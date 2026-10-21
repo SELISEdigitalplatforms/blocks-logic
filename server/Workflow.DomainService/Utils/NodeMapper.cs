@@ -28,14 +28,33 @@ namespace Workflow.DomainService.Utils
                 Type = node.Type,
                 Version = node.Version,
                 Position = node.Position,
-                // Phase 1 of the per-node handle rollout (SPEC4): no handle is stored yet, so a pod still on
-                // Genesis 4.3.6 or older can read every document while old and new pods run side by side.
-                // Phase 2 (SPEC5) stores node.Handle.
-                Handle = null,
+                Handle = ToHandle(node.Handle),
                 Parameters = ToDocument(node.Parameters, node.Id, "parameters"),
                 Settings = ToDocument(node.Settings, node.Id, "settings"),
                 PinData = ToArray(node.PinData, node.Id),
             };
+        }
+
+        // Copies the node's handle. Null lists become empty and null entries are dropped, so readers that
+        // walk the entries (publish copies trigger handles) never meet a null.
+        private static Handle? ToHandle(Handle? handle)
+        {
+            if (handle is null)
+            {
+                return null;
+            }
+
+            return new Handle
+            {
+                Sources = CopyEntries(handle.Sources),
+                Targets = CopyEntries(handle.Targets),
+            };
+        }
+
+        private static List<Dictionary<string, string>> CopyEntries(List<Dictionary<string, string>>? entries)
+        {
+            return entries?.Where(entry => entry is not null).Select(entry => new Dictionary<string, string>(entry)).ToList()
+                ?? new List<Dictionary<string, string>>();
         }
 
         // Missing or null becomes an empty document; anything that is not a JSON object is rejected.

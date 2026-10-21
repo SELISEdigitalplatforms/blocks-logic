@@ -21,14 +21,21 @@ export type NodeType =
 export type NodeCategory = "trigger" | "action" | "logic" | "transform";
 export type NodeVersion = "v1" | "v2" | "v3";
 
+/** One connection point of a node. `key` is the xyflow handle id that edges reference. */
+export type HandleEntry = { key: string; label: string };
+
+/** The node's own connection points, stored with the node. */
+export type NodeHandle = { sources: HandleEntry[]; targets: HandleEntry[] };
+
 export interface WorkflowNode extends Node {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   type: NodeType;
   category: NodeCategory;
   version: NodeVersion;
   isComingSoon?: boolean;
+  handle?: NodeHandle | null;
   position: {
     x: number;
     y: number;
@@ -53,10 +60,11 @@ export interface WorkflowNodeDefinition {
   description: string;
   icon: React.ReactNode;
   category: NodeCategory;
+  /** The version new nodes of this type are created at; stored nodes at this or a lower version use this definition. */
   version: NodeVersion;
   isComingSoon?: boolean;
-  handleSpec: {
-    source: string[];
-    target: string[];
-  };
+  /** Handle template copied into every new node; each `key` is the xyflow handle id that edges reference. */
+  handle: NodeHandle;
+  /** For types whose handles follow their parameters (Switch, Merge): rebuilds the handle on every load and edit. */
+  deriveHandle?: (parameters: Record<string, unknown> | undefined) => NodeHandle;
 }

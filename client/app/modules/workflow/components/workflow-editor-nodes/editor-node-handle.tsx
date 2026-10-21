@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { getHandleLabel } from "@blocks-workflow/constants";
 import { useWorkflowStore } from "@blocks-workflow/store";
 import { Handle, Position, useConnection } from "@xyflow/react";
 import { LucidePlus } from "lucide-react";
@@ -120,7 +119,8 @@ export const EditorNodeHandleArrow = ({ className }: NodeHandleArrowProps) => {
   if (!node) return null;
   if (node?.data?.hasHandleArrow === false) return null;
 
-  const label = getHandleLabel(id);
+  const entries = type === "source" ? node.handle?.sources : node.handle?.targets;
+  const label = entries?.find((entry) => entry.key === id)?.label ?? "";
 
   return (
     <div

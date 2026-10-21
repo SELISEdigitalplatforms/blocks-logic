@@ -4,6 +4,7 @@ import {
   buildExecutedSubgraph,
   getStatusStyles,
 } from "./workflow-execution-editor.util";
+import { upgradeNode } from "./node-upgraders";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const node = (id: string): any => ({ id, name: id, position: { x: 0, y: 0 } });
@@ -151,5 +152,49 @@ describe("buildExecutedSubgraph", () => {
     );
     expect(reachableNodeIds.size).toBe(0);
     expect(traversedEdgeIds.size).toBe(0);
+  });
+});
+
+describe("buildExecutedSubgraph with per-node handles (SPEC5)", () => {
+  // A stored v1 snapshot If node (no handle), upgraded the way the execution view does it.
+  const ifNode = (id: string) =>
+    upgradeNode({ id, name: id, category: "logic", type: "if", version: "v1", position: { x: 0, y: 0 }, data: {} } as never);
+  const codeNode = (id: string) =>
+    upgradeNode({ id, name: id, category: "transform", type: "code", version: "v1", position: { x: 0, y: 0 }, data: {} } as never);
+
+  it("H8: colours only the taken If branch for a v1 snapshot without a handle", () => {
+    const nodes = [codeNode("t"), ifNode("if"), codeNode("yes"), codeNode("no")];
+    const edges = [
+      edge("e0", "t", "if", "source"),
+      edge("e-true", "if", "yes", "if-true"),
+      edge("e-false", "if", "no", "if-false"),
+    ];
+    const execs = [
+      exec("t", { outputItemCount: 1 }),
+      exec("if", { inputItemCount: 1, outputItemCount: 1, outputCountsByBranch: { True: 0, False: 1 } }),
+      exec("no", { inputItemCount: 1 }),
+    ];
+    const { reachableNodeIds, traversedEdgeIds } = buildExecutedSubgraph(nodes, edges, execs, [] as never);
+    expect([...traversedEdgeIds].sort()).toEqual(["e-false", "e0"]);
+    expect(reachableNodeIds.has("no")).toBe(true);
+    expect(reachableNodeIds.has("yes")).toBe(false);
+  });
+
+  it("keeps a single-output edge on the default key always traversed", () => {
+    const nodes = [codeNode("t"), codeNode("a")];
+    const execs = [exec("t", { outputItemCount: 1, outputCountsByBranch: { source: 0 } }), exec("a")];
+    const { traversedEdgeIds } = buildExecutedSubgraph(nodes, [edge("e1", "t", "a", "source")], execs, [] as never);
+    expect(traversedEdgeIds.has("e1")).toBe(true);
+  });
+
+  it("treats a single output with its own key as branching", () => {
+    const single = {
+      ...codeNode("s"),
+      handle: { sources: [{ key: "rule-1", label: "" }], targets: [{ key: "target", label: "" }] },
+    };
+    const nodes = [single, codeNode("a")];
+    const execs = [exec("s", { outputItemCount: 1, outputCountsByBranch: { "rule-1": 0 } }), exec("a")];
+    const { traversedEdgeIds } = buildExecutedSubgraph(nodes, [edge("e1", "s", "a", "rule-1")], execs, [] as never);
+    expect(traversedEdgeIds.has("e1")).toBe(false);
   });
 });

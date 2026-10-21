@@ -51,40 +51,94 @@ namespace XUnitTest.Workflow
                 .Should().Be("zz8d75404dc42646619b91a7d85278687bzz");
         }
 
-        [Theory]
-        [InlineData("source")]
-        [InlineData("Sources")]
-        [InlineData("sources")]
-        public void RemapAndSanitise_AnyHandle_IsStoredAsNullInPhase1(string listName)
+        private static NodeEntity ImportOneNode(object? handle)
         {
-            var root = Root(new
+            var node = new Dictionary<string, object?>
             {
-                name = "wf",
-                settings = new { },
-                nodes = new object[]
-                {
-                    new Dictionary<string, object>
-                    {
-                        ["id"] = "8d75404dc42646619b91a7d85278687b",
-                        ["name"] = "If",
-                        ["type"] = "if",
-                        ["category"] = "logic",
-                        ["version"] = "v1",
-                        ["position"] = new { x = 0.0, y = 0.0 },
-                        ["parameters"] = new { },
-                        ["settings"] = new { },
-                        ["handle"] = new Dictionary<string, object>
-                        {
-                            [listName] = listName == "sources" ? new object[] { new { key = "if-true", label = "True" } } : new object[] { "if-true" },
-                        },
-                    },
-                },
-                edges = Array.Empty<object>(),
+                ["id"] = "8d75404dc42646619b91a7d85278687b",
+                ["name"] = "If",
+                ["type"] = "if",
+                ["category"] = "logic",
+                ["version"] = "v1",
+                ["position"] = new { x = 0.0, y = 0.0 },
+                ["parameters"] = new { },
+                ["settings"] = new { },
+            };
+            if (handle is not null)
+            {
+                node["handle"] = handle;
+            }
+
+            var root = Root(new { name = "wf", settings = new { }, nodes = new object[] { node }, edges = Array.Empty<object>() });
+            return WorkflowImportMapper.RemapAndSanitise(root).Nodes.Should().ContainSingle().Subject;
+        }
+
+        [Theory]
+        [InlineData("sources")]
+        [InlineData("Sources")]
+        [InlineData("source")]
+        public void RemapAndSanitise_StringEntries_BecomeKeyWithEmptyLabel(string listName)
+        {
+            var imported = ImportOneNode(new Dictionary<string, object> { [listName] = new object[] { "if-true", "if-false" } });
+
+            imported.Handle!.Sources.Should().HaveCount(2);
+            imported.Handle.Sources[0].Should().Equal(new Dictionary<string, string> { ["key"] = "if-true", ["label"] = "" });
+            imported.Handle.Sources[1]["key"].Should().Be("if-false");
+            imported.Handle.Targets.Should().BeEmpty();
+        }
+
+        [Theory]
+        [InlineData("targets")]
+        [InlineData("Targets")]
+        [InlineData("target")]
+        public void RemapAndSanitise_ReadsTargetsUnderEveryName(string listName)
+        {
+            var imported = ImportOneNode(new Dictionary<string, object> { [listName] = new object[] { new { key = "target", label = "" } } });
+
+            imported.Handle!.Targets.Should().ContainSingle().Which["key"].Should().Be("target");
+        }
+
+        [Fact]
+        public void RemapAndSanitise_ObjectEntries_KeepKeyAndLabel()
+        {
+            var imported = ImportOneNode(new
+            {
+                sources = new object[] { new { key = "if-true", label = "True" }, new { key = "if-false" } },
+                targets = new object[] { new { key = "target", label = "" } },
             });
 
-            var outGraph = WorkflowImportMapper.RemapAndSanitise(root);
+            imported.Handle!.Sources[0].Should().Equal(new Dictionary<string, string> { ["key"] = "if-true", ["label"] = "True" });
+            imported.Handle.Sources[1].Should().Equal(new Dictionary<string, string> { ["key"] = "if-false", ["label"] = "" });
+            imported.Handle.Targets.Single()["key"].Should().Be("target");
+        }
 
-            outGraph.Nodes.Should().ContainSingle().Which.Handle.Should().BeNull();
+        [Fact]
+        public void RemapAndSanitise_InvalidEntries_AreDropped()
+        {
+            var imported = ImportOneNode(new
+            {
+                sources = new object?[] { "", 5, null, new { key = "" }, new { label = "x" }, new { key = 3 }, "source" },
+            });
+
+            imported.Handle!.Sources.Should().ContainSingle().Which["key"].Should().Be("source");
+        }
+
+        [Fact]
+        public void RemapAndSanitise_AllEntriesDropped_GivesEmptyLists()
+        {
+            var imported = ImportOneNode(new { sources = new object?[] { null, "" }, targets = new object[] { 1 } });
+
+            imported.Handle.Should().NotBeNull();
+            imported.Handle!.Sources.Should().BeEmpty();
+            imported.Handle.Targets.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void RemapAndSanitise_MissingOrNonObjectHandle_IsNull()
+        {
+            ImportOneNode(null).Handle.Should().BeNull();
+            ImportOneNode(new object[] { "source" }).Handle.Should().BeNull();
+            ImportOneNode("source").Handle.Should().BeNull();
         }
 
         [Fact]

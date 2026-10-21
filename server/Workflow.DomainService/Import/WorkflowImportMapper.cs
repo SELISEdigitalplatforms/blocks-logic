@@ -281,9 +281,7 @@ namespace Workflow.DomainService.Import
                     X = position.GetProperty("x").GetDouble(),
                     Y = position.GetProperty("y").GetDouble(),
                 },
-                // Phase 1 of the per-node handle rollout (SPEC4): imported handles are not stored yet (see
-                // NodeMapper). Phase 2 (SPEC5) reads them, entry by entry.
-                Handle = null,
+                Handle = ParseHandle(node),
                 Parameters = RemapToDocument(node, "parameters", idMap),
                 Settings = RemapToDocument(node, "settings", idMap),
                 PinData = RemapToArray(node, "pinData", idMap),
@@ -323,6 +321,74 @@ namespace Workflow.DomainService.Import
             var remapped = ReplaceIdsInString(value.GetRawText(), idMap);
             using var doc = JsonDocument.Parse(remapped);
             return BsonJsonConverter.ToBsonArrayOrNull(doc.RootElement);
+        }
+
+        // An absent or non-object handle imports as null; the client fills it from the node's template on open.
+        private static Handle? ParseHandle(JsonElement node)
+        {
+            if (!node.TryGetProperty("handle", out var handle) || handle.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            return new Handle
+            {
+                Sources = ReadHandleEntries(handle, "sources", "Sources", "source"),
+                Targets = ReadHandleEntries(handle, "targets", "Targets", "target"),
+            };
+        }
+
+        // Entry by entry: {key, label} objects keep their key and label (label defaults to ""), a plain string
+        // "x" becomes {key: "x", label: ""}, and anything else (empty key, number, null) is dropped.
+        private static List<Dictionary<string, string>> ReadHandleEntries(JsonElement handle, params string[] names)
+        {
+            var entries = new List<Dictionary<string, string>>();
+            foreach (var name in names)
+            {
+                if (!handle.TryGetProperty(name, out var list) || list.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var item in list.EnumerateArray())
+                {
+                    if (ReadHandleEntry(item) is { } entry)
+                    {
+                        entries.Add(entry);
+                    }
+                }
+
+                return entries;
+            }
+
+            return entries;
+        }
+
+        private static Dictionary<string, string>? ReadHandleEntry(JsonElement item)
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                var key = item.GetString();
+                return string.IsNullOrEmpty(key) ? null : HandleEntry(key, string.Empty);
+            }
+
+            if (item.ValueKind != JsonValueKind.Object
+                || !item.TryGetProperty("key", out var keyValue)
+                || keyValue.ValueKind != JsonValueKind.String
+                || string.IsNullOrEmpty(keyValue.GetString()))
+            {
+                return null;
+            }
+
+            var label = item.TryGetProperty("label", out var labelValue) && labelValue.ValueKind == JsonValueKind.String
+                ? labelValue.GetString()!
+                : string.Empty;
+            return HandleEntry(keyValue.GetString()!, label);
+        }
+
+        private static Dictionary<string, string> HandleEntry(string key, string label)
+        {
+            return new Dictionary<string, string> { ["key"] = key, ["label"] = label };
         }
 
         private static bool IsValidImportNode(JsonElement node)

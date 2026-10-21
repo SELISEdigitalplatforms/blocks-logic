@@ -1,25 +1,10 @@
-import { DefaultEdgeOptions, NodeProps } from "@xyflow/react";
-import { EditorNodeSimple } from "./editor-node-simple";
-import { NodeDefinitions } from "../node-library-panel";
+import { DefaultEdgeOptions } from "@xyflow/react";
+import { VERSIONED_NODE_TYPES } from "./node-renderers";
 
 export const WorkflowEditorDefaultEdgeOptions: DefaultEdgeOptions = {
   type: "default",
   markerEnd: { type: "arrow", height: 25, width: 25 },
 };
 
-export const NODE_TYPE_REGISTER: { [key: string]: React.ComponentType<NodeProps> } = {};
-
-export const WorkflowEditorNodeTypes = (function () {
-  const nodeTypes = NodeDefinitions.reduce(
-    (acc, def) => {
-      if (def.type in NODE_TYPE_REGISTER) {
-        acc[def.type] = NODE_TYPE_REGISTER[def.type] as unknown as React.ComponentType<NodeProps>;
-        return acc;
-      }
-      acc[def.type] = EditorNodeSimple as unknown as React.ComponentType<NodeProps>;
-      return acc;
-    },
-    {} as Record<string, React.ComponentType<NodeProps>>,
-  );
-  return nodeTypes;
-})();
+/** xyflow node types, keyed by node type. Referentially stable: built once at module load. */
+export const WorkflowEditorNodeTypes = VERSIONED_NODE_TYPES;

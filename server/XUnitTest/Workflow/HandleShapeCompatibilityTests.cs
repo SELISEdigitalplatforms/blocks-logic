@@ -8,8 +8,9 @@ using Workflow.DomainService.Dtos;
 namespace XUnitTest.Workflow
 {
     /// <summary>
-    /// SPEC4 rollout safety: this phase writes only null or empty handles, which every reader accepts,
-    /// and it already reads the {key, label} entries that Phase 2 (SPEC5) writes.
+    /// Handle rollout safety. Null or empty handles are readable by every reader. The {key, label} entries
+    /// that SPEC5 writes are readable from SPEC4 on, but not by pre-4.3.7 code, which is why SPEC5 may only
+    /// reach an environment once every pod there runs SPEC4.
     /// </summary>
     public class HandleShapeCompatibilityTests
     {
@@ -73,6 +74,16 @@ namespace XUnitTest.Workflow
 
             old.Handle!.Sources.Should().BeEmpty();
             old.Handle.Targets.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void OldReader_CannotReadThePhase2Shape()
+        {
+            var bytes = Node(new Handle { Sources = [new() { ["key"] = "if-true", ["label"] = "True" }] }).ToBson();
+
+            var act = () => BsonSerializer.Deserialize<OldNode>(bytes);
+
+            act.Should().Throw<Exception>();
         }
 
         [Fact]

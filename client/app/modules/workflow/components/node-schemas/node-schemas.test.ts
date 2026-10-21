@@ -109,6 +109,16 @@ describe("NodeSchemasDefinition registry", () => {
     );
   });
 
+  it("registers a v2 key for every node type, pointing at the same schema as v1", () => {
+    const v1Keys = Object.keys(NodeSchemasDefinition).filter((key) => key.endsWith("v1"));
+    expect(v1Keys).toHaveLength(13);
+    for (const v1Key of v1Keys) {
+      const v2Key = `${v1Key.slice(0, -2)}v2`;
+      expect(NodeSchemasDefinition[v2Key]).toBe(NodeSchemasDefinition[v1Key]);
+    }
+    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(26);
+  });
+
   it("each definition carries a schema, defaults and transform", () => {
     for (const def of Object.values(NodeSchemasDefinition)) {
       expect(def.schema.type).toBeTruthy();

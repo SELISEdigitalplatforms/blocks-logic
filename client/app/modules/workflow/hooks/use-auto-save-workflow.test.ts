@@ -101,6 +101,22 @@ describe("useAutoSaveWorkflow", () => {
     );
   });
 
+  it("H9: sends only the whitelisted node fields", async () => {
+    renderHook(() => useAutoSaveWorkflow(DEFAULT_OPTIONS), { wrapper: createWrapper() });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DEFAULT_OPTIONS.debounceMs + 100);
+    });
+
+    const payload = vi.mocked(workflowService.updateWorkflow).mock.calls[0][0];
+    const sent = payload.nodes!.find((n) => n.id === mockWorkflowNode1.id)!;
+    expect(Object.keys(sent).every((key) =>
+      ["id", "name", "category", "type", "version", "position", "handle", "parameters", "settings", "pinData"].includes(key),
+    )).toBe(true);
+    expect(sent).not.toHaveProperty("data");
+    expect(sent).not.toHaveProperty("description");
+  });
+
   it("should call updateWorkflow immediately on saveNow()", async () => {
     const { result } = renderHook(() => useAutoSaveWorkflow(DEFAULT_OPTIONS), {
       wrapper: createWrapper(),

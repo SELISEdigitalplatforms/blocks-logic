@@ -1,6 +1,7 @@
 import { useStepExecute, useExecuteTriggerListener, useUpdateWorkflow } from "./use-workflow-api";
 import { useWorkflow } from "./use-workflow";
 import { workflowService } from "../services/workflow.service";
+import { toPersistedNode } from "../utils/to-persisted-node";
 import { showErrorToast } from "@/hooks/use-toast";
 import { TRIGGER_NODE_LISTENING_CODE } from "../constants";
 import { useState } from "react";
@@ -64,7 +65,7 @@ export const useHandleExecuteStep = () => {
     try {
       await updateWorkflow({
         itemId: workflowId,
-        nodes: Object.values(nodesMap) as Parameters<typeof updateWorkflow>[0]["nodes"],
+        nodes: Object.values(nodesMap).map(toPersistedNode),
         edges: Object.values(edgesMap),
       });
 

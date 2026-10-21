@@ -52,11 +52,19 @@ const HANDLE_TO_BRANCH_KEY: Record<string, string> = {
   "if-false": "False",
 };
 
-/** Set of sourceHandle values that represent branching outputs. */
-const BRANCHING_HANDLES = new Set(Object.keys(HANDLE_TO_BRANCH_KEY));
+/**
+ * An edge is branching when its source node has more than one output, or when it leaves through a
+ * handle other than the default "source" (a single-output node with its own key, e.g. a one-rule Switch).
+ * Every other edge is always traversed.
+ */
+const isBranchingEdge = (edge: WorkflowEdge, sourceNode: WorkflowNode | undefined): boolean => {
+  const handle = edge.sourceHandle;
+  if ((sourceNode?.handle?.sources?.length ?? 0) > 1) return true;
+  return !!handle && handle !== "source";
+};
 
 /**
- * Determines if a branching edge was actually traversed during execution.
+ * Determines if an edge was actually traversed during execution.
  *
  * Strategy (tried in order):
  *   1. Check `outputCountsByBranch` with the mapped branch key (e.g. "True")
@@ -66,13 +74,14 @@ const BRANCHING_HANDLES = new Set(Object.keys(HANDLE_TO_BRANCH_KEY));
  */
 const wasEdgeTraversed = (
   edge: WorkflowEdge,
+  sourceNode: WorkflowNode | undefined,
   executionNode: ExecutedNode,
   actuallyExecutedNodeIds: Set<string>,
 ): boolean => {
   const handle = edge.sourceHandle;
 
   // Non-branching edge — always considered traversed
-  if (!handle || !BRANCHING_HANDLES.has(handle)) {
+  if (!isBranchingEdge(edge, sourceNode)) {
     return true;
   }
 
@@ -80,12 +89,12 @@ const wasEdgeTraversed = (
   const branchCounts = executionNode.outputCountsByBranch;
   if (branchCounts && Object.keys(branchCounts).length > 0) {
     // Try mapped key first ("if-true" → "True")
-    const mappedKey = HANDLE_TO_BRANCH_KEY[handle];
+    const mappedKey = handle ? HANDLE_TO_BRANCH_KEY[handle] : undefined;
     if (mappedKey && mappedKey in branchCounts) {
       return branchCounts[mappedKey] > 0;
     }
     // Try raw handle id ("if-true")
-    if (handle in branchCounts) {
+    if (handle && handle in branchCounts) {
       return branchCounts[handle] > 0;
     }
   }
@@ -111,6 +120,8 @@ export const buildExecutedSubgraph = (
   nodeExecutions: ExecutedNode[],
   items: ExecutedItem[],
 ): { reachableNodeIds: Set<string>; traversedEdgeIds: Set<string> } => {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+
   // Map nodeId → ExecutedNode for fast lookup
   const nodeExecutionMap = new Map(
     nodeExecutions.map((ne) => [ne.nodeId, ne]),
@@ -172,7 +183,7 @@ export const buildExecutedSubgraph = (
 
     const outEdges = edgesBySource.get(nodeId) || [];
     for (const edge of outEdges) {
-      if (wasEdgeTraversed(edge, execNode, actuallyExecutedNodeIds)) {
+      if (wasEdgeTraversed(edge, nodesById.get(edge.source), execNode, actuallyExecutedNodeIds)) {
         traversedEdgeIds.add(edge.id);
         // Visit any node that has an execution record (including Failed ones)
         // so they get colored with the appropriate status style.

@@ -3,6 +3,7 @@ import { Separator } from "@/components/ui-kits/separator/separator";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { useExecuteTriggerListener, useUpdateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 import { useWorkflowNotification } from "@blocks-workflow/hooks/use-workflow-notification";
+import { toPersistedNode } from "@blocks-workflow/utils/to-persisted-node";
 import { Controls } from "@xyflow/react";
 import { Wand, Plus, Maximize, ZoomIn, ZoomOut, Play, Square, Loader2 } from "lucide-react";
 import { Fragment, useMemo } from "react";
@@ -63,7 +64,7 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
       if (workflowId) {
         await updateWorkflow({
           itemId: workflowId,
-          nodes: Object.values(nodesMap) as Parameters<typeof updateWorkflow>[0]["nodes"],
+          nodes: Object.values(nodesMap).map(toPersistedNode),
           edges: Object.values(edgesMap),
         });
       }
