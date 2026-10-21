@@ -230,7 +230,7 @@ describe("EditorNodeSimple on a Switch (SPEC6)", () => {
     expect(handleIds("target")).toEqual(["target"]);
     expect(handleIds("source")).toEqual([A, B, "switch-handle-source-fallback"]);
     expect(screen.getByText("Paid")).toBeTruthy();
-    expect(screen.getByText("Output 1")).toBeTruthy();
+    expect(screen.getByText("1")).toBeTruthy();
     expect(screen.getByText("Fallback")).toBeTruthy();
     expect(screen.getByText("Switch")).toBeTruthy();
   });

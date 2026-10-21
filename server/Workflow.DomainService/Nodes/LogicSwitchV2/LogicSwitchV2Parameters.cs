@@ -29,7 +29,5 @@ namespace Workflow.DomainService.Nodes.LogicSwitchV2
         /// <summary>"none" (drop), "extra" (the fallback handle) or the handle key of a rule.</summary>
         public string? FallbackOutput { get; set; } = "none";
         public string? RenameFallbackOutput { get; set; } = string.Empty;
-        public bool IgnoreCase { get; set; }
-        public bool AllMatchingOutputs { get; set; }
     }
 }

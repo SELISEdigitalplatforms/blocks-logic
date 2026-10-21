@@ -42,9 +42,9 @@ namespace XUnitTest.Workflow
             { "handleKey", key }, { "handleLabel", "" }, { "conditionType", conditionType }, { "conditions", new BsonArray(conditions) },
         };
 
-        private static BsonDocument Options(string fallback = "none", bool ignoreCase = false, bool allMatching = false) => new()
+        private static BsonDocument Options(string fallback = "none") => new()
         {
-            { "fallbackOutput", fallback }, { "renameFallbackOutput", "" }, { "ignoreCase", ignoreCase }, { "allMatchingOutputs", allMatching },
+            { "fallbackOutput", fallback }, { "renameFallbackOutput", "" },
         };
 
         private static BsonDocument RulesParams(BsonDocument options, params BsonDocument[] rules) => new()
@@ -86,13 +86,11 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task AllMatching_EmitsOneItemPerMatchingRule_InRuleOrder_WithTheSameParent()
+        public async Task SeveralRulesMatch_TheItemGoesToTheFirstOnly()
         {
-            var result = await Run(RulesParams(Options(allMatching: true), PaidRule, BigRule), Doc("{ \"status\": \"paid\", \"amount\": 500 }"));
+            var result = await Run(RulesParams(Options(), BigRule, PaidRule), Doc("{ \"status\": \"paid\", \"amount\": 500 }"));
 
-            result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-            result.OutputItems.Select(o => o.Branch).Should().Equal(A, B);
-            result.OutputItems.Should().OnlyContain(o => o.ParentItemIds!.SequenceEqual(new[] { "item-0" }));
+            result.OutputItems.Select(o => o.Branch).Should().Equal(B);
         }
 
         [Fact]
@@ -136,28 +134,27 @@ namespace XUnitTest.Workflow
             result.OutputItems.Should().BeEmpty();
         }
 
-        // ---------- example 4: ignore case ----------
+        // ---------- comparisons are case-sensitive, like If ----------
 
-        [Theory]
-        [InlineData(false, 0)]
-        [InlineData(true, 1)]
-        public async Task IgnoreCase_String(bool ignoreCase, int expected)
+        [Fact]
+        public async Task TextComparison_IsCaseSensitive()
         {
-            var result = await Run(RulesParams(Options(ignoreCase: ignoreCase), PaidRule), Doc("{ \"status\": \"PAID\" }"));
+            var result = await Run(RulesParams(Options(), PaidRule), Doc("{ \"status\": \"PAID\" }"));
 
-            result.OutputItems.Should().HaveCount(expected);
+            result.OutputItems.Should().BeEmpty();
         }
 
-        [Theory]
-        [InlineData(false, 0)]
-        [InlineData(true, 1)]
-        public async Task IgnoreCase_Array(bool ignoreCase, int expected)
+        [Fact]
+        public async Task LeftoverRemovedOptions_AreIgnored()
         {
-            var rule = Rule(A, "all", Cond("[\"VIP\",\"x\"]", "contains", "[\"vip\"]", "array"));
+            // A Switch saved before these options were removed still carries them.
+            var options = Options();
+            options["ignoreCase"] = true;
+            options["allMatchingOutputs"] = true;
 
-            var result = await Run(RulesParams(Options(ignoreCase: ignoreCase), rule), Doc("{}"));
+            var result = await Run(RulesParams(options, PaidRule, Rule(B, "all")), Doc("{ \"status\": \"PAID\" }"));
 
-            result.OutputItems.Should().HaveCount(expected);
+            result.OutputItems.Select(o => o.Branch).Should().Equal(B);
         }
 
         // ---------- H17: same result as If ----------
@@ -177,7 +174,7 @@ namespace XUnitTest.Workflow
 
         [Theory]
         [MemberData(nameof(IfCases))]
-        public async Task IgnoreCaseOff_MatchesExactlyWhenIfIsTrue(string left, string op, string? right, string type)
+        public async Task MatchesExactlyWhenIfIsTrue(string left, string op, string? right, string type)
         {
             var input = Doc("{ \"status\": \"paid\", \"amount\": 500 }");
             foreach (var conditionType in new[] { "all", "or" })
@@ -227,7 +224,7 @@ namespace XUnitTest.Workflow
         {
             var bad = Rule(B, "all", Cond("a", "bogus", "a", "string"));
 
-            var result = await Run(RulesParams(Options(allMatching: true), PaidRule, bad), Doc("{ \"status\": \"paid\" }"));
+            var result = await Run(RulesParams(Options(), PaidRule, bad), Doc("{ \"status\": \"paid\" }"));
 
             result.IsSuccess.Should().BeFalse();
             result.OutputItems.Should().ContainSingle().Which.IsError.Should().BeTrue();

@@ -225,7 +225,7 @@ describe("WorkflowEditorEdgeDefault on a Switch (SPEC6)", () => {
 
   it.each([
     [A, "Paid"],
-    [B, "Output 1"],
+    [B, "1"],
     ["switch-handle-source-fallback", "Fallback"],
   ])("labels the edge on %s as %s", (sourceHandleId, label) => {
     renderWithProviders(<WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId })} />, {

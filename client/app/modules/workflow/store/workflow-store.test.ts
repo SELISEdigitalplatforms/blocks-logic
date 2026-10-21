@@ -555,3 +555,40 @@ describe("Switch node in the store (SPEC6)", () => {
     expect(Object.values(state().edgesMap).every((e) => e.source === "s")).toBe(true);
   });
 });
+
+describe("saving and reloading", () => {
+  const load = (nodes: unknown[]) => state().setWorkflow({ itemId: "w1", nodes, edges: [] } as never);
+
+  it("markSaved clears the unsaved flag when nothing changed since the save was sent", () => {
+    load([node("a")]);
+    state().updateNode("a", { name: "Renamed" });
+    const { nodesMap, edgesMap } = state();
+    state().markSaved(nodesMap, edgesMap);
+    expect(state().hasUnsavedChanges).toBe(false);
+  });
+
+  it("markSaved keeps the flag when an edit landed while the save was in flight", () => {
+    load([node("a")]);
+    state().updateNode("a", { name: "First" });
+    const { nodesMap, edgesMap } = state();
+    state().updateNode("a", { name: "Second" });
+    state().markSaved(nodesMap, edgesMap);
+    expect(state().hasUnsavedChanges).toBe(true);
+  });
+
+  it("a reload points the open inspector at the reloaded copy of its node, still selected", () => {
+    load([node("a", { name: "Old" })]);
+    state().selectNode(state().nodesMap.a);
+    load([node("a", { name: "From server" })]);
+    expect(state().selectedNode?.name).toBe("From server");
+    expect(state().selectedNode).toBe(state().nodesMap.a);
+    expect(state().nodesMap.a.selected).toBe(true);
+  });
+
+  it("a reload without the selected node clears the selection", () => {
+    load([node("a")]);
+    state().selectNode(state().nodesMap.a);
+    load([node("b")]);
+    expect(state().selectedNode).toBeNull();
+  });
+});
