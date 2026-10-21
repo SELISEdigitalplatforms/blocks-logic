@@ -26,6 +26,7 @@ export type FormFieldType =
   | "switch-rules"
   | "expression"
   | "display"
+  | "split-out-fields"
   | "callout-accordion-display"
   | "tab-with-text"
   | "readonly-details";

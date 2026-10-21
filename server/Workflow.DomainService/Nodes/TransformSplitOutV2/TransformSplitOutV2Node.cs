@@ -31,6 +31,9 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
 
         private static string StripJsonPrefix(string path)
         {
+            // A field dragged from the input panel arrives as {{$json.output.lines}}; the field is its path.
+            if (path.StartsWith("{{", StringComparison.Ordinal) && path.EndsWith("}}", StringComparison.Ordinal))
+                path = path[2..^2].Trim();
             if (path.StartsWith("$json.output.", StringComparison.Ordinal)) return path["$json.output.".Length..];
             if (path.StartsWith("$json.", StringComparison.Ordinal)) return path["$json.".Length..];
             return path;
@@ -110,6 +113,10 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
         {
             var entries = new List<BsonDocument>();
             var multiSplit = fields.Count > 1;
+            // As n8n (node version 1.1+): with dot notation, destination names are paths ("order.line" goes
+            // inside "order"), written after the other fields are copied in.
+            var destinationPaths = dotNotation && destinations.Count > 0;
+            var pending = new List<List<(string Path, BsonValue Value)>>();
 
             for (var k = 0; k < fields.Count; k++)
             {
@@ -136,8 +143,13 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
                 for (var j = 0; j < elements.Count; j++)
                 {
                     if (entries.Count <= j) entries.Add(new BsonDocument());
+                    if (pending.Count <= j) pending.Add(new List<(string, BsonValue)>());
                     var element = elements[j];
-                    if (element is BsonDocument elementDoc && include == "noOtherFields" && destination.Length == 0 && !multiSplit)
+                    if (destinationPaths)
+                    {
+                        pending[j].Add((name, element.DeepClone()));
+                    }
+                    else if (element is BsonDocument elementDoc && include == "noOtherFields" && destination.Length == 0 && !multiSplit)
                     {
                         foreach (var property in elementDoc) entries[j][property.Name] = property.Value.DeepClone();
                     }
@@ -148,25 +160,31 @@ namespace Workflow.DomainService.Nodes.TransformSplitOutV2
                 }
             }
 
-            if (doc is null) return entries;
-
-            for (var j = 0; j < entries.Count; j++)
+            if (doc is not null)
             {
-                if (include == "allOtherFields")
+                for (var j = 0; j < entries.Count; j++)
                 {
-                    var merged = (BsonDocument)doc.DeepClone();
-                    foreach (var field in fields) BsonPath.Remove(merged, field, dotNotation);
-                    foreach (var property in entries[j]) merged[property.Name] = property.Value;
-                    entries[j] = merged;
-                }
-                else if (include == "selectedOtherFields")
-                {
-                    foreach (var path in fieldsToInclude)
+                    if (include == "allOtherFields")
                     {
-                        if (BsonPath.TryGet(doc, path, dotNotation, out var included))
-                            entries[j][path] = included.DeepClone();
+                        var merged = (BsonDocument)doc.DeepClone();
+                        foreach (var field in fields) BsonPath.Remove(merged, field, dotNotation);
+                        foreach (var property in entries[j]) merged[property.Name] = property.Value;
+                        entries[j] = merged;
+                    }
+                    else if (include == "selectedOtherFields")
+                    {
+                        foreach (var path in fieldsToInclude)
+                        {
+                            if (BsonPath.TryGet(doc, path, dotNotation, out var included))
+                                entries[j][path] = included.DeepClone();
+                        }
                     }
                 }
+            }
+
+            for (var j = 0; j < pending.Count && j < entries.Count; j++)
+            {
+                foreach (var (path, value) in pending[j]) BsonPath.Set(entries[j], path, dotNotation: true, value);
             }
             return entries;
         }

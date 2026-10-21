@@ -1083,12 +1083,21 @@ describe("transform/splitOut v2 (SPEC2)", () => {
       disableDotNotation: false,
     });
     expect(schema.schema.parameters.map((f) => f.key)).toEqual([
-      "fieldToSplitOut",
+      "splitOutFields",
       "include",
       "fieldsToInclude",
-      "destinationFieldName",
       "disableDotNotation",
     ]);
+  });
+
+  it("the field rows edit the saved strings and are never saved themselves", () => {
+    const rows = schema.schema.parameters.find((f) => f.key === "splitOutFields")!;
+    expect(rows.transient).toBe(true);
+    expect(rows.displayValue!({ fieldToSplitOut: "names, scores", destinationFieldName: "name, score" }, {} as never)).toEqual([
+      { field: "names", destination: "name" },
+      { field: "scores", destination: "score" },
+    ]);
+    expect(rows.onChange!([{ field: "lines", destination: "" }], {}, {} as never)).toEqual({ fieldToSplitOut: "lines", destinationFieldName: "" });
   });
 
   it("H11: Fields To Include shows only for Selected other fields and resets to empty", () => {

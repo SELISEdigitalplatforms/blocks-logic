@@ -28,6 +28,32 @@ namespace Workflow.DomainService.Utils
             return true;
         }
 
+        /// <summary>
+        /// Writes the value at the path, creating the documents along it (a non-document in the way is
+        /// replaced), like lodash set for document keys. Without dot notation the path is one literal key.
+        /// </summary>
+        public static void Set(BsonDocument document, string path, bool dotNotation, BsonValue value)
+        {
+            if (!dotNotation)
+            {
+                document[path] = value;
+                return;
+            }
+
+            var segments = path.Split('.');
+            var parent = document;
+            for (var i = 0; i < segments.Length - 1; i++)
+            {
+                if (!parent.TryGetValue(segments[i], out var next) || next is not BsonDocument nested)
+                {
+                    nested = new BsonDocument();
+                    parent[segments[i]] = nested;
+                }
+                parent = nested;
+            }
+            parent[segments[^1]] = value;
+        }
+
         /// <summary>Removes the value at the path, if present. Returns whether something was removed.</summary>
         public static bool Remove(BsonDocument document, string path, bool dotNotation)
         {

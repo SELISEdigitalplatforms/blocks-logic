@@ -166,6 +166,66 @@ namespace XUnitTest.Workflow
             Outputs(await Run(Params("$json.lines"), Order)).Should().HaveCount(2);
         }
 
+        // ---------- n8n 1.1+: destination names with dots are paths ----------
+
+        [Fact]
+        public async Task DottedDestination_IsWrittenAsANestedPath()
+        {
+            var result = await Run(Params("lines", destination: "order.line"), Order);
+
+            Outputs(result).Should().Equal(
+                "{ \"order\" : { \"line\" : { \"sku\" : \"A\", \"qty\" : 1 } } }",
+                "{ \"order\" : { \"line\" : { \"sku\" : \"B\", \"qty\" : 2 } } }");
+        }
+
+        [Fact]
+        public async Task DottedDestination_WithAllOtherFields_GoesInsideTheExistingDocument()
+        {
+            var input = Doc("{ \"id\": 7, \"order\": { \"ref\": \"X\", \"lines\": [ { \"sku\": \"A\" } ] } }");
+
+            var result = await Run(Params("order.lines", include: "allOtherFields", destination: "order.line"), input);
+
+            Outputs(result).Should().Equal("{ \"id\" : 7, \"order\" : { \"ref\" : \"X\", \"line\" : { \"sku\" : \"A\" } } }");
+        }
+
+        [Fact]
+        public async Task NestedFieldWithoutDestination_WithAllOtherFields_IsATopLevelKey_AsInN8n()
+        {
+            var input = Doc("{ \"id\": 7, \"order\": { \"ref\": \"X\", \"lines\": [ { \"sku\": \"A\" } ] } }");
+
+            var result = await Run(Params("order.lines", include: "allOtherFields"), input);
+
+            Outputs(result).Should().Equal("{ \"id\" : 7, \"order\" : { \"ref\" : \"X\" }, \"order.lines\" : { \"sku\" : \"A\" } }");
+        }
+
+        [Fact]
+        public async Task DottedDestination_WithDotNotationDisabled_IsOneLiteralKey()
+        {
+            var result = await Run(Params("lines", destination: "order.line", disableDotNotation: true), Order);
+
+            Outputs(result).First().Should().Be("{ \"order.line\" : { \"sku\" : \"A\", \"qty\" : 1 } }");
+        }
+
+        [Fact]
+        public async Task SeveralFields_WithDottedDestinations_PairByPosition()
+        {
+            var input = Doc("{ \"names\": [\"Ali\", \"Mina\"], \"scores\": [90] }");
+
+            var result = await Run(Params("names, scores", destination: "person.name, person.score"), input);
+
+            Outputs(result).Should().Equal(
+                "{ \"person\" : { \"name\" : \"Ali\", \"score\" : 90 } }",
+                "{ \"person\" : { \"name\" : \"Mina\" } }");
+        }
+
+        [Fact]
+        public async Task AFieldDraggedFromTheInputPanel_IsReadAsItsPath()
+        {
+            var result = await Run(Params("{{$json.output.lines}}"), Order);
+
+            Outputs(result).Should().HaveCount(2);
+        }
+
         [Fact]
         public async Task SeveralInputs_KeepInputOrder()
         {

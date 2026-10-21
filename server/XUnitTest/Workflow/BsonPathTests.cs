@@ -29,6 +29,28 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public void Set_CreatesTheDocumentsAlongThePath_AndKeepsSiblings()
+        {
+            var doc = Doc();
+            BsonPath.Set(doc, "a.b.d", dotNotation: true, 5);
+            BsonPath.Set(doc, "x.y", dotNotation: true, "new");
+            BsonPath.Set(doc, "list.k", dotNotation: true, 1);
+
+            doc["a"]["b"].ToJson().Should().Be("{ \"c\" : 1, \"d\" : 5 }");
+            doc["x"].ToJson().Should().Be("{ \"y\" : \"new\" }");
+            doc["list"].ToJson().Should().Be("{ \"k\" : 1 }");
+        }
+
+        [Fact]
+        public void Set_WithoutDotNotation_WritesOneLiteralKey()
+        {
+            var doc = new BsonDocument();
+            BsonPath.Set(doc, "a.b", dotNotation: false, 1);
+
+            doc.ToJson().Should().Be("{ \"a.b\" : 1 }");
+        }
+
+        [Fact]
         public void Remove_WithAndWithoutDotNotation()
         {
             var doc = Doc();
