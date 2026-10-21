@@ -268,9 +268,9 @@ describe("OutputPanel", () => {
       { nodeId: "n1", itemIndex: 1, branch: B, data: { Output: { firstName: "Alice" } } },
     ];
 
-    it("names each Switch output instead of its key, in output order, with item counts", () => {
+    it("names each Switch output by its name, or Output <i> when unnamed, in output order, with item counts", () => {
       renderWithProviders(<OutputPanel />, { seedWorkflow: seedNodeRun(switchNode, switchItems) });
-      expect(screen.getByText("Output 0 · Adult")).toBeTruthy();
+      expect(screen.getByText("Adult")).toBeTruthy();
       expect(screen.getByText("Output 1")).toBeTruthy();
       expect(screen.getByText("Fallback")).toBeTruthy();
       expect(screen.queryByText(new RegExp(A, "i"))).toBeNull();
@@ -282,8 +282,8 @@ describe("OutputPanel", () => {
 
     it("keeps the raw key for debugging: tooltip and copy button", () => {
       renderWithProviders(<OutputPanel />, { seedWorkflow: seedNodeRun(switchNode, switchItems) });
-      expect(screen.getByText("Output 0 · Adult").getAttribute("title")).toBe(A);
-      fireEvent.click(screen.getByRole("button", { name: "Copy branch key of Output 0 · Adult" }));
+      expect(screen.getByText("Adult").getAttribute("title")).toBe(A);
+      fireEvent.click(screen.getByRole("button", { name: "Copy branch key of Adult" }));
       expect(clipboard.copyToClipboard).toHaveBeenCalledWith(A);
     });
 
@@ -291,7 +291,7 @@ describe("OutputPanel", () => {
       const user = userEvent.setup();
       renderWithProviders(<OutputPanel />, { seedWorkflow: seedNodeRun(switchNode, switchItems) });
       await user.click(screen.getByRole("tab", { name: "Table" }));
-      await waitFor(() => expect(screen.getByText("Output 0 · Adult")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Adult")).toBeTruthy());
       await user.click(screen.getByRole("tab", { name: "JSON" }));
       await waitFor(() => expect(screen.getByText("Output 1")).toBeTruthy());
       expect(document.querySelectorAll("pre code").length).toBe(2);
@@ -320,7 +320,7 @@ describe("OutputPanel", () => {
     it("before any run, a Switch shows the usual empty state, not empty outputs", () => {
       renderWithProviders(<OutputPanel />, { seedWorkflow: seedNodeRun(switchNode, []) });
       expect(screen.getByText("No runtime output schema available.")).toBeTruthy();
-      expect(screen.queryByText("Output 0 · Adult")).toBeNull();
+      expect(screen.queryByText("Adult")).toBeNull();
     });
 
     it("a single-output node shows no branch header", () => {
