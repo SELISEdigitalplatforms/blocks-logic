@@ -103,6 +103,7 @@ namespace Functions.DomainService.Repositories
         {
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionVersionEntity, "FunctionVersionRepository.Create", tenantId))
                 throw new UnauthorizedAccessException("Function version create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.FunctionVersionEntity, version, isInsert: true, "FunctionVersionRepository.Create", tenantId);
             await EnsureIndexesAsync(tenantId, cancellationToken);
             await Collection(tenantId).InsertOneAsync(version, cancellationToken: cancellationToken);
         }
