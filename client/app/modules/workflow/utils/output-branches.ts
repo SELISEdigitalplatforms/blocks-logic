@@ -6,18 +6,18 @@ import { SWITCH_FALLBACK_KEY } from "./switch-handles";
 export type OutputBranchGroup = {
   /** The branch key the items carry (the handle key); shown only for debugging. */
   key: string;
-  /** What a person reads: "Output 0 · Paid", "Fallback", "True". */
+  /** What a person reads: "Paid", "Output 1", "Fallback", "True". */
   title: string;
   rows: unknown[];
 };
 
 type BranchNode = Pick<WorkflowNode, "category" | "type" | "version" | "handle">;
 
-/** "Output <i>" plus the output's name, for nodes whose outputs are a numbered list (Switch). */
+/** The output's name; an unnamed output of a numbered list (Switch) is "Output <i>". */
 const numberedTitle = (node: BranchNode, key: string, index: number) => {
   const label = node.handle?.sources?.[index]?.label;
   if (key === SWITCH_FALLBACK_KEY) return label || "Fallback";
-  return label ? `Output ${index} · ${label}` : `Output ${index}`;
+  return label || `Output ${index}`;
 };
 
 /**
