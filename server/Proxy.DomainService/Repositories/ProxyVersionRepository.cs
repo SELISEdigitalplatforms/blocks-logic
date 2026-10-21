@@ -95,6 +95,7 @@ namespace Proxy.DomainService.Repositories
         {
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.ProxyVersionEntity, "ProxyVersionRepository.Insert", version.TenantId))
                 throw new UnauthorizedAccessException("Proxy version create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.ProxyVersionEntity, version, isInsert: true, "ProxyVersionRepository.Insert", version.TenantId);
             var collection = GetCollection(version.TenantId);
             await EnsureIndexesAsync(version.TenantId, collection);
             await collection.InsertOneAsync(version);

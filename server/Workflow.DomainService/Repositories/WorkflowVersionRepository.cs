@@ -35,6 +35,7 @@ namespace Workflow.DomainService.Repositories
         {
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.WorkflowVersionEntity, "WorkflowVersionRepository.CreateWorkflowVersion", versionModel.TenantId))
                 throw new UnauthorizedAccessException("Workflow version create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.WorkflowVersionEntity, versionModel, isInsert: true, "WorkflowVersionRepository.CreateWorkflowVersion", versionModel.TenantId);
             var collection = GetCollection(versionModel.TenantId);
             await collection.InsertOneAsync(versionModel, null);
         }

@@ -142,6 +142,7 @@ namespace Functions.DomainService.Repositories
         {
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionBuildEntity, "FunctionBuildRepository.Create", tenantId))
                 throw new UnauthorizedAccessException("Function build create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.FunctionBuildEntity, build, isInsert: true, "FunctionBuildRepository.Create", tenantId);
             await EnsureIndexesAsync(tenantId, cancellationToken);
             await Collection(tenantId).InsertOneAsync(build, cancellationToken: cancellationToken);
         }
