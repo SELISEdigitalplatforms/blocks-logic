@@ -13,7 +13,9 @@ import {
 	Code2,
 	FunctionSquare,
 	Waypoints,
+	Split,
 } from "lucide-react";
+import { deriveSwitchHandle, switchHandleLabel } from "@blocks-workflow/utils/switch-handles";
 
 export const NodeDefinitions: WorkflowNodeDefinition[] = [
 	{
@@ -179,6 +181,24 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 			],
 			targets: [{ key: "target", label: "" }],
 		},
+	},
+	{
+		id: "logic-switch-v2",
+		icon: <Split className="h-5 w-5 text-success" />,
+		title: "Switch",
+		description:
+			"Route each item to one of many outputs by rules.",
+		type: "switch",
+		category: "logic",
+		version: "v2",
+		defaultName: "Switch",
+		// Outputs come from the parameters (one per rule or output); the template has only the input.
+		handle: {
+			sources: [],
+			targets: [{ key: "target", label: "" }],
+		},
+		deriveHandle: deriveSwitchHandle,
+		handleLabel: switchHandleLabel,
 	},
 	{
 		id: "transform-setfield-v2",

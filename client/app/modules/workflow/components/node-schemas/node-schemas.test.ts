@@ -116,7 +116,9 @@ describe("NodeSchemasDefinition registry", () => {
       const v2Key = `${v1Key.slice(0, -2)}v2`;
       expect(NodeSchemasDefinition[v2Key]).toBe(NodeSchemasDefinition[v1Key]);
     }
-    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(26);
+    // 13 v1 keys, their 13 v2 aliases, and logicswitchv2 (new types start at v2 with no v1).
+    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(27);
+    expect(NodeSchemasDefinition.logicswitchv1).toBeUndefined();
   });
 
   it("each definition carries a schema, defaults and transform", () => {

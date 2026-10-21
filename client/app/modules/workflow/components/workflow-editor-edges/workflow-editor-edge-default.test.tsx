@@ -204,3 +204,45 @@ describe("WorkflowEditorEdgeDefault", () => {
     );
   });
 });
+
+describe("WorkflowEditorEdgeDefault on a Switch (SPEC6)", () => {
+  const A = "switch-handle-source-aaaaa1";
+  const B = "switch-handle-source-bbbbb2";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const switchSource = (): any => ({
+    n1: {
+      id: "n1", name: "Switch", category: "logic", type: "switch", version: "v2", position: { x: 0, y: 0 }, data: {},
+      handle: {
+        targets: [{ key: "target", label: "" }],
+        sources: [
+          { key: A, label: "Paid" },
+          { key: B, label: "" },
+          { key: "switch-handle-source-fallback", label: "" },
+        ],
+      },
+    },
+  });
+
+  it.each([
+    [A, "Paid"],
+    [B, "Output 1"],
+    ["switch-handle-source-fallback", "Fallback"],
+  ])("labels the edge on %s as %s", (sourceHandleId, label) => {
+    renderWithProviders(<WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId })} />, {
+      seedWorkflow: (store) => store.setState({ nodesMap: switchSource() }),
+    });
+    expect(screen.getByText(label)).toBeTruthy();
+  });
+
+  it("H13: shows the item count of the edge's own key", () => {
+    renderWithProviders(<WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId: B })} />, {
+      seedWorkflow: (store) =>
+        store.setState({
+          nodesMap: switchSource(),
+          stepExecutionTraversedEdgeIds: new Set(["e1"]),
+          executedNodes: [executedNode({ outputCountsByBranch: { [A]: 1, [B]: 3 } })],
+        }),
+    });
+    expect(screen.getByText("3 items")).toBeTruthy();
+  });
+});

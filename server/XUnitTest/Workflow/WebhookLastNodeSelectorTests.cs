@@ -222,6 +222,26 @@ namespace XUnitTest.Workflow
                 .Should().BeNull();
         }
 
+        [Fact]
+        public void Select_SwitchGraph_FollowsOnlyTheTakenKey()
+        {
+            var executions = new[]
+            {
+                Node("webhook", 1, branches: new() { ["source"] = 1 }),
+                Node("switch", 2, branches: new() { ["switch-handle-source-bbbbb2"] = 1 }),
+                Node("taken", 3, branches: new() { ["source"] = 1 }),
+                Node("notTaken", 4, input: 0, output: 0),
+            };
+            var edges = new[]
+            {
+                Edge("webhook", "switch", "source"),
+                Edge("switch", "notTaken", "switch-handle-source-aaaaa1"),
+                Edge("switch", "taken", "switch-handle-source-bbbbb2"),
+            };
+
+            WebhookLastNodeSelector.Select("webhook", executions, edges)!.NodeId.Should().Be("taken");
+        }
+
         private static NodeExecutionEntity Node(
             string nodeId,
             int runIndex,

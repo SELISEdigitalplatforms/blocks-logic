@@ -60,8 +60,9 @@ describe("upgradeNode", () => {
   });
 
   it("H1: every one of the 13 types upgrades to v2 with keys identical to its old handle ids", () => {
-    expect(NodeDefinitions.map((d) => d.type).sort()).toEqual(Object.keys(OLD_HANDLE_IDS).sort());
-    for (const definition of NodeDefinitions) {
+    // The 13 types that existed before SPEC6, plus Switch (which derives its handle; see switch tests).
+    expect(NodeDefinitions.map((d) => d.type).sort()).toEqual([...Object.keys(OLD_HANDLE_IDS), "switch"].sort());
+    for (const definition of NodeDefinitions.filter((d) => d.type in OLD_HANDLE_IDS)) {
       const upgraded = upgradeNode(
         node({ category: definition.category, type: definition.type, version: "v1" }),
       );

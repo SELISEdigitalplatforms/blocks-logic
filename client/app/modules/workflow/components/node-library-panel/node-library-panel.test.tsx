@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { NodeLibraryPanel } from "./node-library-panel";
@@ -113,5 +113,42 @@ describe("NodeLibraryPanel per-node handles (SPEC5)", () => {
       s.getState().selectNode(s.getState().nodesMap.x);
     });
     expect(Object.keys(state.edgesMap)).toHaveLength(0);
+  });
+});
+
+describe("NodeLibraryPanel Switch (SPEC6)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const addSwitch = (): any => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<NodeLibraryPanel />, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (s: any) => {
+        store = s;
+        s.getState().openNodeLibraryPanel();
+      },
+    });
+    fireEvent.click(screen.getByText("Switch"));
+    return store;
+  };
+
+  it("H1: creates a v2 Switch with one rule and its derived handle", () => {
+    const store = addSwitch();
+    const created = Object.values(store.getState().nodesMap)[0] as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(created).toMatchObject({ type: "switch", category: "logic", version: "v2" });
+    expect(created.parameters.mode).toBe("rules");
+    expect(created.parameters.rules).toHaveLength(1);
+    const key = created.parameters.rules[0].handleKey;
+    expect(key).toMatch(/^switch-handle-source-[a-z0-9]{6}$/);
+    expect(created.handle).toEqual({ targets: [{ key: "target", label: "" }], sources: [{ key, label: "" }] });
+  });
+
+  it("two new Switch nodes never share parameters or keys", () => {
+    const store = addSwitch();
+    act(() => store.getState().openNodeLibraryPanel());
+    fireEvent.click(screen.getByText("Switch"));
+    const [a, b] = Object.values(store.getState().nodesMap) as Array<Record<string, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(a.parameters).not.toBe(b.parameters);
+    expect(a.parameters.rules[0].handleKey).not.toBe(b.parameters.rules[0].handleKey);
   });
 });

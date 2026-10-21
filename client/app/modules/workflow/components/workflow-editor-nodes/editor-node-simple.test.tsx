@@ -66,7 +66,7 @@ const handleIds = (type: "source" | "target") =>
 beforeEach(() => updateNodeInternals.mockClear());
 
 describe("EditorNodeSimple", () => {
-  it.each(NodeDefinitions.map((d) => [`${d.category}/${d.type}`, d] as const))(
+  it.each(NodeDefinitions.filter((d) => d.type in OLD_HANDLE_IDS).map((d) => [`${d.category}/${d.type}`, d] as const))(
     "H3: renders a stored v1 %s node with the same handles as before",
     (_name, definition) => {
       renderWithProviders(<EditorNodeSimple {...({ id: "n1" } as never)} />, {
@@ -202,5 +202,36 @@ describe("EditorNodeSimple", () => {
       const wrapper = grown.container.querySelector<HTMLElement>("[style*='min-height']");
       expect(wrapper?.style.minHeight).toBe("114px");
     });
+  });
+});
+
+describe("EditorNodeSimple on a Switch (SPEC6)", () => {
+  const A = "switch-handle-source-aaaaa1";
+  const B = "switch-handle-source-bbbbb2";
+
+  it("H1/H7/C10: renders one source per rule plus Fallback, from the parameters, with display labels", () => {
+    renderWithProviders(<EditorNodeSimple {...({ id: "n1" } as never)} />, {
+      seedWorkflow: load([
+        storedNode({
+          type: "switch",
+          version: "v2",
+          handle: null,
+          parameters: {
+            mode: "rules",
+            rules: [
+              { handleKey: A, handleLabel: "Paid", conditionType: "all", conditions: [] },
+              { handleKey: B, handleLabel: "", conditionType: "all", conditions: [] },
+            ],
+            options: { fallbackOutput: "extra", renameFallbackOutput: "" },
+          },
+        }),
+      ]),
+    });
+    expect(handleIds("target")).toEqual(["target"]);
+    expect(handleIds("source")).toEqual([A, B, "switch-handle-source-fallback"]);
+    expect(screen.getByText("Paid")).toBeTruthy();
+    expect(screen.getByText("Output 1")).toBeTruthy();
+    expect(screen.getByText("Fallback")).toBeTruthy();
+    expect(screen.getByText("Switch")).toBeTruthy();
   });
 });

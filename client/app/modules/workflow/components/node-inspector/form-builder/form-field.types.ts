@@ -23,6 +23,7 @@ export type FormFieldType =
   | "schema-fields"
   | "schema-field-picker"
   | "conditions"
+  | "switch-rules"
   | "expression"
   | "display"
   | "callout-accordion-display"
