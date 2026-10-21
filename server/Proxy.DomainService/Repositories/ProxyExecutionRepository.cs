@@ -109,6 +109,7 @@ namespace Proxy.DomainService.Repositories
             // Gateway hot path: anonymous callers take the skip path inside the helper (no extra reads).
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.ProxyExecutionEntity, "ProxyExecutionRepository.Insert", execution.TenantId))
                 throw new UnauthorizedAccessException("Proxy execution create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.ProxyExecutionEntity, execution, isInsert: true, "ProxyExecutionRepository.Insert", execution.TenantId);
             var collection = GetCollection(execution.TenantId);
             await EnsureIndexesAsync(execution.TenantId, collection);
             await collection.InsertOneAsync(execution);

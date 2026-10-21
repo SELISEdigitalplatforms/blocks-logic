@@ -225,7 +225,7 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
             */}
             <label
               htmlFor={`${idPrefix}-idempotent`}
-              className="flex cursor-pointer items-start gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-2"
+              className="flex cursor-pointer items-start gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-500/40 dark:bg-amber-500/10"
             >
               <Checkbox
                 id={`${idPrefix}-idempotent`}
@@ -238,7 +238,7 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
               />
               <span className="min-w-0">
                 <span className="flex items-center gap-1.5 text-[11px] font-medium">
-                  <AlertTriangle className="h-3 w-3 text-amber-600" />
+                  <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
                   Sending this request twice is safe
                 </span>
                 <span className="block text-[11px] text-muted-foreground">

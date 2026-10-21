@@ -24,13 +24,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/t
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getProxyClientUrl } from "../../constants";
-import { useExportProxy, useGetProxyById, useGetProxyOverview, useToggleProxy } from "../../hooks";
+import { useGetProxyById, useGetProxyOverview, useProxyExport, useToggleProxy } from "../../hooks";
 import { Proxy, ProxyKeyValue, ProxyResilience, ProxyRoute, ResponseFieldNode } from "../../types";
 import {
   describeProxyAccess,
   describeResilience,
-  downloadExportFile,
-  exportFileName,
   pathsToTree,
 } from "../../utils";
 import { ProxyMethodBadge } from "../../components/proxy-method-badge";
@@ -449,7 +447,7 @@ export const ProxyDetails = () => {
     enabled: Boolean(proxy),
   });
   const toggleProxy = useToggleProxy();
-  const exportProxy = useExportProxy();
+  const exportProxy = useProxyExport();
   const toggleLabel = proxy?.enabled ? "Pause" : "Resume";
   const pendingToggleLabel = proxy?.enabled ? "Pausing..." : "Resuming...";
 
@@ -495,19 +493,7 @@ export const ProxyDetails = () => {
     showSuccessToast({ description: enabled ? "Proxy resumed." : "Proxy paused." });
   };
 
-  const handleExport = async () => {
-    try {
-      const file = await exportProxy.mutateAsync(proxy.id);
-      downloadExportFile(exportFileName(proxy.slug), file);
-      showSuccessToast({
-        description: file.maskedValues?.length
-          ? "Proxy exported. Hidden values are saved as ***."
-          : "Proxy exported.",
-      });
-    } catch {
-      showErrorToast({ errors: "Failed to export proxy" });
-    }
-  };
+  const handleExport = () => exportProxy.handleExport(proxy);
 
   return (
     <div className="flex min-h-screen flex-col">

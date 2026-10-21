@@ -59,6 +59,15 @@ namespace DomainService.Notification
                 throw new UnauthorizedAccessException("Notification create is not allowed by the data access policy.");
         }
 
+        /// <summary>Defaults, rules and the requester's access lists for records about to be inserted.</summary>
+        private async Task PrepareInsertAsync<T>(IEnumerable<T> records, string callSite)
+        {
+            if (SchemaOf<T>() is not { } schema)
+                return;
+            foreach (var record in records)
+                await _dataAccess.PrepareWriteAsync(schema, record, isInsert: true, $"NotificationRepository.{callSite}", TargetDb());
+        }
+
         private IMongoDatabase ResolvedClientDb()
         {
             var blocksContext = BlocksContext.GetContext() ?? throw new InvalidOperationException("Tenant context is required.");
@@ -117,6 +126,7 @@ namespace DomainService.Notification
         public async Task SaveAsync<T>(T data, string collectionName = "")
         {
             await GateInsertAsync<T>("SaveAsync");
+            await PrepareInsertAsync([data], "SaveAsync");
             var database = ResolvedClientDb();
             IMongoCollection<T> collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             await collection.InsertOneAsync(data);
@@ -125,6 +135,7 @@ namespace DomainService.Notification
         public async Task SaveAsync<T>(List<T> listOfData)
         {
             await GateInsertAsync<T>("SaveAsyncMany");
+            await PrepareInsertAsync(listOfData, "SaveAsyncMany");
             var database = ResolvedClientDb();
             IMongoCollection<T> collection = database.GetCollection<T>(typeof(T).Name + "s");
            await collection.InsertManyAsync(listOfData);
