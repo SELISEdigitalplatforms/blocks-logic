@@ -420,6 +420,8 @@ describe("OutputPanel", () => {
       const { unmount } = renderWithProviders(<OutputPanel />, { seedWorkflow: seedInput2Empty("all") });
       expect(screen.getByText(/Input 1 · 2 items\s+Input 2 · 0 items/)).toBeTruthy();
       expect(screen.getByText(allNote)).toBeTruthy();
+      // An <output> element: announced as a status without an explicit role.
+      expect(screen.getByRole("status").tagName).toBe("OUTPUT");
       unmount();
       renderWithProviders(<OutputPanel />, { seedWorkflow: seedInput2Empty() });
       expect(screen.getByText(allNote)).toBeTruthy();
