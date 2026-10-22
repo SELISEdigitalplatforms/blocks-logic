@@ -94,7 +94,7 @@ describe("InvokeSnippetCard base URL, SSE and polling", () => {
     expect(screen.getByText(/Add a custom domain to the project/)).toBeTruthy();
   });
 
-  it("adds -N and the Accept header in SSE mode only", () => {
+  it("on a sync function, SSE mode adds -N and the Accept header and shows the two events", () => {
     setDomain("acme.com");
     renderWithProviders(
       <InvokeSnippetCard functionId="fn-1" trigger={{ ...trigger, responseMode: "sync" }} />,
@@ -108,19 +108,32 @@ describe("InvokeSnippetCard base URL, SSE and polling", () => {
     expect(response.match(/^event: /gm)).toEqual(["event: ", "event: "]);
     expect(response).toMatch(/event: run\ndata: \{ "runId": "run_7f21c4" \}\n\nevent: done\n/);
     expect(response).toContain('"result": { "ok": true }');
-    expect(screen.getByText(/STILL_RUNNING/)).toBeTruthy();
   });
 
-  it("warns in SSE mode when the function is async", () => {
-    renderWithProviders(<InvokeSnippetCard functionId="fn-1" trigger={trigger} />);
-    fireEvent.click(screen.getByRole("button", { name: "SSE" }));
-    expect(screen.getByText(/SSE needs Response mode = sync/)).toBeTruthy();
-    expect(screen.queryByText(/200 OK · text\/event-stream/)).toBeNull();
-  });
-
-  it("shows the poll curl with the poll token header in both modes", () => {
+  it("on an SSE function, always shows the event stream, with no toggle and no Accept header", () => {
     setDomain("acme.com");
+    renderWithProviders(
+      <InvokeSnippetCard functionId="fn-1" trigger={{ ...trigger, responseMode: "sse" }} />,
+    );
+    expect(screen.queryByRole("button", { name: "SSE" })).toBeNull();
+    expect(snippetText()).toContain("curl -N -X POST");
+    expect(snippetText()).not.toContain("Accept: text/event-stream");
+    expect(screen.getByText(/200 OK · text\/event-stream/)).toBeTruthy();
+    expect(screen.getByText(/Only needed when the last event is STILL_RUNNING/)).toBeTruthy();
+  });
+
+  it("on an async function, offers no SSE and shows the 202", () => {
     renderWithProviders(<InvokeSnippetCard functionId="fn-1" trigger={trigger} />);
+    expect(screen.queryByRole("button", { name: "SSE" })).toBeNull();
+    expect(snippetText()).not.toContain("-N");
+    expect(screen.getByText(/202 Accepted/)).toBeTruthy();
+  });
+
+  it("shows the poll curl with the poll token header in every mode", () => {
+    setDomain("acme.com");
+    renderWithProviders(
+      <InvokeSnippetCard functionId="fn-1" trigger={{ ...trigger, responseMode: "sync" }} />,
+    );
     expect(pollText()).toContain('curl "$BASE_URL/logic/v4/fn/runs/<runId>/result"');
     expect(pollText()).toContain('-H "x-blocks-key: T1"');
     expect(pollText()).toContain('-H "x-poll-token: <pollToken>"');

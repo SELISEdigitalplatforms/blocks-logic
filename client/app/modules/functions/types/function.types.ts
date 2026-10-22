@@ -35,7 +35,7 @@ export type HttpTriggerVerb = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
  * `sync` waits for the function's answer and returns it, falling back to 202 + poll token when
  * the run takes longer than the wait limit.
  */
-export type TriggerResponseMode = "async" | "sync";
+export type TriggerResponseMode = "async" | "sync" | "sse";
 
 export interface ITriggerConfig {
   httpEnabled: boolean;

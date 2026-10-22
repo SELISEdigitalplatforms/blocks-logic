@@ -457,7 +457,7 @@ namespace Functions.DomainService.Services
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
             trigger.HttpMethods = verbs.Count == 0 ? null : verbs;
-            trigger.ResponseMode = TriggerConfig.IsSync(trigger.ResponseMode) ? TriggerConfig.ResponseModes.Sync : null;
+            trigger.ResponseMode = FunctionResponseModes.Waits(trigger.ResponseMode) ? trigger.ResponseMode : null;
             return trigger;
         }
 

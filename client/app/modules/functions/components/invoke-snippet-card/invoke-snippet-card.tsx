@@ -82,15 +82,7 @@ const ModeToggle = ({ mode, onChange }: { mode: CallMode; onChange: (mode: CallM
   </div>
 );
 
-const StreamResponse = ({ isSync }: { isSync: boolean }) => {
-  if (!isSync) {
-    return (
-      <span className={NOTE_CLASS}>
-        SSE needs Response mode = sync. This function is async, so the call returns 202 and you
-        poll for the result.
-      </span>
-    );
-  }
+const StreamResponse = () => {
   return (
     <>
       <pre className="font-mono text-xs leading-relaxed">{SSE_RESPONSE}</pre>
@@ -132,9 +124,12 @@ const HttpResponse = ({ isSync }: { isSync: boolean }) => {
   );
 };
 
-const pollNote = (mode: CallMode, isSync: boolean) => {
+const pollNote = (isSse: boolean, isSync: boolean) => {
+  if (isSse) {
+    return "Only needed when the last event is STILL_RUNNING: use its runId and pollToken. Poll until status is final.";
+  }
   const base = "Use the runId and pollToken from the 202 answer. Poll until status is final.";
-  return mode === "http" && isSync ? `${base} Only needed after a 202.` : base;
+  return isSync ? `${base} Only needed after a 202.` : base;
 };
 
 /**
@@ -148,20 +143,23 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
   const realBaseUrl = getFunctionBaseUrl(project);
   const baseUrl = realBaseUrl ?? FUNCTION_BASE_URL_PLACEHOLDER;
   const blocksKey = snippetBlocksKey(project?.tenantId);
-  const isSse = mode === "sse";
+  // The trigger decides: an SSE function always answers in events, an async one never does, and
+  // a sync one answers in events only when the caller asks (Accept: text/event-stream).
+  const isSync = trigger.responseMode === "sync";
+  const isSseTrigger = trigger.responseMode === "sse";
+  const isSse = isSseTrigger || (isSync && mode === "sse");
   // x-blocks-key is not optional: it is how the platform resolves the tenant for anything under
   // the gateway, so a caller without it never reaches the function. It identifies the project, it
   // does not authenticate a user — that is what the Authorization header below is for on a
   // token-protected trigger.
   const keyHeader = `  -H "x-blocks-key: ${blocksKey}"`;
-  const acceptHeader = isSse ? ` \\\n  -H "Accept: text/event-stream"` : "";
+  const acceptHeader = isSync && isSse ? ` \\\n  -H "Accept: text/event-stream"` : "";
   const authHeader =
     trigger.authMode === "Token" ? ` \\\n  -H "Authorization: Bearer $BLOCKS_TOKEN"` : "";
   // The first verb the trigger accepts. A GET carries its input in the query; any other verb in
   // the body. The example shows one the trigger actually answers, so what the handler receives
   // below is what this call produces.
   const verb = acceptedHttpVerbs(trigger)[0];
-  const isSync = trigger.responseMode === "sync";
   // -N turns curl's output buffering off, so each event shows up as it is sent.
   const curlHead = `curl${isSse ? " -N" : ""}${verb === "GET" ? "" : ` -X ${verb}`}`;
   const target = `"$BASE_URL${getFunctionClientPath(functionId, "orders/42")}?notify=true"`;
@@ -178,7 +176,7 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
     <Card className="overflow-hidden rounded-xl">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
         <span className="text-sm font-semibold">Call it</span>
-        <ModeToggle mode={mode} onChange={setMode} />
+        {isSync && <ModeToggle mode={mode} onChange={setMode} />}
       </div>
       <div className="flex flex-col gap-1 border-b px-4 py-3">
         <div className="flex items-center justify-between gap-3">
@@ -211,7 +209,7 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
         {pollSnippet}
       </pre>
       <div className="px-4 pb-3 pt-2">
-        <span className={NOTE_CLASS}>{pollNote(mode, isSync)}</span>
+        <span className={NOTE_CLASS}>{pollNote(isSse, isSync)}</span>
       </div>
       <div className="flex flex-col gap-2 border-t px-4 py-3">
         <span className={LABEL_CLASS}>Your handler receives</span>
@@ -219,7 +217,7 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
       </div>
       <div className="flex flex-col gap-2 border-t px-4 py-3">
         <span className={LABEL_CLASS}>Response</span>
-        {isSse ? <StreamResponse isSync={isSync} /> : <HttpResponse isSync={isSync} />}
+        {isSse ? <StreamResponse /> : <HttpResponse isSync={isSync} />}
         <span className={NOTE_CLASS}>
           Every trigger — HTTP, workflow or a test from the editor — is listed under Runs.
         </span>

@@ -191,6 +191,9 @@ namespace XUnitTest.Functions
             service.SyncWaitSeconds(sync, Call(preferWait: 500)).Should().Be(20);
             service.SyncWaitSeconds(sync, Call(preferWait: 0)).Should().BeNull();
             service.SyncWaitSeconds(sync, Call(preferAsync: true)).Should().BeNull();
+            var sse = new TriggerConfig { ResponseMode = "sse" };
+            service.SyncWaitSeconds(sse, Call()).Should().Be(20, "an SSE function waits like a sync one");
+            service.SyncWaitSeconds(sse, Call(preferAsync: true)).Should().BeNull();
         }
 
         [Fact]
@@ -275,6 +278,30 @@ namespace XUnitTest.Functions
             result.RunId.Should().Be(_created!.ItemId);
             result.SseWaitSeconds.Should().BeGreaterThan(0);
             result.RespondSynchronously.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task An_sse_function_answers_in_sse_without_the_accept_header()
+        {
+            _version.Trigger.ResponseMode = "sse";
+            RunIs(RunStatus.Running);
+
+            var result = await Service().InvokeHttpAsync(Tenant, "fn-1", Call());
+
+            result.SseWaitSeconds.Should().BeGreaterThan(0);
+            result.RunId.Should().Be(_created!.ItemId);
+        }
+
+        [Fact]
+        public async Task An_sse_function_called_with_prefer_respond_async_gets_the_202()
+        {
+            _version.Trigger.ResponseMode = "sse";
+            RunIs(RunStatus.Queued);
+
+            var result = await Service().InvokeHttpAsync(Tenant, "fn-1", Call(preferAsync: true));
+
+            result.SseWaitSeconds.Should().BeNull();
+            result.Status.Should().Be(FunctionQueueKeys.Wire.Queued);
         }
 
         [Fact]

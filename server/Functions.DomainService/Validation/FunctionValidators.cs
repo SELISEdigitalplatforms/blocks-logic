@@ -182,8 +182,8 @@ namespace Functions.DomainService.Validation
                 .WithMessage("Each HTTP method may be listed only once.");
 
             RuleFor(x => x.ResponseMode)
-                .Must(m => m is null or TriggerConfig.ResponseModes.Async or TriggerConfig.ResponseModes.Sync)
-                .WithMessage($"Response mode must be \"{TriggerConfig.ResponseModes.Async}\" or \"{TriggerConfig.ResponseModes.Sync}\".");
+                .Must(m => m is null or TriggerConfig.ResponseModes.Async or TriggerConfig.ResponseModes.Sync or FunctionResponseModes.Sse)
+                .WithMessage($"Response mode must be \"{TriggerConfig.ResponseModes.Async}\", \"{TriggerConfig.ResponseModes.Sync}\" or \"{FunctionResponseModes.Sse}\".");
         }
     }
 

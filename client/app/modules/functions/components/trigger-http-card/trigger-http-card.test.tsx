@@ -205,6 +205,22 @@ describe("TriggerHttpCard", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ responseMode: "sync" }));
   });
 
+  it("offers SSE as a third response, and choosing it sets the sse response mode", async () => {
+    const onChange = render(tokenTrigger);
+
+    await userEvent.click(screen.getByRole("radio", { name: "Stream events (SSE)" }));
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ responseMode: "sse" }));
+  });
+
+  it("says what the endpoint answers for an SSE function", () => {
+    render({ ...tokenTrigger, responseMode: "sse" });
+    expect(
+      screen.getByRole("radio", { name: "Stream events (SSE)" }).getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(screen.getByText(/the run id first, then the full response/)).toBeTruthy();
+  });
+
   it("never offers a cookie option: answers can not set cookies on the platform origin", () => {
     render({ ...tokenTrigger, responseMode: "sync" });
     expect(screen.queryByRole("switch", { name: "Allow cookies" })).toBeNull();

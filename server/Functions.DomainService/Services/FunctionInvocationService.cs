@@ -294,8 +294,10 @@ namespace Functions.DomainService.Services
             // subscription; without a ceiling a burst of slow calls to a sync function could hold
             // every connection the Api has. Full → this call is simply async: 202 + poll token,
             // which the caller already has to handle for a run that outlasts the wait.
-            // An SSE caller is sent the run id first, so its run is only queued here; the wait
-            // happens afterwards (AwaitSseAnswerAsync), with keep-alives on the open connection.
+            // An SSE caller — it asked with Accept: text/event-stream, or the trigger answers in SSE —
+            // is sent the run id first, so its run is only queued here; the wait happens afterwards
+            // (AwaitSseAnswerAsync), with keep-alives on the open connection.
+            request.Sse |= FunctionResponseModes.IsSse(version.Trigger.ResponseMode);
             if (request.Sse && syncWait is not null)
             {
                 var queued = await InvokeCoreAsync(
@@ -403,7 +405,7 @@ namespace Functions.DomainService.Services
             // Only a function deployed as sync ever holds a request. Prefer: wait= on an async
             // function is ignored, exactly as before sync existed — existing clients that send it
             // keep getting their 202 and never a raw answer they did not ask the tenant for.
-            if (request.PreferAsync || !TriggerConfig.IsSync(trigger.ResponseMode)) return null;
+            if (request.PreferAsync || !FunctionResponseModes.Waits(trigger.ResponseMode)) return null;
 
             var cap = Math.Max(1, _configuration.GetValue("Functions:HttpSyncWaitMaxSeconds", DefaultHttpSyncWaitMaxSeconds));
             if (request.PreferWaitSeconds is { } asked)

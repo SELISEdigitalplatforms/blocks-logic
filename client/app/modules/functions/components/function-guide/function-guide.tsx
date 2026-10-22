@@ -177,8 +177,8 @@ export default async function handler(input, ctx) {
           <AccordionTrigger className="px-2 text-sm">Streaming answers (AI)</AccordionTrigger>
           <AccordionContent className="flex flex-col gap-2 px-2">
             <P>
-              With Response = <strong>Wait for answer</strong>, yield pieces instead of returning
-              once: the caller gets each piece the moment you yield it.
+              With Response = <strong>Wait for answer</strong> or{" "}
+              <strong>Stream events (SSE)</strong>, you can yield pieces instead of returning once.
             </P>
             <Block>{`export default async function* handler(input, ctx) {
   const stream = await openai.chat.completions.create({
@@ -193,7 +193,7 @@ export default async function handler(input, ctx) {
               items={[
                 "Yield strings (sent as they are), bytes (sent as UTF-8 text) or objects (sent as one JSON line each). Returning any async iterable works too, such as a fetch response's body.",
                 "Without Accept: text/event-stream, the caller gets the pieces as plain text, as they come. If the run fails mid-way, the text is cut off.",
-                "With Accept: text/event-stream, the caller gets two events: event: run with the run id at once, then event: done with the full response (all pieces joined), or event: error.",
+                "With Response = Stream events (SSE), or Accept: text/event-stream on a Wait-for-answer function, the caller gets two events: event: run with the run id at once, then event: done with the full response (all pieces joined), or event: error.",
                 "A streamed answer has a size cap and must finish inside the run's time limit. The run's result keeps only the start of the text.",
                 "In the editor, a Test run shows the pieces as they come. Workflow steps get the whole text at the end.",
               ]}
