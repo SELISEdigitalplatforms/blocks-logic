@@ -51,7 +51,7 @@ const DIGITS = /^\d+$/;
 const describeAllowed = (spec: CronFieldSpec): string => {
   const numbers = `${spec.min}-${spec.max}`;
   if (!spec.names) return numbers;
-  return `${numbers} or ${spec.names[0]}-${spec.names[spec.names.length - 1]}`;
+  return `${numbers} or ${spec.names[0]}-${spec.names.at(-1)}`;
 };
 
 const parseValue = (token: string, spec: CronFieldSpec): number | null => {
