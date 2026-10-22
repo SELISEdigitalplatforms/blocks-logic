@@ -179,7 +179,9 @@ static bool LooksLikeAFile(PathString path)
 }
 
 ApplicationConfigurations.ConfigureMiddleware(app, tenantValidationPrefixes: new[] { "api/notificationHub" });
-app.MapHub<NotificationHub>("/api/notificationHub").WithDisplayName("Controller/notificationHub");
+// A connection is closed when its token expires; the client reconnects with a fresh login.
+app.MapHub<NotificationHub>("/api/notificationHub", options => options.CloseOnAuthenticationExpiration = true)
+    .WithDisplayName("Controller/notificationHub");
 await app.RunAsync();
 
 static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string webRootPath)

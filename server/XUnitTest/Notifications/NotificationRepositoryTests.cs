@@ -106,13 +106,39 @@ namespace XUnitTest.Notifications
         public async Task DataAccess_ResolvesTheRootDatabaseWhileImpersonating()
         {
             SetContext(impersonated: true);
+            Collection<OfflineNotification>(NotificationCollection);
+            var sut = Build();
+
+            await sut.GetItemsAsync<OfflineNotification>(c => true);
+
+            _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Once);
+            _provider.Verify(p => p.GetDatabase(It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task DataAccess_KeepsHubConnectionsInTheTenantDatabaseWhileImpersonating()
+        {
+            SetContext(impersonated: true);
             Collection<NotificationConnection>("NotificationConnections");
             var sut = Build();
 
             await sut.GetItemsAsync<NotificationConnection>(c => true);
 
-            _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Once);
-            _provider.Verify(p => p.GetDatabase(It.IsAny<string>()), Times.Never);
+            _provider.Verify(p => p.GetDatabase("tenant-1"), Times.Once);
+            _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task DataAccess_KeepsHubSubscriptionsInTheTenantDatabaseWhileImpersonating()
+        {
+            SetContext(impersonated: true);
+            Collection<NotificationSubscription>("NotificationSubscriptions");
+            var sut = Build();
+
+            await sut.GetItemsAsync<NotificationSubscription>(c => true);
+
+            _provider.Verify(p => p.GetDatabase("tenant-1"), Times.Once);
+            _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Never);
         }
 
         [Fact]

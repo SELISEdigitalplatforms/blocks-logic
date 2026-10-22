@@ -734,12 +734,13 @@
         <member name="T:Api.Controllers.NotifierController">
             <summary>
             Delivery and read-state for user notifications, routed as <c>/api/Notifier/{action}</c>.
-            The two send actions are anonymous because internal services call them; everything that reads or
+            The two send actions take no bearer token because internal services call them; they check the
+            <c>Secret</c> sender header instead (<see cref="T:DomainService.Notification.INotifierSendGuard"/>). Everything that reads or
             mutates a user's own notifications requires a bearer token.
             </summary>
         </member>
-        <member name="M:Api.Controllers.NotifierController.#ctor(DomainService.Notification.INotificationService,Microsoft.Extensions.Logging.ILogger{Api.Controllers.NotifierController})">
-            <summary>Takes the notification service and a logger.</summary>
+        <member name="M:Api.Controllers.NotifierController.#ctor(DomainService.Notification.INotificationService,DomainService.Notification.INotifierSendGuard,Microsoft.Extensions.Logging.ILogger{Api.Controllers.NotifierController})">
+            <summary>Takes the notification service, the send guard and a logger.</summary>
         </member>
         <member name="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest)">
             <summary><c>POST</c> — delivers a notification through the configured channels.</summary>

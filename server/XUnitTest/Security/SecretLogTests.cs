@@ -75,7 +75,15 @@ namespace XUnitTest.Security
             var logger = new CapturingLogger<NotifierController>();
             var service = new Mock<INotificationService>();
             service.Setup(s => s.NotifyAsync(It.IsAny<NotifyRequest>())).ReturnsAsync(new BaseResponse { IsSuccess = true });
-            var controller = new NotifierController(service.Object, logger);
+            var guard = new Mock<INotifierSendGuard>();
+            guard.Setup(g => g.IsAllowed(It.IsAny<string?>(), It.IsAny<string>())).Returns(true);
+            var controller = new NotifierController(service.Object, guard.Object, logger)
+            {
+                ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+                {
+                    HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext(),
+                },
+            };
             var request = new NotifyRequest
             {
                 ConfigurationName = "cfg",
