@@ -451,8 +451,27 @@ namespace Blocks.FunctionRunner.Runs
                 // From here a container is created: the start charge is spent. Every return above
                 // gives it back with the reservation (HostReservation).
                 reservation.Current?.ContainerStarted();
-                var result = await _sandbox.RunAsync(job.RunId, image, envelopePath, limits, lease.Token)
-                    .ConfigureAwait(false);
+                // A streamed answer's pieces, relayed as they are read (F-5) — a Test run streams
+                // like a warm call. Null until the first piece.
+                StreamRelay? relay = null;
+                Action<string> onChunk = data =>
+                {
+                    if (lease.LeaseLost) return;
+                    try { (relay ??= new StreamRelay(_db, job.RunId, _logger)).Send(data); }
+                    catch (Exception ex) { _logger.LogWarning("Could not relay a piece of run {RunId}: {Message}", job.RunId, ex.Message); }
+                };
+                SandboxResult result;
+                try
+                {
+                    result = await _sandbox.RunAsync(job.RunId, image, envelopePath, limits, onChunk, lease.Token)
+                        .ConfigureAwait(false);
+                }
+                catch
+                {
+                    // A reader of the stream must get an end, not wait out its own time limit.
+                    if (relay is not null) await relay.EndAsync(RunStatuses.Failed, ErrorCodes.SandboxStartFailed, null).ConfigureAwait(false);
+                    throw;
+                }
 
                 if (lease.LeaseLost)
                 {
@@ -464,6 +483,7 @@ namespace Blocks.FunctionRunner.Runs
 
                 if (result.HostFailure is not null)
                 {
+                    if (relay is not null) await relay.EndAsync(RunStatuses.Failed, ErrorCodes.SandboxStartFailed, null).ConfigureAwait(false);
                     await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.SandboxStartFailed,
                         Redact(result.HostFailure, resolvedValues), result.ExitCode, result.DurationMs,
                         null, null, null, null, false,
@@ -486,6 +506,8 @@ namespace Blocks.FunctionRunner.Runs
                 // because every completed run reports its peak here.
                 _budget.Observe(result.PeakMemoryBytes);
 
+                // The stream's end goes out before the result, after its last piece (same connection, in order).
+                if (relay is not null) await relay.EndAsync(status, errorCode, errorMessage).ConfigureAwait(false);
                 await CompleteAsync(
                     job, runKey, startedAt, status, errorCode, errorMessage, result.ExitCode, result.DurationMs,
                     result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,

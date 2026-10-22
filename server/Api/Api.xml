@@ -126,6 +126,20 @@
             with its own message — is what refuses an oversized file, and a runaway upload still stops here.
             </summary>
         </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.StreamRun(BlocksTemplate.Api.Controllers.RunIdRequestDto,Functions.DomainService.Services.IFunctionStreamReader)">
+            <summary>
+            A run's streamed answer as Server-Sent Events, for the Studio (F-5): every piece from the
+            first, as a <c>data:</c> event, then <c>event: done</c> or <c>event: error</c> — the same
+            shape a public caller gets. Lets the editor show a Test run's answer while it runs.
+            <para>
+            The stream's Redis key is per run only, so the run is looked up in the caller's tenant
+            first: another tenant's run id is a 404, like <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRun(System.String)"/>. A finished run that
+            streamed nothing (or whose stream has expired) answers an empty event stream at once
+            rather than waiting for pieces that will never come. A live run that never streams is
+            closed by the reader's own time limit, or by the caller once the run ends.
+            </para>
+            </summary>
+        </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.MapInvokeRefusalsAsync(System.Func{System.Threading.Tasks.Task{Functions.DomainService.Dtos.Responses.InvokeResultDto}})">
             <summary>
             The two refusals a Studio-side invocation (Test, Replay) can hit that are the caller's

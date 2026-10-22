@@ -83,6 +83,19 @@ export class FunctionService {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.TEST, payload);
   };
 
+  /**
+   * A run's streamed answer as Server-Sent Events (see `readSse`). A run that finished without
+   * streaming answers an empty stream.
+   */
+  streamRun = (runId: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> => {
+    return this.logicHttpClient.stream(
+      FUNCTIONS_ENDPOINTS.STREAM_RUN,
+      { runId },
+      { Accept: "text/event-stream" },
+      { signal },
+    );
+  };
+
   /** 200 → the new version; 202 → the build is still running (see useDeploy). */
   deployFunction = (
     payload: IDeployFunctionPayload,

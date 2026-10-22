@@ -91,7 +91,7 @@ export const getProxyClientPath = (slug: string, routePath?: string) => {
  * The registrable domain of a project's custom domain (`app.acme.com` → `acme.com`), whether it is
  * stored bare or as a URL. `""` for anything that is not a dotted hostname.
  */
-const customDomainRoot = (customDomain?: string | null): string => {
+export const customDomainRoot = (customDomain?: string | null): string => {
   const raw = customDomain?.trim();
   if (!raw) return "";
   let hostname: string;

@@ -232,6 +232,33 @@ namespace BlocksTemplate.Api.Controllers
         [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<RunDetailDto> GetRun([FromQuery] string runId) => await _runService.GetAsync(GetTenantId(), runId);
 
+        /// <summary>
+        /// A run's streamed answer as Server-Sent Events, for the Studio (F-5): every piece from the
+        /// first, as a <c>data:</c> event, then <c>event: done</c> or <c>event: error</c> — the same
+        /// shape a public caller gets. Lets the editor show a Test run's answer while it runs.
+        /// <para>
+        /// The stream's Redis key is per run only, so the run is looked up in the caller's tenant
+        /// first: another tenant's run id is a 404, like <see cref="GetRun"/>. A finished run that
+        /// streamed nothing (or whose stream has expired) answers an empty event stream at once
+        /// rather than waiting for pieces that will never come. A live run that never streams is
+        /// closed by the reader's own time limit, or by the caller once the run ends.
+        /// </para>
+        /// </summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public async Task<IActionResult> StreamRun([FromBody] RunIdRequestDto request, [FromServices] IFunctionStreamReader reader)
+        {
+            var run = await _runService.GetAsync(GetTenantId(), request.RunId, HttpContext.RequestAborted);
+            var finished = Enum.TryParse<RunStatus>(run.Status, out var status) && FunctionWireMapping.IsTerminal(status);
+            if (finished && !await reader.ExistsAsync(request.RunId))
+            {
+                // 200 with no events, not 204: a client reading a body treats a missing one as a failure.
+                Response.ContentType = "text/event-stream; charset=utf-8";
+                return new EmptyResult();
+            }
+            return new FunctionStreamResult(request.RunId, sse: true);
+        }
+
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<BaseQueryListResponse<List<RunLogLineDto>>> GetRunLogs(

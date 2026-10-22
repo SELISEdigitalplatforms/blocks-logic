@@ -53,7 +53,7 @@ namespace Blocks.FunctionRunner.Tests
                 await _db.KeyDeleteAsync(
                 [
                     RedisKeys.Run(_runId), RedisKeys.Lease(_runId), RedisKeys.Concurrency(_functionId),
-                    RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
+                    RedisKeys.Result(_runId), RedisKeys.Logs(_runId), RedisKeys.StreamOut(_runId),
                 ]);
             }
             if (_redis is not null) await _redis.DisposeAsync();
@@ -80,6 +80,26 @@ namespace Blocks.FunctionRunner.Tests
                 EnvelopeContentSeen = File.ReadAllText(envelopeHostPath);
                 EnvelopeModeSeen = File.GetUnixFileMode(envelopeHostPath);
                 return Task.FromResult(behave(envelopeHostPath));
+            }
+        }
+
+        /// <summary>A sandbox that streams these pieces through <c>onChunk</c> while it runs, then finishes.</summary>
+        private sealed class StreamingSandbox(params string[] pieces) : ISandbox
+        {
+            public Task<SandboxResult> RunAsync(
+                string runId, string image, string envelopeHostPath, RunLimits limits, CancellationToken cancellationToken) =>
+                RunAsync(runId, image, envelopeHostPath, limits, null, cancellationToken);
+
+            public Task<SandboxResult> RunAsync(
+                string runId, string image, string envelopeHostPath, RunLimits limits, Action<string>? onChunk,
+                CancellationToken cancellationToken)
+            {
+                foreach (var piece in pieces) onChunk?.Invoke(piece);
+                var answered = Finished();
+                return Task.FromResult(answered with
+                {
+                    Output = new SandboxOutputParser().Parse("{\"t\":\"result\",\"ok\":true,\"result\":\"Hello\"}\n"),
+                });
             }
         }
 
@@ -270,6 +290,33 @@ namespace Blocks.FunctionRunner.Tests
             sandbox.Calls.Should().Be(0);
             Directory.Exists(RunDir).Should().BeFalse();
             Field(await ResultEntryAsync(), "errorCode").Should().Be(ErrorCodes.RuntimeStartFailed);
+        }
+    
+
+        [SkippableFact]
+        public async Task A_single_runs_streamed_answer_reaches_the_run_stream_then_its_end()
+        {
+            Skip.If(Unavailable, "no Redis available");
+
+            var disposition = await Processor(new StreamingSandbox("Hel", "lo"))
+                .ProcessAsync(await QueueAsync(), CancellationToken.None);
+
+            disposition.Should().Be(RunProcessor.Disposition.Complete);
+            var entries = await _db!.StreamRangeAsync(RedisKeys.StreamOut(_runId), "-", "+");
+            entries.Take(2).Select(e => (string?)e[RedisKeys.StreamDataField]).Should().Equal("Hel", "lo");
+            entries.Should().HaveCount(3);
+            ((string?)entries[2][RedisKeys.StreamEndField]).Should().Be(RunStatuses.Succeeded);
+            (await _db.KeyTimeToLiveAsync(RedisKeys.StreamOut(_runId))).Should().NotBeNull("it expires");
+        }
+
+        [SkippableFact]
+        public async Task A_single_run_that_streams_nothing_leaves_no_stream()
+        {
+            Skip.If(Unavailable, "no Redis available");
+
+            await Processor(new StreamingSandbox()).ProcessAsync(await QueueAsync(), CancellationToken.None);
+
+            (await _db!.KeyExistsAsync(RedisKeys.StreamOut(_runId))).Should().BeFalse();
         }
     }
 }

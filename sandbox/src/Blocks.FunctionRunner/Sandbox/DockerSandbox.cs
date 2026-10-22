@@ -71,6 +71,19 @@ namespace Blocks.FunctionRunner.Sandbox
             string envelopeHostPath,
             RunLimits limits,
             CancellationToken cancellationToken);
+
+        /// <summary>
+        /// As above, and hands each piece of a streamed answer to <paramref name="onChunk"/> as it
+        /// is read (F-5). A sandbox that cannot watch its output runs the call without it.
+        /// </summary>
+        Task<SandboxResult> RunAsync(
+            string runId,
+            string image,
+            string envelopeHostPath,
+            RunLimits limits,
+            Action<string>? onChunk,
+            CancellationToken cancellationToken)
+            => RunAsync(runId, image, envelopeHostPath, limits, cancellationToken);
     }
 
     /// <inheritdoc cref="ISandbox"/>
@@ -87,11 +100,20 @@ namespace Blocks.FunctionRunner.Sandbox
             _logger = logger;
         }
 
+        public Task<SandboxResult> RunAsync(
+            string runId,
+            string image,
+            string envelopeHostPath,
+            RunLimits limits,
+            CancellationToken cancellationToken)
+            => RunAsync(runId, image, envelopeHostPath, limits, onChunk: null, cancellationToken);
+
         public async Task<SandboxResult> RunAsync(
             string runId,
             string image,
             string envelopeHostPath,
             RunLimits limits,
+            Action<string>? onChunk,
             CancellationToken cancellationToken)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(runId);
@@ -182,7 +204,13 @@ namespace Blocks.FunctionRunner.Sandbox
                 deadlineCts.CancelAfter(deadline);
 
                 var cpuWindow = new HandlerCpuWindow(() => HostCpu.ReadMicroseconds(id), stopwatch);
-                Action<string> onText = boost is null ? cpuWindow.OnText : text => { boost.OnText(text); cpuWindow.OnText(text); };
+                var chunks = onChunk is null ? null : new ChunkLineWatcher(onChunk);
+                Action<string> onText = text =>
+                {
+                    boost?.OnText(text);
+                    cpuWindow.OnText(text);
+                    chunks?.OnText(text);
+                };
                 var readTask = ReadStreamAsync(stream, attachCts.Token, onText);
                 var timedOut = false;
                 using var boostCap = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
