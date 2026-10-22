@@ -1,3 +1,4 @@
+using DataAccess.InternalService.Notifications;
 using Hangfire;
 using Microsoft.Extensions.Logging;
 using Scheduler.DomainService.Events;
@@ -11,11 +12,14 @@ namespace Scheduler.DomainService.Services
         private readonly IScheduleRepository _scheduleRepository;
         private readonly SchedulePublisherService _schedulePublisherService;
         private readonly ILogger<ScheduleJobRegistry> _logger;
+        private readonly IBuiltInNotificationSender? _builtIn;
 
         public ScheduleJobRegistry(IScheduleRepository scheduleRepository,
                                    SchedulePublisherService scheduledEventPublisher,
-                                   ILogger<ScheduleJobRegistry> logger)
+                                   ILogger<ScheduleJobRegistry> logger,
+                                   IBuiltInNotificationSender? builtInNotifications = null)
         {
+            _builtIn = builtInNotifications;
             _scheduleRepository = scheduleRepository;
             _schedulePublisherService = scheduledEventPublisher;
             _logger = logger;
@@ -55,11 +59,23 @@ namespace Scheduler.DomainService.Services
                 TimeZone = TimeZoneInfo.Utc
             };
 
-            RecurringJob.AddOrUpdate(
-                recurringJobId: $"{@event.ItemId}-{@event.TenantId}",
-                methodCall: () => _schedulePublisherService.Publish(@event.ItemId, @event.TenantId),
-                cronExpression: schedule.CronExpression,
-                options: options);
+            try
+            {
+                RecurringJob.AddOrUpdate(
+                    recurringJobId: $"{@event.ItemId}-{@event.TenantId}",
+                    methodCall: () => _schedulePublisherService.Publish(@event.ItemId, @event.TenantId),
+                    cronExpression: schedule.CronExpression,
+                    options: options);
+            }
+            catch (Exception)
+            {
+                // Told once per schedule (throttled), then the original failure goes on to the queue's retry.
+                await ScheduleRegistrationNotifier.NotifyAsync(
+                    _builtIn, @event.TenantId,
+                    schedule.Kind == ScheduleKind.Internal ? schedule.CreatedBy : null, // workflow schedules only
+                    @event.ItemId, workflowId: null);
+                throw;
+            }
         }
 
         public Task ApplyDeleteAsync(ScheduleJobDeletedEvent @event)

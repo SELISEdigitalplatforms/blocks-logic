@@ -29,11 +29,6 @@ namespace Common.InternalService.Shared.Utilities
             serviceCollection.AddSingleton<IContentAccessResolver, ContentAccessResolver>();
             serviceCollection.AddSingleton<IStorageServiceFactory, StorageServiceFactory>();
 
-            serviceCollection.AddTransient<AzureBlobStorageService>();
-            serviceCollection.AddTransient<AwsS3StorageService>();
-            serviceCollection.AddTransient<AwsS3CompatibleStorageService>();
-            serviceCollection.AddTransient<SftpStorageService>();
-
             serviceCollection.AddTransient<IValidator<GetPreSignedUrlForUploadRequest>, GetPreSignedUrlForUploadRequestValidator>();
             #endregion
 

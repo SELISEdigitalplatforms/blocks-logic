@@ -1,4 +1,5 @@
 using DataAccess.InternalService;
+using DataAccess.InternalService.Notifications;
 using Blocks.Genesis.DataAccess.Rules;
 using Blocks.Genesis;
 using Microsoft.Extensions.Logging;
@@ -17,11 +18,14 @@ namespace Scheduler.DomainService.Services
         private readonly IScheduleRepository _scheduleRepository;
         private readonly IMessageClient _messageClient;
         private readonly ILogger<ScheduleService> _logger;
+        private readonly IBuiltInNotificationSender? _builtIn;
 
         public ScheduleService(IScheduleRepository scheduleRepository,
                                IMessageClient messageClient,
-                               ILogger<ScheduleService> logger)
+                               ILogger<ScheduleService> logger,
+                               IBuiltInNotificationSender? builtInNotifications = null)
         {
+            _builtIn = builtInNotifications;
             _scheduleRepository = scheduleRepository;
             _messageClient = messageClient;
             _logger = logger;
@@ -247,6 +251,9 @@ namespace Scheduler.DomainService.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to enqueue workflow schedule {ItemId} for registration.", schedule.ItemId);
+                // The schedule is saved but will not run: tell the user who published the workflow.
+                await ScheduleRegistrationNotifier.NotifyAsync(
+                    _builtIn, tenantId, schedule.CreatedBy, schedule.ItemId, request.WorkflowId);
                 return CreateMutationErrorResponse("enqueue_failed", "Failed to register workflow schedule");
             }
 

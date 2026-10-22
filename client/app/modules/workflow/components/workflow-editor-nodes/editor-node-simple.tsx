@@ -82,6 +82,8 @@ export const EditorNodeSimple = ({ id }: Node) => {
               position={Position.Left}
               id={handleId}
               nodeId={node.id}
+              // Several inputs (Merge) stack in the column like the outputs do; a single input keeps its place.
+              className={targets.length > 1 ? "relative left-auto top-auto transform-none" : undefined}
             >
               {/* Only inputs with a label (Merge's "Input k") show one; every other node's inputs have none. */}
               {label && (

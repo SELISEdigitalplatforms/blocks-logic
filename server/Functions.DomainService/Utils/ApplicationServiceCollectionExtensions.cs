@@ -59,9 +59,6 @@ namespace Functions.DomainService.Utils
                 CloudConfiguration.DomainService.Shared.Services.ConfigurationRepository>();
             services.TryAddSingleton<Common.InternalService.Storage.IStorageServiceFactory,
                 Common.InternalService.Storage.StorageServiceFactory>();
-            services.TryAddTransient<Common.InternalService.Storage.AzureBlobStorageService>();
-            services.TryAddTransient<Common.InternalService.Storage.AwsS3StorageService>();
-            services.TryAddTransient<Common.InternalService.Storage.AwsS3CompatibleStorageService>();
             services.AddSingleton<Storage.IFunctionArtifactStore, Storage.FunctionArtifactStore>();
             services.AddSingleton<IFunctionAuditRepository, FunctionAuditRepository>();
 

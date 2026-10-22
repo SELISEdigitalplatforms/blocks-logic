@@ -32,7 +32,7 @@ namespace XUnitTest.Notification
                       .ReturnsAsync(new ValidationResult());
             TestBlocksContext.Set("tenant-cfg", "user-cfg");
 
-            _sut = new ConfigurationService(_repository.Object, _validator.Object);
+            _sut = new ConfigurationService(_repository.Object, _validator.Object, Mock.Of<ITenants>());
         }
 
         public void Dispose()

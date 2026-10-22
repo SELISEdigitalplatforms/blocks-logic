@@ -1,5 +1,6 @@
 using System.Globalization;
 using Blocks.Genesis;
+using DataAccess.InternalService.Notifications;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -51,6 +52,7 @@ namespace Functions.DomainService.Consumers
         private readonly IFunctionRepository _functionRepository;
         private readonly IFunctionRunGrantRevoker _runGrants;
         private readonly ILogger<FunctionResultConsumer> _logger;
+        private readonly FunctionOwnerNotifier? _notifier;
 
         public FunctionResultConsumer(
             ICacheClient cache,
@@ -61,9 +63,11 @@ namespace Functions.DomainService.Consumers
             IFunctionRepository functionRepository,
             IFunctionRunGrantRevoker runGrants,
             ILogger<FunctionResultConsumer> logger,
-            System.Diagnostics.ActivitySource? traces = null)
+            System.Diagnostics.ActivitySource? traces = null,
+            IBuiltInNotificationSender? builtInNotifications = null)
         {
             _traces = traces;
+            _notifier = builtInNotifications is null ? null : new FunctionOwnerNotifier(functionRepository, builtInNotifications);
             ArgumentNullException.ThrowIfNull(cache);
             _db = cache.CacheDatabase();
             _runRepository = runRepository;
@@ -368,6 +372,13 @@ namespace Functions.DomainService.Consumers
                 await _runGrants.RevokeAsync(runId);
             }
 
+            // The run failed for good (no retry pending), and this delivery wrote that outcome: tell the owner.
+            // Cancelled is the owner's own action and is not reported. Best effort: never throws.
+            if (applied && !retryPending && _notifier is not null && IsFailureWorthReporting(run.Status))
+            {
+                await _notifier.RunFailedAsync(tenantId, run.FunctionId, runId);
+            }
+
             // After the publish, so the caller already has the answer: where this call's time went,
             // for the run's Timing group. Best effort — a run is never failed over its timings.
             if (applied)
@@ -389,6 +400,9 @@ namespace Functions.DomainService.Consumers
                 ? ResultOutcome.Applied
                 : ResultOutcome.Ignored($"run {runId} already holds the outcome of attempt {attempt}");
         }
+
+        private static bool IsFailureWorthReporting(RunStatus status) =>
+            status is RunStatus.Failed or RunStatus.TimedOut or RunStatus.ResourceExceeded;
 
         /// <summary>
         /// Whether the record is still open to this attempt's result — mirrors the repository's

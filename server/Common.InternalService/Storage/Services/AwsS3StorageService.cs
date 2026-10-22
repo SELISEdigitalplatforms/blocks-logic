@@ -2,7 +2,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Blocks.Genesis;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
+using Blocks.Genesis.Entities.Data;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Common.InternalService.Storage
@@ -13,11 +13,11 @@ namespace Common.InternalService.Storage
         protected readonly AmazonS3Client _s3Client;
         protected readonly string _bucketName;
 
-        public AwsS3StorageService(IConfiguration configuration)
+        public AwsS3StorageService(StorageConfiguration storageConfiguration)
         {
-            var accessKey = StorageProvider.AccessKey;
-            var secretKey = StorageProvider.SecretKey;
-            var region = StorageProvider.Region;
+            var accessKey = storageConfiguration.AccessKey;
+            var secretKey = storageConfiguration.SecretKey;
+            var region = storageConfiguration.CloudStorageRegionEndPoint;
             _bucketName = BlocksContext.GetContext()?.TenantId ?? string.Empty;
 
             _s3Client = new AmazonS3Client(accessKey, secretKey, Amazon.RegionEndpoint.GetBySystemName(region));
