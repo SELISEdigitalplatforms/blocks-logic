@@ -276,10 +276,10 @@ export const OutputPanel = ({
             {countItems(splitOutSummary.inputCount)} in → {countItems(splitOutSummary.outputCount)} out
           </p>
           {splitOutSummary.notFound.map((field) => (
-            <div key={field} role="status" className="flex gap-2 rounded border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
+            <output key={field} className="flex gap-2 rounded border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
               <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <p className="break-words">The field &apos;{field}&apos; wasn&apos;t found in any input item</p>
-            </div>
+              <span className="break-words">The field &apos;{field}&apos; wasn&apos;t found in any input item</span>
+            </output>
           ))}
         </div>
       )}
@@ -290,12 +290,12 @@ export const OutputPanel = ({
             {mergeSummary.inputs.map(({ label, count }) => `${label} · ${countItems(count)}`).join("   ")}
           </p>
           {mergeSummary.withoutData.length > 0 && (
-            <div role="status" className="flex gap-2 rounded border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
+            <output className="flex gap-2 rounded border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
               <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <p className="break-words">
+              <span className="break-words">
                 Run When is All: {mergeSummary.withoutData.join(", ")} brought no items, so nothing was output.
-              </p>
-            </div>
+              </span>
+            </output>
           )}
         </div>
       )}
