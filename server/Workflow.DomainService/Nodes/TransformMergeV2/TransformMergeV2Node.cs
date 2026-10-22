@@ -10,6 +10,7 @@ namespace Workflow.DomainService.Nodes.TransformMergeV2
     /// Merge (Append): outputs the items of input 1, then input 2, … input N, each item a copy of its source
     /// item with that item as its parent. Inputs are the target handles merge-handle-target-1..N; a blank
     /// target handle counts as input 1. Items on other handles are ignored and counted.
+    /// Run When All outputs nothing unless every connected input 1..N has items; Any outputs whatever arrived.
     /// </summary>
     public class TransformMergeV2Node : NodeExecutorBase<TransformMergeV2Parameters>, INodeExecutor
     {
@@ -26,7 +27,7 @@ namespace Workflow.DomainService.Nodes.TransformMergeV2
         public const int MinInputs = 2;
         public const int MaxInputs = 10;
 
-        /// <summary>The number of inputs: missing 2, otherwise floored and kept within 2 to 10, as the editor's dropdown.</summary>
+        /// <summary>The number of inputs: missing 2, otherwise floored and kept within 2 to 10, as the editor allows.</summary>
         public static int InputCount(double? numberInputs)
         {
             if (numberInputs is not { } value || double.IsNaN(value)) return MinInputs;
@@ -59,6 +60,19 @@ namespace Workflow.DomainService.Nodes.TransformMergeV2
                 else
                 {
                     ignored += items.Count;
+                }
+            }
+
+            // Every connected input has an entry, empty when its parent sent nothing (or never ran).
+            if (parameters.RunWhen == RunWhenMode.All)
+            {
+                var countByInput = ordered.GroupBy(entry => entry.Input).Select(group => group.Sum(entry => entry.Items.Count)).ToList();
+                var empty = countByInput.Count(count => count == 0);
+                if (empty > 0)
+                {
+                    context.Log.Info(ExecutionLogStages.MergeRunWhenUnmet, "Run When is All: {Empty} of {Inputs} input(s) had no items; nothing was output.",
+                        empty, countByInput.Count);
+                    return Task.FromResult(NodeExecutionResult.Successful([]));
                 }
             }
 

@@ -1107,7 +1107,7 @@ describe("transform/merge v2 (SPEC3)", () => {
   const schema = NodeSchemasDefinition.transformmergev2;
 
   it("H8: defaults, no settings and a fresh derived handle on creation", () => {
-    expect(schema.defaults).toEqual({ parameters: { mode: "append", numberInputs: 2 }, settings: {} });
+    expect(schema.defaults).toEqual({ parameters: { mode: "append", numberInputs: 2, runWhen: "all" }, settings: {} });
     expect(schema.schema.settings).toEqual([]);
     const a = schema.transform!({ id: "a", position: { x: 0, y: 0 }, data: {} } as never);
     const b = schema.transform!({ id: "b", position: { x: 0, y: 0 }, data: {} } as never);
@@ -1116,13 +1116,24 @@ describe("transform/merge v2 (SPEC3)", () => {
     expect(a.handle!.targets.map((t) => t.key)).toEqual(["merge-handle-target-1", "merge-handle-target-2"]);
   });
 
-  it("C3: Number of Inputs is a dropdown from 2 to 10 that saves a number", () => {
+  it("C3: Number of Inputs is a number field from 2 to 10, applied on blur, kept within 2 to 10", () => {
     const field = schema.schema.parameters.find((f) => f.key === "numberInputs")!;
-    expect(field.type).toBe("select");
-    expect((field.options as Array<{ value: number }>).map((o) => o.value)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(field).toMatchObject({ type: "number", min: 2, max: 10, step: 1, commitOn: "blur", defaultValue: 2 });
     const coerce = (value: unknown) => field.onChange!(value, {}, {} as never);
-    expect(coerce("3")).toEqual({ numberInputs: 3 });
-    expect(coerce(3)).toBeUndefined();
+    expect(coerce(1)).toEqual({ numberInputs: 2 });
+    expect(coerce(12)).toEqual({ numberInputs: 10 });
+    expect(coerce(3.7)).toEqual({ numberInputs: 3 });
+    expect(coerce(4)).toBeUndefined();
+    expect(coerce(null)).toBeUndefined();
+  });
+
+  it("Run When is All or Any with a description, All by default", () => {
+    const field = schema.schema.parameters.find((f) => f.key === "runWhen")!;
+    expect(field).toMatchObject({ type: "select-with-description", label: "Run When", defaultValue: "all" });
+    expect(field.options).toEqual([
+      { value: "all", label: "All", description: "Output only when every connected input has data. Otherwise, output nothing." },
+      { value: "any", label: "Any", description: "Output the data from every input that has some. Empty inputs are skipped." },
+    ]);
   });
 
   it("Mode is a dropdown with Append only", () => {

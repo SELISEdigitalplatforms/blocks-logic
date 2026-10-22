@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveMergeHandle, mergeInputCount, mergeInputCounts } from "./merge-handles";
+import { deriveMergeHandle, mergeInputCount, mergeInputCounts, mergeInputsWithoutData } from "./merge-handles";
 
 describe("deriveMergeHandle", () => {
   it.each([
@@ -38,24 +38,41 @@ describe("mergeInputCounts", () => {
   it("counts each input from its sources' branch counts, listing empty inputs too", () => {
     const edges = [edge("b", "merge-handle-target-2"), edge("a", "merge-handle-target-1"), { source: "x", target: "elsewhere", sourceHandle: "source", targetHandle: "merge-handle-target-1" }];
     expect(mergeInputCounts("m", 3, edges, (id) => counts[id])).toEqual([
-      { label: "Input 1", count: 2 },
-      { label: "Input 2", count: 1 },
-      { label: "Input 3", count: 0 },
+      { label: "Input 1", count: 2, connected: true },
+      { label: "Input 2", count: 1, connected: true },
+      { label: "Input 3", count: 0, connected: false },
     ]);
   });
 
   it("adds two edges on one input, reads the edge's branch, treats a blank handle as Input 1 and ignores other handles", () => {
     const edges = [edge("a", "merge-handle-target-1"), edge("check", "merge-handle-target-1", "if-true"), edge("b", null, null), edge("old", "merge-handle-target-3"), edge("old", "input-2")];
     expect(mergeInputCounts("m", 2, edges, (id) => counts[id])).toEqual([
-      { label: "Input 1", count: 6 },
-      { label: "Input 2", count: 0 },
+      { label: "Input 1", count: 6, connected: true },
+      { label: "Input 2", count: 0, connected: false },
     ]);
   });
 
   it("a source that did not run counts 0", () => {
     expect(mergeInputCounts("m", 2, [edge("a", "merge-handle-target-1")], () => undefined)).toEqual([
-      { label: "Input 1", count: 0 },
-      { label: "Input 2", count: 0 },
+      { label: "Input 1", count: 0, connected: true },
+      { label: "Input 2", count: 0, connected: false },
     ]);
+  });
+});
+
+describe("mergeInputsWithoutData", () => {
+  const inputs = [
+    { label: "Input 1", count: 2, connected: true },
+    { label: "Input 2", count: 0, connected: true },
+    { label: "Input 3", count: 0, connected: false },
+  ];
+
+  it("with All (or no saved value) lists the connected inputs that had no items", () => {
+    expect(mergeInputsWithoutData("all", inputs)).toEqual(["Input 2"]);
+    expect(mergeInputsWithoutData(undefined, inputs)).toEqual(["Input 2"]);
+  });
+
+  it("with Any lists nothing", () => {
+    expect(mergeInputsWithoutData("any", inputs)).toEqual([]);
   });
 });

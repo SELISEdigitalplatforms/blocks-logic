@@ -31,14 +31,26 @@ export const mergeInputCounts = (
   numberInputs: unknown,
   edges: MergeEdge[],
   countsBySource: (sourceId: string) => Record<string, number> | undefined,
-): { label: string; count: number }[] => {
+): { label: string; count: number; connected: boolean }[] => {
   const counts = Array.from({ length: mergeInputCount(numberInputs) }, () => 0);
+  const connected = counts.map(() => false);
   for (const edge of edges) {
     if (edge.target !== nodeId) continue;
     const input = edge.targetHandle ? Number(edge.targetHandle.slice(MERGE_TARGET_PREFIX.length)) : 1;
     if (!edge.targetHandle?.startsWith(MERGE_TARGET_PREFIX) && edge.targetHandle) continue;
     if (!Number.isInteger(input) || input < 1 || input > counts.length) continue;
+    connected[input - 1] = true;
     counts[input - 1] += countsBySource(edge.source)?.[edge.sourceHandle || "source"] ?? 0;
   }
-  return counts.map((count, i) => ({ label: `Input ${i + 1}`, count }));
+  return counts.map((count, i) => ({ label: `Input ${i + 1}`, count, connected: connected[i] }));
 };
+
+/**
+ * The connected inputs that had no items when Run When is All (a missing runWhen is All, as on the server):
+ * Merge output nothing because of them. Empty with Any, or when every connected input had items.
+ */
+export const mergeInputsWithoutData = (
+  runWhen: unknown,
+  counts: { label: string; count: number; connected: boolean }[],
+): string[] =>
+  runWhen === "any" ? [] : counts.filter((input) => input.connected && input.count === 0).map((input) => input.label);
