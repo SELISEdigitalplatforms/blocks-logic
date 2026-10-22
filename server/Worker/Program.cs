@@ -85,8 +85,8 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
             services.AddSingleton<IConsumer<PublishScheduleCommand>, SchedulerTriggerConsumer>();
             services.AddApplicationServices();
+            // IScheduleService only (WorkflowService needs it). Hangfire and the schedule registry run in Scheduler.Worker.
             services.AddSchedulerServices();
-            services.AddSchedulerWorkerServices();
             services.AddFunctionsServices(hostContext.Configuration);
             services.AddFunctionsWorkerServices();
             services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
@@ -96,6 +96,6 @@ IHostBuilder CreateHostBuilder(string[] args) =>
 
             // Before Genesis sets up tracing, so it runs ahead of Genesis's exporter (see TraceTagSanitizer).
             Common.InternalService.Tracing.TraceTagSanitizer.AddFirst(services);
-            ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
+            ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetWorkerMessageConfiguration(secret.MessageConnectionString));
         });
 
