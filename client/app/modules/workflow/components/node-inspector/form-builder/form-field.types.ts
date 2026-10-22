@@ -23,8 +23,11 @@ export type FormFieldType =
   | "schema-fields"
   | "schema-field-picker"
   | "conditions"
+  | "switch-rules"
   | "expression"
   | "display"
+  | "split-out-fields"
+  | "comma-list"
   | "callout-accordion-display"
   | "tab-with-text"
   | "readonly-details";

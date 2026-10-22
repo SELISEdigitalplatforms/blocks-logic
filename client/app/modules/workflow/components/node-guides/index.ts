@@ -5,6 +5,8 @@ export { NodeGuideActionHttpRequestV1 } from "./node-guide-action-httpRequest-v1
 export { NodeGuideActionProxy } from "./node-guide-action-proxy";
 export { NodeGuideActionSendMailV1 } from "./node-guide-action-sendMail-v1";
 export { NodeGuideLogicIfV1 } from "./node-guide-logic-if-v1";
+export { NodeGuideLogicSwitchV2 } from "./node-guide-logic-switch-v2";
+export { NodeGuideTransformSplitOutV2 } from "./node-guide-transform-splitOut-v2";
 export { NodeGuideTransformCodeV1 } from "./node-guide-transform-code-v1";
 export { NodeGuideTransformSetFieldV1 } from "./node-guide-transform-setfield-v1";
 export { NodeGuideTriggerDataGatewayV1 } from "./node-guide-trigger-dataGateway-v1";

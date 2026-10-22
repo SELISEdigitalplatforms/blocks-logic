@@ -24,6 +24,7 @@ import { getStatusConfig, shownExecutionStatus, WorkflowExecutionStatus } from "
 import { WorkflowExecutionMode } from "../../models/workflow.model";
 import { WorkflowExecution } from "@blocks-workflow/types/workflow.service.type";
 import { cn } from "@/lib/utils";
+import { upgradeNode } from "../../utils/node-upgraders";
 
 export const WorkflowExecutionEditor = ({
   execution,
@@ -80,7 +81,8 @@ export const WorkflowExecutionEditor = ({
 
   useEffect(() => {
     if (data?.workflowSnapshot && isFetched) {
-      const workflowData = data.workflowSnapshot;
+      // Snapshot nodes may be v1 without a handle; upgrade them first so branching edges are recognised.
+      const workflowData = { ...data.workflowSnapshot, nodes: data.workflowSnapshot.nodes.map(upgradeNode) };
 
       // Build the actually-executed subgraph via BFS
       const { reachableNodeIds, traversedEdgeIds } = buildExecutedSubgraph(

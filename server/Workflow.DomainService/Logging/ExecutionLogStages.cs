@@ -44,6 +44,9 @@ namespace Workflow.DomainService.Logging
         // Per node type (inside each executor's ExecuteAsync)
         public const string TriggerRead = "node.trigger.read";
         public const string IfEvaluated = "node.if.evaluated";
+        public const string SwitchEvaluated = "node.switch.evaluated";
+        public const string SplitOutApplied = "node.splitOut.applied";
+        public const string SplitOutFieldNotFound = "node.splitOut.fieldNotFound";
         public const string SetFieldApplied = "node.setfield.applied";
         public const string CodeStarted = "node.code.started";
         public const string CodeFinished = "node.code.finished";

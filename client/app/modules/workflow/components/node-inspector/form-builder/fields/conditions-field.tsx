@@ -39,7 +39,7 @@ const TYPE_OPTIONS = [
   { value: "date_time", label: "Date & Time" },
 ];
 
-const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> = {
+export const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> = {
   string: [
     { value: "equals", label: "Equals" },
     { value: "not_equals", label: "Not equals" },
@@ -82,15 +82,17 @@ const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> = {
 };
 
 /** Operators whose right side is a list. */
-const LIST_OPERATORS = new Set(["in", "not_in"]);
+export const LIST_OPERATORS = new Set(["in", "not_in"]);
 const LIST_HINT = "List: JSON array or comma-separated values";
 
-function DroppableConditionInput({ id, value, onChange, placeholder, disabled, readOnly, isMultiline, variablePicker }: { id: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; readOnly?: boolean; isMultiline: boolean; variablePicker?: VariablePickerConfig | null }) {
+export function DroppableConditionInput({ id, value, onChange, placeholder, disabled, readOnly, isMultiline, variablePicker, className, ariaLabel }: { id: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; readOnly?: boolean; isMultiline: boolean; variablePicker?: VariablePickerConfig | null; className?: string; ariaLabel?: string }) {
   return (
     <div className={cn("relative w-full")}>
       <ExpressionHighlighter value={value || ""} isMultiline={isMultiline} variablePicker={variablePicker}>
         <Input
           id={id}
+          aria-label={ariaLabel}
+          className={className}
           placeholder={placeholder}
           value={value}
           onChange={(e) => {

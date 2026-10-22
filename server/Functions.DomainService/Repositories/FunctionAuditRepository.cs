@@ -51,6 +51,7 @@ namespace Functions.DomainService.Repositories
         {
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionAuditEventEntity, "FunctionAuditRepository.Create", tenantId))
                 throw new UnauthorizedAccessException("Function audit event create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.FunctionAuditEventEntity, auditEvent, isInsert: true, "FunctionAuditRepository.Create", tenantId);
             await EnsureIndexesAsync(tenantId, cancellationToken);
             await Collection(tenantId).InsertOneAsync(auditEvent, cancellationToken: cancellationToken);
         }

@@ -53,6 +53,8 @@ namespace Functions.DomainService.Repositories
 
             if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionRunLogEntity, "FunctionRunLogRepository.InsertMany", tenantId))
                 throw new UnauthorizedAccessException("Function run log create is not allowed by the data access policy.");
+            foreach (var log in logs)
+                await _dataAccess.PrepareWriteAsync(LogicSchemas.FunctionRunLogEntity, log, isInsert: true, "FunctionRunLogRepository.InsertMany", tenantId);
             await EnsureIndexesAsync(tenantId, cancellationToken);
             // Ordered: preserving the sandbox's own stdout order matters more here than
             // resilience to a single bad document, and a bad document would indicate a bug

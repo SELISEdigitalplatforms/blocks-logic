@@ -52,6 +52,27 @@ const executedNode = (extra: Record<string, unknown> = {}): any => ({
   ...extra,
 });
 
+// The source node "n1" as an If node: edge labels come from its handle entries.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ifSourceNode = (): any => ({
+  n1: {
+    id: "n1",
+    name: "If",
+    type: "if",
+    category: "logic",
+    version: "v2",
+    position: { x: 0, y: 0 },
+    data: {},
+    handle: {
+      sources: [
+        { key: "if-true", label: "True" },
+        { key: "if-false", label: "False" },
+      ],
+      targets: [{ key: "target", label: "" }],
+    },
+  },
+});
+
 describe("WorkflowEditorEdgeDefault", () => {
   it("renders a plain edge with no label when not traversed", () => {
     renderWithProviders(<WorkflowEditorEdgeDefault {...edgeProps()} />);
@@ -76,8 +97,26 @@ describe("WorkflowEditorEdgeDefault", () => {
   it("shows the branch handle label for if-true", () => {
     renderWithProviders(
       <WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId: "if-true" })} />,
+      { seedWorkflow: (store) => store.setState({ nodesMap: ifSourceNode() }) },
     );
     expect(screen.getByText("True")).toBeTruthy();
+  });
+
+  it("takes the label from the source node's handle entry", () => {
+    const nodesMap = ifSourceNode();
+    nodesMap.n1.handle.sources[1].label = "Otherwise";
+    renderWithProviders(
+      <WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId: "if-false" })} />,
+      { seedWorkflow: (store) => store.setState({ nodesMap }) },
+    );
+    expect(screen.getByText("Otherwise")).toBeTruthy();
+  });
+
+  it("shows no label when the source node has no entry for the handle", () => {
+    renderWithProviders(
+      <WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId: "if-true" })} />,
+    );
+    expect(screen.queryByText("True")).toBeNull();
   });
 
   it("applies execution styling and a singular item count for a traversed completed node", () => {
@@ -120,6 +159,7 @@ describe("WorkflowEditorEdgeDefault", () => {
       {
         seedWorkflow: (store) => {
           store.setState({
+            nodesMap: ifSourceNode(),
             stepExecutionTraversedEdgeIds: new Set(["e1"]),
             executedNodes: [executedNode({ outputCountsByBranch: { True: 2 } })],
           });
@@ -162,5 +202,47 @@ describe("WorkflowEditorEdgeDefault", () => {
     expect(screen.getByTestId("base-edge").getAttribute("data-edge-class")).toBe(
       "stroke-success",
     );
+  });
+});
+
+describe("WorkflowEditorEdgeDefault on a Switch (SPEC6)", () => {
+  const A = "switch-handle-source-aaaaa1";
+  const B = "switch-handle-source-bbbbb2";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const switchSource = (): any => ({
+    n1: {
+      id: "n1", name: "Switch", category: "logic", type: "switch", version: "v2", position: { x: 0, y: 0 }, data: {},
+      handle: {
+        targets: [{ key: "target", label: "" }],
+        sources: [
+          { key: A, label: "Paid" },
+          { key: B, label: "" },
+          { key: "switch-handle-source-fallback", label: "" },
+        ],
+      },
+    },
+  });
+
+  it.each([
+    [A, "Paid"],
+    [B, "1"],
+    ["switch-handle-source-fallback", "Fallback"],
+  ])("labels the edge on %s as %s", (sourceHandleId, label) => {
+    renderWithProviders(<WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId })} />, {
+      seedWorkflow: (store) => store.setState({ nodesMap: switchSource() }),
+    });
+    expect(screen.getByText(label)).toBeTruthy();
+  });
+
+  it("H13: shows the item count of the edge's own key", () => {
+    renderWithProviders(<WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId: B })} />, {
+      seedWorkflow: (store) =>
+        store.setState({
+          nodesMap: switchSource(),
+          stepExecutionTraversedEdgeIds: new Set(["e1"]),
+          executedNodes: [executedNode({ outputCountsByBranch: { [A]: 1, [B]: 3 } })],
+        }),
+    });
+    expect(screen.getByText("3 items")).toBeTruthy();
   });
 });

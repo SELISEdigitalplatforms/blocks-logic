@@ -14,7 +14,8 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { useWorkflow } from "../../hooks";
 import { NodeDefinitions } from "./node-definitions";
-import { WorkflowNodeDefinition } from "@blocks-workflow/models/node.model";
+import { EditorNode, WorkflowNodeDefinition } from "@blocks-workflow/models/node.model";
+import { cloneHandle, findNodeDefinition } from "../../utils/node-upgraders";
 import { NodeSchemasDefinition } from "../node-schemas";
 import { v4 as uuidv4 } from "uuid";
 import { findFreePosition } from "../../utils/find-free-position";
@@ -70,8 +71,8 @@ export const NodeLibraryPanel = ({
 
       const position = findFreePosition(nodes, preferredPosition);
 
-      const nodeData = {
-        ...node,
+      // Only the node's own fields: the definition's icon, title and handle template stay in the definition.
+      const nodeData: EditorNode = {
         id: uuidv4().replace(/-/g, ""),
         name:
           length > 0
@@ -79,6 +80,8 @@ export const NodeLibraryPanel = ({
             : node.defaultName || node.type,
         type: node.type,
         category: node.category,
+        version: node.version,
+        handle: cloneHandle(node.handle),
         parameters: schemaDefinition?.defaults.parameters || {},
         settings: schemaDefinition?.defaults.settings || {},
         position,
@@ -93,13 +96,12 @@ export const NodeLibraryPanel = ({
         selectedNodesToConnect.push(selectedNode);
       }
 
-      if (selectedNodesToConnect.length > 0 && node.handleSpec.target.length > 0) {
+      const newTargets = transformedNode.handle?.targets ?? [];
+      if (selectedNodesToConnect.length > 0 && newTargets.length > 0) {
         selectedNodesToConnect.forEach((selNode) => {
-          const selectedDef = NodeDefinitions.find(
-            (d) => d.type === selNode.type && d.category === selNode.category,
-          );
-          const sourceHandle = selectedDef
-            ? getNodeNextSource(selNode.id, selectedDef.handleSpec.source)
+          const selectedSources = selNode.handle?.sources ?? findNodeDefinition(selNode)?.handle.sources;
+          const sourceHandle = selectedSources
+            ? getNodeNextSource(selNode.id, selectedSources.map((entry) => entry.key))
             : "source";
           
           const edgeSourceHandle =
@@ -109,7 +111,7 @@ export const NodeLibraryPanel = ({
 
           createEdge(
             { source: selNode.id, sourceHandle: edgeSourceHandle },
-            { target: transformedNode.id, targetHandle: node.handleSpec.target[0] },
+            { target: transformedNode.id, targetHandle: newTargets[0].key },
           );
         });
       }

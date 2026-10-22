@@ -1,6 +1,7 @@
 import { useStepExecute, useExecuteTriggerListener, useUpdateWorkflow } from "./use-workflow-api";
 import { useWorkflow } from "./use-workflow";
 import { workflowService } from "../services/workflow.service";
+import { toPersistedNode } from "../utils/to-persisted-node";
 import { showErrorToast } from "@/hooks/use-toast";
 import { TRIGGER_NODE_LISTENING_CODE } from "../constants";
 import { useState } from "react";
@@ -18,7 +19,7 @@ export const useHandleExecuteStep = () => {
   const { mutateAsync: stepExecute } = useStepExecute();
   const { mutateAsync: executeTriggerListener } = useExecuteTriggerListener();
   const { mutateAsync: updateWorkflow } = useUpdateWorkflow();
-  const { workflowId, setStepExecutionData, nextExecutionId, setNextExecutionId, setIsListening, nodesMap, edgesMap, executedItems } = useWorkflow();
+  const { workflowId, setStepExecutionData, nextExecutionId, setNextExecutionId, setIsListening, nodesMap, edgesMap, executedItems, markSaved } = useWorkflow();
 
   const [triggerSelectionNodes, setTriggerSelectionNodes] = useState<EditorNode[]>([]);
   const [triggerSelectionCompletionNodeId, setTriggerSelectionCompletionNodeId] = useState<string | null>(null);
@@ -64,9 +65,10 @@ export const useHandleExecuteStep = () => {
     try {
       await updateWorkflow({
         itemId: workflowId,
-        nodes: Object.values(nodesMap) as Parameters<typeof updateWorkflow>[0]["nodes"],
+        nodes: Object.values(nodesMap).map(toPersistedNode),
         edges: Object.values(edgesMap),
       });
+      markSaved(nodesMap, edgesMap);
 
       const stepResp = (await stepExecute({
         WorkflowId: workflowId,

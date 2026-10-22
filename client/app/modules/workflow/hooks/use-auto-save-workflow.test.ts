@@ -11,13 +11,14 @@ import { mockWorkflowEdge1 } from "../test-utils/__mocks__";
 
 vi.mock("../services/workflow.service", () => mockWorkflowServiceFactory());
 
-const { mockGetState, mockUseWorkflowStore } = vi.hoisted(() => {
+const { mockGetState, mockUseWorkflowStore, mockMarkSaved } = vi.hoisted(() => {
   const mockGetState = vi.fn();
+  const mockMarkSaved = vi.fn();
   const mockUseWorkflowStore = vi.fn(
     (selector: (state: { hasUnsavedChanges: boolean }) => boolean) =>
       selector({ hasUnsavedChanges: true }),
   );
-  return { mockGetState, mockUseWorkflowStore };
+  return { mockGetState, mockUseWorkflowStore, mockMarkSaved };
 });
 
 vi.mock("../store", () => ({
@@ -44,6 +45,7 @@ describe("useAutoSaveWorkflow", () => {
       nodesMap: { [mockWorkflowNode1.id]: mockWorkflowNode1 },
       edgesMap: { [mockWorkflowEdge1.id]: mockWorkflowEdge1 as Edge },
       nodeOutputSchemas: {},
+      markSaved: mockMarkSaved,
     });
   });
 
@@ -101,6 +103,22 @@ describe("useAutoSaveWorkflow", () => {
     );
   });
 
+  it("H9: sends only the whitelisted node fields", async () => {
+    renderHook(() => useAutoSaveWorkflow(DEFAULT_OPTIONS), { wrapper: createWrapper() });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DEFAULT_OPTIONS.debounceMs + 100);
+    });
+
+    const payload = vi.mocked(workflowService.updateWorkflow).mock.calls[0][0];
+    const sent = payload.nodes!.find((n) => n.id === mockWorkflowNode1.id)!;
+    expect(Object.keys(sent).every((key) =>
+      ["id", "name", "category", "type", "version", "position", "handle", "parameters", "settings", "pinData"].includes(key),
+    )).toBe(true);
+    expect(sent).not.toHaveProperty("data");
+    expect(sent).not.toHaveProperty("description");
+  });
+
   it("should call updateWorkflow immediately on saveNow()", async () => {
     const { result } = renderHook(() => useAutoSaveWorkflow(DEFAULT_OPTIONS), {
       wrapper: createWrapper(),
@@ -153,6 +171,17 @@ describe("useAutoSaveWorkflow", () => {
     });
 
     expect(onSaveSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks the sent nodes and edges as saved after a successful save", async () => {
+    renderHook(() => useAutoSaveWorkflow(DEFAULT_OPTIONS), { wrapper: createWrapper() });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DEFAULT_OPTIONS.debounceMs + 100);
+    });
+
+    const sent = mockGetState.mock.results[0].value as { nodesMap: object; edgesMap: object };
+    expect(mockMarkSaved).toHaveBeenCalledWith(sent.nodesMap, sent.edgesMap);
   });
 
   it("should call onSaveError callback when updateWorkflow rejects", async () => {

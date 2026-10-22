@@ -17,8 +17,12 @@ namespace XUnitTest.Workflow
             public Task<NodeExecutionResult> RunAsync(NodeExecutionContext context) => Task.FromResult(NodeExecutionResult.Empty());
         }
 
-        /// <summary>Every production executor class, read without running its constructor (NodeType/Versions need no state).</summary>
+        /// <summary>The 13 node types that existed before SPEC6; they must keep resolving exactly as before.</summary>
         private static List<INodeExecutor> ProductionExecutors() =>
+            AllProductionExecutors().Where(e => e.NodeType is not ("switch" or "splitOut")).ToList();
+
+        /// <summary>Every production executor class, read without running its constructor (NodeType/Versions need no state).</summary>
+        private static List<INodeExecutor> AllProductionExecutors() =>
             new[] { typeof(LogicIfV1Node).Assembly, typeof(ActionFunctionNode).Assembly }
                 .SelectMany(a => a.GetTypes())
                 .Where(t => typeof(INodeExecutor).IsAssignableFrom(t) && t is { IsClass: true, IsAbstract: false })
@@ -73,6 +77,25 @@ namespace XUnitTest.Workflow
             // the same generic UnexpectedErrorMessage (UserFacingError); only the server-side log text differs.
             oldLookup.Should().Throw<InvalidOperationException>();
             newLookup.Should().Throw<InvalidOperationException>();
+        }
+
+        [Fact]
+        public void Switch_ResolvesOnlyAsV2_AndNeverFallsBack()
+        {
+            var all = AllProductionExecutors();
+            var registry = new NodeExecutorRegistry(all);
+            var @switch = all.Single(e => e.NodeType == "switch");
+
+            registry.Resolve("switch", "v2").Should().Be(new NodeExecutorResolution(@switch, false));
+            foreach (var version in new[] { "v1", "v3", "", null })
+            {
+                var act = () => registry.Resolve("switch", version);
+                act.Should().Throw<InvalidOperationException>($"version '{version}'");
+            }
+            foreach (var executor in all.Where(e => e.NodeType is not ("switch" or "splitOut")))
+            {
+                registry.Resolve(executor.NodeType, "v1").Executor.Should().BeSameAs(executor);
+            }
         }
 
         [Fact]

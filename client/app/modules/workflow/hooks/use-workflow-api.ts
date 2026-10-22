@@ -31,6 +31,8 @@ export const useGetWorkflowById = (payload: IGetWorkflowByIdPayload) => {
     queryKey: ["workflow", payload],
     queryFn: () => workflowService.getWorkflowById(payload),
     enabled: !!payload.id,
+    // Coming back to the window must not reload the open workflow over the editor's state.
+    refetchOnWindowFocus: false,
   });
 };
 
