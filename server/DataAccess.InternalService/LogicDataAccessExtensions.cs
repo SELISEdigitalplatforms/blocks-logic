@@ -1,4 +1,5 @@
 using Blocks.Genesis.DataAccess;
+using DataAccess.InternalService.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DataAccess.InternalService;
@@ -13,6 +14,8 @@ public static class LogicDataAccessExtensions
     {
         services.AddBlocksDataAccess();
         services.AddSingleton<ILogicDataAccess, LogicDataAccess>();
+        // The one sender of the built-in notifications; every host that calls this gets it.
+        services.AddSingleton<IBuiltInNotificationSender, BuiltInNotificationSender>();
         return services;
     }
 }

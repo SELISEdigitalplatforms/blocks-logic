@@ -1140,6 +1140,7 @@ namespace Workflow.DomainService.Services
             if (!workflow.IsPublished || string.IsNullOrWhiteSpace(workflow.PublishedVersionId))
             {
                 _logger.LogWarning("Workflow is not published: {WorkflowId}, {TenantId}; skipping scheduler trigger", payload.WorkflowId, tenantId);
+                await _workflowNotificationService.NotifyScheduledTriggerDroppedAsync(tenantId, workflow, "not-published");
                 return;
             }
 
@@ -1149,6 +1150,7 @@ namespace Workflow.DomainService.Services
             {
                 _logger.LogError("Published version snapshot not found for WorkflowId: {WorkflowId}, Version: {VersionId}",
                     payload.WorkflowId, workflow.PublishedVersionId);
+                await _workflowNotificationService.NotifyScheduledTriggerDroppedAsync(tenantId, workflow, "version-missing");
                 return;
             }
 
@@ -1161,6 +1163,7 @@ namespace Workflow.DomainService.Services
             {
                 _logger.LogWarning("No schedule trigger node {TriggerId} found in published snapshot for WorkflowId: {WorkflowId}",
                     payload.TriggerId, payload.WorkflowId);
+                await _workflowNotificationService.NotifyScheduledTriggerDroppedAsync(tenantId, workflow, "trigger-missing");
                 return;
             }
 

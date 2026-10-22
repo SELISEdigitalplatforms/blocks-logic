@@ -9,6 +9,7 @@ using Workflow.DomainService.Utils;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Blocks.Genesis.Entities.Logic;
+using DataAccess.InternalService.Notifications;
 
 namespace Workflow.DomainService.Services
 {
@@ -26,6 +27,7 @@ namespace Workflow.DomainService.Services
         private readonly ILogger<WorkflowNotificationService> _logger;
         private readonly INotificationService _notificationService;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IBuiltInNotificationSender? _builtIn;
 
         public WorkflowNotificationService(
             ICryptoService cryptoService,
@@ -33,8 +35,10 @@ namespace Workflow.DomainService.Services
             IConfiguration configuration,
             INotificationService notificationService,
             IHttpClientFactory httpClientFactory,
-            ILogger<WorkflowNotificationService> logger)
+            ILogger<WorkflowNotificationService> logger,
+            IBuiltInNotificationSender? builtInNotifications = null)
         {
+            _builtIn = builtInNotifications;
             _cryptoService = cryptoService;
             _tenants = tenants;
             _configuration = configuration;
@@ -190,6 +194,18 @@ namespace Workflow.DomainService.Services
             var workflowSnapshot = execution.WorkflowSnapshot;
             if (workflowSnapshot == null) return;
 
+            if (eventName == WorkflowFailedEventName && execution.ExecutionMode == WorkflowExecutionMode.Production)
+            {
+                try
+                {
+                    await NotifyRunFailedAsync(execution, workflowSnapshot);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Could not send the run-failed notification for execution {ExecutionId} ({ExceptionType}).", execution.Id, ex.GetType().Name);
+                }
+            }
+
             var userIds = workflowSnapshot.TestMeta?.UserIds;
             if (userIds == null || userIds.Count == 0) return;
 
@@ -210,6 +226,71 @@ namespace Workflow.DomainService.Services
                 _logger.LogError(ex, "Failed to send {Event} notification for execution {ExecutionId}.",
                     eventName, execution.Id);
             }
+        }
+
+        private const string WorkflowFailedEventName = "WorkflowFailed";
+
+        /// <summary>
+        /// A production or scheduled run failed: tell the workflow owner (built-in <c>logic-workflow-run-failed</c>).
+        /// Test runs have their own live stream and are not sent here. Best effort: the sender never throws.
+        /// The owner is the only recipient; no project-members lookup exists yet.
+        /// </summary>
+        private async Task NotifyRunFailedAsync(WorkflowExecutionEntity execution, WorkflowEntity workflow)
+        {
+            if (_builtIn is null) return;
+            var owner = workflow.CreatedBy;
+            await _builtIn.SendAsync(
+                execution.TenantId,
+                BuiltInNotificationNames.WorkflowRunFailed,
+                string.IsNullOrWhiteSpace(owner) ? null : [owner],
+                new BuiltInNotificationPayload(
+                    "WorkflowRunFailed",
+                    "Workflow run failed",
+                    "A workflow run failed. Open the run to see the failing step.",
+                    IsSuccess: false,
+                    Ids: new Dictionary<string, string?>
+                    {
+                        ["workflowId"] = workflow.ItemId,
+                        ["executionId"] = execution.Id,
+                    }),
+                throttleKey: workflow.ItemId);
+        }
+
+        /// <summary>
+        /// A schedule trigger fired but no run was started (workflow not published, snapshot or trigger node
+        /// missing): tell the workflow owner (built-in <c>logic-scheduled-trigger-dropped</c>).
+        /// </summary>
+        public async Task NotifyScheduledTriggerDroppedAsync(string tenantId, WorkflowEntity workflow, string reason)
+        {
+            if (_builtIn is null) return;
+            try
+            {
+                await SendTriggerDroppedAsync(tenantId, workflow, reason);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not send the trigger-dropped notification for workflow {WorkflowId} ({ExceptionType}).", workflow.ItemId, ex.GetType().Name);
+            }
+        }
+
+        private async Task SendTriggerDroppedAsync(string tenantId, WorkflowEntity workflow, string reason)
+        {
+            var owner = workflow.CreatedBy;
+            await _builtIn!.SendAsync(
+                tenantId,
+                BuiltInNotificationNames.ScheduledTriggerDropped,
+                string.IsNullOrWhiteSpace(owner) ? null : [owner],
+                new BuiltInNotificationPayload(
+                    "ScheduledTriggerDropped",
+                    "Scheduled trigger dropped",
+                    "A scheduled trigger fired but no run started, so it was dropped.",
+                    IsSuccess: false,
+                    Ids: new Dictionary<string, string?>
+                    {
+                        ["workflowId"] = workflow.ItemId,
+                        ["reason"] = reason,
+                    }),
+                throttleKey: workflow.ItemId);
         }
 
         private async Task<bool> NotifyWorkflowExecutionEventAsync(

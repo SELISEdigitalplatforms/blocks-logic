@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using DataAccess.InternalService.Notifications;
 using FluentAssertions;
 using Functions.DomainService.Consumers;
 using Functions.DomainService.Queue;
@@ -28,6 +29,7 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionImageRecoveryService> _images = new();
         private readonly Mock<IFunctionRepository> _functions = new();
         private readonly Mock<IFunctionRunGrantRevoker> _grants = new();
+        private readonly Mock<IBuiltInNotificationSender> _builtIn = new();
         private readonly (IDatabase Database, FakeRedisDatabase Fake) _redis = FakeRedisDatabase.Create();
 
         private readonly FunctionVersionEntity _version = new() { ItemId = "v-1", FunctionId = "fn-1" };
@@ -54,6 +56,8 @@ namespace XUnitTest.Functions
                 .ReturnsAsync(true);
             _versions.Setup(v => v.GetByIdAsync(Tenant, "v-1", It.IsAny<CancellationToken>())).ReturnsAsync(_version);
             _redis.Fake.On("SortedSetAddAsync", _ => true);
+            _functions.Setup(f => f.GetByIdAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionEntity { ItemId = "fn-1", CreatedBy = "owner-1" });
         }
 
         private static FunctionRunEntity NewRecord() => new()
@@ -80,7 +84,7 @@ namespace XUnitTest.Functions
             cache.Setup(c => c.CacheDatabase()).Returns(_redis.Database);
             return new FunctionResultConsumer(
                 cache.Object, _runs.Object, _logs.Object, _versions.Object, _images.Object, _functions.Object,
-                _grants.Object, NullLogger<FunctionResultConsumer>.Instance);
+                _grants.Object, NullLogger<FunctionResultConsumer>.Instance, builtInNotifications: _builtIn.Object);
         }
 
         private static ResultStreamEntry Entry(params (string Key, string Value)[] overrides)
@@ -176,6 +180,87 @@ namespace XUnitTest.Functions
                 CancellationToken.None);
 
             _redis.Fake.Calls("SortedSetAddAsync").Should().BeEmpty();
+        }
+
+        // ---- built-in notification: logic-function-run-failed --------------------------------
+
+        private void VerifyOwnerTold(Times times) =>
+            _builtIn.Verify(b => b.SendAsync(
+                Tenant, BuiltInNotificationNames.FunctionRunFailed,
+                It.Is<IReadOnlyCollection<string>?>(u => u != null && u.Count == 1 && u.Contains("owner-1")),
+                It.Is<BuiltInNotificationPayload>(p => p.IsSuccess == false && p.Ids!["runId"] == RunId && p.Ids["functionId"] == "fn-1"),
+                "fn-1", It.IsAny<CancellationToken>()), times);
+
+        [Fact]
+        public async Task A_run_that_failed_for_good_tells_the_function_owner_once()
+        {
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError)),
+                CancellationToken.None);
+
+            VerifyOwnerTold(Times.Once());
+        }
+
+        [Fact]
+        public async Task A_retryable_failure_on_its_last_attempt_tells_the_owner()
+        {
+            _record.Attempt = 3;
+
+            await Consumer().ProcessAsync(
+                Entry(("attempt", "3"), ("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.SandboxStartFailed)),
+                CancellationToken.None);
+
+            VerifyOwnerTold(Times.Once());
+        }
+
+        [Fact]
+        public async Task A_failure_with_a_retry_pending_tells_nobody_yet()
+        {
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.SandboxStartFailed)),
+                CancellationToken.None);
+
+            _builtIn.Verify(b => b.SendAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>?>(),
+                It.IsAny<BuiltInNotificationPayload>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_successful_run_tells_nobody()
+        {
+            await Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            _builtIn.Verify(b => b.SendAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>?>(),
+                It.IsAny<BuiltInNotificationPayload>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_duplicate_delivery_of_a_failure_tells_nobody_again()
+        {
+            _record.Status = RunStatus.Failed;
+            _record.ErrorCode = RunErrorCode.UserRuntimeError;
+
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError)),
+                CancellationToken.None);
+
+            VerifyOwnerTold(Times.Never());
+        }
+
+        [Fact]
+        public async Task A_notifier_that_throws_does_not_fail_the_result()
+        {
+            _builtIn.Setup(b => b.SendAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>?>(),
+                    It.IsAny<BuiltInNotificationPayload>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("boom"));
+
+            var outcome = await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError)),
+                CancellationToken.None);
+
+            outcome.Disposition.Should().Be(ResultDisposition.Applied);
         }
 
         // ---- redelivery and attempts ------------------------------------------------------

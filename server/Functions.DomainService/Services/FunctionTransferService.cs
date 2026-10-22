@@ -6,6 +6,7 @@ using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Blocks.Genesis.Entities.Logic;
+using DataAccess.InternalService.Notifications;
 
 namespace Functions.DomainService.Services
 {
@@ -56,6 +57,7 @@ namespace Functions.DomainService.Services
         private readonly IValidator<SaveFunctionRequestDto> _saveValidator;
         private readonly IValidator<UpdateFunctionRequestDto> _detailsValidator;
         private readonly ILogger<FunctionTransferService> _logger;
+        private readonly FunctionOwnerNotifier? _notifier;
 
         public FunctionTransferService(
             IFunctionRepository repository,
@@ -64,8 +66,10 @@ namespace Functions.DomainService.Services
             IFunctionDeploymentService deployments,
             IValidator<SaveFunctionRequestDto> saveValidator,
             IValidator<UpdateFunctionRequestDto> detailsValidator,
-            ILogger<FunctionTransferService> logger)
+            ILogger<FunctionTransferService> logger,
+            IBuiltInNotificationSender? builtInNotifications = null)
         {
+            _notifier = builtInNotifications is null ? null : new FunctionOwnerNotifier(repository, builtInNotifications);
             _repository = repository;
             _secrets = secrets;
             _audit = audit;
@@ -115,6 +119,12 @@ namespace Functions.DomainService.Services
             await _audit.RecordAsync(
                 tenantId, function.ItemId, FunctionsConstants.AuditActions.Exported, actorId, actorEmail,
                 new { file.ContentHash }, cancellationToken);
+
+            // After the export file is built. The owner is told when somebody else downloaded it.
+            if (_notifier is not null)
+            {
+                await _notifier.ChangedByOtherAsync(tenantId, function, actorId, "exported");
+            }
             return file;
         }
 
@@ -311,6 +321,12 @@ namespace Functions.DomainService.Services
                 await _audit.RecordAsync(
                     tenantId, incoming.ItemId, FunctionsConstants.AuditActions.Imported, actorId, actorEmail,
                     new { Status = result.Status, Fields = changed, file.ContentHash }, cancellationToken);
+
+                // After the update was written. The owner is told when somebody else changed the function.
+                if (_notifier is not null)
+                {
+                    await _notifier.ChangedByOtherAsync(tenantId, existing, actorId, "imported");
+                }
             }
 
             if (result.AllowInstallScriptsReset)

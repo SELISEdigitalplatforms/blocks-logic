@@ -6,6 +6,7 @@ using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging;
 using Blocks.Genesis.Entities.Logic;
+using DataAccess.InternalService.Notifications;
 
 namespace Functions.DomainService.Services
 {
@@ -77,6 +78,7 @@ namespace Functions.DomainService.Services
         private readonly ILogger<FunctionService> _logger;
         private readonly IConfiguration _configuration;
         private readonly IFunctionSecretCatalog? _secretCatalog;
+        private readonly FunctionOwnerNotifier? _notifier;
 
         public FunctionService(
             IFunctionRepository repository,
@@ -90,8 +92,10 @@ namespace Functions.DomainService.Services
             IValidator<SaveFunctionRequestDto> saveValidator,
             ILogger<FunctionService> logger,
             IConfiguration configuration,
-            IFunctionSecretCatalog? secretCatalog = null)
+            IFunctionSecretCatalog? secretCatalog = null,
+            IBuiltInNotificationSender? builtInNotifications = null)
         {
+            _notifier = builtInNotifications is null ? null : new FunctionOwnerNotifier(repository, builtInNotifications);
             _configuration = configuration;
             _secretCatalog = secretCatalog;
             _repository = repository;
@@ -263,6 +267,12 @@ namespace Functions.DomainService.Services
             await _auditService.RecordAsync(
                 tenantId, functionId, FunctionsConstants.AuditActions.Deleted, actorId, actorEmail,
                 new { Forced = force }, cancellationToken);
+
+            // After the tombstone and the audit row. The owner is told when somebody else deleted the function.
+            if (_notifier is not null)
+            {
+                await _notifier.ChangedByOtherAsync(tenantId, function, actorId, "deleted");
+            }
 
             // Only the fast path. Should it fail, the Worker's backstop sweep finds the tombstone.
             await _deletionQueue.EnqueueAsync(tenantId, functionId, cancellationToken);
