@@ -15,7 +15,7 @@ import type { ExecutedNode } from "@blocks-workflow/models/workflow.model";
 import { CopyValueButton } from "../copy-value-button";
 import { itemCountLabel, outputBranchGroups, showsBranchHeaders, type OutputBranchGroup } from "@blocks-workflow/utils/output-branches";
 import { fieldsNotFound } from "@blocks-workflow/utils/split-out";
-import { mergeInputCounts } from "@blocks-workflow/utils/merge-handles";
+import { mergeInputCounts, mergeInputsWithoutData } from "@blocks-workflow/utils/merge-handles";
 
 type BranchGroup = OutputBranchGroup & {
   schema: ReturnType<typeof inferSchemaFromRuntimeRows>;
@@ -113,10 +113,11 @@ export const OutputPanel = ({
     const run = latestRun(executedNodes, selectedNode.id);
     if (!run || run.status === NodeExecutionStatus.Failed) return null;
     const parameters = (selectedNode.parameters ?? {}) as Record<string, unknown>;
-    return mergeInputCounts(selectedNode.id, parameters.numberInputs, Object.values(edgesMap), (sourceId) => {
+    const inputs = mergeInputCounts(selectedNode.id, parameters.numberInputs, Object.values(edgesMap), (sourceId) => {
       const source = latestRun(executedNodes, sourceId);
       return source?.status === NodeExecutionStatus.Completed ? source.outputCountsByBranch : undefined;
     });
+    return { inputs, withoutData: mergeInputsWithoutData(parameters.runWhen, inputs) };
   }, [edgesMap, executedNodes, selectedNode]);
 
   const failedRunError = useMemo(
@@ -284,9 +285,19 @@ export const OutputPanel = ({
       )}
 
       {mergeSummary && !isEditingMock && (
-        <p className="mt-2 shrink-0 text-xs text-medium-emphasis">
-          {mergeSummary.map(({ label, count }) => `${label} · ${countItems(count)}`).join("   ")}
-        </p>
+        <div className="mt-2 flex shrink-0 flex-col gap-1.5">
+          <p className="text-xs text-medium-emphasis">
+            {mergeSummary.inputs.map(({ label, count }) => `${label} · ${countItems(count)}`).join("   ")}
+          </p>
+          {mergeSummary.withoutData.length > 0 && (
+            <div role="status" className="flex gap-2 rounded border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <p className="break-words">
+                Run When is All: {mergeSummary.withoutData.join(", ")} brought no items, so nothing was output.
+              </p>
+            </div>
+          )}
+        </div>
       )}
 
       {isEditingMock ? (

@@ -403,6 +403,34 @@ describe("OutputPanel", () => {
       expect(screen.getByText(/Input 1 · 2 items\s+Input 2 · 1 item\s+Input 3 · 0 items/)).toBeTruthy();
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seedInput2Empty = (runWhen?: string) => (store: any) => {
+      seedMergeRun({ parameters: { mode: "append", numberInputs: 2, ...(runWhen ? { runWhen } : {}) } })(store);
+      store.setState({
+        executedNodes: [
+          { id: "ne-a", nodeId: "a", runIndex: 0, status: 4, outputCountsByBranch: { source: 2 } },
+          { id: "ne-b", nodeId: "b", runIndex: 1, status: 4, outputCountsByBranch: {} },
+          { id: "ne-m", nodeId: "m", runIndex: 2, status: 4, outputItemCount: 0, outputCountsByBranch: {} },
+        ],
+      });
+    };
+    const allNote = "Run When is All: Input 2 brought no items, so nothing was output.";
+
+    it("with All (the default), says which connected input had no items", () => {
+      const { unmount } = renderWithProviders(<OutputPanel />, { seedWorkflow: seedInput2Empty("all") });
+      expect(screen.getByText(/Input 1 · 2 items\s+Input 2 · 0 items/)).toBeTruthy();
+      expect(screen.getByText(allNote)).toBeTruthy();
+      unmount();
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedInput2Empty() });
+      expect(screen.getByText(allNote)).toBeTruthy();
+    });
+
+    it("with Any, shows the counts but no note", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedInput2Empty("any") });
+      expect(screen.getByText(/Input 2 · 0 items/)).toBeTruthy();
+      expect(screen.queryByText(allNote)).toBeNull();
+    });
+
     it("is not shown before a run, after a failed run, or with mock data", () => {
       const { unmount } = renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ id: "m", type: "merge", parameters: { numberInputs: 2 } }) });
       expect(screen.queryByText(/Input 1 ·/)).toBeNull();

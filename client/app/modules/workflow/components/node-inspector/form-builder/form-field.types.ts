@@ -157,6 +157,8 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
    */
   optionsDependencies?: string[];
   copyable?: boolean;
+  /** `number` only: "blur" reports the value on blur or Enter instead of on every keystroke. */
+  commitOn?: "blur";
   maxLength?: number;
   minLength?: number;
   min?: number;

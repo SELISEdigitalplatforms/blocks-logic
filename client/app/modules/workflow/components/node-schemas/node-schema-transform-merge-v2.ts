@@ -1,9 +1,8 @@
 import { NodeGuideTransformMergeV2 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
-import { deriveMergeHandle, MERGE_MAX_INPUTS, MERGE_MIN_INPUTS } from "../../utils/merge-handles";
+import { deriveMergeHandle, MERGE_MAX_INPUTS, MERGE_MIN_INPUTS, mergeInputCount } from "../../utils/merge-handles";
 
-const DEFAULT_PARAMETERS = { mode: "append", numberInputs: 2 };
-const INPUT_COUNTS = Array.from({ length: MERGE_MAX_INPUTS - MERGE_MIN_INPUTS + 1 }, (_, i) => MERGE_MIN_INPUTS + i);
+const DEFAULT_PARAMETERS = { mode: "append", numberInputs: 2, runWhen: "all" };
 
 export const NodeSchemaTransformMergeV2: NodeSchemaDefinition = {
   guide: NodeGuideTransformMergeV2,
@@ -23,17 +22,33 @@ export const NodeSchemaTransformMergeV2: NodeSchemaDefinition = {
       },
       {
         id: "numberInputs",
-        type: "select",
+        type: "number",
         label: "Number of Inputs",
-        info: "Lowering it removes the connections on the removed inputs.",
+        info: "2 to 10. Applies when you leave the field or press Enter. Lowering it removes the connections on the removed inputs.",
         key: "numberInputs",
+        min: MERGE_MIN_INPUTS,
+        max: MERGE_MAX_INPUTS,
+        step: 1,
         defaultValue: 2,
-        options: INPUT_COUNTS.map((count) => ({ value: count, label: String(count) })),
-        // The dropdown hands back text; Merge saves a number.
+        commitOn: "blur",
+        // Outside 2 to 10 or a fraction becomes the number Merge uses; an empty value is left alone and means 2.
         onChange: (value) => {
-          const count = Number(value);
-          if (typeof value === "string" && Number.isFinite(count)) return { numberInputs: count };
+          if (typeof value !== "number" || !Number.isFinite(value)) return;
+          const count = mergeInputCount(value);
+          if (count !== value) return { numberInputs: count };
         },
+      },
+      {
+        id: "runWhen",
+        type: "select-with-description",
+        label: "Run When",
+        info: "Whether Merge needs data on every connected input.",
+        key: "runWhen",
+        defaultValue: "all",
+        options: [
+          { value: "all", label: "All", description: "Output only when every connected input has data. Otherwise, output nothing." },
+          { value: "any", label: "Any", description: "Output the data from every input that has some. Empty inputs are skipped." },
+        ],
       },
     ],
     settings: [],

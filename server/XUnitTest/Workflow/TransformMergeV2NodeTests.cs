@@ -187,6 +187,107 @@ namespace XUnitTest.Workflow
             (await Run(Params(2), new())).OutputItems.Should().BeEmpty();
         }
 
+        private static BsonDocument RunWhen(string runWhen)
+        {
+            var parameters = Params(2);
+            parameters["runWhen"] = runWhen;
+            return parameters;
+        }
+
+        private static readonly Dictionary<string, IReadOnlyList<WorkflowItemExecutionEntity>> Input2Empty = new()
+        {
+            ["merge-handle-target-1"] = [Item("a1", "p1"), Item("a2", "p1", 1)],
+            ["merge-handle-target-2"] = [],
+        };
+
+        [Fact]
+        public async Task RunWhenAll_EveryConnectedInputHasItems_Appends()
+        {
+            var result = await Run(RunWhen("all"), new()
+            {
+                ["merge-handle-target-2"] = [Item("b1", "p2")],
+                ["merge-handle-target-1"] = [Item("a1", "p1")],
+            });
+
+            Ids(result).Should().Equal("a1", "b1");
+        }
+
+        [Fact]
+        public async Task RunWhenAll_AConnectedInputIsEmpty_SucceedsWithNoItems()
+        {
+            var result = await Run(RunWhen("all"), Input2Empty);
+
+            result.IsSuccess.Should().BeTrue();
+            result.OutputItems.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task RunWhen_MissingMeansAll()
+        {
+            var result = await Run(Params(2), Input2Empty);
+
+            result.IsSuccess.Should().BeTrue();
+            result.OutputItems.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task RunWhenAll_CountsOnlyConnectedInputs()
+        {
+            // Number of Inputs 3 with only inputs 1 and 2 connected: input 3 is not counted.
+            var parameters = Params(3);
+            parameters["runWhen"] = "all";
+            var result = await Run(parameters, new()
+            {
+                ["merge-handle-target-1"] = [Item("a1", "p1")],
+                ["merge-handle-target-2"] = [Item("b1", "p2")],
+            });
+
+            Ids(result).Should().Equal("a1", "b1");
+        }
+
+        [Fact]
+        public async Task RunWhenAll_TwoEdgesIntoOneInput_CountTogether()
+        {
+            // A blank handle is input 1: one empty edge and one with items still give input 1 items.
+            var result = await Run(RunWhen("all"), new()
+            {
+                ["merge-handle-target-1"] = [],
+                [""] = [Item("a1", "p0")],
+                ["merge-handle-target-2"] = [Item("b1", "p2")],
+            });
+
+            Ids(result).Should().Equal("a1", "b1");
+        }
+
+        [Fact]
+        public async Task RunWhenAll_IgnoresInputsAboveN()
+        {
+            var result = await Run(RunWhen("all"), new()
+            {
+                ["merge-handle-target-1"] = [Item("a1", "p1")],
+                ["merge-handle-target-2"] = [Item("b1", "p2")],
+                ["merge-handle-target-3"] = [],
+            });
+
+            Ids(result).Should().Equal("a1", "b1");
+        }
+
+        [Fact]
+        public async Task RunWhenAny_OutputsWhatArrived()
+        {
+            Ids(await Run(RunWhen("any"), Input2Empty)).Should().Equal("a1", "a2");
+        }
+
+        [Fact]
+        public async Task RunWhen_UnknownValue_FailsTheStep()
+        {
+            var result = await Run(RunWhen("sometimes"), Input2Empty);
+
+            result.IsSuccess.Should().BeFalse();
+            result.ErrorMessage.Should().Contain("runWhen");
+            result.OutputItems.Should().BeEmpty();
+        }
+
         [Fact]
         public void C18_DeclaresOnlyV2_AndIsRegistered()
         {
@@ -292,7 +393,7 @@ namespace XUnitTest.Workflow
             Branch = "source", ItemIndex = index, ParentItemIds = new(), AncestorMap = new(), Data = new NodeOutputItemData { Output = new BsonDocument("id", id) },
         };
 
-        private static Harness Build(string type, string version, BsonDocument settings, bool secondParentHasData, INodeExecutor executor)
+        private static Harness Build(string type, string version, BsonDocument settings, bool secondParentHasData, INodeExecutor executor, string? runWhen = null)
         {
             var execution = new WorkflowExecutionEntity
             {
@@ -309,7 +410,10 @@ namespace XUnitTest.Workflow
                         new NodeEntity
                         {
                             Id = "m", Name = "Merge", Category = "transform", Type = type, Version = version, Position = new Position(),
-                            Parameters = new BsonDocument { { "mode", "append" }, { "numberInputs", 2 } }, Settings = settings,
+                            Parameters = runWhen is null
+                                ? new BsonDocument { { "mode", "append" }, { "numberInputs", 2 } }
+                                : new BsonDocument { { "mode", "append" }, { "numberInputs", 2 }, { "runWhen", runWhen } },
+                            Settings = settings,
                         },
                     ],
                     // Edge order is input 2 first, so the output order shows the handle order wins.
@@ -361,6 +465,31 @@ namespace XUnitTest.Workflow
 
             h.StoredError().Should().BeNull();
             h.Saved.Select(i => i.Data.Output["id"].AsString).Should().Equal("a1", "a2", "b1");
+        }
+
+        [Fact]
+        public async Task RunWhenAll_OneInputSentNothing_MergeCompletesWithNoItems()
+        {
+            var h = Build("merge", "v2", new BsonDocument(), secondParentHasData: false, new TransformMergeV2Node(), runWhen: "all");
+
+            await h.Engine.RunNodeInProcessAsync(Event());
+
+            h.StoredError().Should().BeNull();
+            h.Saved.Should().BeEmpty();
+            var merge = h.Execution.NodeExecutions.Last(ne => ne.NodeId == "m");
+            merge.Status.Should().Be(NodeExecutionStatus.Completed);
+            merge.OutputItemCount.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task RunWhenAny_OneInputSentNothing_MergeOutputsTheOtherInput()
+        {
+            var h = Build("merge", "v2", new BsonDocument(), secondParentHasData: false, new TransformMergeV2Node(), runWhen: "any");
+
+            await h.Engine.RunNodeInProcessAsync(Event());
+
+            h.StoredError().Should().BeNull();
+            h.Saved.Select(i => i.Data.Output["id"].AsString).Should().Equal("a1", "a2");
         }
 
         [Fact]
