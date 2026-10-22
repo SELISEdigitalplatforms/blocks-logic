@@ -245,20 +245,23 @@ export const ScheduleForm = ({
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2.5">
-              <FormField
-                control={form.control}
-                name="isActive"
-                render={({ field }) => (
-                  <FormItem className="flex items-center space-y-0">
-                    <FormControl>
-                      <Switch size="md" checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <span className="text-sm font-medium text-foreground">Active</span>
-            </div>
+            {/* Create always saves an active schedule, so the toggle is only offered on edit. */}
+            {isEdit && (
+              <div className="flex items-center gap-2.5">
+                <FormField
+                  control={form.control}
+                  name="isActive"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center space-y-0">
+                      <FormControl>
+                        <Switch size="md" checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <span className="text-sm font-medium text-foreground">Active</span>
+              </div>
+            )}
 
             {onCancel && (
               <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>

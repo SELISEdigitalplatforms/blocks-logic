@@ -9,12 +9,15 @@ type DeleteScheduleDialogProps = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   schedule: ISchedule | null;
+  /** Runs only after a successful delete; cancelling just closes the dialog. */
+  onDeleted?: () => void;
 };
 
 export const DeleteScheduleDialog = ({
   open,
   onOpenChange,
   schedule,
+  onDeleted,
 }: DeleteScheduleDialogProps) => {
   const { mutateAsync } = useDeleteSchedule();
 
@@ -25,6 +28,7 @@ export const DeleteScheduleDialog = ({
       if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Something went wrong" });
       showSuccessToast({ description: "Schedule deleted successfully" });
       onOpenChange(false);
+      onDeleted?.();
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
       return showErrorToast({ errors: "Something went wrong" });
