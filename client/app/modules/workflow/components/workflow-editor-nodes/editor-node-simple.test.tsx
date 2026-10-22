@@ -235,3 +235,14 @@ describe("EditorNodeSimple on a Switch (SPEC6)", () => {
     expect(screen.getByText("Switch")).toBeTruthy();
   });
 });
+
+describe("EditorNodeSimple on a Merge (SPEC3)", () => {
+  it("H7: renders N labelled inputs and one output; other nodes' inputs stay unlabelled", () => {
+    renderWithProviders(<EditorNodeSimple {...({ id: "n1" } as never)} />, {
+      seedWorkflow: load([storedNode({ category: "transform", type: "merge", version: "v2", parameters: { mode: "append", numberInputs: 3 } })]),
+    });
+    expect(handleIds("target")).toEqual(["merge-handle-target-1", "merge-handle-target-2", "merge-handle-target-3"]);
+    expect(handleIds("source")).toEqual(["source"]);
+    expect(screen.getByText("Input 3")).toBeTruthy();
+  });
+});

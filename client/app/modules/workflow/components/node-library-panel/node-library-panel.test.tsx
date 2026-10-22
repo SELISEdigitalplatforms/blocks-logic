@@ -170,3 +170,31 @@ describe("NodeLibraryPanel Split Out (SPEC2)", () => {
     expect(created.handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [{ key: "target", label: "" }] });
   });
 });
+
+describe("NodeLibraryPanel Merge (SPEC3)", () => {
+  it("H8/H11: creates a v2 Merge with 2 inputs; '+' with two selected nodes connects both to input 1", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<NodeLibraryPanel />, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (s: any) => {
+        store = s;
+        s.getState().setWorkflow({
+          itemId: "w1",
+          nodes: [
+            { id: "a", name: "A", category: "transform", type: "code", version: "v1", position: { x: 0, y: 0 }, data: {}, selected: true },
+            { id: "b", name: "B", category: "transform", type: "code", version: "v1", position: { x: 0, y: 0 }, data: {}, selected: true },
+          ],
+          edges: [],
+        });
+        s.getState().openNodeLibraryPanel();
+      },
+    });
+    fireEvent.click(screen.getByText("Merge"));
+    const merge = Object.values(store.getState().nodesMap).find((n: any) => n.type === "merge") as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(merge).toMatchObject({ version: "v2", parameters: { mode: "append", numberInputs: 2 }, settings: {} });
+    expect(merge.handle.targets.map((t: { key: string }) => t.key)).toEqual(["merge-handle-target-1", "merge-handle-target-2"]);
+    const edges = Object.values(store.getState().edgesMap) as Array<Record<string, unknown>>;
+    expect(edges.map((e) => [e.source, e.targetHandle]).sort()).toEqual([["a", "merge-handle-target-1"], ["b", "merge-handle-target-1"]]);
+  });
+});

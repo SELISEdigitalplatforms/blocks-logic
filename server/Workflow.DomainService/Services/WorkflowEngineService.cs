@@ -325,6 +325,10 @@ namespace Workflow.DomainService.Services
                 AncestorNodeOutputs = ancestorOutputs,
                 IterationCount = inputItems.Count,
                 HasUpstream = hasUpstream,
+                // Only Merge reads its input per handle; every other node keeps InputItems alone, as before.
+                InputItemsByHandle = node.Type == "merge"
+                    ? InputItemsByHandleBuilder.Build(incomingEdges, inputItems, execution.NodeExecutions)
+                    : new Dictionary<string, IReadOnlyList<WorkflowItemExecutionEntity>>(),
                 ServiceProvider = _serviceProvider,
                 Log = log,
                 PreviousAttemptItems = previousAttemptItems,
@@ -734,6 +738,24 @@ namespace Workflow.DomainService.Services
                     data: execution.Id!,
                     message: $"Workflow '{execution.WorkflowSnapshot.Name}' completed successfully.");
                 LogExecutionCompleted(execution);
+            }
+
+            // A join waits for every parent, and only edges that carried items start it. When this parent sent a
+            // join that is already waiting (another parent sent it items) nothing, start it again so it re-checks:
+            // otherwise it stays active and the run never ends. A join no parent sent items to is not started.
+            var joins = WorkflowBranchRouting.JoinsSentNothing(
+                execution.WorkflowSnapshot.Edges.Where(e => e.Source == node.Id),
+                nodeExecution.OutputCountsByBranch,
+                execution.WorkflowSnapshot.Edges);
+            if (joins.Count > 0 && !isWorkflowComplete)
+            {
+                var latest = await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
+                var waiting = joins.Where(id => latest?.ActiveNodeIds?.Contains(id) == true).ToList();
+                if (waiting.Count > 0)
+                {
+                    context.Log.Info(ExecutionLogStages.JoinWoken, "Sent no items to {Count} waiting join(s); starting them to re-check.", waiting.Count);
+                    nextNodeIds = [.. nextNodeIds, .. waiting];
+                }
             }
 
             // Build next node events

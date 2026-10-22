@@ -323,6 +323,28 @@ namespace XUnitTest.Workflow
                 .Should().BeTrue();
         }
 
+        [Fact]
+        public void JoinsSentNothing_OnlyJoinsThisNodeSentNoItems()
+        {
+            var edges = new[]
+            {
+                Edge("a", "join", "source"),
+                Edge("b", "join", "source"),
+                Edge("a", "single", "source"),
+                Edge("a", "fed", "source"),
+                Edge("c", "fed", "source"),
+                Edge("a", "join2", "if-false"),
+                Edge("a", "join2", "if-true"),
+                Edge("d", "join2", "source"),
+            };
+            var counts = new Dictionary<string, int> { ["if-true"] = 1 };
+
+            // "join": two parents, a sent nothing. "single": one parent. "join2": a sent items on if-true.
+            WorkflowBranchRouting.JoinsSentNothing(edges.Where(e => e.Source == "a"), counts, edges)
+                .Should().Equal("join", "fed");
+            WorkflowBranchRouting.JoinsSentNothing(null, counts, edges).Should().BeEmpty();
+        }
+
         private static NodeExecutionEntity Node(
             string nodeId,
             int runIndex,

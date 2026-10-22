@@ -116,8 +116,9 @@ describe("NodeSchemasDefinition registry", () => {
       const v2Key = `${v1Key.slice(0, -2)}v2`;
       expect(NodeSchemasDefinition[v2Key]).toBe(NodeSchemasDefinition[v1Key]);
     }
-    // 13 v1 keys, their 13 v2 aliases, logicswitchv2 and transformsplitOutv2 (new types start at v2 with no v1).
-    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(28);
+    // 13 v1 keys, their 13 v2 aliases, logicswitchv2, transformsplitOutv2 and transformmergev2 (new types start at v2 with no v1).
+    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(29);
+    expect(NodeSchemasDefinition.transformmergev1).toBeUndefined();
     expect(NodeSchemasDefinition.transformsplitOutv1).toBeUndefined();
     expect(NodeSchemasDefinition.logicswitchv1).toBeUndefined();
   });
@@ -1099,5 +1100,33 @@ describe("transform/splitOut v2 (SPEC2)", () => {
     expect(field.dependsOn).toEqual({ key: "include", value: "selectedOtherFields" });
     expect(field.defaultValue).toEqual([]);
     expect(field.placeholder).toBe("e.g. email, name");
+  });
+});
+
+describe("transform/merge v2 (SPEC3)", () => {
+  const schema = NodeSchemasDefinition.transformmergev2;
+
+  it("H8: defaults, no settings and a fresh derived handle on creation", () => {
+    expect(schema.defaults).toEqual({ parameters: { mode: "append", numberInputs: 2 }, settings: {} });
+    expect(schema.schema.settings).toEqual([]);
+    const a = schema.transform!({ id: "a", position: { x: 0, y: 0 }, data: {} } as never);
+    const b = schema.transform!({ id: "b", position: { x: 0, y: 0 }, data: {} } as never);
+    expect(a.parameters).not.toBe(b.parameters);
+    expect(a.parameters).not.toBe(schema.defaults.parameters);
+    expect(a.handle!.targets.map((t) => t.key)).toEqual(["merge-handle-target-1", "merge-handle-target-2"]);
+  });
+
+  it("C3: Number of Inputs is a dropdown from 2 to 10 that saves a number", () => {
+    const field = schema.schema.parameters.find((f) => f.key === "numberInputs")!;
+    expect(field.type).toBe("select");
+    expect((field.options as Array<{ value: number }>).map((o) => o.value)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    const coerce = (value: unknown) => field.onChange!(value, {}, {} as never);
+    expect(coerce("3")).toEqual({ numberInputs: 3 });
+    expect(coerce(3)).toBeUndefined();
+  });
+
+  it("Mode is a dropdown with Append only", () => {
+    const field = schema.schema.parameters.find((f) => f.key === "mode")!;
+    expect(field.options).toEqual([{ value: "append", label: "Append" }]);
   });
 });
