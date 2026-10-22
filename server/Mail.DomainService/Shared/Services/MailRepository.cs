@@ -349,7 +349,7 @@ namespace Mail.DomainService.Services
                 }
             }
 
-            return latestEntity;
+            return scope.ForView(latestEntity);
         }
     }
 }

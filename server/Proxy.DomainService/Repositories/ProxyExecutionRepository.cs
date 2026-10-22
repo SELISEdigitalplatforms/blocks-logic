@@ -123,11 +123,11 @@ namespace Proxy.DomainService.Repositories
         {
             var scope = await ReadAsync(tenantId, WindowFilter(tenantId, proxyId, statusClass, sinceUtc, asOfUtc), "GetPage");
             if (!scope.Granted) return [];
-            return await scope.Apply(GetCollection(tenantId))
+            return scope.ForView(await scope.Apply(GetCollection(tenantId))
                 .Sort(NewestFirst)
                 .Skip(pageNumber * pageSize)
                 .Limit(pageSize)
-                .ToListAsync();
+                .ToListAsync());
         }
 
         public async Task<List<ProxyExecutionEntity>> GetNewerThanAsync(
@@ -143,10 +143,10 @@ namespace Proxy.DomainService.Repositories
 
             var scope = await ReadAsync(tenantId, WindowFilter(tenantId, proxyId, statusClass, sinceUtc) & strictlyNewer, "GetNewerThan");
             if (!scope.Granted) return [];
-            return await scope.Apply(GetCollection(tenantId))
+            return scope.ForView(await scope.Apply(GetCollection(tenantId))
                 .Sort(NewestFirst)
                 .Limit(pageSize)
-                .ToListAsync();
+                .ToListAsync());
         }
 
         public async Task<long> CountAsync(
@@ -163,7 +163,7 @@ namespace Proxy.DomainService.Repositories
                          & builder.Eq(e => e.ProxyId, proxyId)
                          & builder.Eq(e => e.ItemId, itemId);
             var scope = await ReadAsync(tenantId, filter, "GetById");
-            return scope.Granted ? await scope.Apply(GetCollection(tenantId)).FirstOrDefaultAsync() : null;
+            return scope.Granted ? scope.ForView(await scope.Apply(GetCollection(tenantId)).FirstOrDefaultAsync()) : null;
         }
 
         public async Task<ProxyExecutionEntity?> FindByItemIdAsync(string tenantId, string itemId)

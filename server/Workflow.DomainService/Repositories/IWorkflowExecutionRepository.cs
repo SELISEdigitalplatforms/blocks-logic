@@ -8,6 +8,8 @@ namespace Workflow.DomainService.Repositories
     {
         Task<WorkflowExecutionEntity> CreateAsync(WorkflowExecutionEntity execution);
         Task<WorkflowExecutionEntity?> GetByIdAsync(string id, string tenantId);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<WorkflowExecutionEntity?> GetByIdForViewAsync(string id, string tenantId);
         Task UpdateAsync(WorkflowExecutionEntity execution);
         Task<bool> AtomicCompleteNodeAsync(string executionId, string tenantId, string completedNodeId, List<string> nextNodeIds);
         /// <summary>Marks the execution Completed unless it is already Failed. False = it was Failed and stays Failed.</summary>

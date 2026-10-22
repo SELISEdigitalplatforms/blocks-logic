@@ -116,6 +116,15 @@ namespace Proxy.DomainService.Repositories
             return scope.Granted ? NormalizeTenant(await scope.Apply(collection).FirstOrDefaultAsync(), tenantId) : null;
         }
 
+        public async Task<ProxyDetailEntity?> GetForViewAsync(string tenantId, string itemId)
+        {
+            // Masked: View column (property) rules clear what the caller may not see. Never save it back.
+            var collection = GetCollection(tenantId);
+            var filter = Builders<ProxyDetailEntity>.Filter.Eq(p => p.ItemId, itemId);
+            var scope = await ReadAsync(tenantId, filter, "GetForView");
+            return scope.Granted ? scope.ForView(NormalizeTenant(await scope.Apply(collection).FirstOrDefaultAsync(), tenantId)) : null;
+        }
+
         public async Task<ProxyDetailEntity?> GetBySlugAsync(string tenantId, string slug)
         {
             var collection = GetCollection(tenantId);
@@ -143,7 +152,7 @@ namespace Proxy.DomainService.Repositories
                 NormalizeTenant(proxy, tenantId);
             }
 
-            return proxies;
+            return scope.ForView(proxies);
         }
 
         public async Task<long> CountAsync(string tenantId, string? search, bool? isActive)
@@ -173,7 +182,13 @@ namespace Proxy.DomainService.Repositories
             nameof(ProxyDetailEntity.Stats),
         };
 
-        public async Task<bool> SaveConfigAsync(ProxyDetailEntity proxy, int expectedVersion)
+        public Task<bool> SaveConfigAsync(ProxyDetailEntity proxy, int expectedVersion) =>
+            SaveAsync(proxy, expectedVersion, keepHidden: false);
+
+        public Task<bool> SaveEditedConfigAsync(ProxyDetailEntity proxy, int expectedVersion) =>
+            SaveAsync(proxy, expectedVersion, keepHidden: true);
+
+        private async Task<bool> SaveAsync(ProxyDetailEntity proxy, int expectedVersion, bool keepHidden)
         {
             if (string.IsNullOrWhiteSpace(proxy.TenantId))
             {
@@ -190,6 +205,12 @@ namespace Proxy.DomainService.Repositories
                 .Where(e => !NotConfigFields.Contains(e.Name))
                 .Select(e => Builders<ProxyDetailEntity>.Update.Set(e.Name, e.Value));
             var update = Builders<ProxyDetailEntity>.Update.Combine(sets);
+            if (keepHidden)
+            {
+                var kept = await _dataAccess.KeepHiddenAsync(LogicSchemas.ProxyDetailEntity, update, collection, filter, "ProxyRepository.SaveConfig", proxy.TenantId);
+                if (kept is null) return true;
+                update = kept;
+            }
             await _dataAccess.CheckUpdateAsync(LogicSchemas.ProxyDetailEntity, update, "ProxyRepository.SaveConfig", proxy.TenantId);
             var result = await collection.UpdateOneAsync(filter, update);
             return result.MatchedCount == 1;

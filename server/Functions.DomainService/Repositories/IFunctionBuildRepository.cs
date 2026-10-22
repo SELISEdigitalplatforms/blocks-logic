@@ -5,6 +5,8 @@ namespace Functions.DomainService.Repositories
     public interface IFunctionBuildRepository
     {
         Task<FunctionBuildEntity?> GetByIdAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<FunctionBuildEntity?> GetByIdForViewAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// The build cache lookup (DECISIONS D3): the most recent successful build for this

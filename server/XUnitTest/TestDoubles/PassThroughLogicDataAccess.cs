@@ -22,6 +22,11 @@ internal sealed class PassThroughLogicDataAccess : ILogicDataAccess
 
     public Task<T> PrepareUpsertAsync<T>(string schema, T entity, IMongoCollection<T> collection, FilterDefinition<T> filter, string callSite, string? tenantId = null) =>
         Task.FromResult(entity);
+    public Task<T> PrepareReplaceAsync<T>(string schema, T entity, IMongoCollection<T> collection, FilterDefinition<T> filter, string callSite, string? tenantId = null) =>
+        Task.FromResult(entity);
+
+    public Task<UpdateDefinition<T>?> KeepHiddenAsync<T>(string schema, UpdateDefinition<T> update, IMongoCollection<T> collection, FilterDefinition<T> filter, string callSite, string? tenantId = null) =>
+        Task.FromResult<UpdateDefinition<T>?>(update);
 
     public Task CheckUpdateAsync<T>(string schema, UpdateDefinition<T> update, string callSite, string? tenantId = null) => Task.CompletedTask;
 }

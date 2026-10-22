@@ -87,7 +87,7 @@ namespace Proxy.DomainService.Services
             var itemId = request.ItemId ?? string.Empty;
             _logger.LogInformation("Fetching proxy {ItemId} for tenant {TenantId}.", itemId, tenantId);
 
-            var proxy = await _proxyRepository.GetAsync(tenantId, itemId);
+            var proxy = await _proxyRepository.GetForViewAsync(tenantId, itemId);
             if (proxy == null)
             {
                 _logger.LogInformation("Proxy {ItemId} not found for tenant {TenantId}; returning null.", itemId, tenantId);
@@ -332,7 +332,7 @@ namespace Proxy.DomainService.Services
                 {
                     proxy.SecretIds = secretIds;
                     // No version bump. If someone saved meanwhile, their save bound the ids already: nothing lost.
-                    if (!await _proxyRepository.SaveConfigAsync(proxy, readVersion))
+                    if (!await _proxyRepository.SaveEditedConfigAsync(proxy, readVersion))
                     {
                         _logger.LogInformation(
                             "Proxy {ItemId} (tenant {TenantId}) changed during a no-op save; ids left to that save.",
@@ -363,7 +363,7 @@ namespace Proxy.DomainService.Services
             proxy.LastUpdatedBy = ProxyVersionFactory.CurrentUserId();
             proxy.CurrentVersion += 1;
 
-            if (!await _proxyRepository.SaveConfigAsync(proxy, readVersion))
+            if (!await _proxyRepository.SaveEditedConfigAsync(proxy, readVersion))
             {
                 return VersionConflict(itemId, tenantId, readVersion, null);
             }

@@ -30,6 +30,7 @@ namespace XUnitTest.Proxy
         {
             TestBlocksContext.Set(Tenant, "user-1");
             _proxyRepo.Setup(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>())).ReturnsAsync(true);
+            _proxyRepo.Setup(r => r.SaveEditedConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>())).ReturnsAsync(true);
             _proxyRepo.Setup(r => r.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>())).ReturnsAsync(true);
             _executionRepo
                 .Setup(r => r.CountByProxyAsync(It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>()))
@@ -397,6 +398,7 @@ namespace XUnitTest.Proxy
         public async Task Get_Known_ReturnsDetailWithPathAndUnmaskedUpstream()
         {
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(Existing());
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(Existing());
 
             var result = await _service.GetAsync(Tenant, new ProxyGetRequestDto { ItemId = "p1" });
 
@@ -412,6 +414,7 @@ namespace XUnitTest.Proxy
         public async Task Get_Unknown_ReturnsNullData()
         {
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "nope")).ReturnsAsync((ProxyDetailEntity?)null);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "nope")).ReturnsAsync((ProxyDetailEntity?)null);
 
             var result = await _service.GetAsync(Tenant, new ProxyGetRequestDto { ItemId = "nope" });
 
@@ -424,6 +427,7 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing();
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
             ProxyVersionEntity? version = null;
             _versionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()))
                 .Callback<ProxyVersionEntity>(v => version = v).Returns(Task.CompletedTask);
@@ -450,7 +454,7 @@ namespace XUnitTest.Proxy
             var upstreamChange = version.Changes.Should().ContainSingle(c => c.Field == "upstream").Subject;
             upstreamChange.Before.Should().Be("https://api.stripe.com/v1/charges");
             upstreamChange.After.Should().Be("https://api.stripe.com/v2/charges");
-            _proxyRepo.Verify(r => r.SaveConfigAsync(entity, It.IsAny<int>()), Times.Once);
+            _proxyRepo.Verify(r => r.SaveEditedConfigAsync(entity, It.IsAny<int>()), Times.Once);
         }
 
         // ---------- Update : a rename must not collide with another proxy's published identity ----------
@@ -464,6 +468,7 @@ namespace XUnitTest.Proxy
                 e.Slug = "weather-lookup";
             });
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p2")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p2")).ReturnsAsync(entity);
             // "stripe-payments" already belongs to p1.
             _proxyRepo.Setup(r => r.GetBySlugAsync(Tenant, "stripe-payments")).ReturnsAsync(Existing());
 
@@ -479,7 +484,7 @@ namespace XUnitTest.Proxy
             result.Code.Should().Be("PROXY_SLUG_CONFLICT");
             entity.Name.Should().Be("Weather Lookup");
             entity.Slug.Should().Be("weather-lookup");
-            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveEditedConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -489,6 +494,7 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing();
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
             _proxyRepo.Setup(r => r.GetBySlugAsync(Tenant, "stripe-billing")).ReturnsAsync((ProxyDetailEntity?)null);
 
             var result = await _service.UpdateAsync(Tenant, new ProxyUpdateRequestDto
@@ -503,7 +509,7 @@ namespace XUnitTest.Proxy
             result.HttpStatus.Should().Be(200);
             entity.Name.Should().Be("Stripe Billing");
             entity.Slug.Should().Be("stripe-payments");
-            _proxyRepo.Verify(r => r.SaveConfigAsync(entity, It.IsAny<int>()), Times.Once);
+            _proxyRepo.Verify(r => r.SaveEditedConfigAsync(entity, It.IsAny<int>()), Times.Once);
         }
 
         // ---------- Update : a proxy whose own slug matches its name is not self-conflicted ----------
@@ -512,6 +518,7 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing();
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
 
             var result = await _service.UpdateAsync(Tenant, new ProxyUpdateRequestDto
             {
@@ -532,6 +539,7 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing();
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
             var versions = new List<ProxyVersionEntity>();
             _versionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()))
                 .Callback<ProxyVersionEntity>(v => versions.Add(v)).Returns(Task.CompletedTask);
@@ -559,6 +567,7 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing(); // Methods = [Get, Post]
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
 
             var result = await _service.UpdateAsync(Tenant, new ProxyUpdateRequestDto
             {
@@ -570,7 +579,7 @@ namespace XUnitTest.Proxy
             });
 
             result.HttpStatus.Should().Be(200);
-            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveEditedConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -580,6 +589,7 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing();
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
             ProxyVersionEntity? version = null;
             _versionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()))
                 .Callback<ProxyVersionEntity>(v => version = v).Returns(Task.CompletedTask);
@@ -616,6 +626,7 @@ namespace XUnitTest.Proxy
                 Upstream = "https://api.stripe.com/v2/charges",
             }));
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
             ProxyVersionEntity? version = null;
             _versionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()))
                 .Callback<ProxyVersionEntity>(v => version = v).Returns(Task.CompletedTask);
@@ -645,6 +656,7 @@ namespace XUnitTest.Proxy
                 Upstream = "https://api.stripe.com/v2/charges",
             }));
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
 
             var result = await _service.UpdateAsync(Tenant, new ProxyUpdateRequestDto
             {
@@ -660,7 +672,7 @@ namespace XUnitTest.Proxy
             });
 
             result.HttpStatus.Should().Be(200);
-            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveEditedConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -670,6 +682,7 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing();
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
 
             var result = await _service.UpdateAsync(Tenant, new ProxyUpdateRequestDto
             {
@@ -683,7 +696,7 @@ namespace XUnitTest.Proxy
             result.HttpStatus.Should().Be(200);
             result.ItemId.Should().Be("p1");
             entity.CurrentVersion.Should().Be(1);
-            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveEditedConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -692,6 +705,7 @@ namespace XUnitTest.Proxy
         public async Task Update_UnknownItem_Returns404()
         {
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "x")).ReturnsAsync((ProxyDetailEntity?)null);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "x")).ReturnsAsync((ProxyDetailEntity?)null);
 
             var result = await _service.UpdateAsync(Tenant, new ProxyUpdateRequestDto
             {
@@ -710,6 +724,7 @@ namespace XUnitTest.Proxy
         public async Task Update_ForeignTenant_Returns404()
         {
             _proxyRepo.Setup(r => r.GetAsync("tenant-abc", "p1")).ReturnsAsync(Existing());
+            _proxyRepo.Setup(r => r.GetForViewAsync("tenant-abc", "p1")).ReturnsAsync(Existing());
 
             var result = await _service.UpdateAsync("tenant-other", new ProxyUpdateRequestDto
             {
@@ -745,6 +760,7 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing(e => e.Enabled = true);
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
             ProxyVersionEntity? version = null;
             _versionRepo.Setup(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()))
                 .Callback<ProxyVersionEntity>(v => version = v).Returns(Task.CompletedTask);
@@ -764,6 +780,7 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing(e => e.Enabled = true);
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
 
             var result = await _service.ToggleAsync(Tenant, new ProxyToggleRequestDto { ItemId = "p1", Enabled = true });
 
@@ -776,6 +793,7 @@ namespace XUnitTest.Proxy
         public async Task Toggle_UnknownItem_Returns404()
         {
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "x")).ReturnsAsync((ProxyDetailEntity?)null);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "x")).ReturnsAsync((ProxyDetailEntity?)null);
 
             var result = await _service.ToggleAsync(Tenant, new ProxyToggleRequestDto { ItemId = "x", Enabled = false });
 
@@ -789,6 +807,7 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing();
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
 
             var order = new List<string>();
             ProxyVersionEntity? version = null;
@@ -825,11 +844,12 @@ namespace XUnitTest.Proxy
         {
             var entity = Existing();
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(entity);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(entity);
 
             var result = await _service.UpdateAsync(Tenant, ChangeUpstream(expectedVersion: 1));
 
             result.HttpStatus.Should().Be(200);
-            _proxyRepo.Verify(r => r.SaveConfigAsync(entity, 1), Times.Once);
+            _proxyRepo.Verify(r => r.SaveEditedConfigAsync(entity, 1), Times.Once);
             entity.CurrentVersion.Should().Be(2);
         }
 
@@ -837,13 +857,14 @@ namespace XUnitTest.Proxy
         public async Task Update_FormLoadedAnOlderVersion_Returns409_WritesNothing()
         {
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(Existing(e => e.CurrentVersion = 3));
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(Existing(e => e.CurrentVersion = 3));
 
             var result = await _service.UpdateAsync(Tenant, ChangeUpstream(expectedVersion: 2));
 
             result.HttpStatus.Should().Be(409);
             result.Code.Should().Be(ProxyErrorCodes.VersionConflict);
             result.Message.Should().Contain("Reload");
-            _proxyRepo.Verify(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
+            _proxyRepo.Verify(r => r.SaveEditedConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>()), Times.Never);
             _versionRepo.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
 
@@ -851,7 +872,9 @@ namespace XUnitTest.Proxy
         public async Task Update_AnotherSaveWinsTheRace_Returns409_WritesNoVersionRow()
         {
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(Existing());
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(Existing());
             _proxyRepo.Setup(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), 1)).ReturnsAsync(false);
+            _proxyRepo.Setup(r => r.SaveEditedConfigAsync(It.IsAny<ProxyDetailEntity>(), 1)).ReturnsAsync(false);
 
             var result = await _service.UpdateAsync(Tenant, ChangeUpstream(expectedVersion: null));
 
@@ -864,11 +887,13 @@ namespace XUnitTest.Proxy
         public async Task Toggle_StaleVersion_Returns409_AndLostRace_Returns409()
         {
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(() => Existing(e => e.CurrentVersion = 4));
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(() => Existing(e => e.CurrentVersion = 4));
 
             var stale = await _service.ToggleAsync(Tenant, new ProxyToggleRequestDto { ItemId = "p1", Enabled = false, ExpectedVersion = 3 });
             stale.HttpStatus.Should().Be(409);
 
             _proxyRepo.Setup(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), 4)).ReturnsAsync(false);
+            _proxyRepo.Setup(r => r.SaveEditedConfigAsync(It.IsAny<ProxyDetailEntity>(), 4)).ReturnsAsync(false);
             var lost = await _service.ToggleAsync(Tenant, new ProxyToggleRequestDto { ItemId = "p1", Enabled = false });
             lost.HttpStatus.Should().Be(409);
             lost.Code.Should().Be(ProxyErrorCodes.VersionConflict);
@@ -879,6 +904,7 @@ namespace XUnitTest.Proxy
         public async Task Delete_AfterAnotherSave_Returns409_WritesNoDeleteRow()
         {
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "p1")).ReturnsAsync(Existing());
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "p1")).ReturnsAsync(Existing());
             _proxyRepo.Setup(r => r.DeleteAsync(Tenant, "p1", 1)).ReturnsAsync(false);
 
             var result = await _service.DeleteAsync(Tenant, new ProxyDeleteRequestDto { ItemId = "p1" });
@@ -892,6 +918,7 @@ namespace XUnitTest.Proxy
         public async Task Delete_UnknownItem_Returns404()
         {
             _proxyRepo.Setup(r => r.GetAsync(Tenant, "x")).ReturnsAsync((ProxyDetailEntity?)null);
+            _proxyRepo.Setup(r => r.GetForViewAsync(Tenant, "x")).ReturnsAsync((ProxyDetailEntity?)null);
 
             var result = await _service.DeleteAsync(Tenant, new ProxyDeleteRequestDto { ItemId = "x" });
 

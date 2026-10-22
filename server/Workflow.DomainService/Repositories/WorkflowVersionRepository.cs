@@ -47,7 +47,7 @@ namespace Workflow.DomainService.Repositories
                          Builders<WorkflowVersionEntity>.Filter.Eq(f => f.WorkflowId, workflowId);
 
             var scope = await ReadAsync(tenantId, filters, "GetWorkflowVersions");
-            return scope.Granted ? await scope.Apply(collection).SortByDescending(f => f.CreatedDate).ToListAsync() : [];
+            return scope.Granted ? scope.ForView(await scope.Apply(collection).SortByDescending(f => f.CreatedDate).ToListAsync()) : [];
         }
 
         public async Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string[] workflowIds)
@@ -67,6 +67,16 @@ namespace Workflow.DomainService.Repositories
                          Builders<WorkflowVersionEntity>.Filter.Eq(f => f.ItemId, versionId);
             var scope = await ReadAsync(tenantId, filter, "GetWorkflowVersion");
             return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null!;
+        }
+
+        public async Task<WorkflowVersionEntity> GetWorkflowVersionForViewAsync(string tenantId, string versionId)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
+                         Builders<WorkflowVersionEntity>.Filter.Eq(f => f.ItemId, versionId);
+            // Masked: View column (property) rules clear what the caller may not see.
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflowVersionForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(collection).FirstOrDefaultAsync()) : null!;
         }
 
         public async Task<WorkflowVersionEntity> UpdateWorkflowVersionAsync(string tenantId, string versionId, WorkflowVersionEntity versionModel)

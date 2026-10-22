@@ -94,10 +94,10 @@ namespace Workflow.DomainService.Repositories
             }
             var scope = await ReadAsync(tenantId, filter, "GetAllWorkflows");
             if (!scope.Granted) return [];
-            return await scope.Apply(collection)
+            return scope.ForView(await scope.Apply(collection)
                 .SortByDescending(x => x.CreatedDate)
                 .Skip(pageNumber * pageSize)
-                .Limit(pageSize).ToListAsync();
+                .Limit(pageSize).ToListAsync());
         }
 
         public async Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId)
@@ -107,6 +107,15 @@ namespace Workflow.DomainService.Repositories
             // Entity may be written back by the caller (ReplaceOne): read it whole, no projection.
             var scope = await ReadAsync(tenantId, filter, "GetWorkflow", useProjection: false);
             return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null!;
+        }
+
+        public async Task<WorkflowEntity> GetWorkflowForViewAsync(string tenantId, string workflowId)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = Builders<WorkflowEntity>.Filter.Eq(w => w.ItemId, workflowId);
+            // Masked: View column (property) rules clear what the caller may not see.
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflowForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(collection).FirstOrDefaultAsync()) : null!;
         }
 
         public async Task<List<WorkflowEntity>> GetWorkflowsByMailServerConfigurationIdAsync(string tenantId, string mailServerConfigurationId)
@@ -216,7 +225,7 @@ namespace Workflow.DomainService.Repositories
             var filter = await _dataAccess.EditFilterAsync(LogicSchemas.WorkflowEntity,
                 Builders<WorkflowEntity>.Filter.Eq(item => item.ItemId, workflow.ItemId), "WorkflowRepository.UpdateWorkflow", workflow.TenantId);
             if (filter is not null)
-                await _dataAccess.PrepareWriteAsync(LogicSchemas.WorkflowEntity, workflow, isInsert: false, "WorkflowRepository.UpdateWorkflow", workflow.TenantId);
+                await _dataAccess.PrepareReplaceAsync(LogicSchemas.WorkflowEntity, workflow, collection, filter, "WorkflowRepository.UpdateWorkflow", workflow.TenantId);
             // Denied: no write; the existing "not found" error is the answer.
             var result = filter is null ? null : await collection.ReplaceOneAsync(filter, workflow);
             if (result is null || result.MatchedCount == 0)

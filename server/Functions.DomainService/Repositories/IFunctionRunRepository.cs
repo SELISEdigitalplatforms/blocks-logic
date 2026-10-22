@@ -61,6 +61,8 @@ namespace Functions.DomainService.Repositories
             string tenantId, string functionId, CancellationToken cancellationToken = default);
 
         Task<FunctionRunEntity?> GetByIdAsync(string tenantId, string runId, CancellationToken cancellationToken = default);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<FunctionRunEntity?> GetByIdForViewAsync(string tenantId, string runId, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Run counts per version number for one function, for the versions tab's "Runs" column.

@@ -163,6 +163,9 @@ namespace XUnitTest.Workflow
             _workflowRepository
                 .Setup(r => r.GetWorkflowAsync("tenant-wf", It.IsAny<string>()))
                 .ReturnsAsync(() => captured!);
+            _workflowRepository
+                .Setup(r => r.GetWorkflowForViewAsync("tenant-wf", It.IsAny<string>()))
+                .ReturnsAsync(() => captured!);
 
             const string settings = "{\"retry\":2,\"note\":\"x\"}";
             var create = await _service.CreateAsync("tenant-wf", new WorkflowCreateRequestDto

@@ -44,6 +44,9 @@ namespace XUnitTest.Functions
             public int Inserts { get; private set; }
             public int Updates { get; private set; }
 
+            public Task<FunctionEntity?> GetByIdForViewAsync(string tenantId, string functionId, CancellationToken cancellationToken = default) =>
+                GetByIdAsync(tenantId, functionId, cancellationToken);
+
             public Task<FunctionEntity?> GetByIdAsync(string tenantId, string functionId, CancellationToken cancellationToken = default) =>
                 Task.FromResult(Live.TryGetValue(functionId, out var f) ? Clone(f) : null);
 

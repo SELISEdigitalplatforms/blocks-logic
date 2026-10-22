@@ -16,6 +16,8 @@ namespace Functions.DomainService.Repositories
             int pageNumber, int pageSize, CancellationToken cancellationToken = default);
 
         Task<FunctionEntity?> GetByIdAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<FunctionEntity?> GetByIdForViewAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
 
         Task CreateAsync(string tenantId, FunctionEntity function, CancellationToken cancellationToken = default);
 

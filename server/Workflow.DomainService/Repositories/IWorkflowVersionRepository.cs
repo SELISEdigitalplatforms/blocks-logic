@@ -9,6 +9,8 @@ namespace Workflow.DomainService.Repositories
         Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string workflowId);
         Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string[] workflowIds);
         Task<WorkflowVersionEntity> GetWorkflowVersionAsync(string tenantId, string versionId);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<WorkflowVersionEntity> GetWorkflowVersionForViewAsync(string tenantId, string versionId);
         Task<WorkflowVersionEntity> UpdateWorkflowVersionAsync(string tenantId, string versionId, WorkflowVersionEntity versionModel);
         Task DeleteWorkflowVersionAsync(string tenantId, string versionId);
         Task DeleteWorkflowVersionsByWorkflowIdAsync(string tenantId, string workflowId);

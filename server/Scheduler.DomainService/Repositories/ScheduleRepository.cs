@@ -61,7 +61,7 @@ namespace Scheduler.DomainService.Repositories
                 .Limit(pageSize)
                 .ToListAsync();
 
-            return (items.Count > 0 ? items : null, totalCount);
+            return (items.Count > 0 ? scope.ForView(items) : null, totalCount);
         }
         public async Task<Schedule?> GetByIdAsync(string scheduleId, string tenantId = "")
         {
@@ -86,7 +86,7 @@ namespace Scheduler.DomainService.Repositories
             var filter = await _dataAccess.EditFilterAsync(LogicSchemas.Schedule,
                 Builders<Schedule>.Filter.Eq(x => x.ItemId, schedule.ItemId), "ScheduleRepository.Update");
             if (filter is null) return;
-            await _dataAccess.PrepareWriteAsync(LogicSchemas.Schedule, schedule, isInsert: false, "ScheduleRepository.Update");
+            await _dataAccess.PrepareReplaceAsync(LogicSchemas.Schedule, schedule, GetCollection(), filter, "ScheduleRepository.Update");
             await GetCollection().ReplaceOneAsync(filter, schedule);
         }
 

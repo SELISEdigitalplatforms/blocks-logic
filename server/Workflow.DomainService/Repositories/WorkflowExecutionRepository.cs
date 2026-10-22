@@ -93,6 +93,15 @@ namespace Workflow.DomainService.Repositories
             return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null;
         }
 
+        public async Task<WorkflowExecutionEntity?> GetByIdForViewAsync(string id, string tenantId)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, id);
+            // Masked: View column (property) rules clear what the caller may not see.
+            var scope = await ReadAsync(tenantId, filter, "GetByIdForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(collection).FirstOrDefaultAsync()) : null;
+        }
+
         public async Task UpdateAsync(WorkflowExecutionEntity execution)
         {
             if (string.IsNullOrEmpty(execution.TenantId))
@@ -355,9 +364,9 @@ namespace Workflow.DomainService.Repositories
             var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.WorkflowId, workflowId);
             var scope = await ReadAsync(tenantId, filter, "GetByWorkflowId");
             if (!scope.Granted) return [];
-            return await scope.Apply(collection)
+            return scope.ForView(await scope.Apply(collection)
                 .SortByDescending(e => e.StartedAt)
-                .ToListAsync();
+                .ToListAsync());
         }
 
         public Task<List<WorkflowExecutionListRow>> GetPageAsync(string workflowId, string tenantId, int pageSize)
@@ -529,7 +538,7 @@ namespace Workflow.DomainService.Repositories
             var filter = Builders<WorkflowItemExecutionEntity>.Filter.Eq("WorkflowExecutionId", workflowExecutionId);
 
             var scope = await ReadItemsAsync(tenantId, filter, "GetAllItemsByExecutionId");
-            return scope.Granted ? await scope.Apply(collection).SortBy(doc => doc.CreatedAt).ToListAsync() : [];
+            return scope.Granted ? scope.ForView(await scope.Apply(collection).SortBy(doc => doc.CreatedAt).ToListAsync()) : [];
         }
 
 
@@ -552,9 +561,9 @@ namespace Workflow.DomainService.Repositories
                 item.ExecutionMode == WorkflowExecutionMode.Test &&
                 item.Status == WorkflowExecutionStatus.Completed), "GetLastCompletedExecution");
             if (!scope.Granted) return null!;
-            return await scope.Apply(collection)
+            return scope.ForView(await scope.Apply(collection)
             .SortByDescending(item => item.FinishedAt)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync());
         }
     }
 }

@@ -71,7 +71,7 @@ namespace Functions.DomainService.Repositories
                 .Limit(Math.Max(1, pageSize))
                 .ToListAsync(cancellationToken);
 
-            return (items, totalCount);
+            return (scope.ForView(items), totalCount);
         }
     }
 }

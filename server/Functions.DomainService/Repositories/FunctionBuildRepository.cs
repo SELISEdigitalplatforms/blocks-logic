@@ -59,6 +59,14 @@ namespace Functions.DomainService.Repositories
             return scope.Granted ? await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken) : null;
         }
 
+        public async Task<FunctionBuildEntity?> GetByIdForViewAsync(string tenantId, string buildId, CancellationToken cancellationToken = default)
+        {
+            // Masked: View column (property) rules clear what the caller may not see. Never save it back.
+            if (string.IsNullOrWhiteSpace(buildId)) return null;
+            var scope = await ReadAsync(tenantId, Builders<FunctionBuildEntity>.Filter.Where(b => b.ItemId == buildId), "GetByIdForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken)) : null;
+        }
+
         public async Task<FunctionBuildEntity?> GetSucceededBySourceHashAsync(
             string tenantId, string functionId, string sourceHash, CancellationToken cancellationToken = default)
         {

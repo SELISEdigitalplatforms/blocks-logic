@@ -60,7 +60,7 @@ namespace Proxy.DomainService.Services
                 }
             }
 
-            var versions = await _proxyVersionRepository.GetForProxyAsync(tenantId, proxyId, pageSize, pageNumber);
+            var versions = await _proxyVersionRepository.GetForProxyForViewAsync(tenantId, proxyId, pageSize, pageNumber);
             var data = versions.Select(ToDto).ToList();
 
             _logger.LogInformation(

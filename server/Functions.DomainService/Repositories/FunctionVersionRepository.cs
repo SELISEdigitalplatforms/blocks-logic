@@ -68,7 +68,7 @@ namespace Functions.DomainService.Repositories
                 .Limit(Math.Max(1, pageSize))
                 .ToListAsync(cancellationToken);
 
-            return (items, totalCount);
+            return (scope.ForView(items), totalCount);
         }
 
         public async Task<FunctionVersionEntity?> GetByIdAsync(string tenantId, string versionId, CancellationToken cancellationToken = default)
@@ -76,6 +76,14 @@ namespace Functions.DomainService.Repositories
             if (string.IsNullOrWhiteSpace(versionId)) return null;
             var scope = await ReadAsync(tenantId, Builders<FunctionVersionEntity>.Filter.Where(v => v.ItemId == versionId), "GetById");
             return scope.Granted ? await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken) : null;
+        }
+
+        public async Task<FunctionVersionEntity?> GetByIdForViewAsync(string tenantId, string versionId, CancellationToken cancellationToken = default)
+        {
+            // Masked: View column (property) rules clear what the caller may not see. Never save it back.
+            if (string.IsNullOrWhiteSpace(versionId)) return null;
+            var scope = await ReadAsync(tenantId, Builders<FunctionVersionEntity>.Filter.Where(v => v.ItemId == versionId), "GetByIdForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken)) : null;
         }
 
         public async Task<FunctionVersionEntity?> GetByNumberAsync(

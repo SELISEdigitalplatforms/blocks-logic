@@ -103,7 +103,9 @@ namespace Functions.DomainService.Services
 
         public async Task<RunDetailDto> GetAsync(string tenantId, string runId, CancellationToken cancellationToken = default)
         {
-            var run = await GetEntityAsync(tenantId, runId, cancellationToken);
+            // The detail goes back to the caller: View column (property) rules clear what they may not see.
+            var run = await _runRepository.GetByIdForViewAsync(tenantId, runId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"run '{runId}' was not found");
             var dto = RunDetailDto.From(run);
             if (!FunctionWireMapping.IsTerminal(run.Status))
             {

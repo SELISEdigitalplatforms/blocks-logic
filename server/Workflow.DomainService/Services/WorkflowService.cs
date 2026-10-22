@@ -380,7 +380,7 @@ namespace Workflow.DomainService.Services
             WorkflowEntity workflow;
             try
             {
-                workflow = await _workflowRepository.GetWorkflowAsync(tenantId, dto.WorkflowId);
+                workflow = await _workflowRepository.GetWorkflowForViewAsync(tenantId, dto.WorkflowId);
             }
             catch (InvalidOperationException ex) when (ex.InnerException is KeyNotFoundException)
             {
@@ -419,7 +419,7 @@ namespace Workflow.DomainService.Services
             if (workflow.IsPublished && !string.IsNullOrEmpty(workflow.PublishedVersionId))
             {
                 _logger.LogInformation("Fetching published version for workflow with Id: {WorkflowId}, PublishedVersionId: {PublishedVersionId}", dto.WorkflowId, workflow.PublishedVersionId);
-                publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, workflow.PublishedVersionId);
+                publishedVersion = await _workflowVersionRepository.GetWorkflowVersionForViewAsync(tenantId, workflow.PublishedVersionId);
             }
             else
             {
@@ -851,7 +851,7 @@ namespace Workflow.DomainService.Services
         public async Task<GetWorkflowByVersionResponseDto> GetWorkflowByVersionAsync(string tenantId, GetWorkflowByVersionRequestDto dto)
         {
             var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, dto.WorkflowId);
-            var version = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, dto.VersionId);
+            var version = await _workflowVersionRepository.GetWorkflowVersionForViewAsync(tenantId, dto.VersionId);
             if (version == null)
             {
                 return new GetWorkflowByVersionResponseDto

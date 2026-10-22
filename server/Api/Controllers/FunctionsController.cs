@@ -214,7 +214,7 @@ namespace BlocksTemplate.Api.Controllers
         [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<FunctionBuildEntitySummary> GetBuild([FromQuery] string buildId)
         {
-            var build = await _buildService.GetAsync(GetTenantId(), buildId);
+            var build = await _buildService.GetForViewAsync(GetTenantId(), buildId);
             return FunctionBuildEntitySummary.From(build);
         }
 

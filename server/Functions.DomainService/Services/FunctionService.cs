@@ -321,7 +321,9 @@ namespace Functions.DomainService.Services
         public async Task<FunctionDetailDto> GetAsync(
             string tenantId, string functionId, CancellationToken cancellationToken = default)
         {
-            var function = await GetEntityAsync(tenantId, functionId, cancellationToken);
+            // The detail goes back to the caller: View column (property) rules clear what they may not see.
+            var function = await _repository.GetByIdForViewAsync(tenantId, functionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
             return await BuildDetailAsync(tenantId, function, cancellationToken);
         }
 
@@ -360,7 +362,7 @@ namespace Functions.DomainService.Services
         public async Task<FunctionSource> GetVersionSourceAsync(
             string tenantId, string functionId, string versionId, CancellationToken cancellationToken = default)
         {
-            var version = await _versionRepository.GetByIdAsync(tenantId, versionId, cancellationToken);
+            var version = await _versionRepository.GetByIdForViewAsync(tenantId, versionId, cancellationToken);
             if (version is null || version.FunctionId != functionId)
             {
                 throw new FunctionNotFoundException($"function '{functionId}' has no version '{versionId}'");

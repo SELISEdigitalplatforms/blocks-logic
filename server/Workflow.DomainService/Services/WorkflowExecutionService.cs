@@ -726,7 +726,7 @@ namespace Workflow.DomainService.Services
 
         public async Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string tenantId, WorkflowExecutionGetRequestDto dto)
         {
-            var execution = await _executionRepository.GetByIdAsync(dto.ExecutionId, tenantId)
+            var execution = await _executionRepository.GetByIdForViewAsync(dto.ExecutionId, tenantId)
                 ?? throw new InvalidOperationException($"Execution {dto.ExecutionId} not found");
 
             // Get all workflow items - frontend will organize them into input/output structure

@@ -38,6 +38,8 @@ namespace Functions.DomainService.Services
 
         /// <summary>A single build's current state — for the editor's build-progress indicator to poll.</summary>
         Task<FunctionBuildEntity> GetAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
+        /// <summary>The build as the caller may see it: properties a View column rule hides are cleared.</summary>
+        Task<FunctionBuildEntity> GetForViewAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Records a fresh, never-reused build for one test run and stores its source bundle. It is
@@ -97,6 +99,13 @@ namespace Functions.DomainService.Services
             string tenantId, string buildId, CancellationToken cancellationToken = default)
         {
             var build = await _buildRepository.GetByIdAsync(tenantId, buildId, cancellationToken);
+            return build ?? throw new Utils.FunctionNotFoundException($"build '{buildId}' was not found");
+        }
+
+        public async Task<FunctionBuildEntity> GetForViewAsync(
+            string tenantId, string buildId, CancellationToken cancellationToken = default)
+        {
+            var build = await _buildRepository.GetByIdForViewAsync(tenantId, buildId, cancellationToken);
             return build ?? throw new Utils.FunctionNotFoundException($"build '{buildId}' was not found");
         }
 

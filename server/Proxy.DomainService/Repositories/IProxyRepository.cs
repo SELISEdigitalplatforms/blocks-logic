@@ -7,6 +7,8 @@ namespace Proxy.DomainService.Repositories
     public interface IProxyRepository
     {
         Task<ProxyDetailEntity?> GetAsync(string tenantId, string itemId);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<ProxyDetailEntity?> GetForViewAsync(string tenantId, string itemId);
 
         Task<ProxyDetailEntity?> GetBySlugAsync(string tenantId, string slug);
 
@@ -22,6 +24,11 @@ namespace Proxy.DomainService.Repositories
         /// Returns <c>false</c> when someone else wrote first; nothing is written then.
         /// </summary>
         Task<bool> SaveConfigAsync(ProxyDetailEntity proxy, int expectedVersion);
+        /// <summary>
+        /// As <see cref="SaveConfigAsync"/> for the caller's own edit: properties a View column rule hides from them keep
+        /// their stored value when the edit carries what their masked read showed.
+        /// </summary>
+        Task<bool> SaveEditedConfigAsync(ProxyDetailEntity proxy, int expectedVersion);
 
         /// <summary>Deletes the proxy only while its version is still <paramref name="expectedVersion"/>; <c>false</c> otherwise.</summary>
         Task<bool> DeleteAsync(string tenantId, string itemId, int expectedVersion);

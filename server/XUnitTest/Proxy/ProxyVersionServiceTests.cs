@@ -99,7 +99,7 @@ namespace XUnitTest.Proxy
         public async Task GetVersions_ReturnsRows_NewestFirst_WithLabelsAndDiffFlag()
         {
             _versionRepo.Setup(r => r.CountForProxyAsync(Tenant, "p1")).ReturnsAsync(2);
-            _versionRepo.Setup(r => r.GetForProxyAsync(Tenant, "p1", 50, 0)).ReturnsAsync(new List<ProxyVersionEntity>
+            _versionRepo.Setup(r => r.GetForProxyForViewAsync(Tenant, "p1", 50, 0)).ReturnsAsync(new List<ProxyVersionEntity>
             {
                 Version(2, ProxyVersionKind.ConfigUpdate, id: "v2"),
                 Version(1, ProxyVersionKind.Create, id: "v1"),
@@ -122,7 +122,7 @@ namespace XUnitTest.Proxy
         public async Task GetVersions_ProxyDeleted_StillReturnsHistory()
         {
             _versionRepo.Setup(r => r.CountForProxyAsync(Tenant, "p1")).ReturnsAsync(3);
-            _versionRepo.Setup(r => r.GetForProxyAsync(Tenant, "p1", 50, 0))
+            _versionRepo.Setup(r => r.GetForProxyForViewAsync(Tenant, "p1", 50, 0))
                 .ReturnsAsync(new List<ProxyVersionEntity> { Version(3, ProxyVersionKind.Delete, id: "v3") });
 
             var result = await _service.GetVersionsAsync(Tenant, new ProxyGetVersionsRequestDto { ProxyId = "p1" });

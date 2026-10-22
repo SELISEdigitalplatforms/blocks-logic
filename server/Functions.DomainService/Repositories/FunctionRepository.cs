@@ -128,7 +128,7 @@ namespace Functions.DomainService.Repositories
                 .Limit(Math.Max(1, pageSize))
                 .ToListAsync(cancellationToken);
 
-            return (items, totalCount);
+            return (scope.ForView(items), totalCount);
         }
 
         public async Task<FunctionEntity?> GetByIdAsync(string tenantId, string functionId, CancellationToken cancellationToken = default)
@@ -136,6 +136,14 @@ namespace Functions.DomainService.Repositories
             if (string.IsNullOrWhiteSpace(functionId)) return null;
             var scope = await ReadAsync(tenantId, Live(functionId), "GetById");
             return scope.Granted ? await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken) : null;
+        }
+
+        public async Task<FunctionEntity?> GetByIdForViewAsync(string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            // Masked: View column (property) rules clear what the caller may not see. Never save it back.
+            if (string.IsNullOrWhiteSpace(functionId)) return null;
+            var scope = await ReadAsync(tenantId, Live(functionId), "GetByIdForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken)) : null;
         }
 
         public async Task CreateAsync(string tenantId, FunctionEntity function, CancellationToken cancellationToken = default)
@@ -154,7 +162,7 @@ namespace Functions.DomainService.Repositories
             var update = Builders<FunctionEntity>.Update
                 .Set(f => f.Name, name)
                 .Set(f => f.Description, description);
-            return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken);
+            return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken, keepHidden: true);
         }
 
         public Task UpdateSourceAndConfigAsync(
@@ -175,7 +183,7 @@ namespace Functions.DomainService.Repositories
             // source hash against the active version's, in FunctionService.IsDirty. Setting it
             // here asked the driver to write a field that has no BSON mapping, which threw
             // "Expression not supported: f.IsDirty" and turned every Save into a 500.
-            return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken);
+            return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken, keepHidden: true);
         }
 
         public async Task<bool> UpdateImportedAsync(
@@ -233,10 +241,14 @@ namespace Functions.DomainService.Repositories
             return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken);
         }
 
-        /// <summary>Stamps who and when, then applies one targeted update.</summary>
+        /// <summary>
+        /// Stamps who and when, then applies one targeted update. <paramref name="keepHidden"/>: the values come from
+        /// the caller's edit, so properties a View column rule hides from them keep their stored value when the edit
+        /// carries what their masked read showed.
+        /// </summary>
         private async Task ApplyAsync(
             string tenantId, string functionId, UpdateDefinition<FunctionEntity> update, string? actorId,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, bool keepHidden = false)
         {
             update = Builders<FunctionEntity>.Update.Combine(
                 update,
@@ -245,6 +257,12 @@ namespace Functions.DomainService.Repositories
 
             var filter = await EditAsync(tenantId, Live(functionId), "Apply");
             if (filter is null) return;
+            if (keepHidden)
+            {
+                var kept = await _dataAccess.KeepHiddenAsync(LogicSchemas.FunctionEntity, update, Collection(tenantId), filter, "FunctionRepository.Apply", tenantId);
+                if (kept is null) return;
+                update = kept;
+            }
             await _dataAccess.CheckUpdateAsync(LogicSchemas.FunctionEntity, update, "FunctionRepository.Apply", tenantId);
             await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
         }

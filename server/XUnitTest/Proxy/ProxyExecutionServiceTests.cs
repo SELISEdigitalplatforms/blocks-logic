@@ -33,6 +33,7 @@ namespace XUnitTest.Proxy
         {
             TestBlocksContext.Set(Tenant, "user-1");
             _proxies.Setup(r => r.GetAsync(Tenant, ProxyId)).ReturnsAsync(Proxy());
+            _proxies.Setup(r => r.GetForViewAsync(Tenant, ProxyId)).ReturnsAsync(Proxy());
             _service = new ProxyExecutionService(
                 _executions.Object, _proxies.Object, new FixedTimeProvider(Now),
                 Mock.Of<ILogger<ProxyExecutionService>>());
@@ -69,6 +70,7 @@ namespace XUnitTest.Proxy
                 TotalLatencyMsTotal = latencyMsTotal,
             };
             _proxies.Setup(r => r.GetAsync(Tenant, ProxyId)).ReturnsAsync(proxy);
+            _proxies.Setup(r => r.GetForViewAsync(Tenant, ProxyId)).ReturnsAsync(proxy);
         }
 
         // =========================== GetOverview ===========================
@@ -139,6 +141,7 @@ namespace XUnitTest.Proxy
         public async Task GetOverview_UnknownProxy_NoRows_Returns404()
         {
             _proxies.Setup(r => r.GetAsync(Tenant, "ghost")).ReturnsAsync((ProxyDetailEntity?)null);
+            _proxies.Setup(r => r.GetForViewAsync(Tenant, "ghost")).ReturnsAsync((ProxyDetailEntity?)null);
             _executions.Setup(r => r.AnyForProxyAsync(Tenant, "ghost")).ReturnsAsync(false);
 
             var result = await _service.GetOverviewAsync(Tenant, new ProxyGetOverviewRequestDto { ProxyId = "ghost" });
@@ -152,6 +155,7 @@ namespace XUnitTest.Proxy
         public async Task GetOverview_DeletedProxyWithRetainedRows_StillComputesMetrics()
         {
             _proxies.Setup(r => r.GetAsync(Tenant, ProxyId)).ReturnsAsync((ProxyDetailEntity?)null);
+            _proxies.Setup(r => r.GetForViewAsync(Tenant, ProxyId)).ReturnsAsync((ProxyDetailEntity?)null);
             _executions.Setup(r => r.AnyForProxyAsync(Tenant, ProxyId)).ReturnsAsync(true);
             // Window (24h) and all-time stats differ, so the DTO's fields can be attributed to the right query.
             _executions.Setup(r => r.GetStatsAsync(Tenant, ProxyId, Now.AddHours(-24)))
@@ -412,6 +416,7 @@ namespace XUnitTest.Proxy
         public async Task GetExecutions_UnknownProxy_NoRows_Returns404()
         {
             _proxies.Setup(r => r.GetAsync(Tenant, "ghost")).ReturnsAsync((ProxyDetailEntity?)null);
+            _proxies.Setup(r => r.GetForViewAsync(Tenant, "ghost")).ReturnsAsync((ProxyDetailEntity?)null);
             _executions.Setup(r => r.AnyForProxyAsync(Tenant, "ghost")).ReturnsAsync(false);
 
             var result = await _service.GetExecutionsAsync(Tenant, new ProxyGetExecutionsRequestDto { ProxyId = "ghost" });
@@ -424,6 +429,7 @@ namespace XUnitTest.Proxy
         public async Task GetExecutions_DeletedProxyWithRetainedRows_StillReturnsRows()
         {
             _proxies.Setup(r => r.GetAsync(Tenant, ProxyId)).ReturnsAsync((ProxyDetailEntity?)null);
+            _proxies.Setup(r => r.GetForViewAsync(Tenant, ProxyId)).ReturnsAsync((ProxyDetailEntity?)null);
             _executions.Setup(r => r.AnyForProxyAsync(Tenant, ProxyId)).ReturnsAsync(true);
             _executions.Setup(r => r.CountAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync(2);
             _executions.Setup(r => r.GetPageAsync(Tenant, ProxyId, ProxyStatusClass.All, It.IsAny<DateTime>(), It.IsAny<DateTime>(), 25, 0))

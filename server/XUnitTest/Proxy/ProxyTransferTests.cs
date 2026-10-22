@@ -789,6 +789,8 @@ namespace XUnitTest.Proxy
             private static ProxyDetailEntity Copy(ProxyDetailEntity proxy) =>
                 BsonSerializer.Deserialize<ProxyDetailEntity>(proxy.ToBsonDocument());
 
+            public Task<ProxyDetailEntity?> GetForViewAsync(string tenantId, string itemId) => GetAsync(tenantId, itemId);
+
             public Task<ProxyDetailEntity?> GetAsync(string tenantId, string itemId) =>
                 Task.FromResult(Proxies.TryGetValue(itemId, out var p) ? Copy(p) : null);
 
@@ -810,6 +812,8 @@ namespace XUnitTest.Proxy
                 Proxies[proxy.ItemId] = Copy(proxy);
                 return Task.CompletedTask;
             }
+
+            public Task<bool> SaveEditedConfigAsync(ProxyDetailEntity proxy, int expectedVersion) => SaveConfigAsync(proxy, expectedVersion);
 
             public Task<bool> SaveConfigAsync(ProxyDetailEntity proxy, int expectedVersion)
             {
@@ -837,6 +841,9 @@ namespace XUnitTest.Proxy
 
             Task<ProxyVersionEntity?> IProxyVersionRepository.GetAsync(string tenantId, string versionId) =>
                 Task.FromResult(Versions.FirstOrDefault(v => v.ItemId == versionId));
+
+            public Task<List<ProxyVersionEntity>> GetForProxyForViewAsync(string tenantId, string proxyId, int pageSize, int pageNumber) =>
+                GetForProxyAsync(tenantId, proxyId, pageSize, pageNumber);
 
             public Task<List<ProxyVersionEntity>> GetForProxyAsync(string tenantId, string proxyId, int pageSize, int pageNumber) =>
                 Task.FromResult(Versions.Where(v => v.ProxyId == proxyId).OrderByDescending(v => v.VersionNumber)

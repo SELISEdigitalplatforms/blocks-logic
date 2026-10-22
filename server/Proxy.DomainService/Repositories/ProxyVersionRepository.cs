@@ -125,6 +125,22 @@ namespace Proxy.DomainService.Repositories
                 .ToListAsync();
         }
 
+        public async Task<List<ProxyVersionEntity>> GetForProxyForViewAsync(
+            string tenantId, string proxyId, int pageSize, int pageNumber)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = Builders<ProxyVersionEntity>.Filter.Eq(v => v.TenantId, tenantId)
+                         & Builders<ProxyVersionEntity>.Filter.Eq(v => v.ProxyId, proxyId);
+            // Masked: View column (property) rules clear what the caller may not see. Never save these back.
+            var scope = await ReadAsync(tenantId, filter, "GetForProxyForView");
+            if (!scope.Granted) return [];
+            return scope.ForView(await scope.Apply(collection)
+                .SortByDescending(v => v.VersionNumber)
+                .Skip(pageNumber * pageSize)
+                .Limit(pageSize)
+                .ToListAsync());
+        }
+
         public async Task<long> CountForProxyAsync(string tenantId, string proxyId)
         {
             var collection = GetCollection(tenantId);

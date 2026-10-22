@@ -260,6 +260,7 @@ namespace XUnitTest.Functions
         {
             var functions = new Mock<IFunctionRepository>();
             functions.Setup(f => f.GetByIdAsync(Tenant, "fn_1", It.IsAny<CancellationToken>())).ReturnsAsync(Imported);
+            functions.Setup(f => f.GetByIdForViewAsync(Tenant, "fn_1", It.IsAny<CancellationToken>())).ReturnsAsync(Imported);
             functions.Setup(f => f.GetAllAsync(Tenant, null, null, null, 0, 20, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(((IReadOnlyList<FunctionEntity>)[Imported], 1L));
             var runs = new Mock<IFunctionRunRepository>();
