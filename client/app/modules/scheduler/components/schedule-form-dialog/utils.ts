@@ -1,9 +1,5 @@
 import { z } from "zod";
-
-const CRON_FIELD_PATTERN = "(?:\\*|\\d+)(?:-\\d+)?(?:\\/\\d+)?";
-const CRON_EXPRESSION_REGEX = new RegExp(
-  `^${CRON_FIELD_PATTERN}(?:,${CRON_FIELD_PATTERN})*(?:\\s+${CRON_FIELD_PATTERN}(?:,${CRON_FIELD_PATTERN})*){4}$`,
-);
+import { validateCronExpression } from "./cron-validation";
 
 export const WEBHOOK_METHODS = ["POST", "GET", "PUT", "PATCH", "DELETE"] as const;
 
@@ -37,7 +33,11 @@ export const scheduleFormSchema = z
     cronExpression: z
       .string()
       .min(1, "Cron expression is required")
-      .regex(CRON_EXPRESSION_REGEX, "Enter a valid 5-field cron expression"),
+      .superRefine((value, ctx) => {
+        if (!value) return;
+        const error = validateCronExpression(value);
+        if (error) ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+      }),
     payload: z.string().refine(
       (value) => {
         if (!value.trim()) return true;
