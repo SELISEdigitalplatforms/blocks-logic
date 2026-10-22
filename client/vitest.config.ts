@@ -90,6 +90,9 @@ export default defineConfig({
       provider: "v8",
       // lcov is what the client SonarQube workflow imports; the rest are used locally.
       reporter: ["text", "lcov", "json-summary", "json", "clover"],
+      // Write coverage even when a test fails: the SonarQube job runs on regardless, and without a
+      // report one flaky test elsewhere reads as 0% coverage on every changed file.
+      reportOnFailure: true,
       include: ["app/**/*.{ts,tsx}"],
       exclude: [
         "app/**/*.test.*",
