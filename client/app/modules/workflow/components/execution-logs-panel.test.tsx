@@ -186,7 +186,7 @@ describe("ExecutionLogsPanel", () => {
   it.each([
     [
       { availability: ExecutionLogsAvailability.NotRecorded, logs: [] },
-      "It ran before execution logging was turned on.",
+      "Logs aren't available for this execution.",
     ],
     [
       { availability: ExecutionLogsAvailability.SourceUnavailable, logs: [] },
