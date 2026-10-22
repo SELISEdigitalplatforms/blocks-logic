@@ -192,7 +192,7 @@ describe("NodeLibraryPanel Merge (SPEC3)", () => {
     });
     fireEvent.click(screen.getByText("Merge"));
     const merge = Object.values(store.getState().nodesMap).find((n: any) => n.type === "merge") as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    expect(merge).toMatchObject({ version: "v2", parameters: { mode: "append", numberInputs: 2 }, settings: { runWhen: "anyInputHasData", ifInputMissing: "skip" } });
+    expect(merge).toMatchObject({ version: "v2", parameters: { mode: "append", numberInputs: 2 }, settings: {} });
     expect(merge.handle.targets.map((t: { key: string }) => t.key)).toEqual(["merge-handle-target-1", "merge-handle-target-2"]);
     const edges = Object.values(store.getState().edgesMap) as Array<Record<string, unknown>>;
     expect(edges.map((e) => [e.source, e.targetHandle]).sort()).toEqual([["a", "merge-handle-target-1"], ["b", "merge-handle-target-1"]]);

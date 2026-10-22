@@ -65,6 +65,26 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
+        /// Distinct targets of <paramref name="outgoingEdges"/> that have more than one incoming edge (a join)
+        /// and got no items on any edge from this node. Only edges that carried items start a node, so a join
+        /// whose last parent sent it nothing would otherwise never be started.
+        /// </summary>
+        public static List<string> JoinsSentNothing(
+            IEnumerable<EdgeEnity>? outgoingEdges,
+            IReadOnlyDictionary<string, int>? outputCountsByBranch,
+            IReadOnlyList<EdgeEnity>? edges)
+        {
+            var outgoing = (outgoingEdges ?? Array.Empty<EdgeEnity>()).Where(e => e != null && !string.IsNullOrEmpty(e.Target)).ToList();
+            var taken = TakenTargets(outgoing, outputCountsByBranch);
+            var graph = edges ?? Array.Empty<EdgeEnity>();
+            return outgoing
+                .Select(e => e.Target)
+                .Distinct()
+                .Where(target => !taken.Contains(target) && graph.Count(e => e != null && e.Target == target) > 1)
+                .ToList();
+        }
+
+        /// <summary>
         /// True when every incoming parent has either finished or cannot still run.
         /// A parent with no row blocks only when some other active or running node can reach it.
         /// The walk does not start at <paramref name="nodeId"/> and does not leave a failed node.
@@ -193,30 +213,6 @@ namespace Workflow.DomainService.Services
             }
 
             return reachable;
-        }
-
-        /// <summary>
-        /// Over the incoming edges of <paramref name="nodeId"/>: how many there are, and how many sent no items.
-        /// An edge sent items only when its source's latest row is Completed and carried items on that edge's
-        /// branch; a source with no row (an untaken branch) sent none.
-        /// </summary>
-        public static (int Total, int WithoutData) IncomingEdgeDataStatus(
-            string nodeId,
-            IReadOnlyList<EdgeEnity>? edges,
-            IReadOnlyList<NodeExecutionEntity>? executions)
-        {
-            var incoming = (edges ?? Array.Empty<EdgeEnity>()).Where(e => e != null && e.Target == nodeId).ToList();
-            if (incoming.Count == 0)
-            {
-                return (0, 0);
-            }
-
-            var latestByNode = LatestByNode(executions);
-            var withoutData = incoming.Count(edge =>
-                !(latestByNode.TryGetValue(edge.Source, out var row)
-                  && row.Status == NodeExecutionStatus.Completed
-                  && CarriedItems(row.OutputCountsByBranch, edge.SourceHandle)));
-            return (incoming.Count, withoutData);
         }
 
         private static Dictionary<string, NodeExecutionEntity> LatestByNode(IReadOnlyList<NodeExecutionEntity>? executions)

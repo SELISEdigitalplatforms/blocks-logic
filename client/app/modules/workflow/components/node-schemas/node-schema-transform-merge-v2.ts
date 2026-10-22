@@ -1,9 +1,9 @@
 import { NodeGuideTransformMergeV2 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
-import { deriveMergeHandle } from "../../utils/merge-handles";
+import { deriveMergeHandle, MERGE_MAX_INPUTS, MERGE_MIN_INPUTS } from "../../utils/merge-handles";
 
 const DEFAULT_PARAMETERS = { mode: "append", numberInputs: 2 };
-const DEFAULT_SETTINGS = { runWhen: "anyInputHasData", ifInputMissing: "skip" };
+const INPUT_COUNTS = Array.from({ length: MERGE_MAX_INPUTS - MERGE_MIN_INPUTS + 1 }, (_, i) => MERGE_MIN_INPUTS + i);
 
 export const NodeSchemaTransformMergeV2: NodeSchemaDefinition = {
   guide: NodeGuideTransformMergeV2,
@@ -23,56 +23,28 @@ export const NodeSchemaTransformMergeV2: NodeSchemaDefinition = {
       },
       {
         id: "numberInputs",
-        type: "number",
+        type: "select",
         label: "Number of Inputs",
-        info: "Applies when you leave the field or press Enter. Lowering it removes the connections on the removed inputs.",
+        info: "Lowering it removes the connections on the removed inputs.",
         key: "numberInputs",
-        min: 1,
-        step: 1,
         defaultValue: 2,
-        commitOn: "blur",
-        // Below 1 becomes 1 and fractions are floored; an empty value is left alone and means 2.
+        options: INPUT_COUNTS.map((count) => ({ value: count, label: String(count) })),
+        // The dropdown hands back text; Merge saves a number.
         onChange: (value) => {
-          if (typeof value !== "number" || !Number.isFinite(value)) return;
-          const coerced = Math.max(1, Math.floor(value));
-          if (coerced !== value) return { numberInputs: coerced };
+          const count = Number(value);
+          if (typeof value === "string" && Number.isFinite(count)) return { numberInputs: count };
         },
       },
     ],
-    settings: [
-      {
-        id: "runWhen",
-        type: "select",
-        label: "Run When",
-        info: "Whether the node runs when only some inputs sent data.",
-        key: "runWhen",
-        defaultValue: "anyInputHasData",
-        options: [
-          { value: "anyInputHasData", label: "Any input has data" },
-          { value: "allInputsHaveData", label: "All inputs have data" },
-        ],
-      },
-      {
-        id: "ifInputMissing",
-        type: "select",
-        label: "If An Input Has No Data",
-        key: "ifInputMissing",
-        defaultValue: "skip",
-        dependsOn: { key: "runWhen", value: "allInputsHaveData" },
-        options: [
-          { value: "skip", label: "Skip this node (no output)" },
-          { value: "fail", label: "Fail this node" },
-        ],
-      },
-    ],
+    settings: [],
   },
   defaults: {
     parameters: DEFAULT_PARAMETERS,
-    settings: DEFAULT_SETTINGS,
+    settings: {},
   },
-  // Every new Merge gets its own parameters and settings, and the handle they derive.
+  // Every new Merge gets its own parameters and the handle they derive.
   transform: (node) => {
     const parameters = { ...DEFAULT_PARAMETERS };
-    return { ...node, parameters, settings: { ...DEFAULT_SETTINGS }, handle: deriveMergeHandle(parameters) };
+    return { ...node, parameters, settings: {}, handle: deriveMergeHandle(parameters) };
   },
 };

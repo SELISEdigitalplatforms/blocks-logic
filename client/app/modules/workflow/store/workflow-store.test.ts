@@ -611,14 +611,17 @@ describe("Merge node in the store (SPEC3)", () => {
     expect(Object.keys(state().edgesMap)).toEqual(["e3"]);
   });
 
-  it("C13: committing 2 -> 1 deletes only the edge on input 2", () => {
+  it("C13: choosing 3 -> 2 deletes only the edge on input 3", () => {
     state().setWorkflow({
       itemId: "w1",
-      nodes: [mergeNode(2), node("a"), node("b"), node("x")],
-      edges: [edge("e1", "a", "merge-handle-target-1"), edge("e2", "b", "merge-handle-target-2"), { id: "out", source: "m", target: "x", sourceHandle: "source", targetHandle: "target" }],
+      nodes: [mergeNode(3), node("a"), node("b"), node("c"), node("x")],
+      edges: [
+        edge("e1", "a", "merge-handle-target-1"), edge("e2", "b", "merge-handle-target-2"), edge("e3", "c", "merge-handle-target-3"),
+        { id: "out", source: "m", target: "x", sourceHandle: "source", targetHandle: "target" },
+      ],
     } as never);
-    state().updateNodeParameters("m", { mode: "append", numberInputs: 1 });
-    expect(targetKeys()).toEqual(["merge-handle-target-1"]);
-    expect(Object.keys(state().edgesMap).sort()).toEqual(["e1", "out"]);
+    state().updateNodeParameters("m", { mode: "append", numberInputs: 2 });
+    expect(targetKeys()).toEqual(["merge-handle-target-1", "merge-handle-target-2"]);
+    expect(Object.keys(state().edgesMap).sort()).toEqual(["e1", "e2", "out"]);
   });
 });

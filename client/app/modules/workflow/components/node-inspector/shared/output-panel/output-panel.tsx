@@ -15,6 +15,7 @@ import type { ExecutedNode } from "@blocks-workflow/models/workflow.model";
 import { CopyValueButton } from "../copy-value-button";
 import { itemCountLabel, outputBranchGroups, showsBranchHeaders, type OutputBranchGroup } from "@blocks-workflow/utils/output-branches";
 import { fieldsNotFound } from "@blocks-workflow/utils/split-out";
+import { mergeInputCounts } from "@blocks-workflow/utils/merge-handles";
 
 type BranchGroup = OutputBranchGroup & {
   schema: ReturnType<typeof inferSchemaFromRuntimeRows>;
@@ -49,6 +50,7 @@ export const OutputPanel = ({
   const selectedNode = useWorkflowStore((s) => s.selectedNode);
   const executedItems = useWorkflowStore((s) => s.executedItems);
   const executedNodes = useWorkflowStore((s) => s.executedNodes);
+  const edgesMap = useWorkflowStore((s) => s.edgesMap);
   const { editorMode, updateNode, lastSuccessfulExecutionData } = useWorkflow();
   const hasMockData = selectedNode?.pinData != null;
 
@@ -104,6 +106,18 @@ export const OutputPanel = ({
       notFound: fieldsNotFound(parameters.fields, input, parameters.disableDotNotation !== true),
     };
   }, [executedNodes, selectedNode]);
+
+  // Merge: how many items each input received on the latest run.
+  const mergeSummary = useMemo(() => {
+    if (!selectedNode || selectedNode.type !== "merge" || selectedNode.pinData != null) return null;
+    const run = latestRun(executedNodes, selectedNode.id);
+    if (!run || run.status === NodeExecutionStatus.Failed) return null;
+    const parameters = (selectedNode.parameters ?? {}) as Record<string, unknown>;
+    return mergeInputCounts(selectedNode.id, parameters.numberInputs, Object.values(edgesMap), (sourceId) => {
+      const source = latestRun(executedNodes, sourceId);
+      return source?.status === NodeExecutionStatus.Completed ? source.outputCountsByBranch : undefined;
+    });
+  }, [edgesMap, executedNodes, selectedNode]);
 
   const failedRunError = useMemo(
     () => (selectedNode ? latestRunError(executedNodes, selectedNode.id) : null),
@@ -267,6 +281,12 @@ export const OutputPanel = ({
             </div>
           ))}
         </div>
+      )}
+
+      {mergeSummary && !isEditingMock && (
+        <p className="mt-2 shrink-0 text-xs text-medium-emphasis">
+          {mergeSummary.map(({ label, count }) => `${label} · ${countItems(count)}`).join("   ")}
+        </p>
       )}
 
       {isEditingMock ? (

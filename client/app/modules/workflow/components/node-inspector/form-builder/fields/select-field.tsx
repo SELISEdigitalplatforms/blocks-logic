@@ -80,7 +80,8 @@ export const SelectField = ({
 
   return (
     <Select
-      value={value === "" ? EMPTY_SELECT_VALUE : (value ?? "")}
+      // A numeric saved value (Merge's Number of Inputs) matches its option's text.
+      value={value === "" ? EMPTY_SELECT_VALUE : typeof value === "number" ? String(value) : (value ?? "")}
       onValueChange={readOnly ? undefined : (val) => onChange(toStoredValue(val))}
       disabled={(field.disabled as boolean) || isLoading}
     >

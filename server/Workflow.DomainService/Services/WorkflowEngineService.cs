@@ -110,35 +110,6 @@ namespace Workflow.DomainService.Services
                 // Without this the step could not be stopped: it kept waiting until the process was killed, and
                 // the node stayed Running for ever. Only the step's own work sees it; the writes below do not.
                 nodeExecutionContext.CancellationToken = stopping;
-
-                // Input rule (node settings; the editor offers it on Merge): a node that requires every input
-                // is skipped or failed when one of its incoming edges sent no items. Pinned data is not used then.
-                // Without the "allInputsHaveData" setting, which no node had before, nothing here runs.
-                var inputRule = NodeInputRule.Parse(node.Settings);
-                if (inputRule.RequireAllInputs)
-                {
-                    var (total, withoutData) = WorkflowBranchRouting.IncomingEdgeDataStatus(
-                        node.Id, execution.WorkflowSnapshot.Edges, execution.NodeExecutions);
-                    var decision = NodeInputRule.Evaluate(inputRule, total, withoutData);
-                    if (decision != InputRuleDecision.Run)
-                    {
-                        log.Info(ExecutionLogStages.InputRuleUnmet, "{WithoutData} of {Total} input(s) sent no items.", withoutData, total);
-                        if (decision == InputRuleDecision.Fail)
-                        {
-                            await FailNodeExecutionAsync(execution, node, nodeExecutionContext, nodeExecution,
-                                new Exception($"Required input data is missing: {withoutData} of {total} inputs sent no items."),
-                                outputItems: null, "NodeReportedFailure");
-                        }
-                        else
-                        {
-                            var skippedEvents = await CompleteNodeExecutionAsync(nodeExecutionContext, execution, node, nodeExecution,
-                                NodeExecutionResult.Successful(new List<NodeOutputItem>()), completionNodeId);
-                            await dispatchNextNodes(skippedEvents, log);
-                        }
-                        return;
-                    }
-                }
-
                 var (executor, usedFallback) = _nodeExecutors.Resolve(node.Type, node.Version);
                 if (usedFallback)
                 {
@@ -767,6 +738,24 @@ namespace Workflow.DomainService.Services
                     data: execution.Id!,
                     message: $"Workflow '{execution.WorkflowSnapshot.Name}' completed successfully.");
                 LogExecutionCompleted(execution);
+            }
+
+            // A join waits for every parent, and only edges that carried items start it. When this parent sent a
+            // join that is already waiting (another parent sent it items) nothing, start it again so it re-checks:
+            // otherwise it stays active and the run never ends. A join no parent sent items to is not started.
+            var joins = WorkflowBranchRouting.JoinsSentNothing(
+                execution.WorkflowSnapshot.Edges.Where(e => e.Source == node.Id),
+                nodeExecution.OutputCountsByBranch,
+                execution.WorkflowSnapshot.Edges);
+            if (joins.Count > 0 && !isWorkflowComplete)
+            {
+                var latest = await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
+                var waiting = joins.Where(id => latest?.ActiveNodeIds?.Contains(id) == true).ToList();
+                if (waiting.Count > 0)
+                {
+                    context.Log.Info(ExecutionLogStages.JoinWoken, "Sent no items to {Count} waiting join(s); starting them to re-check.", waiting.Count);
+                    nextNodeIds = [.. nextNodeIds, .. waiting];
+                }
             }
 
             // Build next node events

@@ -89,10 +89,14 @@ namespace XUnitTest.Workflow
         [Theory]
         [InlineData(null, 2)]
         [InlineData(2.5, 2)]
-        [InlineData(0.0, 1)]
-        [InlineData(-3.0, 1)]
+        [InlineData(1.0, 2)]
+        [InlineData(0.0, 2)]
+        [InlineData(-3.0, 2)]
         [InlineData(5.0, 5)]
-        public void C3_InputCount(double? value, double expected)
+        [InlineData(10.0, 10)]
+        [InlineData(11.0, 10)]
+        [InlineData(1e12, 10)]
+        public void C3_InputCount_IsTwoToTen(double? value, int expected)
         {
             TransformMergeV2Node.InputCount(value).Should().Be(expected);
         }
@@ -113,10 +117,10 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task C4_ItemsAboveNOrOnUnknownHandles_AreIgnored()
         {
-            var result = await Run(Params(1), new()
+            var result = await Run(Params(2), new()
             {
                 ["merge-handle-target-1"] = [Item("x1", "p1")],
-                ["merge-handle-target-2"] = [Item("y1", "p2")],
+                ["merge-handle-target-3"] = [Item("y1", "p2")],
                 ["input-1"] = [Item("z1", "p3")],
             });
 
@@ -139,25 +143,42 @@ namespace XUnitTest.Workflow
         [Theory]
         [InlineData("combine")]
         [InlineData("")]
-        public async Task C7_UnsupportedMode_Fails(string mode)
+        public async Task C7_UnsupportedMode_FailsTheStep(string mode)
         {
-            var result = await Run(Params(2, mode), new());
+            var result = await Run(Params(2, mode), new() { ["merge-handle-target-1"] = [Item("a1", "p1")] });
             result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Be("Unsupported Merge mode.");
+            result.ErrorMessage.Should().Contain("mode");
+            result.OutputItems.Should().BeEmpty();
         }
 
         [Fact]
-        public async Task HugeNumberInputs_IsBoundedByTheEdges()
+        public async Task Mode_ReadsTheSavedName()
         {
-            var started = DateTime.UtcNow;
+            Ids(await Run(Params(2, "append"), new() { ["merge-handle-target-1"] = [Item("a1", "p1")] })).Should().Equal("a1");
+        }
+
+        [Fact]
+        public async Task OutputItems_KeepTheParametersAsSaved()
+        {
+            var saved = Params(2);
+            var result = await Run(saved, new() { ["merge-handle-target-1"] = [Item("a1", "p1")] });
+
+            result.OutputItems.Single().Data.Parameters.Should().BeSameAs(saved);
+            saved["mode"].AsString.Should().Be("append");
+        }
+
+        [Fact]
+        public async Task NumberInputsAboveTen_UsesTen()
+        {
             var result = await Run(Params(1e12), new()
             {
                 ["merge-handle-target-1"] = [Item("a1", "p1")],
+                ["merge-handle-target-10"] = [Item("j1", "p10")],
+                ["merge-handle-target-11"] = [Item("k1", "p11")],
                 ["merge-handle-target-999999999999"] = [Item("z1", "p9")],
             });
 
-            Ids(result).Should().Equal("a1", "z1");
-            (DateTime.UtcNow - started).Should().BeLessThan(TimeSpan.FromSeconds(5));
+            Ids(result).Should().Equal("a1", "j1");
         }
 
         [Fact]
@@ -181,40 +202,6 @@ namespace XUnitTest.Workflow
             global::Workflow.DomainService.WorkflowExecutionServiceCollectionExtensions.AddWorkflowExecutionEngine(services);
             services.Where(d => d.ServiceType == typeof(INodeExecutor)).Select(d => d.ImplementationType)
                 .Should().ContainSingle(t => t == typeof(TransformMergeV2Node));
-        }
-    }
-
-    public class NodeInputRuleTests
-    {
-        [Fact]
-        public void Defaults_ForNullEmptyUnknownAndNonString()
-        {
-            NodeInputRule.Parse(null).Should().Be(NodeInputRule.Default);
-            NodeInputRule.Parse(new BsonDocument()).Should().Be(NodeInputRule.Default);
-            NodeInputRule.Parse(new BsonDocument { { "runWhen", "sometimes" }, { "ifInputMissing", "explode" } }).Should().Be(NodeInputRule.Default);
-            NodeInputRule.Parse(new BsonDocument { { "runWhen", 1 }, { "ifInputMissing", true } }).Should().Be(NodeInputRule.Default);
-            NodeInputRule.Parse(new BsonDocument("retry", 3)).Should().Be(NodeInputRule.Default);
-        }
-
-        [Fact]
-        public void Parses_AllInputsAndFail()
-        {
-            NodeInputRule.Parse(new BsonDocument { { "runWhen", "allInputsHaveData" }, { "ifInputMissing", "fail" } })
-                .Should().Be(new NodeInputRule(true, true));
-            NodeInputRule.Parse(new BsonDocument { { "runWhen", "allInputsHaveData" } })
-                .Should().Be(new NodeInputRule(true, false));
-        }
-
-        [Theory]
-        [InlineData(false, false, 2, 1, InputRuleDecision.Run)]
-        [InlineData(true, false, 2, 0, InputRuleDecision.Run)]
-        [InlineData(true, false, 2, 1, InputRuleDecision.Skip)]
-        [InlineData(true, true, 2, 1, InputRuleDecision.Fail)]
-        [InlineData(true, true, 0, 0, InputRuleDecision.Run)]
-        [InlineData(false, true, 2, 2, InputRuleDecision.Run)]
-        public void Evaluate(bool requireAll, bool fail, int total, int withoutData, InputRuleDecision expected)
-        {
-            NodeInputRule.Evaluate(new NodeInputRule(requireAll, fail), total, withoutData).Should().Be(expected);
         }
     }
 
@@ -276,7 +263,7 @@ namespace XUnitTest.Workflow
         }
     }
 
-    /// <summary>SPEC3 through the real engine: the input rule and Merge input order.</summary>
+    /// <summary>SPEC3 through the real engine: Merge input order.</summary>
     public class MergeEngineTests
     {
         private sealed class CountingExecutor(string type) : INodeExecutor
@@ -365,9 +352,6 @@ namespace XUnitTest.Workflow
 
         private static AddExcuationNodeEvent Event() => new() { TenantId = "t1", WorkflowId = "wf", WorkflowExecutionId = "exec-1", NodeId = "m" };
 
-        private static readonly BsonDocument AllSkip = new() { { "runWhen", "allInputsHaveData" }, { "ifInputMissing", "skip" } };
-        private static readonly BsonDocument AllFail = new() { { "runWhen", "allInputsHaveData" }, { "ifInputMissing", "fail" } };
-
         [Fact]
         public async Task H1_RealMerge_AppendsByHandleOrder()
         {
@@ -380,7 +364,7 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task C10_NodeWithoutTheSetting_RunsEvenWhenAnInputSentNothing()
+        public async Task C10_NodeRunsWhenOneInputSentNothing()
         {
             var executor = new CountingExecutor("x");
             var h = Build("x", "v1", new BsonDocument(), secondParentHasData: false, executor);
@@ -390,45 +374,108 @@ namespace XUnitTest.Workflow
             executor.Calls.Should().Be(1);
             h.StoredError().Should().BeNull();
         }
+    }
+
+    /// <summary>
+    /// A join waits for every parent. When the last parent finishes with 0 items on its edge, nothing used to
+    /// wake the join (only edges that carried items send an event), so it stayed active and the run never ended.
+    /// </summary>
+    public class JoinWakeUpTests
+    {
+        private sealed class EmptyExecutor : INodeExecutor
+        {
+            public string NodeType => "x";
+            public string Version => "v1";
+            public Task<NodeExecutionResult> RunAsync(NodeExecutionContext context) => Task.FromResult(NodeExecutionResult.Successful([]));
+        }
+
+        private static (WorkflowEngineService Engine, List<string> Dispatched) Build(List<string> activeNodeIds, params EdgeEnity[] edges)
+        {
+            var execution = new WorkflowExecutionEntity
+            {
+                Id = "exec-1", TenantId = "t1", WorkflowId = "wf", WorkflowName = "wf",
+                ExecutionMode = WorkflowExecutionMode.Production,
+                TriggerMetadata = new TriggerMetadata(),
+                ActiveNodeIds = activeNodeIds,
+                WorkflowSnapshot = new WorkflowEntity
+                {
+                    TenantId = "t1",
+                    Nodes =
+                    [
+                        new NodeEntity { Id = "p1", Name = "p1", Category = "transform", Type = "x", Version = "v1", Position = new Position() },
+                        new NodeEntity { Id = "p2", Name = "p2", Category = "transform", Type = "x", Version = "v1", Position = new Position() },
+                        new NodeEntity { Id = "m", Name = "Merge", Category = "transform", Type = "merge", Version = "v2", Position = new Position() },
+                        new NodeEntity { Id = "n", Name = "n", Category = "transform", Type = "x", Version = "v1", Position = new Position() },
+                    ],
+                    Edges = [.. edges],
+                    TestMeta = new TestWorkflowMeta(),
+                },
+                NodeExecutions =
+                [
+                    new NodeExecutionEntity
+                    {
+                        Id = "ne-p1", NodeId = "p1", NodeName = "p1", NodeType = "x", NodeVersion = "v1", RunIndex = 1,
+                        Status = NodeExecutionStatus.Completed, OutputCountsByBranch = new() { ["source"] = 2 }, OutputItemCount = 2,
+                    },
+                ],
+            };
+
+            var dispatched = new List<string>();
+            var repository = new Mock<IWorkflowExecutionRepository> { DefaultValue = DefaultValue.Empty };
+            repository.Setup(r => r.GetByIdAsync("exec-1", "t1")).ReturnsAsync(execution);
+            repository.Setup(r => r.GetItemsByNodeIdsAsync(It.IsAny<string>(), It.IsAny<List<Dictionary<string, string>>>(), It.IsAny<string>()))
+                .ReturnsAsync(new List<WorkflowItemExecutionEntity>());
+            repository.Setup(r => r.TryAddFirstNodeExecutionAsync("exec-1", "t1", It.IsAny<NodeExecutionEntity>())).ReturnsAsync(true);
+            repository.Setup(r => r.TryAddNodeExecutionAsync("exec-1", "t1", It.IsAny<NodeExecutionEntity>())).ReturnsAsync(true);
+            var messages = new Mock<IMessageClient>();
+            messages.Setup(m => m.SendToConsumerAsync(It.IsAny<ConsumerMessage<AddExcuationNodeEvent>>()))
+                .Callback((ConsumerMessage<AddExcuationNodeEvent> message) => dispatched.Add(message.Payload.NodeId))
+                .Returns(Task.CompletedTask);
+
+            var engine = new WorkflowEngineService(repository.Object, [new EmptyExecutor(), new TransformMergeV2Node()], messages.Object,
+                NullLogger<WorkflowEngineService>.Instance, Mock.Of<IWorkflowNotificationService>(),
+                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
+            return (engine, dispatched);
+        }
+
+        private static EdgeEnity Edge(string source, string target, string targetHandle = "target") =>
+            new() { Id = $"{source}-{target}", Source = source, Target = target, SourceHandle = "source", TargetHandle = targetHandle };
+
+        private static readonly EdgeEnity[] IntoMerge = [Edge("p1", "m", "merge-handle-target-1"), Edge("p2", "m", "merge-handle-target-2")];
+
+        private static Task RunP2(WorkflowEngineService engine) =>
+            engine.RunNodeAsync(new AddExcuationNodeEvent { TenantId = "t1", WorkflowId = "wf", WorkflowExecutionId = "exec-1", NodeId = "p2" });
 
         [Fact]
-        public async Task H5_AllInputsHaveData_Runs()
+        public async Task LastParentSendsNothing_WakesTheWaitingJoin()
         {
-            var executor = new CountingExecutor("x");
-            var h = Build("x", "v1", AllFail, secondParentHasData: true, executor);
+            // p1 already sent items, so the join is active and waiting for p2.
+            var (engine, dispatched) = Build(["p2", "m"], IntoMerge);
 
-            await h.Engine.RunNodeInProcessAsync(Event());
+            await RunP2(engine);
 
-            executor.Calls.Should().Be(1);
-            h.StoredError().Should().BeNull();
+            dispatched.Should().Equal("m");
         }
 
         [Fact]
-        public async Task H6_MissingInput_Skip_CompletesWithNoItems_WithoutRunningTheNode()
+        public async Task JoinNotWaiting_IsNotWoken()
         {
-            var executor = new CountingExecutor("x");
-            var h = Build("x", "v1", AllSkip, secondParentHasData: false, executor);
+            // No other parent has sent the join items yet: it is not active, so it is not started.
+            var (engine, dispatched) = Build(["p2"], IntoMerge);
 
-            await h.Engine.RunNodeInProcessAsync(Event());
+            await RunP2(engine);
 
-            executor.Calls.Should().Be(0);
-            h.StoredError().Should().BeNull();
-            h.Saved.Should().BeEmpty();
-            h.Execution.NodeExecutions.Last(ne => ne.NodeId == "m").Status.Should().Be(NodeExecutionStatus.Completed);
+            dispatched.Should().BeEmpty();
         }
 
         [Fact]
-        public async Task C1_C16_MissingInput_Fail_FailsWithTheVisibleMessage()
+        public async Task ANodeWithOneParent_StillDoesNotRunOnZeroItems()
         {
-            var executor = new CountingExecutor("x");
-            var h = Build("x", "v1", AllFail, secondParentHasData: false, executor);
+            var (engine, dispatched) = Build(["p2", "n"], Edge("p2", "n"));
 
-            await h.Engine.RunNodeInProcessAsync(Event());
+            await RunP2(engine);
 
-            executor.Calls.Should().Be(0);
-            h.StoredError().Should().Be("Required input data is missing: 1 of 2 inputs sent no items.");
-            h.Execution.Status.Should().Be(WorkflowExecutionStatus.Failed);
-            h.Execution.ErrorMessage.Should().Be("Required input data is missing: 1 of 2 inputs sent no items.");
+            dispatched.Should().BeEmpty();
         }
     }
 }

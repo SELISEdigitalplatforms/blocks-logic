@@ -23,23 +23,24 @@ namespace Workflow.DomainService.Nodes.TransformMergeV2
         /// <summary>Merge exists only as v2 (it owns its handle from the start); there is no v1.</summary>
         public IReadOnlyCollection<string> Versions => SupportedVersions;
 
-        /// <summary>The number of inputs: missing or null 2, below 1 1, otherwise floored (no upper limit).</summary>
-        public static double InputCount(double? numberInputs)
+        public const int MinInputs = 2;
+        public const int MaxInputs = 10;
+
+        /// <summary>The number of inputs: missing 2, otherwise floored and kept within 2 to 10, as the editor's dropdown.</summary>
+        public static int InputCount(double? numberInputs)
         {
-            if (numberInputs is not { } value || double.IsNaN(value)) return 2;
-            return value < 1 ? 1 : Math.Floor(value);
+            if (numberInputs is not { } value || double.IsNaN(value)) return MinInputs;
+            return (int)Math.Clamp(Math.Floor(value), MinInputs, MaxInputs);
         }
 
         protected override Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, TransformMergeV2Parameters? nodeparameters)
         {
+            // Append is the only mode; any other saved value already failed the parameter shape.
             var parameters = nodeparameters ?? new TransformMergeV2Parameters();
-            if (!string.Equals((parameters.Mode ?? "append").Trim(), "append", StringComparison.OrdinalIgnoreCase))
-                return Task.FromResult(NodeExecutionResult.Failed("Unsupported Merge mode."));
-
             var inputCount = InputCount(parameters.NumberInputs);
 
-            // Only the handles that are present are visited (bounded by the edges, not by the input count).
-            var ordered = new List<(double Input, int Blank, IReadOnlyList<WorkflowItemExecutionEntity> Items)>();
+            // Only the handles that are present are visited.
+            var ordered = new List<(int Input, int Blank, IReadOnlyList<WorkflowItemExecutionEntity> Items)>();
             var ignored = 0;
             foreach (var (key, items) in context.InputItemsByHandle)
             {
@@ -50,7 +51,7 @@ namespace Workflow.DomainService.Nodes.TransformMergeV2
                 }
                 var match = InputKey.Match(key);
                 if (match.Success
-                    && double.TryParse(match.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var input)
+                    && int.TryParse(match.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var input)
                     && input >= 1 && input <= inputCount)
                 {
                     ordered.Add((input, 1, items));
@@ -74,7 +75,8 @@ namespace Workflow.DomainService.Nodes.TransformMergeV2
                         {
                             Input = source.Data.Output,
                             Output = source.Data.Output?.DeepClone() ?? BsonNull.Value,
-                            Parameters = parameters.ToBsonDocument(),
+                            // As saved: the enum would otherwise be stored as a number.
+                            Parameters = context.Parameters,
                         },
                         Branch = "source",
                         ParentItemIds = new List<string> { source.Id },

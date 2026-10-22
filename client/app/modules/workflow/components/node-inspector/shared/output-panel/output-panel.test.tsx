@@ -377,6 +377,44 @@ describe("OutputPanel", () => {
     });
   });
 
+  describe("Merge run summary", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seedMergeRun = (extra: Record<string, unknown> = {}, mergeStatus = 4) => (store: any) => {
+      const n = node({ id: "m", type: "merge", category: "transform", version: "v2", parameters: { mode: "append", numberInputs: 3 }, ...extra });
+      store.getState().addNode(n);
+      store.setState({
+        selectedNode: n,
+        editorMode: "run",
+        edgesMap: {
+          e1: { id: "e1", source: "a", target: "m", sourceHandle: "source", targetHandle: "merge-handle-target-1" },
+          e2: { id: "e2", source: "b", target: "m", sourceHandle: "source", targetHandle: "merge-handle-target-2" },
+        },
+        executedNodes: [
+          { id: "ne-a", nodeId: "a", runIndex: 0, status: 4, outputCountsByBranch: { source: 2 } },
+          { id: "ne-b", nodeId: "b", runIndex: 1, status: 4, outputCountsByBranch: { source: 1 } },
+          { id: "ne-m", nodeId: "m", runIndex: 2, status: mergeStatus, outputItemCount: 3, outputCountsByBranch: { source: 3 } },
+        ],
+        executedItems: [],
+      });
+    };
+
+    it("shows how many items each input received, including an empty one", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedMergeRun() });
+      expect(screen.getByText(/Input 1 · 2 items\s+Input 2 · 1 item\s+Input 3 · 0 items/)).toBeTruthy();
+    });
+
+    it("is not shown before a run, after a failed run, or with mock data", () => {
+      const { unmount } = renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ id: "m", type: "merge", parameters: { numberInputs: 2 } }) });
+      expect(screen.queryByText(/Input 1 ·/)).toBeNull();
+      unmount();
+      const failed = renderWithProviders(<OutputPanel />, { seedWorkflow: seedMergeRun({}, 5) });
+      expect(screen.queryByText(/Input 1 ·/)).toBeNull();
+      failed.unmount();
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedMergeRun({ pinData: [{ a: 1 }] }) });
+      expect(screen.queryByText(/Input 1 ·/)).toBeNull();
+    });
+  });
+
   it("hides the schema body while collapsed", () => {
     renderWithProviders(<OutputPanel isCollapsed onToggleCollapse={() => {}} />, {
       seedWorkflow: seedSelected({ pinData: [{ name: "Ada" }] }),

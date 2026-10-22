@@ -49,7 +49,7 @@ namespace Workflow.DomainService.Logging
         public const string SplitOutFieldNotFound = "node.splitOut.fieldNotFound";
         public const string MergeApplied = "node.merge.applied";
         public const string MergeIgnored = "node.merge.ignored";
-        public const string InputRuleUnmet = "node.inputRule.unmet";
+        public const string JoinWoken = "node.join.woken";
         public const string SetFieldApplied = "node.setfield.applied";
         public const string CodeStarted = "node.code.started";
         public const string CodeFinished = "node.code.finished";
