@@ -49,6 +49,7 @@ export const useWorkflow = () => {
   const openNodeLibraryPanel = useWorkflowStore((state) => state.openNodeLibraryPanel);
   const closeNodeLibraryPanel = useWorkflowStore((state) => state.closeNodeLibraryPanel);
   const setWorkflow = useWorkflowStore((state) => state.setWorkflow);
+  const markSaved = useWorkflowStore((state) => state.markSaved);
   const setEditorMode = useWorkflowStore((state) => state.setEditorMode);
   const setExecutionMode = useWorkflowStore((state) => state.setExecutionMode);
   const resetWorkflow = useWorkflowStore((state) => state.resetWorkflow);
@@ -245,6 +246,7 @@ export const useWorkflow = () => {
 
     // Workflow operations
     setWorkflow,
+    markSaved,
     setEditorMode,
     setExecutionMode,
     setLastSuccessfulExecutionData,

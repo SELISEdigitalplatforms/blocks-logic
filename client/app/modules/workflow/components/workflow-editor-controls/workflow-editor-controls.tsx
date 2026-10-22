@@ -45,6 +45,7 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
     isListening,
     listeningNodeId,
     setIsListening,
+    markSaved,
   } = useWorkflow();
   const { mutateAsync: executeTriggerListener, isPending: isExecutingTrigger } = useExecuteTriggerListener();
   const { mutateAsync: updateWorkflow, isPending: isUpdatingWorkflow } = useUpdateWorkflow();
@@ -67,6 +68,7 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
           nodes: Object.values(nodesMap).map(toPersistedNode),
           edges: Object.values(edgesMap),
         });
+        markSaved(nodesMap, edgesMap);
       }
 
       await executeTriggerListener(

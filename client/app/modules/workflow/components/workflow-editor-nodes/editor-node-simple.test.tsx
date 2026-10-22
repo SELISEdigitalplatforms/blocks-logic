@@ -30,8 +30,8 @@ vi.mock("@xyflow/react", async (importOriginal) => {
   return {
     ...actual,
     useUpdateNodeInternals: () => updateNodeInternals,
-    Handle: ({ id, type, children }: { id: string; type: string; children?: React.ReactNode }) => (
-      <div data-testid={`handle-${type}`} data-handle-id={id}>
+    Handle: ({ id, type, className, children }: { id: string; type: string; className?: string; children?: React.ReactNode }) => (
+      <div data-testid={`handle-${type}`} data-handle-id={id} className={className}>
         {children}
       </div>
     ),
@@ -230,8 +230,37 @@ describe("EditorNodeSimple on a Switch (SPEC6)", () => {
     expect(handleIds("target")).toEqual(["target"]);
     expect(handleIds("source")).toEqual([A, B, "switch-handle-source-fallback"]);
     expect(screen.getByText("Paid")).toBeTruthy();
-    expect(screen.getByText("Output 1")).toBeTruthy();
+    expect(screen.getByText("1")).toBeTruthy();
     expect(screen.getByText("Fallback")).toBeTruthy();
     expect(screen.getByText("Switch")).toBeTruthy();
+  });
+});
+
+describe("EditorNodeSimple on a Merge (SPEC3)", () => {
+  it("H7: renders N labelled inputs and one output; other nodes' inputs stay unlabelled", () => {
+    renderWithProviders(<EditorNodeSimple {...({ id: "n1" } as never)} />, {
+      seedWorkflow: load([storedNode({ category: "transform", type: "merge", version: "v2", parameters: { mode: "append", numberInputs: 3 } })]),
+    });
+    expect(handleIds("target")).toEqual(["merge-handle-target-1", "merge-handle-target-2", "merge-handle-target-3"]);
+    expect(handleIds("source")).toEqual(["source"]);
+    expect(screen.getByText("Input 3")).toBeTruthy();
+  });
+
+  it("stacks several inputs one above the other instead of on the same spot", () => {
+    renderWithProviders(<EditorNodeSimple {...({ id: "n1" } as never)} />, {
+      seedWorkflow: load([storedNode({ category: "transform", type: "merge", version: "v2", parameters: { mode: "append", numberInputs: 2 } })]),
+    });
+    const inputs = Array.from(screen.queryAllByTestId("handle-target"));
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) expect(input.className).toContain("relative");
+  });
+
+  it("a node with one input keeps its input where it was", () => {
+    renderWithProviders(<EditorNodeSimple {...({ id: "n1" } as never)} />, {
+      seedWorkflow: load([storedNode({ category: "transform", type: "code", version: "v2", parameters: {} })]),
+    });
+    const inputs = Array.from(screen.queryAllByTestId("handle-target"));
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0].className).not.toContain("relative");
   });
 });

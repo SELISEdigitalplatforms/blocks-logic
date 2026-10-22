@@ -60,8 +60,8 @@ describe("upgradeNode", () => {
   });
 
   it("H1: every one of the 13 types upgrades to v2 with keys identical to its old handle ids", () => {
-    // The 13 types that existed before SPEC6, plus Switch (which derives its handle; see switch tests).
-    expect(NodeDefinitions.map((d) => d.type).sort()).toEqual([...Object.keys(OLD_HANDLE_IDS), "switch"].sort());
+    // The 13 types that existed before SPEC6, plus Switch and Merge (which derive their handles) and Split Out.
+    expect(NodeDefinitions.map((d) => d.type).sort()).toEqual([...Object.keys(OLD_HANDLE_IDS), "switch", "splitOut", "merge"].sort());
     for (const definition of NodeDefinitions.filter((d) => d.type in OLD_HANDLE_IDS)) {
       const upgraded = upgradeNode(
         node({ category: definition.category, type: definition.type, version: "v1" }),
@@ -128,7 +128,7 @@ describe("upgradeNode", () => {
   });
 
   it("labels: If outputs are True/False and every other handle has no label, as before", () => {
-    for (const definition of NodeDefinitions) {
+    for (const definition of NodeDefinitions.filter((d) => d.type in OLD_HANDLE_IDS)) {
       for (const entry of [...definition.handle.sources, ...definition.handle.targets]) {
         const expected = entry.key === "if-true" ? "True" : entry.key === "if-false" ? "False" : "";
         expect(entry.label).toBe(expected);

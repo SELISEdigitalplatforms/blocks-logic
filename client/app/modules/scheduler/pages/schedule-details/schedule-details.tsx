@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import Editor from "@monaco-editor/react";
 import {
   CalendarClock,
@@ -19,7 +19,6 @@ import {
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
-import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import {
@@ -47,6 +46,7 @@ import { DeleteScheduleDialog } from "../../components/delete-schedule";
 export const ScheduleDetails = () => {
   const navigate = useNavigate();
   const scoped = useScopedPath();
+  const { pathname } = useLocation();
   const params = useParams<{ scheduleId?: string; id?: string }>();
   const scheduleId = params.scheduleId || params.id;
 
@@ -72,9 +72,6 @@ export const ScheduleDetails = () => {
     if (scheduleId && isFetched && !isLoading && !schedule) {
       showErrorToast({ errors: "Schedule not found" });
       navigate(scoped("/app/schedule"));
-    } else if (schedule?.name && scheduleId) {
-
-      BREADCRUMB_CUSTOM_TITLES[`/schedule/${scheduleId}`] = schedule.name;
     }
   }, [scheduleId, isFetched, isLoading, schedule, navigate, scoped]);
 
@@ -128,7 +125,10 @@ export const ScheduleDetails = () => {
     <div className="flex min-h-screen flex-col">
       {/* Breadcrumb Bar */}
       <div className="px-6 pt-4 pb-2">
-        <PageBreadcrumb breadcrumbIndex={3} />
+        <PageBreadcrumb
+          breadcrumbIndex={3}
+          customTitles={{ [pathname]: schedule.name || null }}
+        />
       </div>
 
       <div className="flex-1 px-6 mt-4 space-y-6">
@@ -445,13 +445,8 @@ export const ScheduleDetails = () => {
 
       <DeleteScheduleDialog
         open={isDeleteDialogOpen}
-        onOpenChange={(open) => {
-          setIsDeleteDialogOpen(open);
-          if (!open) {
-            navigate(scoped("schedule"));
-          }
-        }}
-
+        onOpenChange={setIsDeleteDialogOpen}
+        onDeleted={() => navigate(scoped("schedule"))}
         schedule={schedule}
       />
     </div>

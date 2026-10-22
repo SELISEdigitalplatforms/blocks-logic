@@ -41,6 +41,7 @@ export const useAutoSaveWorkflow = ({
         nodes,
         edges,
       });
+      store.getState().markSaved(nodesMap, edgesMap);
 
       onSaveSuccess?.();
     } catch (error) {

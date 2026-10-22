@@ -4,6 +4,8 @@ export type NodeType =
   | "if"
   | "switch"
   | "setfield"
+  | "splitOut"
+  | "merge"
   | "code"
   | "webhookResponse"
   | "manual"
