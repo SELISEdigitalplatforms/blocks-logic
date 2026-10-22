@@ -41,12 +41,19 @@ describe("useDeploy (F-4: deploy does not hold the request for the build)", () =
 
   it("a 202 watches the build, then deploys exactly that build", async () => {
     deployFunction.mockResolvedValueOnce({ buildId: "b1", status: "Building" }).mockResolvedValueOnce(version);
-    getBuild.mockResolvedValue({ id: "b1", status: "Succeeded", createdDate: "" });
+    // Hold the build open until the "building" state is asserted; an instant answer lets a slow
+    // runner finish the whole deploy inside the first act() and the assertion races it.
+    let finishBuild = () => {};
+    const buildDone = new Promise((resolve) => {
+      finishBuild = () => resolve({ id: "b1", status: "Succeeded", createdDate: "" });
+    });
+    getBuild.mockReturnValue(buildDone);
     const { hook, onDeployed } = setup();
 
     await act(() => hook.result.current.deploy());
     expect(hook.result.current.isBuilding).toBe(true);
 
+    finishBuild();
     await waitFor(() => expect(onDeployed).toHaveBeenCalledWith(version));
     expect(deployFunction).toHaveBeenLastCalledWith({ functionId: "fn_1", buildId: "b1" });
     expect(deployFunction).toHaveBeenCalledTimes(2);
