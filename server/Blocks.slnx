@@ -10,6 +10,7 @@
   <Project Path="Notification.DomainService/Notification.DomainService.csproj" />
   <Project Path="Proxy.DomainService/Proxy.DomainService.csproj" />
   <Project Path="Scheduler.DomainService/Scheduler.DomainService.csproj" />
+  <Project Path="Scheduler.Worker/Scheduler.Worker.csproj" />
   <Project Path="Worker/Worker.csproj" />
   <Project Path="XUnitTest/XUnitTest.csproj" />
   <!-- The function runner. It deploys to its own VM rather than into any image this solution

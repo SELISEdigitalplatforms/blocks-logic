@@ -299,7 +299,7 @@ namespace Scheduler.DomainService.Services
         }
 
         /// <summary>
-        /// Sends the minimal delete notification to the Worker for Hangfire removal.
+        /// Sends the minimal delete notification to Scheduler.Worker for Hangfire removal.
         /// Plain send — no inner try/catch so callers' error handling stays reachable.
         /// </summary>
         private Task EnqueueScheduleJobDeletedAsync(string itemId)
@@ -318,7 +318,7 @@ namespace Scheduler.DomainService.Services
         }
 
         /// <summary>
-        /// Sends the minimal upsert notification to the Worker for Hangfire registration.
+        /// Sends the minimal upsert notification to Scheduler.Worker for Hangfire registration.
         /// Plain send — no inner try/catch so callers' error handling stays reachable.
         /// </summary>
         private Task EnqueueScheduleJobUpsertedAsync(string itemId)

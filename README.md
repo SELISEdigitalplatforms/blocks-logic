@@ -1,6 +1,6 @@
 # Blocks Logic
 
-Blocks Logic is the workflow and automation service of the SELISE `<Blocks/>` platform: a **React** (Vite, TypeScript) single-page application with a visual workflow builder, a **Genesis-backed ASP.NET Core API**, and a **background Worker** that executes workflows and consumers. The SPA is built into `server/Api/wwwroot` so Kestrel can serve the UI and backend from one host. The logic domain (`server/DomainService`) covers workflow definition and execution (triggers, nodes, transforms), the template engine, magic links, PDF generation, sequences, geolocation and storage helpers.
+Blocks Logic is the workflow and automation service of the SELISE `<Blocks/>` platform: a **React** (Vite, TypeScript) single-page application with a visual workflow builder, a **Genesis-backed ASP.NET Core API**, a **background Worker** that executes workflows and consumers, and a **Scheduler.Worker** that fires schedules. The SPA is built into `server/Api/wwwroot` so Kestrel can serve the UI and backend from one host. The logic domain (`server/DomainService`) covers workflow definition and execution (triggers, nodes, transforms), the template engine, magic links, PDF generation, sequences, geolocation and storage helpers.
 
 ## Project structure
 
@@ -26,6 +26,7 @@ blocks-logic/
 │   │   ├── Api.csproj
 │   │   └── GlobalApiRoutePrefixConvention.cs
 │   ├── Worker/                     # Background worker (message consumers, workflow execution)
+│   ├── Scheduler.Worker/           # Scheduler host: Hangfire, schedule registry consumers (ONE replica)
 │   ├── DomainService/              # Logic domain: Workflow, TemplateEngine, MagicLink,
 │   │                               #   PdfGenerator, Sequence, Geolocation, Messaging, Storage
 │   ├── Authentication.DomainService/
@@ -40,7 +41,7 @@ blocks-logic/
 │   ├── Notification.DomainService/
 │   ├── XUnitTest/                  # Unit tests
 │   ├── Captcha.Driver/, Iam.Driver/, Mfa.Driver/, Mail.Driver/   # Driver-style projects
-│   └── Blocks.slnx                 # Solution: Api, domain libraries, Worker, XUnitTest
+│   └── Blocks.slnx                 # Solution: Api, domain libraries, Worker, Scheduler.Worker, XUnitTest
 ├── e2e/                            # Playwright end-to-end tests (see e2e/README.md)
 ├── scripts/                        # scan.sh and deploy.sh entry points
 ├── run.sh                          # Build/run helpers (Unix/macOS; see below)
@@ -69,9 +70,10 @@ Both **`run.sh`** (Bash) and **`run.ps1`** (PowerShell) live at the repo root. T
 
 | Option | Role |
 |--------|------|
-| **`-a`**, **`--all`** | Install/build client, sync **`client/dist`** → **`server/Api/wwwroot`**, then start **API** and **Worker** |
+| **`-a`**, **`--all`** | Install/build client, sync **`client/dist`** → **`server/Api/wwwroot`**, then start **API**, **Worker** and **Scheduler.Worker** |
 | **`-b`**, **`--backend`** | Run **API** only (`dotnet run` on `server/Api/Api.csproj`) |
 | **`-w`**, **`--worker`** | Run **Worker** only (`server/Worker/Worker.csproj`) |
+| **`-s`**, **`--scheduler`** | Run **Scheduler.Worker** only (`server/Scheduler.Worker/Scheduler.Worker.csproj`). Run one at a time: see [Scheduler.Worker](#schedulerworker) |
 | **`-f`**, **`--frontend`** | Vite dev server: **`npm run dev`** in **`client/`** (`run.sh` installs dependencies only if **`node_modules`** is missing; **`run.ps1`** runs **`npm install`** every time) |
 | **`-k`**, **`--kill-port`** | Stop whatever is listening on the API port (**5000**) |
 | **`-n`**, **`--npm`** *args…* | Run **`npm`** in **`client/`** (e.g. `run test`, `run build`) |
@@ -83,25 +85,26 @@ Both **`run.sh`** (Bash) and **`run.ps1`** (PowerShell) live at the repo root. T
 ### Unix / macOS (`run.sh`)
 
 ```bash
-./run.sh -a              # full stack (build + API + Worker in this shell)
+./run.sh -a              # full stack (build + API + Worker + Scheduler.Worker in this shell)
 ./run.sh -b              # API only (frees port 5000 first)
+./run.sh -s              # Scheduler.Worker only
 ./run.sh -f              # Vite dev server
 ./run.sh -n run test     # npm in client/
 ```
 
-`run.sh` syncs the built SPA with **`rsync`** (`dist/` → `wwwroot/`). For **`-a`**, the API and Worker run as background jobs in the same terminal; **Ctrl+C** runs the script’s cleanup trap.
+`run.sh` syncs the built SPA with **`rsync`** (`dist/` → `wwwroot/`). For **`-a`**, the API, Worker and Scheduler.Worker run as background jobs in the same terminal; **Ctrl+C** runs the script’s cleanup trap.
 
 ### Windows (`run.ps1`)
 
 ```powershell
-.\run.ps1 -a             # build + start API and Worker in separate windows
+.\run.ps1 -a             # build + start API, Worker and Scheduler.Worker in separate windows
 .\run.ps1 -b             # API only (restore + free port 5000 first)
 .\run.ps1 -f             # Vite dev server
 .\run.ps1 -n run test    # npm in client/
 .\run.ps1 -d test server/XUnitTest/XUnitTest.csproj
 ```
 
-`run.ps1` syncs **`dist`** → **`wwwroot`** with **`robocopy`**. It runs **`dotnet restore`** on the Api and Worker projects before **`-b`**, **`-w`**, and **`-a`**. With **`-a`**, two extra PowerShell windows open (one for the API, one for the Worker); press **Enter** in the original window to stop those processes.
+`run.ps1` syncs **`dist`** → **`wwwroot`** with **`robocopy`**. It runs **`dotnet restore`** on the Api, Worker and Scheduler.Worker projects before **`-b`**, **`-w`**, **`-s`** and **`-a`**. With **`-a`**, three extra PowerShell windows open (API, Worker, Scheduler.Worker); press **Enter** in the original window to stop those processes.
 
 ### Without the scripts
 
@@ -155,6 +158,15 @@ Coverage:
 dotnet test server/XUnitTest/XUnitTest.csproj --collect:"XPlat Code Coverage"
 npm --prefix client run test -- --coverage
 ```
+
+## Scheduler.Worker
+
+`server/Scheduler.Worker` (service and image `blocks-logic-scheduler-worker`, `Dockerfile.scheduler`) is the only process that fires schedules. It hosts the in-memory Hangfire server, rebuilds the recurring jobs from Mongo at startup, and consumes the schedule registry queue (`blcoks_logic_scheduler_job_registry_listener`). The Api and Worker send registry events to it when a schedule changes; the Worker still consumes the workflow schedule trigger (`SchedulerTriggerConsumer`).
+
+- **Run exactly one replica.** Hangfire storage is in memory, so every replica would fire every schedule. Deploy it with one replica, the `Recreate` strategy and no autoscaling, and as a single systemd unit. The Worker can run any number of replicas.
+- **Startup.** The reseed is tried 5 times (2, 4, 8 and 16 s apart). If all fail, the process exits with code 1 so Kubernetes or systemd restarts it.
+- **Missed ticks are not replayed.** Occurrences that fall while the process is down are skipped.
+- **Releases.** CI builds and rolls out Scheduler.Worker before the Worker; the Worker's GitOps update waits for it. To roll back, redeploy the previous Worker image first, then scale Scheduler.Worker to 0.
 
 ## Scanning and deployment
 

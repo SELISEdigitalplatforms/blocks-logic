@@ -11,7 +11,8 @@ Usage: .\run.ps1 [OPTIONS]
 Options:
   -b, --backend        Run .NET API
   -w, --worker         Run .NET Worker
-  -a, --all            Build frontend + run API + Worker
+  -s, --scheduler      Run .NET Scheduler.Worker (Hangfire; run one only)
+  -a, --all            Build frontend + run API + Worker + Scheduler.Worker
   -f, --frontend       Run frontend (npm run dev)
 
   -n, --npm <args>     Run npm command (client/)
@@ -34,6 +35,7 @@ Env:
 # ---- Flags ----
 $Backend = $false
 $Worker = $false
+$Scheduler = $false
 $All = $false
 $Frontend = $false
 $KillPort = $false
@@ -53,6 +55,9 @@ while ($i -lt $CliArgs.Count) {
 
         "-w" { $Worker = $true }
         "--worker" { $Worker = $true }
+
+        "-s" { $Scheduler = $true }
+        "--scheduler" { $Scheduler = $true }
 
         "-a" { $All = $true }
         "--all" { $All = $true }
@@ -93,7 +98,7 @@ while ($i -lt $CliArgs.Count) {
     $i++
 }
 
-if (-not ($Backend -or $Worker -or $All -or $Frontend -or $KillPort -or $TestFe -or $TestE2e -or $TestBe -or $Npm.Count -or $Dotnet.Count)) {
+if (-not ($Backend -or $Worker -or $Scheduler -or $All -or $Frontend -or $KillPort -or $TestFe -or $TestE2e -or $TestBe -or $Npm.Count -or $Dotnet.Count)) {
     Show-Usage
     exit
 }
@@ -105,6 +110,7 @@ $E2eDir = Join-Path $ScriptDir "e2e"
 $Solution = Join-Path $ScriptDir "server/Blocks.slnx"
 $ApiProject = Join-Path $ScriptDir "server/Api/Api.csproj"
 $WorkerProject = Join-Path $ScriptDir "server/Worker/Worker.csproj"
+$SchedulerProject = Join-Path $ScriptDir "server/Scheduler.Worker/Scheduler.Worker.csproj"
 $Wwwroot = Join-Path $ScriptDir "server/Api/wwwroot"
 
 $ApiPort = 5000
@@ -127,6 +133,7 @@ function Restore-Dotnet {
     Write-Host "Restoring .NET dependencies..."
     dotnet restore $ApiProject
     dotnet restore $WorkerProject
+    dotnet restore $SchedulerProject
 }
 
 function Build-Frontend {
@@ -152,6 +159,11 @@ function Run-Backend {
 function Run-Worker {
     Write-Host "Running .NET Worker..."
     dotnet run --project $WorkerProject
+}
+
+function Run-Scheduler {
+    Write-Host "Running .NET Scheduler.Worker..."
+    dotnet run --project $SchedulerProject
 }
 
 # ---- Tests ----
@@ -260,6 +272,12 @@ if ($Worker) {
     exit
 }
 
+if ($Scheduler) {
+    Restore-Dotnet
+    Run-Scheduler
+    exit
+}
+
 if ($Frontend) {
     npm --prefix $ClientDir install
     npm --prefix $ClientDir run dev
@@ -271,7 +289,7 @@ if ($All) {
     Restore-Dotnet
     Build-Frontend
 
-    Write-Host "Starting API + Worker..."
+    Write-Host "Starting API + Worker + Scheduler.Worker..."
 
     $api = Start-Process powershell `
         -ArgumentList "-NoExit", "-Command", "dotnet run --project '$ApiProject'" `
@@ -282,11 +300,17 @@ if ($All) {
         -PassThru
 
     Write-Host "API PID: $($api.Id)"
+    $scheduler = Start-Process powershell `
+        -ArgumentList "-NoExit", "-Command", "dotnet run --project '$SchedulerProject'" `
+        -PassThru
+
     Write-Host "Worker PID: $($worker.Id)"
+    Write-Host "Scheduler.Worker PID: $($scheduler.Id)"
     Write-Host "Press Enter to stop..."
 
     [void][Console]::ReadLine()
 
     try { Stop-Process $api.Id -Force } catch {}
     try { Stop-Process $worker.Id -Force } catch {}
+    try { Stop-Process $scheduler.Id -Force } catch {}
 }
