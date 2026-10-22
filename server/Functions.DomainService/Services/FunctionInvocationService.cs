@@ -36,6 +36,15 @@ namespace Functions.DomainService.Services
             string tenantId, string functionId, InvokeFunctionRequestDto request, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// The answer an SSE caller waits for, after it was sent the run id: the finished run, a
+        /// run that started streaming (<see cref="InvokeResultDto.Streaming"/> — read its pieces),
+        /// or, when it did not finish in <paramref name="waitSeconds"/> (or is about to be
+        /// retried, or too many requests are already held), the run's not-finished status.
+        /// </summary>
+        Task<InvokeResultDto> AwaitSseAnswerAsync(
+            string tenantId, string runId, int waitSeconds, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Runs the function's <b>current editor source</b> (not a deployed version), building
         /// it first if needed. Uses the ambient, already-authenticated caller's own identity in
         /// <c>ctx.context</c> — Test simulates "does my code work", not "what would an anonymous
@@ -285,6 +294,19 @@ namespace Functions.DomainService.Services
             // subscription; without a ceiling a burst of slow calls to a sync function could hold
             // every connection the Api has. Full → this call is simply async: 202 + poll token,
             // which the caller already has to handle for a run that outlasts the wait.
+            // An SSE caller is sent the run id first, so its run is only queued here; the wait
+            // happens afterwards (AwaitSseAnswerAsync), with keep-alives on the open connection.
+            if (request.Sse && syncWait is not null)
+            {
+                var queued = await InvokeCoreAsync(
+                    tenantId, function, version, FunctionRunImage.For(version), decision.Context,
+                    InvokedByType.Http, invokedById: null, inputJson, wait: false,
+                    waitTimeoutSeconds: null, cancellationToken);
+                timedRunId = queued.RunId;
+                queued.SseWaitSeconds = SseWaitSeconds((version.Limits ?? function.Limits).Clamp());
+                return queued;
+            }
+
             var holdsSlot = syncWait is not null && _syncWaits.Wait(0);
             if (!holdsSlot) syncWait = null;
 
@@ -329,6 +351,37 @@ namespace Functions.DomainService.Services
                     functionId, timedRunId ?? "-", timer.ElapsedMs, timer.ToString());
                 StepTimer.Current.Value = null;
             }
+        }
+
+        public async Task<InvokeResultDto> AwaitSseAnswerAsync(
+            string tenantId, string runId, int waitSeconds, CancellationToken cancellationToken = default)
+        {
+            // Held connections share the sync waits' bound: full → answered as not finished now.
+            if (!_syncWaits.Wait(0))
+            {
+                return new InvokeResultDto { RunId = runId, Status = FunctionQueueKeys.Wire.Queued };
+            }
+            try
+            {
+                return await WaitForResultAsync(
+                    tenantId, runId, waitSeconds, waitSeconds, cancellationToken,
+                    finishedOnlyWithoutRetry: true, allowStream: true);
+            }
+            finally
+            {
+                _syncWaits.Release();
+            }
+        }
+
+        /// <summary>
+        /// How long an SSE caller waits for the answer: the run's own time limit plus the grace,
+        /// under <c>Functions:SyncWaitMaxSeconds</c>. Not the lower HTTP cap — that exists for
+        /// ingress idle timeouts, which the SSE keep-alives answer.
+        /// </summary>
+        private int SseWaitSeconds(FunctionLimits limits)
+        {
+            var max = Math.Max(1, _configuration.GetValue("Functions:SyncWaitMaxSeconds", DefaultSyncWaitMaxSeconds));
+            return Math.Min(max, limits.TimeoutSeconds + SyncGraceSeconds);
         }
 
         /// <summary>

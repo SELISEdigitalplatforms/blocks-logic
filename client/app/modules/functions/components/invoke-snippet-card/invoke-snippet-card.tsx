@@ -21,13 +21,21 @@ type CallMode = "http" | "sse";
 
 const MODES: { id: CallMode; label: string }[] = [
   { id: "http", label: "HTTP" },
-  { id: "sse", label: "SSE stream" },
+  { id: "sse", label: "SSE" },
 ];
 
 const LABEL_CLASS = "text-xs font-medium uppercase tracking-wide text-medium-emphasis";
 const NOTE_CLASS = "text-xs leading-relaxed text-medium-emphasis";
 
-const SSE_RESPONSE = "200 OK · text/event-stream\ndata: Hel\n\ndata: lo\n\nevent: done\ndata: {}";
+const SSE_RESPONSE = [
+  "200 OK · text/event-stream",
+  "event: run",
+  'data: { "runId": "run_7f21c4" }',
+  "",
+  "event: done",
+  'data: { "runId": "run_7f21c4", "status": "SUCCEEDED",',
+  '        "result": { "ok": true } }',
+].join("\n");
 
 /** Copy button with its own "Copied" state. */
 const CopyButton = ({ text, label = "Copy" }: { text: string; label?: string }) => {
@@ -78,8 +86,8 @@ const StreamResponse = ({ isSync }: { isSync: boolean }) => {
   if (!isSync) {
     return (
       <span className={NOTE_CLASS}>
-        Streaming needs Response mode = sync. This function is async, so the call returns 202 and
-        you poll for the result.
+        SSE needs Response mode = sync. This function is async, so the call returns 202 and you
+        poll for the result.
       </span>
     );
   }
@@ -87,12 +95,14 @@ const StreamResponse = ({ isSync }: { isSync: boolean }) => {
     <>
       <pre className="font-mono text-xs leading-relaxed">{SSE_RESPONSE}</pre>
       <span className={NOTE_CLASS}>
-        Your handler must stream: write it as <code className="font-mono">async function*</code>{" "}
-        and <code className="font-mono">yield</code> each piece. Each piece arrives as a{" "}
-        <code className="font-mono">data:</code> event, then{" "}
-        <code className="font-mono">event: done</code>. If the run fails mid-stream you get{" "}
-        <code className="font-mono">event: error</code> with{" "}
-        <code className="font-mono">{"{ runId, status, errorCode, message }"}</code>.
+        Two events. <code className="font-mono">run</code> comes at once with the run id.{" "}
+        <code className="font-mono">done</code> comes when the run ends, with the full response:
+        what the handler returned, or every piece joined if it yields them. If the run fails you
+        get <code className="font-mono">event: error</code> with{" "}
+        <code className="font-mono">{"{ runId, status, errorCode, message }"}</code>. If it is
+        still running when the wait ends, the error is{" "}
+        <code className="font-mono">STILL_RUNNING</code> with a{" "}
+        <code className="font-mono">pollToken</code>: poll for the result below.
       </span>
     </>
   );
@@ -181,7 +191,7 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
         )}
       </div>
       <div className="flex items-center justify-between gap-3 border-b px-4 py-2">
-        <span className={LABEL_CLASS}>{isSse ? "Stream it" : "Call it"}</span>
+        <span className={LABEL_CLASS}>Call it</span>
         <CopyButton text={snippet} />
       </div>
       <pre

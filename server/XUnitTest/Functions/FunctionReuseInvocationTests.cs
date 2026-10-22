@@ -258,6 +258,50 @@ namespace XUnitTest.Functions
             result.RespondSynchronously.Should().BeTrue();
         }
 
+        // ---- SSE caller: run id first, the answer after (2026-10-22) ----------------------------
+
+        [Fact]
+        public async Task An_sse_caller_of_a_sync_function_gets_its_run_queued_not_waited_for()
+        {
+            _version.Trigger.ResponseMode = "sync";
+            RunIs(RunStatus.Running); // would hold a waiting caller until its window ran out
+            var call = Call(preferWait: 20);
+            call.Sse = true;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            var result = await Service().InvokeHttpAsync(Tenant, "fn-1", call);
+
+            clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(2));
+            result.RunId.Should().Be(_created!.ItemId);
+            result.SseWaitSeconds.Should().BeGreaterThan(0);
+            result.RespondSynchronously.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task An_sse_caller_of_an_async_function_gets_the_usual_answer()
+        {
+            _version.Trigger.ResponseMode = "async";
+            RunIs(RunStatus.Queued);
+            var call = Call();
+            call.Sse = true;
+
+            var result = await Service().InvokeHttpAsync(Tenant, "fn-1", call);
+
+            result.SseWaitSeconds.Should().BeNull();
+            result.Status.Should().Be(FunctionQueueKeys.Wire.Queued);
+        }
+
+        [Fact]
+        public async Task The_sse_wait_answers_a_finished_run_with_its_result()
+        {
+            RunIs(RunStatus.Succeeded);
+
+            var result = await Service().AwaitSseAnswerAsync(Tenant, "run-1", 5);
+
+            result.Status.Should().Be(FunctionQueueKeys.Wire.Succeeded);
+            result.Result.Should().Be("{\"ok\":true}");
+        }
+
         // ---- F-5: a streamed answer takes over the sync wait (2026-10-07) ------------------------
 
         /// <summary>Pub/sub with every subscription kept by channel, so a test can nudge either one.</summary>

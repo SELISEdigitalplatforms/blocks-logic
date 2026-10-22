@@ -125,6 +125,12 @@ namespace Functions.DomainService.Dtos.Requests
         public bool Wait { get; set; }
 
         /// <summary>
+        /// The caller asked for <c>Accept: text/event-stream</c>: a sync function answers with two
+        /// events — <c>run</c> once queued, then <c>done</c> or <c>error</c> — instead of one body.
+        /// </summary>
+        public bool Sse { get; set; }
+
+        /// <summary>
         /// <c>Prefer: wait=&lt;seconds&gt;</c> from the caller (RFC 7240), parsed by the controller:
         /// ask for a synchronous answer, waiting at most this long — and never longer than
         /// <c>Functions:HttpSyncWaitMaxSeconds</c>. Null when the header did not ask. Kept apart

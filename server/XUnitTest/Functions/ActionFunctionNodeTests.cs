@@ -43,6 +43,9 @@ namespace XUnitTest.Functions
             public Task<InvokeResultDto> TestAsync(string tenantId, string functionId, TestFunctionRequestDto request, CancellationToken cancellationToken = default)
                 => throw new NotSupportedException();
 
+            public Task<InvokeResultDto> AwaitSseAnswerAsync(string tenantId, string runId, int waitSeconds, CancellationToken cancellationToken = default)
+                => throw new NotSupportedException();
+
             public Task<InvokeResultDto> ReplayAsync(string tenantId, FunctionRunEntity originalRun, CancellationToken cancellationToken = default)
                 => throw new NotSupportedException();
         }

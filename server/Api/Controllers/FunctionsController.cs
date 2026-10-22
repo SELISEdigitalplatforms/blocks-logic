@@ -432,6 +432,7 @@ namespace BlocksTemplate.Api.Controllers
             // over 1 MB outright, so accepting more would only create a run that can fail.
             var (body, tooLarge) = await ReadBodyAsync(aborted);
             var (preferAsync, preferWaitSeconds) = ParsePrefer(Request.Headers["Prefer"]);
+            var acceptsSse = Request.Headers.Accept.Any(a => a?.Contains("text/event-stream", StringComparison.OrdinalIgnoreCase) == true);
 
             var request = new InvokeFunctionRequestDto
             {
@@ -452,17 +453,24 @@ namespace BlocksTemplate.Api.Controllers
                 Wait = false,
                 PreferAsync = preferAsync,
                 PreferWaitSeconds = preferWaitSeconds,
+                Sse = acceptsSse,
             };
 
             try
             {
                 var result = await _invocationService.InvokeHttpAsync(tenantId, functionId, request, aborted);
 
-                // The function streams its answer (F-5): the pieces, as they come.
+                // An SSE caller of a sync function: `run` now, then `done` or `error`.
+                if (result.SseWaitSeconds is { } sseWait)
+                {
+                    return new FunctionSseAnswerResult(tenantId, result.RunId, sseWait,
+                        ct => TryIssuePollTokenAsync(tenantId, result.RunId, ct));
+                }
+
+                // The function streams its answer (F-5): the pieces, as they come, as plain text.
                 if (result.Streaming)
                 {
-                    var sse = Request.Headers.Accept.Any(a => a?.Contains("text/event-stream", StringComparison.OrdinalIgnoreCase) == true);
-                    return new FunctionStreamResult(result.RunId, sse);
+                    return new FunctionStreamResult(result.RunId, acceptsSse);
                 }
 
                 // 202 for any run not yet finished — queued, or claimed/starting/running/processing
@@ -761,6 +769,187 @@ namespace BlocksTemplate.Api.Controllers
     /// say so but to stop short: the connection is aborted, so the client sees an incomplete body
     /// rather than a clean end. The run id is in <c>x-blocks-run-id</c> for looking it up.
     /// </summary>
+    /// <summary>
+    /// The public route's answer to an SSE caller of a sync function: exactly two events.
+    /// <list type="bullet">
+    /// <item><c>event: run</c> <c>{ runId }</c> — at once; the run is queued.</item>
+    /// <item><c>event: done</c> <c>{ runId, status, result }</c> — the full response: what the
+    /// handler returned (JSON as JSON), or, for a handler that streams, every piece joined.</item>
+    /// <item>or <c>event: error</c> <c>{ runId, status, errorCode, message }</c> — the run failed,
+    /// or (<c>STILL_RUNNING</c>, with a <c>pollToken</c>) it did not finish in the wait.</item>
+    /// </list>
+    /// <c>: keep-alive</c> comments (not events) hold the connection open past ingress idle
+    /// timeouts while the run works. A caller that leaves does not stop the run.
+    /// </summary>
+    public sealed class FunctionSseAnswerResult(
+        string tenantId, string runId, int waitSeconds, Func<CancellationToken, Task<string?>> issuePollToken,
+        TimeSpan? keepAliveInterval = null) : IActionResult
+    {
+        /// <summary>Above the runtime's whole stream budget (3 MB encoded); more is never sent.</summary>
+        internal const int MaxStreamChars = 4 * 1024 * 1024;
+
+        private readonly TimeSpan _keepAliveInterval = keepAliveInterval ?? TimeSpan.FromSeconds(15);
+
+        public string RunId { get; } = runId;
+        public int WaitSeconds { get; } = waitSeconds;
+
+        public async Task ExecuteResultAsync(ActionContext context)
+        {
+            var http = context.HttpContext;
+            var invocation = http.RequestServices.GetRequiredService<IFunctionInvocationService>();
+            var response = http.Response;
+            var aborted = http.RequestAborted;
+
+            response.StatusCode = 200;
+            response.ContentType = "text/event-stream; charset=utf-8";
+            response.Headers.CacheControl = "no-cache";
+            response.Headers["X-Accel-Buffering"] = "no";
+            response.Headers["x-blocks-run-id"] = RunId;
+            http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
+
+            using var writeLock = new SemaphoreSlim(1, 1);
+            async Task WriteAsync(string text)
+            {
+                await writeLock.WaitAsync(aborted);
+                try
+                {
+                    await response.WriteAsync(text, aborted);
+                    await response.Body.FlushAsync(aborted);
+                }
+                finally
+                {
+                    writeLock.Release();
+                }
+            }
+
+            using var stopKeepAlive = CancellationTokenSource.CreateLinkedTokenSource(aborted);
+            Task? keepAlive = null;
+            try
+            {
+                await response.StartAsync(aborted);
+                await WriteAsync(Event("run", new { runId = RunId }));
+                keepAlive = KeepAliveAsync(WriteAsync, stopKeepAlive.Token);
+
+                var answer = await invocation.AwaitSseAnswerAsync(tenantId, RunId, WaitSeconds, aborted);
+                string last;
+                if (answer.Streaming)
+                {
+                    last = await StreamedAnswerAsync(http.RequestServices.GetRequiredService<IFunctionStreamReader>(), aborted);
+                }
+                else
+                {
+                    last = await FinalAnswerAsync(answer, aborted);
+                }
+
+                await stopKeepAlive.CancelAsync();
+                await keepAlive;
+                await WriteAsync(last);
+            }
+            catch (OperationCanceledException) when (aborted.IsCancellationRequested)
+            {
+                // The caller left; the run goes on and is recorded as usual.
+            }
+            catch (Exception ex) when (response.HasStarted && ex is not OperationCanceledException)
+            {
+                // The run id is already out, so the caller can still poll: say so as the last
+                // event rather than cutting the connection. The run itself is unaffected.
+                http.RequestServices.GetService<ILogger<FunctionSseAnswerResult>>()?
+                    .LogWarning(ex, "Could not wait for the SSE answer of run {RunId}", RunId);
+                await stopKeepAlive.CancelAsync();
+                if (keepAlive is not null) await keepAlive;
+                await WriteAsync(Event("error", new
+                {
+                    runId = RunId,
+                    status = FunctionQueueKeys.Wire.Running,
+                    errorCode = "UNAVAILABLE",
+                    message = "the answer could not be read right now; poll for its result with the pollToken",
+                    pollToken = await issuePollToken(aborted),
+                }));
+            }
+            finally
+            {
+                await stopKeepAlive.CancelAsync();
+                if (keepAlive is not null) await keepAlive;
+            }
+        }
+
+        /// <summary>The pieces of a streamed answer joined into one result, then its end as the last event.</summary>
+        private async Task<string> StreamedAnswerAsync(IFunctionStreamReader reader, CancellationToken aborted)
+        {
+            var text = new System.Text.StringBuilder();
+            await foreach (var piece in reader.ReadAsync(RunId, aborted))
+            {
+                if (!piece.IsEnd)
+                {
+                    if (text.Length + piece.Data!.Length <= MaxStreamChars) text.Append(piece.Data);
+                    continue;
+                }
+                return piece.EndStatus == FunctionQueueKeys.Wire.Succeeded
+                    ? Event("done", new { runId = RunId, status = piece.EndStatus, result = text.ToString() })
+                    : Event("error", new { runId = RunId, status = piece.EndStatus, errorCode = piece.ErrorCode, message = piece.ErrorMessage });
+            }
+            // The reader always ends with an end piece; reaching here means the caller left.
+            aborted.ThrowIfCancellationRequested();
+            return Event("error", new { runId = RunId, status = FunctionQueueKeys.Wire.Failed, errorCode = "STREAM_ENDED", message = "the stream ended without an answer" });
+        }
+
+        private async Task<string> FinalAnswerAsync(InvokeResultDto answer, CancellationToken aborted)
+        {
+            var status = FunctionWireMapping.ToRunStatus(answer.Status, out var recognised);
+            if (!recognised || !FunctionWireMapping.IsTerminal(status))
+            {
+                return Event("error", new
+                {
+                    runId = RunId,
+                    status = answer.Status,
+                    errorCode = "STILL_RUNNING",
+                    message = "the run did not finish in time; poll for its result with the pollToken",
+                    pollToken = await issuePollToken(aborted),
+                });
+            }
+            if (status == RunStatus.Succeeded)
+            {
+                return Event("done", new { runId = RunId, status = answer.Status, result = ResultValue(answer.Result) });
+            }
+            return Event("error", new { runId = RunId, status = answer.Status, errorCode = answer.ErrorCode, message = answer.ErrorMessage });
+        }
+
+        private async Task KeepAliveAsync(Func<string, Task> write, CancellationToken token)
+        {
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(_keepAliveInterval, token);
+                    await write(": keep-alive\n\n");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Stopped: the answer is about to be written, or the caller left.
+            }
+        }
+
+        /// <summary>The stored result as JSON when it is JSON (it always is for a returned value), else as a string.</summary>
+        internal static object? ResultValue(string? result)
+        {
+            if (string.IsNullOrEmpty(result)) return null;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(result);
+                return doc.RootElement.Clone();
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return result;
+            }
+        }
+
+        /// <summary>One SSE event; JSON has no raw newlines, so one <c>data:</c> line is enough.</summary>
+        internal static string Event(string name, object data) =>
+            $"event: {name}\ndata: {System.Text.Json.JsonSerializer.Serialize(data)}\n\n";
+    }
+
     public sealed class FunctionStreamResult(string runId, bool sse) : IActionResult
     {
         public string RunId { get; } = runId;

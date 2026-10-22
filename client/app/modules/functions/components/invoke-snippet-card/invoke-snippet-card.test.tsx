@@ -100,18 +100,22 @@ describe("InvokeSnippetCard base URL, SSE and polling", () => {
       <InvokeSnippetCard functionId="fn-1" trigger={{ ...trigger, responseMode: "sync" }} />,
     );
     expect(snippetText()).not.toContain("-N");
-    fireEvent.click(screen.getByRole("button", { name: "SSE stream" }));
+    fireEvent.click(screen.getByRole("button", { name: "SSE" }));
     expect(snippetText()).toContain("curl -N -X POST");
     expect(snippetText()).toContain('-H "Accept: text/event-stream"');
-    expect(screen.getByText(/200 OK · text\/event-stream/)).toBeTruthy();
-    expect(screen.getByText(/Your handler must stream/)).toBeTruthy();
+    const response = screen.getByText(/200 OK · text\/event-stream/).textContent ?? "";
+    // Exactly two events: the run id first, then the full response.
+    expect(response.match(/^event: /gm)).toEqual(["event: ", "event: "]);
+    expect(response).toMatch(/event: run\ndata: \{ "runId": "run_7f21c4" \}\n\nevent: done\n/);
+    expect(response).toContain('"result": { "ok": true }');
+    expect(screen.getByText(/STILL_RUNNING/)).toBeTruthy();
   });
 
   it("warns in SSE mode when the function is async", () => {
     renderWithProviders(<InvokeSnippetCard functionId="fn-1" trigger={trigger} />);
-    fireEvent.click(screen.getByRole("button", { name: "SSE stream" }));
-    expect(screen.getByText(/Streaming needs Response mode = sync/)).toBeTruthy();
-    expect(screen.queryByText(/Your handler must stream/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "SSE" }));
+    expect(screen.getByText(/SSE needs Response mode = sync/)).toBeTruthy();
+    expect(screen.queryByText(/200 OK · text\/event-stream/)).toBeNull();
   });
 
   it("shows the poll curl with the poll token header in both modes", () => {
@@ -120,7 +124,7 @@ describe("InvokeSnippetCard base URL, SSE and polling", () => {
     expect(pollText()).toContain('curl "$BASE_URL/logic/v4/fn/runs/<runId>/result"');
     expect(pollText()).toContain('-H "x-blocks-key: T1"');
     expect(pollText()).toContain('-H "x-poll-token: <pollToken>"');
-    fireEvent.click(screen.getByRole("button", { name: "SSE stream" }));
+    fireEvent.click(screen.getByRole("button", { name: "SSE" }));
     expect(pollText()).toContain("x-poll-token");
   });
 });

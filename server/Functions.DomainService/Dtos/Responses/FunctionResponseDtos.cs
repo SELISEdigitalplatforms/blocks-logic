@@ -304,6 +304,14 @@ namespace Functions.DomainService.Dtos.Responses
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public bool Streaming { get; set; }
+
+        /// <summary>
+        /// Set for an SSE caller of a sync function: the run is queued, not waited for, and the
+        /// controller waits up to this many seconds for its answer (<c>AwaitSseAnswerAsync</c>)
+        /// while the connection already has the run id. Never serialized.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int? SseWaitSeconds { get; set; }
     }
 
     /// <summary>
