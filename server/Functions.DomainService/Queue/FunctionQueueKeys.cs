@@ -180,6 +180,12 @@ namespace Functions.DomainService.Queue
         /// </summary>
         public static string DeadResultsStream => _prefix + "functions:dead-results";
 
+        /// <summary>
+        /// Function events the Worker could not send after its retries: one entry each — event id, run id, tenant,
+        /// type, reason; never the payload. Trimmed like the other dead streams.
+        /// </summary>
+        public static string DeadEventsStream => _prefix + "functions:dead-events";
+
         // ---- consumer groups ----------------------------------------------------
         /// <summary>The group runners join. The control plane never reads these.</summary>
         public const string RunnerGroup = "runners";

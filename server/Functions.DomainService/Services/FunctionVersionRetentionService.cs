@@ -57,14 +57,17 @@ namespace Functions.DomainService.Services
         private readonly IFunctionImagePinService _imagePins;
         private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionVersionRetentionService> _logger;
+        private readonly IFunctionEventSettingsRepository? _eventSettings;
 
         public FunctionVersionRetentionService(
             IFunctionVersionRepository versionRepository,
             IFunctionRunRepository runRepository,
             IFunctionImagePinService imagePins,
             IConfiguration configuration,
-            ILogger<FunctionVersionRetentionService> logger)
+            ILogger<FunctionVersionRetentionService> logger,
+            IFunctionEventSettingsRepository? eventSettings = null)
         {
+            _eventSettings = eventSettings;
             _versionRepository = versionRepository;
             _runRepository = runRepository;
             _imagePins = imagePins;
@@ -97,6 +100,7 @@ namespace Functions.DomainService.Services
                     tenantId, doomed.Select(v => v.ItemId).ToList(), cancellationToken);
 
                 await ReleaseImagesAsync(versions, keep, doomed);
+                await DeleteEventSettingsAsync(tenantId, doomed, cancellationToken);
 
                 _logger.LogInformation(
                     "Pruned {Deleted} version(s) of function {FunctionId} beyond the newest {MaxVersions}",
@@ -110,6 +114,21 @@ namespace Functions.DomainService.Services
                 // trimmed. The next deploy tries again.
                 _logger.LogError(ex, "Pruning versions of function {FunctionId} failed", functionId);
                 return 0;
+            }
+        }
+
+        /// <summary>The events rows of pruned versions go with them. Best effort: an orphan row is never read.</summary>
+        private async Task DeleteEventSettingsAsync(
+            string tenantId, IReadOnlyList<FunctionVersionEntity> doomed, CancellationToken cancellationToken)
+        {
+            if (_eventSettings is null) return;
+            try
+            {
+                await _eventSettings.DeleteVersionsAsync(tenantId, [.. doomed.Select(v => v.ItemId)], cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Could not delete the event settings of {Count} pruned version(s)", doomed.Count);
             }
         }
 

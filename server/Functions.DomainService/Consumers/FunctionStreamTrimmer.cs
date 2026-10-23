@@ -72,6 +72,7 @@ namespace Functions.DomainService.Consumers
         [
             FunctionQueueKeys.DeadStream,
             FunctionQueueKeys.DeadResultsStream,
+            FunctionQueueKeys.DeadEventsStream,
         ];
 
         private readonly IDatabase _db;

@@ -126,6 +126,41 @@ namespace BlocksTemplate.Api.Controllers
         [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<FunctionLimitsOptionsDto> GetLimits() => await _functionService.GetLimitsOptionsAsync();
 
+        // ------------------------------------------------------------------ events ----
+        // Function events: the events a function may send (ctx.events.add), edited on the draft and copied to each version
+        // at deploy; and what happened to a run's events. Reads need read, the save needs manage (it decides what a
+        // function may send). Every lookup is inside the caller's tenant database, so another tenant's id is a 404.
+
+        /// <summary>The events a function can be allowed to send, each with its payload template.</summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public FunctionEventCatalogDto GetEventCatalog([FromServices] IFunctionEventSettingsService events)
+            => events.GetCatalog();
+
+        /// <summary>The events of the function's draft; empty when none were saved.</summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public async Task<FunctionEventSettingsDto> GetEventSettings(
+            [FromQuery] string functionId, [FromServices] IFunctionEventSettingsService events)
+            => await events.GetAsync(GetTenantId(), functionId, HttpContext.RequestAborted);
+
+        /// <summary>Saves the draft's events. A deploy copies them to the new version.</summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::function::manage")]
+        public async Task<BaseResponse> SaveEventSettings(
+            [FromBody] SaveEventSettingsRequestDto request, [FromServices] IFunctionEventSettingsService events)
+        {
+            await events.SaveAsync(GetTenantId(), request, GetUserId(), GetEmail(), HttpContext.RequestAborted);
+            return new BaseResponse { IsSuccess = true };
+        }
+
+        /// <summary>What happened to the events of a run (its newest attempt that has any). Never a payload.</summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public async Task<RunEventsDto> GetRunEvents(
+            [FromQuery] string runId, [FromServices] IFunctionEventSettingsService events)
+            => await events.GetRunEventsAsync(GetTenantId(), runId, HttpContext.RequestAborted);
+
         // -------------------------------------------------------- export / import ----
         // One function per file, the same id in every environment (2026-10-18). Both directions need manage: an export
         // carries the whole source, and an import writes it. The file holds secret names, never ids or values.

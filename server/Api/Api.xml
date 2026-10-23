@@ -100,6 +100,18 @@
             poll-token service behind the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>.
             </summary>
         </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.GetEventCatalog(Functions.DomainService.Services.IFunctionEventSettingsService)">
+            <summary>The events a function can be allowed to send, each with its payload template.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.GetEventSettings(System.String,Functions.DomainService.Services.IFunctionEventSettingsService)">
+            <summary>The events of the function's draft; empty when none were saved.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.SaveEventSettings(Functions.DomainService.Dtos.Requests.SaveEventSettingsRequestDto,Functions.DomainService.Services.IFunctionEventSettingsService)">
+            <summary>Saves the draft's events. A deploy copies them to the new version.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRunEvents(System.String,Functions.DomainService.Services.IFunctionEventSettingsService)">
+            <summary>What happened to the events of a run (its newest attempt that has any). Never a payload.</summary>
+        </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Export(System.String)">
             <summary>
             Downloads one function as a <c>blocks.function.export</c> file: source, settings, output actions and

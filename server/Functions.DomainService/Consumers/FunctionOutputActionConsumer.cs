@@ -72,6 +72,7 @@ namespace Functions.DomainService.Consumers
         private readonly IOutputActionProcessor _processor;
         private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionOutputActionConsumer> _logger;
+        private readonly IFunctionEventDispatcher? _events;
         private readonly string _consumerName = $"{Environment.MachineName}-{Environment.ProcessId}";
 
         public FunctionOutputActionConsumer(
@@ -81,8 +82,10 @@ namespace Functions.DomainService.Consumers
             IFunctionRepository functionRepository,
             IOutputActionProcessor processor,
             IConfiguration configuration,
-            ILogger<FunctionOutputActionConsumer> logger)
+            ILogger<FunctionOutputActionConsumer> logger,
+            IFunctionEventDispatcher? events = null)
         {
+            _events = events;
             ArgumentNullException.ThrowIfNull(cache);
             _db = cache.CacheDatabase();
             _runRepository = runRepository;
@@ -294,6 +297,13 @@ namespace Functions.DomainService.Consumers
                 }
             }
 
+            // The run's events, after its output actions. A failed action does not hold them back: they are the function's
+            // own result, and the actions are only what the tenant chained after it.
+            if (_events is not null && !await DispatchEventsAsync(tenantId, run, entry, cancellationToken))
+            {
+                return OutputDisposition.InFlightElsewhere;
+            }
+
             var finalStatus = allSucceeded ? RunStatus.Succeeded : RunStatus.OutputFailed;
             var written = await _runRepository.ApplyOutputResultAsync(
                 tenantId, runId, attempt, results, finalStatus,
@@ -313,6 +323,14 @@ namespace Functions.DomainService.Consumers
             }
 
             return OutputDisposition.Done;
+        }
+
+        /// <returns>False when another live Worker is sending one of the run's events.</returns>
+        private async Task<bool> DispatchEventsAsync(
+            string tenantId, FunctionRunEntity run, ResultStreamEntry entry, CancellationToken cancellationToken)
+        {
+            var handoff = FunctionEventsHandoff.From(entry);
+            return handoff.IsEmpty || await _events!.DispatchAsync(tenantId, run, handoff, cancellationToken);
         }
 
         /// <summary>

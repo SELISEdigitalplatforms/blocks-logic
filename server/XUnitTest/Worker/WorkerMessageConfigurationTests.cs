@@ -24,6 +24,8 @@ namespace XUnitTest.Worker
             ("blocks_logic_workflow_scheduler_trigger_listener", 10, false),
             ("blocks_logic_workflow_import_listener", 5, false),
             ("blocks_email_listener", 5, false),
+            // Declared only (nothing consumes it yet), so a function event sent to it is not dropped.
+            ("blocks_logic_function_event_listener", 0, false),
             ("blocks_mail_status_listener", 5, false),
             ("blocks_migration_topic1", 5, false),
             ("blcoks_logic_scheduler_job_registry_listener", 5, false),
@@ -39,7 +41,7 @@ namespace XUnitTest.Worker
         public void The_full_RabbitMq_configuration_is_unchanged()
         {
             Shape(LogicConstants.GetMessageConfiguration(Rabbit)).Should().Equal(FullRabbitMq);
-            FullRabbitMq.Should().HaveCount(25);
+            FullRabbitMq.Should().HaveCount(26);
         }
 
         [Fact]
@@ -70,7 +72,7 @@ namespace XUnitTest.Worker
             var worker = Shape(LogicConstants.GetWorkerMessageConfiguration(Rabbit));
 
             worker.Should().Equal(FullRabbitMq.Where(s => s.Queue != Registry));
-            worker.Should().HaveCount(24);
+            worker.Should().HaveCount(25);
         }
 
         [Fact]

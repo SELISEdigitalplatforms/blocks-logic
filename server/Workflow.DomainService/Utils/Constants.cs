@@ -50,6 +50,12 @@ namespace Workflow.DomainService.Utils
         /// <summary>Fallback only, when WORKFLOW_NOTIFICATION_CONFIGURATION_NAME is not set; no environment creates it.</summary>
         public const string WorkflowImportNotificationConfigurationName = "workflow-import";
         public const string LogicMailQueueName = "blocks_email_listener";
+
+        /// <summary>
+        /// Function events (a function's <c>ctx.events.add('FunctionEvent', …)</c>). The Worker only SENDS to it for
+        /// now; the consumer that starts functions from it is added with the event trigger.
+        /// </summary>
+        public const string FunctionEventQueueName = "blocks_logic_function_event_listener";
         public const string MigrationCompletionTopic = "blocks_migration_topic1";
         public const string AccessTokenCookieName = "access_token";
         public const string RefreshTokenCookieName = "refresh_token";
@@ -91,6 +97,9 @@ namespace Workflow.DomainService.Utils
                                              ConsumerSubscription.BindToQueue(SchedulerTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(WorkflowImportQueue),
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
+                                             // Declared, not consumed: RabbitMQ drops a message sent to a queue that does not
+                                             // exist. Azure creates its sender on first use, so it needs no entry below.
+                                             new ConsumerSubscription(FunctionEventQueueName, string.Empty, 0, isDeclareOnly: true),
                                              ConsumerSubscription.BindToQueue(CommunicationConstants.MailStatusQueueName),
                                              ConsumerSubscription.BindToQueue(MigrationCompletionTopic),
                                              .. registry,

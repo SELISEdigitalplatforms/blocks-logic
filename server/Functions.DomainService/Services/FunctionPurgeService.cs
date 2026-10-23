@@ -50,6 +50,8 @@ namespace Functions.DomainService.Services
         private readonly IFunctionImagePinService _imagePins;
         private readonly ICacheClient _cache;
         private readonly ILogger<FunctionPurgeService> _logger;
+        private readonly IFunctionEventSettingsRepository? _eventSettings;
+        private readonly IFunctionRunEventsRepository? _runEvents;
 
         /// <summary>Runs are cancelled a page at a time.</summary>
         private const int ActiveRunPageSize = 200;
@@ -68,8 +70,12 @@ namespace Functions.DomainService.Services
             IFunctionRunLogRepository runLogRepository,
             IFunctionImagePinService imagePins,
             ICacheClient cache,
-            ILogger<FunctionPurgeService> logger)
+            ILogger<FunctionPurgeService> logger,
+            IFunctionEventSettingsRepository? eventSettings = null,
+            IFunctionRunEventsRepository? runEvents = null)
         {
+            _eventSettings = eventSettings;
+            _runEvents = runEvents;
             _versionRepository = versionRepository;
             _buildRepository = buildRepository;
             _runRepository = runRepository;
@@ -101,6 +107,8 @@ namespace Functions.DomainService.Services
             var deletedBuilds = await _buildRepository.DeleteAllForFunctionAsync(tenantId, functionId, cancellationToken);
             var deletedLogs = await _runLogRepository.DeleteAllForFunctionAsync(tenantId, functionId, cancellationToken);
             var deletedRuns = await _runRepository.DeleteAllForFunctionAsync(tenantId, functionId, cancellationToken);
+            if (_eventSettings is not null) await _eventSettings.DeleteAllForFunctionAsync(tenantId, functionId, cancellationToken);
+            if (_runEvents is not null) await _runEvents.DeleteAllForFunctionAsync(tenantId, functionId, cancellationToken);
 
             await DeleteRuntimeKeysAsync(functionId);
 

@@ -30,6 +30,7 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionRepository> _functions = new();
         private readonly Mock<IFunctionRunGrantRevoker> _grants = new();
         private readonly Mock<IBuiltInNotificationSender> _builtIn = new();
+        private readonly Mock<IFunctionRunEventsRepository> _runEvents = new();
         private readonly (IDatabase Database, FakeRedisDatabase Fake) _redis = FakeRedisDatabase.Create();
 
         private readonly FunctionVersionEntity _version = new() { ItemId = "v-1", FunctionId = "fn-1" };
@@ -84,7 +85,8 @@ namespace XUnitTest.Functions
             cache.Setup(c => c.CacheDatabase()).Returns(_redis.Database);
             return new FunctionResultConsumer(
                 cache.Object, _runs.Object, _logs.Object, _versions.Object, _images.Object, _functions.Object,
-                _grants.Object, NullLogger<FunctionResultConsumer>.Instance, builtInNotifications: _builtIn.Object);
+                _grants.Object, NullLogger<FunctionResultConsumer>.Instance, builtInNotifications: _builtIn.Object,
+                runEvents: _runEvents.Object);
         }
 
         private static ResultStreamEntry Entry(params (string Key, string Value)[] overrides)
@@ -158,6 +160,90 @@ namespace XUnitTest.Functions
 
             _runs.Verify(r => r.TryBeginOutputProcessingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
             OutputJobs().Should().BeEmpty();
+        }
+
+        // ---- function events: a run with events goes through the same hand-off ----------------------
+
+        private static (string Key, string Value)[] WithEvents(int count = 2) =>
+        [
+            (FunctionQueueKeys.ResultEventsKeyField, FunctionQueueKeys.Events(RunId)),
+            (FunctionQueueKeys.ResultEventCountField, count.ToString()),
+            (FunctionQueueKeys.TraceParentField, "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"),
+        ];
+
+        private static Dictionary<string, string> JobFields(object?[] job) =>
+            ((NameValueEntry[])job[1]!).ToDictionary(f => f.Name.ToString(), f => f.Value.ToString());
+
+        [Fact]
+        public async Task A_success_with_events_but_no_output_actions_is_handed_off_with_the_events_fields()
+        {
+            _version.OutputActions = [];
+
+            var outcome = await Consumer().ProcessAsync(Entry(WithEvents()), CancellationToken.None);
+
+            outcome.Disposition.Should().Be(ResultDisposition.Applied);
+            _runs.Verify(r => r.TryBeginOutputProcessingAsync(Tenant, RunId, 1, It.IsAny<CancellationToken>()), Times.Once);
+            var fields = JobFields(OutputJobs().Should().ContainSingle().Subject);
+            fields["runId"].Should().Be(RunId);
+            fields[FunctionQueueKeys.ResultEventsKeyField].Should().Be(FunctionQueueKeys.Events(RunId));
+            fields[FunctionQueueKeys.ResultEventCountField].Should().Be("2");
+            fields[FunctionQueueKeys.TraceParentField].Should().StartWith("00-0af7651916cd43dd8448eb211c80319c");
+            fields.Should().NotContainKey(FunctionQueueKeys.ResultEventsRejectedField);
+        }
+
+        [Fact]
+        public async Task A_success_where_the_runner_dropped_the_events_hands_off_so_the_reason_is_recorded()
+        {
+            _version.OutputActions = [];
+
+            await Consumer().ProcessAsync(
+                Entry((FunctionQueueKeys.ResultEventsRejectedField, "EVENTS_REJECTED: 51 events; the limit is 50")), CancellationToken.None);
+
+            var fields = JobFields(OutputJobs().Should().ContainSingle().Subject);
+            fields[FunctionQueueKeys.ResultEventsRejectedField].Should().Be("EVENTS_REJECTED: 51 events; the limit is 50");
+            fields.Should().NotContainKey(FunctionQueueKeys.ResultEventsKeyField);
+        }
+
+        [Fact]
+        public async Task A_redelivered_result_does_not_hand_a_finished_events_run_off_again()
+        {
+            _version.OutputActions = [];
+            _runEvents.Setup(r => r.ExistsAsync(Tenant, RunId, 1, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+            await Consumer().ProcessAsync(Entry(WithEvents()), CancellationToken.None);
+
+            _runs.Verify(r => r.TryBeginOutputProcessingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+            OutputJobs().Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_failed_run_never_hands_its_events_off()
+        {
+            await Consumer().ProcessAsync(
+                Entry([("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError), .. WithEvents()]), CancellationToken.None);
+
+            OutputJobs().Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_run_with_events_and_actions_carries_the_events_on_the_same_job()
+        {
+            _version.OutputActions = [new OutputAction { Id = "a1", Url = "https://example.test" }];
+
+            await Consumer().ProcessAsync(Entry(WithEvents(1)), CancellationToken.None);
+
+            JobFields(OutputJobs().Should().ContainSingle().Subject)[FunctionQueueKeys.ResultEventCountField].Should().Be("1");
+        }
+
+        [Fact]
+        public async Task A_job_for_a_run_without_events_has_no_events_fields()
+        {
+            _version.OutputActions = [new OutputAction { Id = "a1", Url = "https://example.test" }];
+
+            await Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            JobFields(OutputJobs().Should().ContainSingle().Subject).Keys.Should().NotContain(
+                [FunctionQueueKeys.ResultEventsKeyField, FunctionQueueKeys.ResultEventCountField, FunctionQueueKeys.TraceParentField]);
         }
 
         [Fact]

@@ -33,6 +33,19 @@ namespace Functions.DomainService.Queue
         public static readonly TimeSpan OutputActionMarkerTtl = TimeSpan.FromHours(48);
 
         /// <summary>
+        /// The "this event has been dispatched" marker, keyed on the event id (<c>{runId}-{attempt}-{n}</c>, made by
+        /// the sandbox's runtime and checked by the runner to start with the run's own id). SET NX before the send,
+        /// then the outcome is written onto it: the same rule as <see cref="OutputActionMarker"/>.
+        /// </summary>
+        public static string EventSentMarker(string eventId) => $"function:event-sent:{eventId}";
+
+        /// <summary>Long enough for any redelivery of the job (the working streams are trimmed at 12 h).</summary>
+        public static readonly TimeSpan EventSentMarkerTtl = TimeSpan.FromDays(7);
+
+        /// <summary>Events sent by one tenant in one minute (<paramref name="minute"/> = unix time / 60).</summary>
+        public static string EventRate(string tenantId, long minute) => $"function:events-rate:{tenantId}:{minute}";
+
+        /// <summary>
         /// Written after a result's logs have been copied to Mongo for one attempt, so a
         /// redelivered result entry does not insert every log line a second time.
         /// </summary>

@@ -28,6 +28,7 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionVersionRepository> _versions = new();
         private readonly Mock<IFunctionRepository> _functions = new();
         private readonly Mock<IOutputActionProcessor> _processor = new();
+        private readonly Mock<IFunctionEventDispatcher> _events = new();
         private readonly (IDatabase Database, FakeRedisDatabase Fake) _redis = FakeRedisDatabase.Create();
         private readonly Dictionary<string, string> _markers = new(StringComparer.Ordinal);
         private readonly List<string> _sent = [];
@@ -87,7 +88,7 @@ namespace XUnitTest.Functions
             cache.Setup(c => c.CacheDatabase()).Returns(_redis.Database);
             return new FunctionOutputActionConsumer(
                 cache.Object, _runs.Object, _versions.Object, _functions.Object, _processor.Object,
-                new ConfigurationBuilder().Build(), NullLogger<FunctionOutputActionConsumer>.Instance);
+                new ConfigurationBuilder().Build(), NullLogger<FunctionOutputActionConsumer>.Instance, _events.Object);
         }
 
         private static ResultStreamEntry Job(string attempt = "1") => new("1-0", new Dictionary<string, string>
@@ -116,6 +117,113 @@ namespace XUnitTest.Functions
             VerifyVerdict(RunStatus.Succeeded, r => r.Count == 2);
             _markers[MarkerKey(0, "a1")].Should().Contain("\"state\":\"done\"");
             _redis.Fake.Calls("PublishAsync").Should().ContainSingle();
+        }
+
+        // ---- function events: sent after the output actions ------------------------------------------
+
+        private static ResultStreamEntry EventsJob(string? rejected = null)
+        {
+            var fields = new Dictionary<string, string>
+            {
+                ["runId"] = RunId, ["tenantId"] = Tenant, ["functionId"] = "fn-1", ["attempt"] = "1",
+                [FunctionQueueKeys.ResultEventsKeyField] = FunctionQueueKeys.Events(RunId),
+                [FunctionQueueKeys.ResultEventCountField] = "2",
+                [FunctionQueueKeys.TraceParentField] = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+            };
+            if (rejected is not null) fields[FunctionQueueKeys.ResultEventsRejectedField] = rejected;
+            return new ResultStreamEntry("1-0", fields);
+        }
+
+        [Fact]
+        public async Task A_run_with_events_and_no_actions_sends_its_events_and_closes_as_succeeded()
+        {
+            _version.OutputActions = [];
+            _events.Setup(e => e.DispatchAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<FunctionEventsHandoff>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+            var disposition = await Consumer().ProcessAsync(EventsJob(), null, CancellationToken.None);
+
+            disposition.Should().Be(OutputDisposition.Done);
+            _processor.Verify(p => p.ProcessAsync(It.IsAny<string>(), It.IsAny<FunctionRunEntity>(), It.IsAny<IReadOnlyList<OutputAction>>(), It.IsAny<RetryPolicy>(), It.IsAny<CancellationToken>()), Times.Never);
+            _events.Verify(e => e.DispatchAsync(
+                Tenant, It.Is<FunctionRunEntity>(r => r.ItemId == RunId),
+                It.Is<FunctionEventsHandoff>(h => h.EventsKey == FunctionQueueKeys.Events(RunId) && h.Count == 2 && h.TraceParent!.StartsWith("00-0af7")),
+                It.IsAny<CancellationToken>()), Times.Once);
+            VerifyVerdict(RunStatus.Succeeded);
+        }
+
+        [Fact]
+        public async Task The_events_go_after_the_actions_and_before_the_verdict()
+        {
+            var order = new List<string>();
+            _processor
+                .Setup(p => p.ProcessAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<IReadOnlyList<OutputAction>>(), It.IsAny<RetryPolicy>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string _, FunctionRunEntity _, IReadOnlyList<OutputAction> actions, RetryPolicy _, CancellationToken _) =>
+                {
+                    order.Add(actions[0].Id);
+                    return new OutputActionChainResult([new OutputActionResult { ActionId = actions[0].Id, Ok = true }], true);
+                });
+            _events.Setup(e => e.DispatchAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<FunctionEventsHandoff>(), It.IsAny<CancellationToken>()))
+                .Callback(() => order.Add("events")).ReturnsAsync(true);
+            _runs.Setup(r => r.ApplyOutputResultAsync(Tenant, RunId, 1, It.IsAny<IReadOnlyList<OutputActionResult>>(), It.IsAny<RunStatus>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .Callback(() => order.Add("verdict")).ReturnsAsync(true);
+
+            await Consumer().ProcessAsync(EventsJob(), null, CancellationToken.None);
+
+            order.Should().Equal("a1", "a2", "events", "verdict");
+        }
+
+        [Fact]
+        public async Task A_failed_action_stops_the_chain_but_the_events_are_still_sent()
+        {
+            _processor
+                .Setup(p => p.ProcessAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<IReadOnlyList<OutputAction>>(), It.IsAny<RetryPolicy>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string _, FunctionRunEntity _, IReadOnlyList<OutputAction> actions, RetryPolicy _, CancellationToken _) =>
+                    new OutputActionChainResult([new OutputActionResult { ActionId = actions[0].Id, Ok = false }], false));
+            _events.Setup(e => e.DispatchAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<FunctionEventsHandoff>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+            await Consumer().ProcessAsync(EventsJob(), null, CancellationToken.None);
+
+            _processor.Verify(p => p.ProcessAsync(It.IsAny<string>(), It.IsAny<FunctionRunEntity>(), It.IsAny<IReadOnlyList<OutputAction>>(), It.IsAny<RetryPolicy>(), It.IsAny<CancellationToken>()), Times.Once);
+            _events.Verify(e => e.DispatchAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<FunctionEventsHandoff>(), It.IsAny<CancellationToken>()), Times.Once);
+            VerifyVerdict(RunStatus.OutputFailed);
+        }
+
+        [Fact]
+        public async Task A_job_whose_events_are_held_by_another_worker_is_left_alone_and_no_verdict_is_written()
+        {
+            _events.Setup(e => e.DispatchAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<FunctionEventsHandoff>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+            var disposition = await Consumer().ProcessAsync(EventsJob(), null, CancellationToken.None);
+
+            disposition.Should().Be(OutputDisposition.InFlightElsewhere);
+            _runs.Verify(r => r.ApplyOutputResultAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<IReadOnlyList<OutputActionResult>>(), It.IsAny<RunStatus>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_job_without_events_never_calls_the_dispatcher()
+        {
+            await Consumer().ProcessAsync(Job(), null, CancellationToken.None);
+
+            _events.Verify(e => e.DispatchAsync(It.IsAny<string>(), It.IsAny<FunctionRunEntity>(), It.IsAny<FunctionEventsHandoff>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task The_runners_rejection_reason_reaches_the_dispatcher_even_with_no_events_key()
+        {
+            _version.OutputActions = [];
+            _events.Setup(e => e.DispatchAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<FunctionEventsHandoff>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            var job = new ResultStreamEntry("1-0", new Dictionary<string, string>
+            {
+                ["runId"] = RunId, ["tenantId"] = Tenant, ["functionId"] = "fn-1", ["attempt"] = "1",
+                [FunctionQueueKeys.ResultEventsRejectedField] = "EVENTS_REJECTED: too many",
+            });
+
+            await Consumer().ProcessAsync(job, null, CancellationToken.None);
+
+            _events.Verify(e => e.DispatchAsync(
+                Tenant, It.IsAny<FunctionRunEntity>(), It.Is<FunctionEventsHandoff>(h => h.EventsKey == null && h.Rejected == "EVENTS_REJECTED: too many"), It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]

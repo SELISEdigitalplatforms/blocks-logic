@@ -2,6 +2,7 @@ using Blocks.Genesis;
 using Common.InternalService.Access;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
+using Functions.DomainService.Events;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
@@ -183,8 +184,10 @@ namespace Functions.DomainService.Services
             Storage.IFunctionArtifactStore artifacts,
             ICacheClient cache,
             IConfiguration configuration,
-            ILogger<FunctionInvocationService> logger)
+            ILogger<FunctionInvocationService> logger,
+            IFunctionEventSettingsRepository? eventSettings = null)
         {
+            _eventSettings = eventSettings;
             _functionRepository = functionRepository;
             _versionRepository = versionRepository;
             _runRepository = runRepository;
@@ -201,6 +204,30 @@ namespace Functions.DomainService.Services
 
             var maxSyncWaits = Math.Max(1, configuration.GetValue("Functions:MaxConcurrentSyncWaits", DefaultMaxConcurrentSyncWaits));
             _syncWaits = new SemaphoreSlim(maxSyncWaits, maxSyncWaits);
+        }
+
+        /// <summary>Event types a version may send, by version id (see <see cref="FunctionEventAllowedCache"/>).</summary>
+        private readonly FunctionEventAllowedCache _allowedEvents = new();
+
+        private readonly IFunctionEventSettingsRepository? _eventSettings;
+
+        /// <summary>
+        /// The event types this run may send. A deployed version's row is a snapshot that never changes, so its answer is
+        /// kept briefly; the draft (a Test run) is read every time because the editor changes it.
+        /// </summary>
+        private async Task<IReadOnlyCollection<string>> AllowedEventsAsync(
+            string tenantId, FunctionEntity function, FunctionVersionEntity? version, CancellationToken cancellationToken)
+        {
+            var settings = _eventSettings;
+            if (settings is null) return [];
+
+            var authMode = (version?.Trigger ?? function.Trigger).AuthMode;
+            async Task<IReadOnlyCollection<string>> ReadAsync() => FunctionEventPolicy.AllowedTypes(
+                await settings.GetAsync(tenantId, function.ItemId, version?.ItemId, cancellationToken), authMode);
+
+            return version is null
+                ? await ReadAsync()
+                : await _allowedEvents.GetOrReadAsync(tenantId, version.ItemId, ReadAsync);
         }
 
         private Task<FunctionVersionEntity?> ActiveVersionAsync(string tenantId, string versionId, CancellationToken cancellationToken)
@@ -681,7 +708,9 @@ namespace Functions.DomainService.Services
             // run as SecretUnresolved (naming the variable) when one cannot be read, and as the
             // retryable SecretStoreUnavailable when the store itself is down. A version snapshot
             // keeps the reference too, so rotating a secret takes effect on the next run.
-            var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson);
+            // The events it may send come from its version's own list (the draft's for a Test), narrowed for a Public trigger.
+            var allowedEvents = await AllowedEventsAsync(tenantId, function, version, cancellationToken);
+            var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson, allowedEvents);
 
             // The caller's identity for ctx.blocks.accessToken, as a delegation grant id the runner
             // redeems right before the sandbox starts — never a token. Written now, while the

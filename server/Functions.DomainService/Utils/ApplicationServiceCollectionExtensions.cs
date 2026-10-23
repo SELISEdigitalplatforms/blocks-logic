@@ -49,6 +49,11 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionRunRepository, FunctionRunRepository>();
             services.AddSingleton<IFunctionRunLogRepository, FunctionRunLogRepository>();
             services.AddSingleton<IFunctionBuildRepository, FunctionBuildRepository>();
+            // Function events: what a function may send, and what happened to a run's events (logic-owned collections).
+            services.AddSingleton<IFunctionEventSettingsRepository, FunctionEventSettingsRepository>();
+            services.AddSingleton<IFunctionRunEventsRepository, FunctionRunEventsRepository>();
+            services.AddSingleton<IFunctionEventAllowList, FunctionEventAllowList>();
+            services.AddSingleton<IFunctionEventSettingsService, FunctionEventSettingsService>();
 
             // The artifact store, on the tenant's own storage. It takes the tenant per call and enters
             // that tenant's context itself, so one instance serves every tenant. The storage stack it
@@ -107,6 +112,7 @@ namespace Functions.DomainService.Utils
             services.AddValidator<SaveFunctionRequestDto, SaveFunctionRequestValidator>();
             services.AddValidator<TestFunctionRequestDto, TestFunctionRequestValidator>();
             services.AddValidator<DeployFunctionRequestDto, DeployFunctionRequestValidator>();
+            services.AddValidator<SaveEventSettingsRequestDto, SaveEventSettingsRequestValidator>();
 
             return services;
         }
@@ -118,6 +124,8 @@ namespace Functions.DomainService.Utils
             // Output actions, decoupled from result processing so a slow endpoint never holds a
             // result entry long enough to be reclaimed and delivered twice.
             services.AddHostedService<FunctionOutputActionConsumer>();
+            // Sends a succeeded run's events over the Genesis bus, from the output consumer, after its output actions.
+            services.AddSingleton<IFunctionEventDispatcher, FunctionEventDispatcher>();
             services.AddHostedService<FunctionBuildResultConsumer>();
             // Closes runs that will never hear back (payload expired or lost, runner died,
             // output job lost), per tenant, with conditional writes only.
