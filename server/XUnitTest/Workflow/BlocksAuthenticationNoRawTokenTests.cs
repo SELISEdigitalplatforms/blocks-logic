@@ -117,7 +117,7 @@ namespace XUnitTest.Workflow
         private static BsonDocument HttpParams(string authenticationType, bool useBlocksAuthorization = false, BsonDocument? headers = null) => new()
         {
             { "httpMethod", "GET" },
-            { "url", "https://author-chosen.example/x" },
+            { "url", "https://api.seliseblocks.com/x" },
             { "authenticationType", authenticationType },
             { "useBlocksAuthorization", useBlocksAuthorization },
             { "haveHeaders", headers != null },
@@ -128,7 +128,8 @@ namespace XUnitTest.Workflow
         {
             var handler = new CaptureHandler("""{"ok":true}""");
             var node = new ActionHttpRequestV1Node(Factory(handler), Auth(delegatedToken),
-                Mock.Of<IClientCredentialTokenService>(), NullLogger<ActionHttpRequestV1Node>.Instance);
+                Mock.Of<IClientCredentialTokenService>(), NullLogger<ActionHttpRequestV1Node>.Instance,
+                TestOutboundGuard.ResolvingTo());
             return (await node.RunAsync(Context(parameters)), handler);
         }
 
