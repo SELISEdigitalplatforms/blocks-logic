@@ -30,6 +30,7 @@ const TRIGGER_FILTERS = [
   { label: "Workflow", value: "Workflow" },
   { label: "Test", value: "Test" },
   { label: "Replay", value: "Replay" },
+  { label: "Event", value: "Event" },
 ];
 
 const RANGE_FILTERS = [
