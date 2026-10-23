@@ -628,7 +628,7 @@ namespace Blocks.FunctionRunner.Runs
                 // Set by the runner, after the screen and never from the queue: the run span's trace id
                 // and the hosts that get it on fetch(). `events` (what the function may add with
                 // ctx.events) travels in the queued envelope and is left exactly as the control plane wrote it.
-                envelope = ExecutionEnvelope.WithTrace(envelope, Tracing.RunTracing.CurrentTraceParent(), _options.TraceHosts);
+                envelope = ExecutionEnvelope.WithTrace(envelope, Tracing.RunTracing.CurrentTraceParent(), _options.EffectiveTraceHosts);
 
                 return new PreparedRun(envelope, resolvedValues, accessToken is not null, null);
             }
