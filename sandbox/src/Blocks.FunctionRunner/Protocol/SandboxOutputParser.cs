@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Blocks.FunctionRunner.Contracts;
 
 namespace Blocks.FunctionRunner.Protocol
@@ -18,6 +19,13 @@ namespace Blocks.FunctionRunner.Protocol
 
         /// <summary>The serialized result value, when the run succeeded.</summary>
         public string? ResultJson { get; internal set; }
+
+        /// <summary>
+        /// The raw <c>events</c> array of the success line, exactly as the sandbox wrote it and NOT yet
+        /// trusted: the sandbox is untrusted, so <see cref="SandboxOutputParser.ValidateEvents"/> must
+        /// accept it before anything is stored or sent. Null when the line had none.
+        /// </summary>
+        public string? EventsJson { get; internal set; }
 
         /// <summary>True when a result line said ok, false when it said not-ok, null when absent.</summary>
         public bool? Ok { get; internal set; }
@@ -39,6 +47,15 @@ namespace Blocks.FunctionRunner.Protocol
         public long LogBytes { get; internal set; }
     }
 
+    /// <summary>What <see cref="SandboxOutputParser.ValidateEvents"/> made of a run's events.</summary>
+    /// <param name="Json">The accepted events as one JSON array; null when there are none or they were rejected.</param>
+    /// <param name="Count">How many events <paramref name="Json"/> holds.</param>
+    /// <param name="Rejected"><c>EVENTS_REJECTED: &lt;reason&gt;</c> when all events were dropped; the reason never quotes a payload.</param>
+    public sealed record EventsCheck(string? Json, int Count, string? Rejected)
+    {
+        public static EventsCheck None { get; } = new(null, 0, null);
+    }
+
     /// <summary>
     /// Parses the sandbox stdout protocol and enforces the log and result ceilings a second
     /// time, out of process.
@@ -55,6 +72,19 @@ namespace Blocks.FunctionRunner.Protocol
 
         private const int MaxMalformedKept = 20;
         private const int MaxSingleLineBytes = 64 * 1024;
+
+        /// <summary>
+        /// A <c>result</c> line is the one line allowed to be long: it carries the value (up to the
+        /// result ceiling) and the events (up to their total), plus framing and each event's id/type.
+        /// </summary>
+        private const string ResultLinePrefix = "{\"t\":\"result\"";
+        private const int ResultLineFraming = 64 * 1024;
+
+        /// <summary><c>FunctionEvent</c> names; the same rule as the sandbox's and the Worker's.</summary>
+        private static readonly Regex FunctionEventName = new(
+            @"^[a-z][a-z0-9_.-]{2,63}\z", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50));
+
+        private const int MaxEventIdChars = 256;
 
         private readonly long _logByteCeiling;
         private readonly int _logLineCeiling;
@@ -106,8 +136,12 @@ namespace Blocks.FunctionRunner.Protocol
 
         private void Consume(SandboxOutput output, string line)
         {
-            // A single absurd line is clipped before anything tries to parse it.
-            if (Encoding.UTF8.GetByteCount(line) > MaxSingleLineBytes)
+            // A single absurd line is clipped before anything tries to parse it. A result line is
+            // exempt up to what it may legitimately hold; its value and events are checked below.
+            var maxBytes = line.StartsWith(ResultLinePrefix, StringComparison.Ordinal)
+                ? _resultByteCeiling + Ceilings.EventsLineBytes + ResultLineFraming
+                : MaxSingleLineBytes;
+            if (Encoding.UTF8.GetByteCount(line) > maxBytes)
             {
                 line = line[..Math.Min(line.Length, MaxSingleLineBytes / 4)];
             }
@@ -196,7 +230,7 @@ namespace Blocks.FunctionRunner.Protocol
             {
                 // Re-extract the raw `value` rather than re-serializing the deserialized object:
                 // round-tripping through object would lose numeric precision and property order.
-                var value = ExtractRawValue(line);
+                var (value, events) = ExtractRaw(line);
                 if (value is null)
                 {
                     output.Ok = false;
@@ -215,6 +249,7 @@ namespace Blocks.FunctionRunner.Protocol
 
                 output.Ok = true;
                 output.ResultJson = value;
+                output.EventsJson = events;
                 return;
             }
 
@@ -224,19 +259,107 @@ namespace Blocks.FunctionRunner.Protocol
             output.ErrorStack = evt.Stack;
         }
 
-        private static string? ExtractRawValue(string line)
+        /// <summary>The raw <c>value</c> (or "null" when absent; null for unreadable JSON) and the raw <c>events</c> array, if any.</summary>
+        private static (string? Value, string? Events) ExtractRaw(string line)
         {
             try
             {
                 using var doc = JsonDocument.Parse(line);
-                return doc.RootElement.TryGetProperty("value", out var value)
-                    ? value.GetRawText()
-                    : "null";
+                var value = doc.RootElement.TryGetProperty("value", out var v) ? v.GetRawText() : "null";
+                var events = doc.RootElement.TryGetProperty("events", out var e) ? e.GetRawText() : null;
+                return (value, events);
             }
             catch (JsonException)
             {
-                return null;
+                return (null, null);
             }
+        }
+
+        /// <summary>
+        /// Checks a success line's events a second time, out of process. The sandbox is untrusted: its
+        /// own checks (<c>ctx.events.add</c>) are for the developer, and tenant code can write a forged
+        /// line to fd 1, so nothing here relies on them. Everything must hold or ALL events are dropped
+        /// (the result is kept): an array of at most <see cref="Ceilings.EventsPerCall"/> items, each
+        /// <c>{id, type, payload}</c> with a string id (unique, starting with <paramref name="idPrefix"/>
+        /// when given), a type from <paramref name="allowedTypes"/> that the platform knows, an object
+        /// payload of at most <see cref="Ceilings.EventPayloadBytes"/> bytes, at most
+        /// <see cref="Ceilings.EventsTotalBytes"/> in all, and a valid name on a <c>FunctionEvent</c>.
+        /// The reason names an index and a rule, never a payload.
+        /// </summary>
+        /// <param name="rawEvents"><see cref="SandboxOutput.EventsJson"/>.</param>
+        /// <param name="allowedTypes">The types this function may send, from its envelope.</param>
+        /// <param name="idPrefix">Event ids must start with this (<c>{runId}-{attempt}-</c>), so a forged id cannot collide with another run's.</param>
+        public static EventsCheck ValidateEvents(string? rawEvents, IReadOnlyCollection<string> allowedTypes, string? idPrefix = null)
+        {
+            if (rawEvents is null) return EventsCheck.None;
+            ArgumentNullException.ThrowIfNull(allowedTypes);
+
+            try
+            {
+                using var doc = JsonDocument.Parse(rawEvents);
+                var root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Array) return Reject("the events are not a list");
+
+                var count = root.GetArrayLength();
+                if (count == 0) return EventsCheck.None;
+                if (count > Ceilings.EventsPerCall) return Reject($"{count} events; the limit is {Ceilings.EventsPerCall}");
+
+                var ids = new HashSet<string>(StringComparer.Ordinal);
+                long total = 0;
+                var index = 0;
+                foreach (var item in root.EnumerateArray())
+                {
+                    index++;
+                    var problem = CheckEvent(item, allowedTypes, idPrefix, ids, out var payloadBytes);
+                    if (problem is not null) return Reject($"event {index}: {problem}");
+
+                    total += payloadBytes;
+                    if (total > Ceilings.EventsTotalBytes)
+                    {
+                        return Reject($"the payloads together exceed {Ceilings.EventsTotalBytes} bytes");
+                    }
+                }
+
+                return new EventsCheck(root.GetRawText(), count, null);
+            }
+            catch (JsonException)
+            {
+                return Reject("the events are not valid JSON");
+            }
+        }
+
+        private static EventsCheck Reject(string reason) => new(null, 0, $"{ErrorCodes.EventsRejected}: {reason}");
+
+        /// <summary>Why <paramref name="item"/> is not an acceptable event, or null when it is.</summary>
+        private static string? CheckEvent(
+            JsonElement item, IReadOnlyCollection<string> allowedTypes, string? idPrefix, HashSet<string> ids, out int payloadBytes)
+        {
+            payloadBytes = 0;
+            if (item.ValueKind != JsonValueKind.Object) return "is not an object";
+
+            if (!item.TryGetProperty("id", out var idElement) || idElement.ValueKind != JsonValueKind.String) return "has no string id";
+            var id = idElement.GetString();
+            if (string.IsNullOrEmpty(id) || id.Length > MaxEventIdChars) return "has an empty or too long id";
+            if (idPrefix is not null && !id.StartsWith(idPrefix, StringComparison.Ordinal)) return "has an id that does not belong to this run";
+            if (!ids.Add(id)) return "repeats an id";
+
+            if (!item.TryGetProperty("type", out var typeElement) || typeElement.ValueKind != JsonValueKind.String) return "has no string type";
+            var type = typeElement.GetString();
+            if (!EventTypes.IsKnown(type) || !allowedTypes.Contains(type!)) return "has a type that is not allowed for this function";
+
+            if (!item.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object) return "has no object payload";
+            payloadBytes = Encoding.UTF8.GetByteCount(payload.GetRawText());
+            if (payloadBytes > Ceilings.EventPayloadBytes) return $"has a payload over {Ceilings.EventPayloadBytes} bytes";
+
+            if (type == EventTypes.FunctionEvent && !IsValidFunctionEvent(payload)) return "has an invalid FunctionEvent name";
+            return null;
+        }
+
+        private static bool IsValidFunctionEvent(JsonElement payload)
+        {
+            if (!payload.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String) return false;
+            var text = name.GetString();
+            return text is not null && FunctionEventName.IsMatch(text);
         }
 
         private static void RecordMalformed(SandboxOutput output, string line)

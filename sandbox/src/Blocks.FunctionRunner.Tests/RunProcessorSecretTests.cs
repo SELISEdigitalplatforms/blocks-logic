@@ -450,7 +450,8 @@ namespace Blocks.FunctionRunner.Tests
 
             resolver.Calls.Should().BeEmpty();
             sandbox.Calls.Should().Be(1);
-            sandbox.EnvelopeContentSeen.Should().Be(legacy);
+            // Untouched apart from the `trace` the runner now sets on every envelope.
+            sandbox.EnvelopeContentSeen.Should().Be(ExecutionEnvelope.WithTrace(legacy, null, []));
         }
 
         [SkippableFact]

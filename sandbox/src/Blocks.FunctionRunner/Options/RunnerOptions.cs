@@ -101,6 +101,16 @@ namespace Blocks.FunctionRunner.Options
         public string QueuePrefix { get; set; } = string.Empty;
 
         /// <summary>
+        /// Hosts that get the run's W3C <c>traceparent</c> when the function calls them with
+        /// <c>fetch()</c> (a listed host or any subdomain of it), as <c>RUNNER__TraceHosts__0</c>,
+        /// <c>RUNNER__TraceHosts__1</c>, … — put the Blocks API hosts here. Empty by default: no
+        /// header is added anywhere. Other hosts never get it, so a trace id does not leak to third
+        /// parties. The runner writes it into each run's envelope (<c>trace.hosts</c>); the control
+        /// plane cannot.
+        /// </summary>
+        public string[] TraceHosts { get; set; } = [];
+
+        /// <summary>
         /// The most sandbox slots one tenant may hold at once, as
         /// <c>RUNNER__MaxSandboxesPerTenant</c>, for the whole fleet: the count is one Redis key
         /// all runners share. Zero (the default) derives it as half the fleet's capacity (the sum

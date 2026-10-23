@@ -513,7 +513,8 @@ namespace Blocks.FunctionRunner.Runs
                     result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                     WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                     result.Output.Truncated,
-                    startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, timings: timings)
+                    startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, timings: timings,
+                    events: CheckEvents(job, fields, status, result.Output))
                     .ConfigureAwait(false);
 
                 return Disposition.Complete;
@@ -623,6 +624,11 @@ namespace Blocks.FunctionRunner.Runs
                     envelope = RunDelegation.Apply(envelope, accessToken);
                     resolvedValues = [.. resolvedValues, accessToken];
                 }
+
+                // Set by the runner, after the screen and never from the queue: the run span's trace id
+                // and the hosts that get it on fetch(). `events` (what the function may add with
+                // ctx.events) travels in the queued envelope and is left exactly as the control plane wrote it.
+                envelope = ExecutionEnvelope.WithTrace(envelope, Tracing.RunTracing.CurrentTraceParent(), _options.TraceHosts);
 
                 return new PreparedRun(envelope, resolvedValues, accessToken is not null, null);
             }
@@ -838,7 +844,8 @@ namespace Blocks.FunctionRunner.Runs
                 result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                 WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                 result.Output.Truncated,
-                startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, warm: report, timings: timings)
+                startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, warm: report, timings: timings,
+                events: CheckEvents(job, fields, status, result.Output))
                 .ConfigureAwait(false);
 
             return Disposition.Complete;
@@ -1169,6 +1176,28 @@ namespace Blocks.FunctionRunner.Runs
         }
 
         /// <summary>
+        /// The events of a finished run, checked again out of process (<see cref="SandboxOutputParser.ValidateEvents"/>):
+        /// only a succeeded run sends any, so a failure, timeout or cancel drops them. A violation drops
+        /// all of them and is logged — the run id, the count and the rule, never a payload — while the
+        /// result and status stand. Allowed types come from the queued envelope, never from the sandbox.
+        /// </summary>
+        private EventsCheck CheckEvents(RunJob job, Dictionary<string, string> fields, string status, SandboxOutput output)
+        {
+            if (status != RunStatuses.Succeeded || output.EventsJson is null) return EventsCheck.None;
+
+            var envelope = fields.TryGetValue("envelope", out var queued) ? queued : "{}";
+            var check = SandboxOutputParser.ValidateEvents(
+                output.EventsJson, ExecutionEnvelope.AllowedEventTypes(envelope), $"{job.RunId}-{job.Attempt}-");
+            if (check.Rejected is not null)
+            {
+                _logger.LogWarning(
+                    "Run {RunId} sent events that were dropped ({Bytes} bytes on the line): {Reason}",
+                    job.RunId, output.EventsJson.Length, check.Rejected);
+            }
+            return check;
+        }
+
+        /// <summary>
         /// Persists the outcome and publishes it. The result and logs are written to Redis
         /// <b>before</b> the stream entry, so a crash between the two replays the run rather
         /// than losing it.
@@ -1216,11 +1245,13 @@ namespace Blocks.FunctionRunner.Runs
             string status, string? errorCode, string? errorMessage,
             int? exitCode, long durationMs, long? peakMemory, long? cpuUsageMs,
             string? resultJson, List<string>? logs, bool truncated,
-            long? startupMs = null, long? executionMs = null, long? cpuWindowMs = null, WarmReport? warm = null, HandoverTimings? timings = null)
+            long? startupMs = null, long? executionMs = null, long? cpuWindowMs = null, WarmReport? warm = null, HandoverTimings? timings = null,
+            EventsCheck? events = null)
         {
             var completedAt = DateTimeOffset.UtcNow;
             string? resultKey = null;
             string? logsKey = null;
+            string? eventsKey = null;
 
             // The result, the logs and the status are written together — sent back to back on the
             // one connection, so Redis applies them in this order, and waited for as one round
@@ -1232,6 +1263,14 @@ namespace Blocks.FunctionRunner.Runs
             {
                 resultKey = RedisKeys.Result(job.RunId);
                 writes.Add(_db.StringSetAsync(resultKey, resultJson, RedisKeys.ResultTtl));
+            }
+
+            // The run's events, already checked, as one array. Same TTL as the result; written before
+            // the stream entry like everything else the entry points at.
+            if (events?.Json is not null)
+            {
+                eventsKey = RedisKeys.Events(job.RunId);
+                writes.Add(_db.StringSetAsync(eventsKey, events.Json, RedisKeys.ResultTtl));
             }
 
             if (logs is { Count: > 0 })
@@ -1276,6 +1315,22 @@ namespace Blocks.FunctionRunner.Runs
                 new("attempt", job.Attempt.ToString(CultureInfo.InvariantCulture)),
                 new("protocol", RedisKeys.ProtocolVersion.ToString(CultureInfo.InvariantCulture)),
             };
+
+            // The events fields are appended only when there is something to say, so a run without
+            // events writes exactly the entry it always did.
+            if (eventsKey is not null)
+            {
+                entry =
+                [
+                    .. entry,
+                    new(RedisKeys.ResultEventsKeyField, eventsKey),
+                    new(RedisKeys.ResultEventCountField, events!.Count.ToString(CultureInfo.InvariantCulture)),
+                ];
+            }
+            else if (events?.Rejected is { } rejected)
+            {
+                entry = [.. entry, new(RedisKeys.ResultEventsRejectedField, Truncate(rejected, 512) ?? string.Empty)];
+            }
 
             // A warm run's three extra fields (sandbox/REUSE.md), appended after everything above
             // so the existing fields stay exactly as they were. A single run carries none of them,

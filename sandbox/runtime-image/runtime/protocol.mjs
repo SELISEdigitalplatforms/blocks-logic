@@ -39,6 +39,11 @@ export const LIMITS = _freeze({
   // the result line this stays inside the runner's per-call output ceiling (2 × logs + result).
   STREAM_BYTES: 3 * 1024 * 1024,
   STREAM_KEEP_CHARS: 256 * 1024, // the start of the streamed text, kept as the run's result
+  // Function events (ctx.events.add). Their own budget: they are not part of RESULT_BYTES. The
+  // runner and the Worker check the same numbers again.
+  EVENTS_MAX: 50,                    // events per call
+  EVENT_BYTES: 64 * 1024,            // one serialized payload
+  EVENTS_TOTAL_BYTES: 512 * 1024,    // all payloads of one call
 });
 
 export const EXIT = _freeze({
@@ -213,8 +218,14 @@ export class ProtocolWriter {
     this.#sink(_stringify(this.#tag({ t: 'started', at: _now() })) + '\n');
   }
 
-  /** The single success line. Returns null on success, or an error code. */
-  result(value) {
+  /**
+   * The single success line. Returns null on success, or an error code.
+   *
+   * `events` is the call's `ctx.events` buffer (`[{ id, type, json }]`). Their payloads go through
+   * the redaction like a log line does; the `value` does not (it is the function's answer to its
+   * caller). Only `value` counts against RESULT_BYTES. The `events` key is there only when there are some.
+   */
+  result(value, events) {
     if (this.#resultWritten) return null;
 
     let payload;
@@ -229,9 +240,25 @@ export class ProtocolWriter {
     const size = _byteLength(payload, 'utf8');
     if (size > LIMITS.RESULT_BYTES) return CODE.RESULT_TOO_LARGE;
 
+    if (_isArray(events) && events.length > 0) {
+      payload = payload.slice(0, -1) + ',"events":' + _stringify(events.map((e) => this.#redactedEvent(e))) + '}';
+    }
+
     this.#resultWritten = true;
     this.#sink(payload + '\n');
     return null;
+  }
+
+  /** One event for the result line, its payload masked. */
+  #redactedEvent({ id, type, json }) {
+    const masked = this.#scrub(json);
+    try {
+      return { id, type, payload: JSON.parse(masked) };
+    } catch {
+      // A secret that is a bare number or literal, replaced inside the JSON, leaves text that no
+      // longer parses. Keep the shape (an object) and the masked text, never the secret.
+      return { id, type, payload: { _redacted: masked } };
+    }
   }
 
   /**

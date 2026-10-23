@@ -195,6 +195,22 @@ namespace Functions.DomainService.Queue
         public const string RunPhaseBuilding = "building";
         public static string Result(string runId) => $"{_prefix}function:result:{runId}";
         public static string Logs(string runId) => $"{_prefix}function:logs:{runId}";
+
+        /// <summary>
+        /// The events a succeeded run added with <c>ctx.events.add</c>: one JSON array of <c>{id, type, payload}</c>,
+        /// checked by the runner. Same TTL as <see cref="Result"/>. Mirrors <c>RedisKeys.Events</c> in the runner;
+        /// the Worker reads and sends them in a later phase.
+        /// </summary>
+        public static string Events(string runId) => $"{_prefix}function:events:{runId}";
+
+        /// <summary>
+        /// Results-stream fields for the events (mirror <c>RedisKeys.ResultEventsKeyField</c> and its two siblings
+        /// in the runner): the key, how many, and — when the runner dropped them all — <c>EVENTS_REJECTED: &lt;reason&gt;</c>.
+        /// Absent on a run without events, so an entry from an older runner reads as "none".
+        /// </summary>
+        public const string ResultEventsKeyField = "eventsKey";
+        public const string ResultEventCountField = "eventCount";
+        public const string ResultEventsRejectedField = "eventsRejected";
         public static string Lease(string runId) => $"{_prefix}function:lease:{runId}";
         public static string Cancel(string runId) => $"{_prefix}function:cancel:{runId}";
 

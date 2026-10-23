@@ -117,6 +117,10 @@ namespace XUnitTest.Functions
             FunctionQueueKeys.Run("r1").Should().Be(RunnerKeys.Run("r1"));
             FunctionQueueKeys.Result("r1").Should().Be(RunnerKeys.Result("r1"));
             FunctionQueueKeys.Logs("r1").Should().Be(RunnerKeys.Logs("r1"));
+            FunctionQueueKeys.Events("r1").Should().Be(RunnerKeys.Events("r1"));
+            FunctionQueueKeys.ResultEventsKeyField.Should().Be(RunnerKeys.ResultEventsKeyField);
+            FunctionQueueKeys.ResultEventCountField.Should().Be(RunnerKeys.ResultEventCountField);
+            FunctionQueueKeys.ResultEventsRejectedField.Should().Be(RunnerKeys.ResultEventsRejectedField);
             FunctionQueueKeys.Lease("r1").Should().Be(RunnerKeys.Lease("r1"));
             FunctionQueueKeys.Cancel("r1").Should().Be(RunnerKeys.Cancel("r1"));
             FunctionQueueKeys.SyncChannel("r1").Should().Be(RunnerKeys.SyncChannel("r1"));

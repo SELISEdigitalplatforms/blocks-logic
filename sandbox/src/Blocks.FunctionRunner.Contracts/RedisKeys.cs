@@ -213,6 +213,22 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>The serialized result of a run. TTL 24 h.</summary>
         public static string Result(string runId) => $"{_prefix}function:result:{runId}";
 
+        /// <summary>
+        /// The events a succeeded run added with <c>ctx.events.add</c>: one JSON array of
+        /// <c>{id, type, payload}</c>, already validated by the runner. TTL = <see cref="ResultTtl"/>.
+        /// Mirrors <c>FunctionQueueKeys.Events</c> in blocks-logic.
+        /// </summary>
+        public static string Events(string runId) => $"{_prefix}function:events:{runId}";
+
+        /// <summary>Results-stream fields for the events (mirrored in <c>FunctionQueueKeys</c>): key, count, and why they were dropped.</summary>
+        public const string ResultEventsKeyField = "eventsKey";
+
+        /// <inheritdoc cref="ResultEventsKeyField" />
+        public const string ResultEventCountField = "eventCount";
+
+        /// <inheritdoc cref="ResultEventsKeyField" />
+        public const string ResultEventsRejectedField = "eventsRejected";
+
         /// <summary>NDJSON log lines for a run, as a list. TTL 24 h.</summary>
         public static string Logs(string runId) => $"{_prefix}function:logs:{runId}";
 

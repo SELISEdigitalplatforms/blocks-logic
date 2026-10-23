@@ -258,6 +258,12 @@ namespace Functions.DomainService.Consumers
             {
                 return ResultOutcome.Rejected($"logsKey '{logsKey}' does not belong to run {runId}");
             }
+            // The run's events (function events). Only checked here: reading and sending them is a later phase.
+            var eventsKey = entry.Get(FunctionQueueKeys.ResultEventsKeyField);
+            if (!string.IsNullOrEmpty(eventsKey) && eventsKey != FunctionQueueKeys.Events(runId))
+            {
+                return ResultOutcome.Rejected($"eventsKey '{eventsKey}' does not belong to run {runId}");
+            }
 
             // Where this result's time goes, logged once it is published (StepTimer). "queued" is
             // how long the entry sat on the stream before this Worker picked it up.

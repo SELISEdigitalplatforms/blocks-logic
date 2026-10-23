@@ -22,7 +22,7 @@ those files.
 | Path | Holds |
 |---|---|
 | `provision/` | host setup, one numbered script per concern, idempotent |
-| `runtime-image/` | the Node 24 image and the trusted runtime (`bootstrap.mjs`, `envelope.mjs`, `protocol.mjs`) |
+| `runtime-image/` | the Node 24 image and the trusted runtime (`bootstrap.mjs`, `envelope.mjs`, `protocol.mjs`, `events.mjs`, `trace.mjs`) |
 | `src/` | `Blocks.FunctionRunner` (Genesis worker), `.Contracts` (the protocol as code), `.Cli` (`fnctl`), `.Tests` |
 | `deploy/` | the systemd unit (installed by `make install`) and an env-file reference |
 

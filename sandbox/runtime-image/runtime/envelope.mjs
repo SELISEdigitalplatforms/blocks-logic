@@ -14,6 +14,8 @@ export class EnvelopeError extends Error {
   constructor(message) { super(message); this.name = 'EnvelopeError'; }
 }
 
+const TRACEPARENT_SHAPE = /^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/;
+
 const fail = (m) => { throw new EnvelopeError(m); };
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !_isArray(v);
@@ -47,6 +49,27 @@ function envMap(value) {
     else fail(`env.${k} must be a string, number, boolean or null`);
   }
   return _freeze(out);
+}
+
+/**
+ * `events.allowed`: the event types this function may add (ctx.events). Absent → none.
+ */
+function parseEvents(ev) {
+  if (ev !== undefined && ev !== null && !isPlainObject(ev)) fail('envelope.events must be an object');
+  return _freeze({ allowed: stringArray(ev?.allowed, 'events.allowed') });
+}
+
+/**
+ * `trace`: set by the runner only — the run span's traceparent and the hosts that get it on fetch().
+ * A traceparent that is not W3C-shaped is ignored rather than failing the run.
+ */
+function parseTrace(tr) {
+  if (tr !== undefined && tr !== null && !isPlainObject(tr)) fail('envelope.trace must be an object');
+  const traceparent = stringOrNull(tr?.traceparent, 'trace.traceparent');
+  return _freeze({
+    traceparent: traceparent !== null && TRACEPARENT_SHAPE.test(traceparent) ? traceparent : null,
+    hosts: _freeze(stringArray(tr?.hosts, 'trace.hosts').map((h) => h.trim().toLowerCase()).filter((h) => h.length > 0)),
+  });
 }
 
 /** Parses and validates the envelope, returning the frozen pieces the bootstrap needs. */
@@ -155,8 +178,13 @@ export function parseEnvelope(raw) {
   const maskedEnv = stringArray(doc.maskedEnv, 'maskedEnv');
   const extraMasked = stringArray(doc.maskedValues, 'maskedValues');
 
+  const events = parseEvents(doc.events);
+  const trace = parseTrace(doc.trace);
+
   return _freeze({
     run: frozenRun,
+    events,
+    trace,
     context: ctxContext,
     blocks,
     env,

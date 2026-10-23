@@ -334,7 +334,7 @@ namespace Blocks.FunctionRunner.Sandbox
             // Twice the log ceiling plus the result ceiling: enough for a legitimate run, far
             // short of what a flooding sandbox would like to send. Enforced on bytes, and
             // decoded statefully so a character split across two reads survives intact.
-            const long ceiling = (2 * Ceilings.LogBytes) + Ceilings.ResultBytes;
+            const long ceiling = (2 * Ceilings.LogBytes) + Ceilings.ResultBytes + Ceilings.EventsLineBytes;
 
             return CappedOutputReader.ReadAsync(stream, ceiling, token, onText);
         }

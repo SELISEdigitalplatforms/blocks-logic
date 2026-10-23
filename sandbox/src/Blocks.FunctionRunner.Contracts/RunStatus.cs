@@ -59,6 +59,13 @@ namespace Blocks.FunctionRunner.Contracts
     /// <summary>Error codes from <c>plan/PROTOCOL.md</c>, as sent on the wire.</summary>
     public static class ErrorCodes
     {
+        /// <summary>
+        /// Prefix of <c>RunResultMessage.EventsRejected</c>: the run's events were dropped because the
+        /// list broke a rule (<c>EVENTS_REJECTED: &lt;reason&gt;</c>). Not an error code: the run's
+        /// result and status stand.
+        /// </summary>
+        public const string EventsRejected = "EVENTS_REJECTED";
+
         /// <summary>The cgroup memory ceiling killed the sandbox.</summary>
         public const string MemoryLimit = "MEMORY_LIMIT";
 

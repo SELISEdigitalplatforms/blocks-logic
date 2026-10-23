@@ -37,6 +37,8 @@ import { dirname } from 'node:path';
 import { getCallSites } from 'node:util';
 import { ProtocolWriter, CODE, EXIT, isStream, pumpStream } from './protocol.mjs';
 import { parseEnvelope, ACCESS_TOKEN_REMOVED } from './envelope.mjs';
+import { createEventBuffer } from './events.mjs';
+import { withTraceparent } from './trace.mjs';
 
 // Captured before any tenant code is imported (see protocol.mjs): a function that later replaces
 // these cannot change what the runtime does with them.
@@ -217,6 +219,8 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
   }
 
   if (_fetch) {
+    // The trace is the one of the call the code belongs to (its async context), not of whichever call is current.
+    const tracedFetch = withTraceparent(_fetch, () => als.getStore()?.trace ?? null);
     const trackedFetch = function fetch(...args) {
       const tok = als.getStore();
       if (tok === undefined) return _fetch(...args);
@@ -226,7 +230,7 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
         if (n <= 0) inFlightFetch.delete(tok); else inFlightFetch.set(tok, n);
       };
       let p;
-      try { p = _fetch(...args); } catch (err) { done(); throw err; }
+      try { p = tracedFetch(...args); } catch (err) { done(); throw err; }
       p.then(done, done);
       return p;
     };
@@ -388,7 +392,7 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
   /** Runs one call to its `idle` line. False when the sandbox must not serve another. */
   async function serve(envelope) {
     const id = envelope.run.id;
-    const tok = _freeze({ id });
+    const tok = _freeze({ id, trace: envelope.trace });
     for (const v of envelope.maskedValues) allMasked.add(v);
     armRedaction();
     const writer = new ProtocolWriter(_stdoutWrite, { call: id });
@@ -397,6 +401,7 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
     // unpauses this sandbox for the next call must still make that next call dirty.
     const waits = [];
     let open = true;
+    const outbox = createEventBuffer({ runId: id, attempt: envelope.run.attempt, allowed: envelope.events.allowed });
     current = { tok, id, writer, answered: false };
 
     // The caller's token is fetched only when the function asks for it: most calls never do, and
@@ -443,6 +448,7 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
       env: envelope.env,
       run: envelope.run,
       log,
+      events: outbox.events,
       /** Finish `promise` after the answer is sent; the sandbox is not reused until it settles. */
       waitUntil(promise) {
         if (!open) throw new Error('ctx.waitUntil was called after its call ended');
@@ -485,7 +491,9 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
         value = deadline ? await _race([pump, deadline]) : await pump;
       }
       measureCpu();
-      const problem = writer.result(value);
+      // The list is closed with the answer: ctx.events.add, also from ctx.waitUntil work, now throws.
+      outbox.close();
+      const problem = writer.result(value, outbox.take());
       if (problem === CODE.RESULT_TOO_LARGE) {
         writer.failure(CODE.RESULT_TOO_LARGE, 'the result exceeds the 5242880 byte ceiling');
       } else if (problem === CODE.RESULT_NOT_SERIALIZABLE) {
@@ -494,6 +502,7 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
       }
     } catch (err) {
       measureCpu();
+      outbox.close(); // a failed call sends nothing
       const d = describe(err);
       writer.failure(err?.__timeout ? CODE.TIMED_OUT : (err?.__code ?? CODE.USER_RUNTIME_ERROR), d.message,
         err?.__timeout || err?.__code ? undefined : d.stack);

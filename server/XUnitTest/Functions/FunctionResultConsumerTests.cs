@@ -443,6 +443,7 @@ namespace XUnitTest.Functions
         [InlineData("resultKey", "function:result:someone-else")]
         [InlineData("resultKey", "blocks-secret-logic")]
         [InlineData("logsKey", "function:logs:someone-else")]
+        [InlineData("eventsKey", "function:events:someone-else")]
         public async Task Keys_that_are_not_the_runs_own_are_never_read(string field, string key)
         {
             var outcome = await Consumer().ProcessAsync(Entry((field, key)), CancellationToken.None);
@@ -451,6 +452,16 @@ namespace XUnitTest.Functions
             _redis.Fake.Calls("StringGetAsync").Should().BeEmpty();
             _redis.Fake.Calls("ListRangeAsync").Should().BeEmpty();
             VerifyNothingWritten();
+        }
+
+        [Fact]
+        public async Task The_events_fields_of_a_run_that_has_them_do_not_break_the_result()
+        {
+            var outcome = await Consumer().ProcessAsync(Entry(
+                (FunctionQueueKeys.ResultEventsKeyField, FunctionQueueKeys.Events(RunId)),
+                (FunctionQueueKeys.ResultEventCountField, "2")), CancellationToken.None);
+
+            outcome.Disposition.Should().NotBe(ResultDisposition.Rejected);
         }
 
         [Theory]
