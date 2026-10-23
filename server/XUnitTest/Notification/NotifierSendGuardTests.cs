@@ -9,10 +9,11 @@ namespace XUnitTest.Notification
 {
     /// <summary>
     /// Unit tests for <see cref="NotifierSendGuard"/>. A call is valid when its <c>Secret</c> header equals the
-    /// hash of the request tenant id with that tenant's salt. Report lets an invalid call through and logs it,
-    /// Enforce refuses it, Off does not check; the secret itself is never logged.
+    /// hash of the request tenant id with that tenant's salt, OR its token has the send permission. Enforce (the
+    /// default) refuses any other call, Report lets it through and logs it, Off does not check; the secret itself
+    /// is never logged.
     /// </summary>
-    public class NotifierSendGuardTests : IDisposable
+    public sealed class NotifierSendGuardTests : IDisposable
     {
         private const string TenantId = "tenant-a";
         private const string Salt = "salt-a";
@@ -57,97 +58,169 @@ namespace XUnitTest.Notification
             return new NotifierSendGuard(configuration, _tenants.Object, _crypto.Object, _logger);
         }
 
+        private int _tokenChecks;
+
+        private Func<Task<NotifierCallerToken>> Token(NotifierCallerToken token) => () =>
+        {
+            _tokenChecks++;
+            return Task.FromResult(token);
+        };
+
+        private static Task<bool> Allowed(NotifierSendGuard sut, string? secret) =>
+            sut.IsAllowedAsync(secret, () => Task.FromResult(NotifierCallerToken.None), SendAction);
+
         [Theory]
         [InlineData("Off")]
         [InlineData("Report")]
         [InlineData("Enforce")]
-        public void IsAllowed_AcceptsTheHashOfTheTenantAndItsSalt(string mode)
+        public async Task IsAllowed_AcceptsTheHashOfTheTenantAndItsSalt(string mode)
         {
-            Build(mode).IsAllowed(GoodSecret, SendAction).Should().BeTrue();
+            (await Build(mode).IsAllowedAsync(GoodSecret, Token(NotifierCallerToken.None), SendAction)).Should().BeTrue();
 
             _logger.Lines.Should().BeEmpty();
         }
 
         [Fact]
-        public void IsAllowed_DoesNotCheckAnythingWhenOff()
+        public async Task IsAllowed_RightSecretNeedsNoTokenCheck()
+        {
+            (await Build(EnforceMode).IsAllowedAsync(GoodSecret, Token(NotifierCallerToken.Invalid), SendAction))
+                .Should().BeTrue();
+
+            _tokenChecks.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task IsAllowed_DoesNotCheckAnythingWhenOff()
         {
             TestBlocksContext.Clear();
 
-            Build("Off").IsAllowed(null, SendAction).Should().BeTrue();
+            (await Build("Off").IsAllowedAsync(null, Token(NotifierCallerToken.Invalid), SendAction)).Should().BeTrue();
 
             _tenants.Verify(t => t.GetTenantByID(It.IsAny<string>()), Times.Never);
+            _tokenChecks.Should().Be(0);
             _logger.Lines.Should().BeEmpty();
         }
 
         [Theory]
         [InlineData(null)]
         [InlineData("")]
-        public void IsAllowed_ReportLetsAMissingSecretThroughAndLogsIt(string? secret)
+        public async Task IsAllowed_ReportLetsAMissingSecretThroughAndLogsIt(string? secret)
         {
-            Build(ReportMode).IsAllowed(secret, SendAction).Should().BeTrue();
+            (await Allowed(Build(ReportMode), secret)).Should().BeTrue();
 
             _logger.All.Should().Contain("missing").And.Contain(TenantId);
         }
 
         [Fact]
-        public void IsAllowed_EnforceRefusesAMissingSecret()
+        public async Task IsAllowed_EnforceRefusesNoSecretAndNoToken()
         {
-            Build(EnforceMode).IsAllowed(null, SendAction).Should().BeFalse();
+            (await Build(EnforceMode).IsAllowedAsync(null, Token(NotifierCallerToken.None), SendAction)).Should().BeFalse();
+
+            _tokenChecks.Should().Be(1);
+            _logger.All.Should().Contain("missing").And.Contain(nameof(NotifierCallerToken.None));
         }
 
         [Fact]
-        public void IsAllowed_EnforceRefusesACallWithoutATenant()
+        public async Task IsAllowed_EnforceRefusesAValidTokenWithoutThePermission()
+        {
+            (await Build(EnforceMode).IsAllowedAsync(null, Token(NotifierCallerToken.NoPermission), SendAction))
+                .Should().BeFalse();
+
+            _logger.All.Should().Contain(nameof(NotifierCallerToken.NoPermission));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData(BadSecret)]
+        public async Task IsAllowed_EnforceAllowsAValidTokenWithThePermission(string? secret)
+        {
+            (await Build(EnforceMode).IsAllowedAsync(secret, Token(NotifierCallerToken.Permitted), SendAction))
+                .Should().BeTrue();
+
+            _logger.Lines.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task IsAllowed_EnforceAllowsAPermittedTokenWithoutATenantSecret()
         {
             TestBlocksContext.Clear();
 
-            Build(EnforceMode).IsAllowed(GoodSecret, SendAction).Should().BeFalse();
+            (await Build(EnforceMode).IsAllowedAsync(null, Token(NotifierCallerToken.Permitted), SendAction))
+                .Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task IsAllowed_EnforceRefusesAnInvalidOrExpiredToken()
+        {
+            (await Build(EnforceMode).IsAllowedAsync(null, Token(NotifierCallerToken.Invalid), SendAction))
+                .Should().BeFalse();
+
+            _logger.All.Should().Contain(nameof(NotifierCallerToken.Invalid));
+        }
+
+        [Fact]
+        public async Task IsAllowed_ReportLetsAnInvalidTokenThroughAndLogsIt()
+        {
+            (await Build(ReportMode).IsAllowedAsync(BadSecret, Token(NotifierCallerToken.Invalid), SendAction))
+                .Should().BeTrue();
+
+            _logger.Lines.Should().ContainSingle();
+            _logger.All.Should().Contain("mismatch").And.Contain(nameof(NotifierCallerToken.Invalid));
+        }
+
+        [Fact]
+        public async Task IsAllowed_EnforceRefusesACallWithoutATenant()
+        {
+            TestBlocksContext.Clear();
+
+            (await Allowed(Build(EnforceMode), GoodSecret)).Should().BeFalse();
 
             _logger.All.Should().Contain("no tenant");
         }
 
         [Fact]
-        public void IsAllowed_EnforceRefusesAnEmptyTenantId()
+        public async Task IsAllowed_EnforceRefusesAnEmptyTenantId()
         {
             TestBlocksContext.Set("");
 
-            Build(EnforceMode).IsAllowed(GoodSecret, SendAction).Should().BeFalse();
+            (await Allowed(Build(EnforceMode), GoodSecret)).Should().BeFalse();
 
             _logger.All.Should().Contain("no tenant");
         }
 
         [Fact]
-        public void IsAllowed_EnforceRefusesAnUnknownTenant()
+        public async Task IsAllowed_EnforceRefusesAnUnknownTenant()
         {
             _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns((Tenant?)null);
 
-            Build(EnforceMode).IsAllowed(GoodSecret, SendAction).Should().BeFalse();
+            (await Allowed(Build(EnforceMode), GoodSecret)).Should().BeFalse();
 
             _logger.All.Should().Contain("unknown tenant");
         }
 
         [Fact]
-        public void IsAllowed_EnforceRefusesATenantWithoutASalt()
+        public async Task IsAllowed_EnforceRefusesATenantWithoutASalt()
         {
             _tenants.Setup(t => t.GetTenantByID(TenantId)).Returns(NewTenant(""));
 
-            Build(EnforceMode).IsAllowed(GoodSecret, SendAction).Should().BeFalse();
+            (await Allowed(Build(EnforceMode), GoodSecret)).Should().BeFalse();
 
             _logger.All.Should().Contain("unknown tenant");
             _crypto.Verify(c => c.ConstantTimeEquals(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
-        public void IsAllowed_EnforceRefusesAWrongSecret()
+        public async Task IsAllowed_EnforceRefusesAWrongSecret()
         {
-            Build(EnforceMode).IsAllowed(BadSecret, SendAction).Should().BeFalse();
+            (await Allowed(Build(EnforceMode), BadSecret)).Should().BeFalse();
 
             _logger.All.Should().Contain("mismatch");
         }
 
         [Fact]
-        public void IsAllowed_ReportLetsAWrongSecretThroughAndLogsTheActionAndTenant()
+        public async Task IsAllowed_ReportLetsAWrongSecretThroughAndLogsTheActionAndTenant()
         {
-            Build(ReportMode).IsAllowed(BadSecret, SendAction).Should().BeTrue();
+            (await Allowed(Build(ReportMode), BadSecret)).Should().BeTrue();
 
             _logger.All.Should().Contain(SendAction).And.Contain(TenantId).And.Contain(ReportMode);
         }
@@ -155,13 +228,21 @@ namespace XUnitTest.Notification
         [Theory]
         [InlineData("Report")]
         [InlineData("Enforce")]
-        public void IsAllowed_NeverLogsTheSecretOrItsExpectedHash(string mode)
+        public async Task IsAllowed_NeverLogsTheSecretOrItsExpectedHash(string mode)
         {
-            Build(mode).IsAllowed(BadSecret, SendAction);
-            Build(mode).IsAllowed(null, SendAction);
+            await Allowed(Build(mode), BadSecret);
+            await Allowed(Build(mode), null);
 
             _logger.Lines.Should().NotBeEmpty();
             _logger.All.Should().NotContain(BadSecret).And.NotContain(GoodSecret);
+        }
+
+        [Fact]
+        public async Task IsAllowed_RejectsANullTokenCheck()
+        {
+            var act = () => Build(EnforceMode).IsAllowedAsync(null, null!, SendAction);
+
+            await act.Should().ThrowAsync<ArgumentNullException>();
         }
 
         [Theory]
@@ -169,19 +250,22 @@ namespace XUnitTest.Notification
         [InlineData("")]
         [InlineData("Strict")]
         [InlineData("7")]
-        public void IsAllowed_TreatsAMissingOrUnknownModeAsReport(string? mode)
+        public async Task IsAllowed_TreatsAMissingOrUnknownModeAsEnforce(string? mode)
         {
             var sut = Build(mode);
 
-            sut.Mode.Should().Be(NotifierSendAuthMode.Report);
-            sut.IsAllowed(BadSecret, SendAction).Should().BeTrue();
+            sut.Mode.Should().Be(NotifierSendAuthMode.Enforce);
+            (await Allowed(sut, BadSecret)).Should().BeFalse();
             _logger.Lines.Should().ContainSingle();
         }
 
-        [Fact]
-        public void Mode_IgnoresTheCaseOfTheConfiguredValue()
+        [Theory]
+        [InlineData("off", NotifierSendAuthMode.Off)]
+        [InlineData("REPORT", NotifierSendAuthMode.Report)]
+        [InlineData("enforce", NotifierSendAuthMode.Enforce)]
+        public void Mode_IgnoresTheCaseOfTheConfiguredValue(string value, NotifierSendAuthMode expected)
         {
-            Build("enforce").Mode.Should().Be(NotifierSendAuthMode.Enforce);
+            Build(value).Mode.Should().Be(expected);
         }
     }
 }

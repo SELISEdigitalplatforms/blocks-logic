@@ -93,6 +93,7 @@ services.AddFunctionsServices(builder.Configuration);
 services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
 services.AddStorageDomainServices();
 services.AddBlocksSecrets();
+services.AddNotifierSendPolicy();
 services.AddLogicDataAccess();
 services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);

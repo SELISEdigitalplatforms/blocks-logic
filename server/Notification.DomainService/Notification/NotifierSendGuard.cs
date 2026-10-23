@@ -4,28 +4,46 @@ using Microsoft.Extensions.Logging;
 
 namespace DomainService.Notification
 {
-    /// <summary>How the send actions treat a call without a valid sender secret.</summary>
+    /// <summary>How the send actions treat a call that has neither a valid sender secret nor the send permission.</summary>
     public enum NotifierSendAuthMode
     {
         /// <summary>No check.</summary>
         Off,
         /// <summary>The call goes through; it is logged.</summary>
         Report,
-        /// <summary>The call is refused.</summary>
+        /// <summary>The call is refused. The default.</summary>
         Enforce,
+    }
+
+    /// <summary>What the caller's bearer token says about the send permission.</summary>
+    public enum NotifierCallerToken
+    {
+        /// <summary>No token was sent.</summary>
+        None,
+        /// <summary>A token was sent but it is not valid (bad signature, expired, other tenant ...).</summary>
+        Invalid,
+        /// <summary>A valid token without the send permission.</summary>
+        NoPermission,
+        /// <summary>A valid token with the send permission.</summary>
+        Permitted,
     }
 
     /// <summary>Decides whether a call to a notifier send action may go through.</summary>
     public interface INotifierSendGuard
     {
-        /// <summary>True when the call may go through. <paramref name="secret"/> is the raw <c>Secret</c> header.</summary>
-        bool IsAllowed(string? secret, string action);
+        /// <summary>
+        /// True when the call may go through: a valid <c>Secret</c> header OR a token with the send permission.
+        /// <paramref name="secret"/> is the raw <c>Secret</c> header; <paramref name="checkToken"/> is only called
+        /// when the secret is not valid, so a sender with the secret costs no permission lookup.
+        /// </summary>
+        Task<bool> IsAllowedAsync(string? secret, Func<Task<NotifierCallerToken>> checkToken, string action);
     }
 
     /// <summary>
-    /// Checks the <c>Secret</c> header the Blocks services already send: the hash of the request tenant id
-    /// with that tenant's salt. The mode comes from <c>Notifier:SendAuthMode</c> on every call, so it can be
-    /// switched without a restart; missing or unknown means <see cref="NotifierSendAuthMode.Report"/>.
+    /// A call may go through when EITHER its <c>Secret</c> header is the hash the Blocks services already send (the
+    /// request tenant id with that tenant's salt) OR its bearer token has the send permission. The mode comes from
+    /// <c>Notifier:SendAuthMode</c> on every call, so it can be switched without a restart; missing or unknown means
+    /// <see cref="NotifierSendAuthMode.Enforce"/>. Off and Report are explicit opt-outs.
     /// </summary>
     public sealed class NotifierSendGuard : INotifierSendGuard
     {
@@ -49,9 +67,15 @@ namespace DomainService.Notification
             Enum.TryParse<NotifierSendAuthMode>(_configuration[ModeConfigKey], ignoreCase: true, out var mode)
                 && Enum.IsDefined(mode)
                 ? mode
-                : NotifierSendAuthMode.Report;
+                : NotifierSendAuthMode.Enforce;
 
-        public bool IsAllowed(string? secret, string action)
+        public Task<bool> IsAllowedAsync(string? secret, Func<Task<NotifierCallerToken>> checkToken, string action)
+        {
+            ArgumentNullException.ThrowIfNull(checkToken);
+            return IsAllowedCoreAsync(secret, checkToken, action);
+        }
+
+        private async Task<bool> IsAllowedCoreAsync(string? secret, Func<Task<NotifierCallerToken>> checkToken, string action)
         {
             var mode = Mode;
             if (mode == NotifierSendAuthMode.Off)
@@ -62,10 +86,14 @@ namespace DomainService.Notification
             if (failure is null)
                 return true;
 
-            // Never the header value: only what is needed to find the caller.
+            var token = await checkToken();
+            if (token == NotifierCallerToken.Permitted)
+                return true;
+
+            // Never the header value or the token: only what is needed to find the caller.
             _logger.LogWarning(
-                "Notifier {Action} called without a valid sender secret ({Failure}) for tenant {TenantId}; mode {Mode}",
-                action, failure, tenantId, mode);
+                "Notifier {Action} called without a valid sender secret ({Failure}) or send permission (token {Token}) for tenant {TenantId}; mode {Mode}",
+                action, failure, token, tenantId, mode);
             return mode != NotifierSendAuthMode.Enforce;
         }
 

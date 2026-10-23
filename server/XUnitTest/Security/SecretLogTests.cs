@@ -76,8 +76,10 @@ namespace XUnitTest.Security
             var service = new Mock<INotificationService>();
             service.Setup(s => s.NotifyAsync(It.IsAny<NotifyRequest>())).ReturnsAsync(new BaseResponse { IsSuccess = true });
             var guard = new Mock<INotifierSendGuard>();
-            guard.Setup(g => g.IsAllowed(It.IsAny<string?>(), It.IsAny<string>())).Returns(true);
-            var controller = new NotifierController(service.Object, guard.Object, logger)
+            guard.Setup(g => g.IsAllowedAsync(It.IsAny<string?>(), It.IsAny<Func<Task<NotifierCallerToken>>>(), It.IsAny<string>()))
+                 .ReturnsAsync(true);
+            var controller = new NotifierController(service.Object, guard.Object,
+                Mock.Of<BlocksTemplate.Api.Security.INotifierSendPermission>(), logger)
             {
                 ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
                 {
