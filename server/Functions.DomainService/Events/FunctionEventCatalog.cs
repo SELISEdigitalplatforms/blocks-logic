@@ -325,19 +325,31 @@ namespace Functions.DomainService.Events
     public static class FunctionEventDepth
     {
         /// <summary>
-        /// A run started by an event counts as one hop until the event trigger stores the starting event's depth on the
-        /// run (then: that depth plus one, here).
+        /// The most events deep a chain may go: the event consumer refuses an event whose depth is over this
+        /// (<c>DEPTH_LIMIT</c>), so A sends B sends A … stops.
+        /// </summary>
+        public const int MaxDepth = 5;
+
+        /// <summary>
+        /// What a run started by an event counts as when its starting event's depth is not known (the stored value
+        /// expired or Redis was down): one hop.
         /// </summary>
         internal const int EventStartedRunDepth = 1;
 
+        /// <summary>Depth of the events a run sends when its stored depth is not known: see the overload.</summary>
+        public static int ForRun(FunctionRunEntity run) => ForRun(run, null);
+
         /// <summary>
-        /// Depth of the events a run sends: 0 for a run that no event started, <see cref="EventStartedRunDepth"/> for one
-        /// that an event did (<see cref="InvokedByType.Event"/>, from the event trigger).
+        /// Depth of the events a run sends: 0 for a run that no event started; for one an event started
+        /// (<see cref="InvokedByType.Event"/>), the depth of that starting event plus one
+        /// (<paramref name="startingEventDepth"/>, stored when the event trigger created the run), or
+        /// <see cref="EventStartedRunDepth"/> when it is not known.
         /// </summary>
-        public static int ForRun(FunctionRunEntity run)
+        public static int ForRun(FunctionRunEntity run, int? startingEventDepth)
         {
             ArgumentNullException.ThrowIfNull(run);
-            return run.InvokedBy == InvokedByType.Event ? EventStartedRunDepth : 0;
+            if (run.InvokedBy != InvokedByType.Event) return 0;
+            return startingEventDepth is { } depth and >= 0 ? depth + 1 : EventStartedRunDepth;
         }
     }
 }

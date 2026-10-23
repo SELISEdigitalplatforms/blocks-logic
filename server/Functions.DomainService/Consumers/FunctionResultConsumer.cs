@@ -54,6 +54,7 @@ namespace Functions.DomainService.Consumers
         private readonly ILogger<FunctionResultConsumer> _logger;
         private readonly FunctionOwnerNotifier? _notifier;
         private readonly IFunctionRunEventsRepository? _runEvents;
+        private readonly IFunctionEventDeadLetters? _eventDeadLetters;
 
         public FunctionResultConsumer(
             ICacheClient cache,
@@ -66,9 +67,11 @@ namespace Functions.DomainService.Consumers
             ILogger<FunctionResultConsumer> logger,
             System.Diagnostics.ActivitySource? traces = null,
             IBuiltInNotificationSender? builtInNotifications = null,
-            IFunctionRunEventsRepository? runEvents = null)
+            IFunctionRunEventsRepository? runEvents = null,
+            IFunctionEventDeadLetters? eventDeadLetters = null)
         {
             _runEvents = runEvents;
+            _eventDeadLetters = eventDeadLetters;
             _traces = traces;
             _notifier = builtInNotifications is null ? null : new FunctionOwnerNotifier(functionRepository, builtInNotifications);
             ArgumentNullException.ThrowIfNull(cache);
@@ -386,6 +389,13 @@ namespace Functions.DomainService.Consumers
             if (applied && !retryPending && _notifier is not null && IsFailureWorthReporting(run.Status))
             {
                 await _notifier.RunFailedAsync(tenantId, run.FunctionId, runId);
+            }
+
+            // A run an event started failed for good: its event is dead-lettered (the retry policy has already run its
+            // course — no retry is pending). Never throws.
+            if (applied && !retryPending && _eventDeadLetters is not null && IsFailureWorthReporting(run.Status))
+            {
+                await _eventDeadLetters.RunFailedAsync(tenantId, run);
             }
 
             // After the publish, so the caller already has the answer: where this call's time went,

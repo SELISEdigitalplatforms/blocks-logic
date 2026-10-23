@@ -147,6 +147,11 @@ RUNNER__QueuePrefix=
 # RUNNER__TraceHosts__0=api.example.com — only Blocks hosts; a trace id must not go to third parties.
 # RUNNER__TraceHosts__0=
 #
+# How long a run started by a function event may wait in the event queue (functions:event-runs)
+# before the runner gives up on it: older entries are not started and their run fails as
+# EVENT_EXPIRED. Events are not real time. Default 300 (5 minutes).
+# RUNNER__EventRunMaxWaitSeconds=300
+#
 # The most sandbox slots one tenant may hold at once on this host. Unset or 0 derives it as
 # half the host's capacity, rounded up. The host budget on its own is first-come-first-served,
 # so one tenant's burst could hold every slot while every other tenant waited behind it;

@@ -48,6 +48,9 @@ namespace XUnitTest.Functions
 
             public Task<InvokeResultDto> ReplayAsync(string tenantId, FunctionRunEntity originalRun, CancellationToken cancellationToken = default)
                 => throw new NotSupportedException();
+
+            public Task<InvokeResultDto> InvokeFromEventAsync(string tenantId, string functionId, FunctionEventInvocation @event, BlocksContext? callerContext, CancellationToken cancellationToken = default)
+                => throw new NotSupportedException();
         }
 
         private static WorkflowItemExecutionEntity Item(string id, BsonDocument output) => new()

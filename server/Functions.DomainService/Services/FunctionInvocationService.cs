@@ -88,7 +88,30 @@ namespace Functions.DomainService.Services
         Task<InvokeResultDto> InvokeFromWorkflowAsync(
             string tenantId, string functionId, string? inputJson, BlocksContext? callerContext,
             int? waitTimeoutSeconds, string? workflowExecutionId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Starts a run of the function's <b>active, deployed</b> version for a function event, without waiting for it
+        /// (the event trigger: <see cref="Consumers.FunctionEventConsumer"/>). Authorized by the version's own
+        /// subscription to the event (<see cref="IFunctionAuthorizationService.AuthorizeForEvent"/>); the run's identity is
+        /// the message's context, <paramref name="callerContext"/>.
+        /// <para>
+        /// The handler's <c>input</c> is the event's data; <c>ctx.run.invokedBy</c> is <c>{ type: 'event', id: eventId,
+        /// name }</c>. The run is counted by admission (the function's rate limit), goes to the event queue, and
+        /// remembers the event's depth for the events it sends. <b>One run per event and function:</b> a redelivered
+        /// event finds the run it already started and starts no second one (the result carries that run's id).
+        /// </para>
+        /// </summary>
+        Task<InvokeResultDto> InvokeFromEventAsync(
+            string tenantId, string functionId, FunctionEventInvocation @event, BlocksContext? callerContext,
+            CancellationToken cancellationToken = default);
     }
+
+    /// <summary>One event that starts a function (<see cref="IFunctionInvocationService.InvokeFromEventAsync"/>).</summary>
+    /// <param name="EventId">The event's id: the run's <c>InvokedById</c>, and half of its idempotency key.</param>
+    /// <param name="Name">The event's name (checked against the version's subscription).</param>
+    /// <param name="DataJson">The event's data as JSON text: the handler's <c>input</c>.</param>
+    /// <param name="Depth">The event's depth (<see cref="FunctionEvent.Depth"/>).</param>
+    public sealed record FunctionEventInvocation(string EventId, string Name, string DataJson, int Depth);
 
     /// <summary>
     /// Builds the envelope, admits and authorizes the caller, and queues a run — the write
@@ -185,9 +208,11 @@ namespace Functions.DomainService.Services
             ICacheClient cache,
             IConfiguration configuration,
             ILogger<FunctionInvocationService> logger,
-            IFunctionEventSettingsRepository? eventSettings = null)
+            IFunctionEventSettingsRepository? eventSettings = null,
+            IFunctionEventRunStore? eventRuns = null)
         {
             _eventSettings = eventSettings;
+            _eventRuns = eventRuns;
             _functionRepository = functionRepository;
             _versionRepository = versionRepository;
             _runRepository = runRepository;
@@ -210,6 +235,7 @@ namespace Functions.DomainService.Services
         private readonly FunctionEventAllowedCache _allowedEvents = new();
 
         private readonly IFunctionEventSettingsRepository? _eventSettings;
+        private readonly IFunctionEventRunStore? _eventRuns;
 
         /// <summary>
         /// The event types this run may send. A deployed version's row is a snapshot that never changes, so its answer is
@@ -647,6 +673,74 @@ namespace Functions.DomainService.Services
                 waitTimeoutSeconds, cancellationToken);
         }
 
+        public async Task<InvokeResultDto> InvokeFromEventAsync(
+            string tenantId, string functionId, FunctionEventInvocation @event, BlocksContext? callerContext,
+            CancellationToken cancellationToken = default)
+        {
+            var settingsRepository = _eventSettings ?? throw new InvalidOperationException("function event settings are not available");
+            if (_eventRuns is null) throw new InvalidOperationException("the event run store is not available");
+
+            var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
+
+            if (function.Status != FunctionStatus.Live || string.IsNullOrEmpty(function.ActiveVersionId))
+            {
+                throw new FunctionValidationException($"function '{functionId}' is not deployed");
+            }
+
+            var version = await ActiveVersionAsync(tenantId, function.ActiveVersionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{functionId}' has no active version");
+
+            // The subscription of the DEPLOYED version is the authorization (never the draft's list).
+            var subscription = await settingsRepository.GetAsync(tenantId, function.ItemId, version.ItemId, cancellationToken);
+            var authResult = _authorizationService.AuthorizeForEvent(subscription, @event.Name);
+            if (!authResult.Allowed)
+            {
+                throw new FunctionAuthorizationException(authResult.Reason ?? "not authorized");
+            }
+
+            // One run per event and function. The lock only serializes two deliveries that arrive together; the run record
+            // (found by the event id) is what answers every later one, and survives a crash after the lock was taken.
+            var database = _cache.CacheDatabase();
+            var lockKey = FunctionWorkerQueueKeys.EventStartLock(@event.EventId, function.ItemId);
+            if (!await database.StringSetAsync(lockKey, "1", FunctionWorkerQueueKeys.EventStartLockTtl, When.NotExists))
+            {
+                _logger.LogInformation(
+                    "Event {EventId} is already being started for function {FunctionId}; not starting a second run",
+                    @event.EventId, function.ItemId);
+                return new InvokeResultDto { RunId = string.Empty, Status = FunctionQueueKeys.Wire.Queued };
+            }
+
+            try
+            {
+                var existing = await _runRepository.FindEventRunAsync(tenantId, function.ItemId, @event.EventId, cancellationToken);
+                if (existing is not null)
+                {
+                    _logger.LogInformation(
+                        "Event {EventId} already started run {RunId} of function {FunctionId}; not starting a second run",
+                        @event.EventId, existing.ItemId, function.ItemId);
+                    return new InvokeResultDto { RunId = existing.ItemId, Status = FunctionQueueKeys.Wire.Queued };
+                }
+
+                return await InvokeCoreAsync(
+                    tenantId, function, version, FunctionRunImage.For(version), callerContext,
+                    InvokedByType.Event, invokedById: @event.EventId, @event.DataJson, wait: false,
+                    waitTimeoutSeconds: null, cancellationToken, fromEvent: @event);
+            }
+            finally
+            {
+                try
+                {
+                    await database.KeyDeleteAsync(lockKey);
+                }
+                catch (Exception ex) when (ex is RedisException or TimeoutException)
+                {
+                    // It expires on its own.
+                    _logger.LogDebug("Could not release the start lock of event {EventId}: {Message}", @event.EventId, ex.Message);
+                }
+            }
+        }
+
         private async Task<InvokeResultDto> InvokeCoreAsync(
             string tenantId,
             FunctionEntity function,
@@ -661,7 +755,8 @@ namespace Functions.DomainService.Services
             CancellationToken cancellationToken,
             TestBuild? test = null,
             int? httpWaitSeconds = null,
-            bool finishedOnlyWithoutRetry = false)
+            bool finishedOnlyWithoutRetry = false,
+            FunctionEventInvocation? fromEvent = null)
         {
             var admission = await _admissionService.AdmitAsync(function, tenantId, inputJson, invokedBy, version, cancellationToken);
             StepTimer.Current.Value?.Mark("admission");
@@ -694,7 +789,10 @@ namespace Functions.DomainService.Services
                     ? 1
                     : Math.Max(1, (version?.Retry ?? function.Retry).Attempts),
             };
-            run.IdempotencyKey = $"{run.ItemId}-{run.Attempt}";
+            // A run an event started is keyed by the event and the function, so a redelivery of the event is the same key.
+            run.IdempotencyKey = fromEvent is null
+                ? $"{run.ItemId}-{run.Attempt}"
+                : $"{fromEvent.EventId}-{function.ItemId}";
 
             // Warm sandboxes serve every run of a deployed version, whoever calls it — HTTP, a
             // workflow step, a schedule, a replay (user, 2026-10-07: "it must not matter"). The
@@ -710,7 +808,14 @@ namespace Functions.DomainService.Services
             // keeps the reference too, so rotating a secret takes effect on the next run.
             // The events it may send come from its version's own list (the draft's for a Test), narrowed for a Public trigger.
             var allowedEvents = await AllowedEventsAsync(tenantId, function, version, cancellationToken);
-            var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson, allowedEvents);
+            var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson, allowedEvents, fromEvent?.Name);
+
+            // The event's name and depth, kept for the events this run sends and for its dead-letter entry. Before the
+            // record exists (and before any grant is written), so a Redis failure leaves nothing behind to clean up.
+            if (fromEvent is not null && _eventRuns is not null)
+            {
+                await _eventRuns.SaveAsync(run.ItemId, new FunctionEventRunInfo(fromEvent.EventId, fromEvent.Name, fromEvent.Depth));
+            }
 
             // The caller's identity for ctx.blocks.accessToken, as a delegation grant id the runner
             // redeems right before the sandbox starts — never a token. Written now, while the
@@ -981,8 +1086,10 @@ namespace Functions.DomainService.Services
                 entry.Add(new NameValueEntry(FunctionQueueKeys.RunApiTimingsField, timer.ToCompact()));
             }
 
-            await database.StreamAddAsync(FunctionQueueKeys.RunsStream, [.. entry]);
-            StreamWakeup.Publish(database, FunctionQueueKeys.RunsNudgeChannel);
+            // Runs an event started wait in their own queue: HTTP runs always go first (see the runner's RunSourceSelector).
+            var fromEvent = run.InvokedBy == InvokedByType.Event;
+            await database.StreamAddAsync(fromEvent ? FunctionQueueKeys.EventRunsStream : FunctionQueueKeys.RunsStream, [.. entry]);
+            StreamWakeup.Publish(database, fromEvent ? FunctionQueueKeys.EventRunsNudgeChannel : FunctionQueueKeys.RunsNudgeChannel);
         }
 
         /// <summary><see cref="ArtifactUrlOrNullAsync"/>, with any failure logged and read as "go by image".</summary>

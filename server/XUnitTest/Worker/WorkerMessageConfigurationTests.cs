@@ -24,8 +24,8 @@ namespace XUnitTest.Worker
             ("blocks_logic_workflow_scheduler_trigger_listener", 10, false),
             ("blocks_logic_workflow_import_listener", 5, false),
             ("blocks_email_listener", 5, false),
-            // Declared only (nothing consumes it yet), so a function event sent to it is not dropped.
-            ("blocks_logic_function_event_listener", 0, false),
+            // Consumed by the event trigger (FunctionEventConsumer); also declares the queue, so a function event sent to it is not dropped.
+            ("blocks_logic_function_event_listener", 5, false),
             ("blocks_mail_status_listener", 5, false),
             ("blocks_migration_topic1", 5, false),
             ("blcoks_logic_scheduler_job_registry_listener", 5, false),
@@ -57,10 +57,11 @@ namespace XUnitTest.Worker
                 "blocks_logic_workflow_scheduler_trigger_listener",
                 "blocks_logic_workflow_import_listener",
                 "blocks_email_listener",
+                "blocks_logic_function_event_listener",
                 "blocks_mail_status_listener",
                 Registry,
             ]);
-            azure.Queues.Should().HaveCount(24);
+            azure.Queues.Should().HaveCount(25);
             azure.Topics.Should().Equal("blocks_migration_topic1");
             azure.QueuePrefetchCount.Should().Be(40);
             azure.MaxConcurrentCalls.Should().Be(40);
@@ -82,7 +83,7 @@ namespace XUnitTest.Worker
             var worker = LogicConstants.GetWorkerMessageConfiguration(Azure).AzureServiceBusConfiguration!;
 
             worker.Queues.Should().Equal(full.Queues.Where(q => q != Registry));
-            worker.Queues.Should().HaveCount(23);
+            worker.Queues.Should().HaveCount(24);
             worker.Topics.Should().Equal(full.Topics);
             worker.QueuePrefetchCount.Should().Be(40);
             worker.MaxConcurrentCalls.Should().Be(40);

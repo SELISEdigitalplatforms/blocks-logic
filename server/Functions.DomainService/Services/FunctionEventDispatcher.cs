@@ -99,6 +99,7 @@ return count";
         private readonly int _perTenantPerMinute;
         private readonly ILogger<FunctionEventDispatcher> _logger;
         private readonly ActivitySource? _traces;
+        private readonly IFunctionEventRunStore? _eventRuns;
         private readonly string _consumerName = $"{Environment.MachineName}-{Environment.ProcessId}";
 
         public FunctionEventDispatcher(
@@ -108,8 +109,10 @@ return count";
             IFunctionEventAllowList allowList,
             IConfiguration configuration,
             ILogger<FunctionEventDispatcher> logger,
-            ActivitySource? traces = null)
+            ActivitySource? traces = null,
+            IFunctionEventRunStore? eventRuns = null)
         {
+            _eventRuns = eventRuns;
             ArgumentNullException.ThrowIfNull(cache);
             _db = cache.CacheDatabase();
             _messages = messages;
@@ -402,7 +405,7 @@ return count";
                     {
                         ConsumerName = definition.Queue,
                         Payload = FunctionEventCatalog.BuildFunctionEvent(
-                            payload, entry.Id, run.FunctionId, run.ItemId, FunctionEventDepth.ForRun(run)),
+                            payload, entry.Id, run.FunctionId, run.ItemId, await DepthOfEventsSentByAsync(run)),
                     });
                 }
             }
@@ -410,6 +413,18 @@ return count";
             {
                 BlocksContext.SetContext(previous, previous is not null);
             }
+        }
+
+        /// <summary>
+        /// The depth stamped on the events this run sends: for a run an event started, the depth stored when the run was
+        /// created plus one (<see cref="FunctionEventDepth.ForRun(FunctionRunEntity, int?)"/>); 0 for any other run.
+        /// </summary>
+        private async Task<int> DepthOfEventsSentByAsync(FunctionRunEntity run)
+        {
+            if (run.InvokedBy != InvokedByType.Event || _eventRuns is null) return FunctionEventDepth.ForRun(run);
+
+            var info = await _eventRuns.GetAsync(run.ItemId);
+            return FunctionEventDepth.ForRun(run, info?.Depth);
         }
 
         /// <summary>

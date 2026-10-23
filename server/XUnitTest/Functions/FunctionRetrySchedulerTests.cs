@@ -120,6 +120,19 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public async Task A_retry_of_a_run_an_event_started_goes_back_to_the_event_queue()
+        {
+            _runs.Setup(r => r.GetByIdAsync("t1", "run-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionRunEntity { ItemId = "run-1", Attempt = 1, Status = RunStatus.Failed, InvokedBy = InvokedByType.Event });
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            _redis.Fake.Calls("StreamAddAsync").Should().ContainSingle(a => a[0]!.ToString() == FunctionQueueKeys.EventRunsStream);
+            _redis.Fake.Calls("StreamAddAsync").Should().NotContain(a => a[0]!.ToString() == FunctionQueueKeys.RunsStream);
+            _redis.Fake.Calls("Publish").Select(c => c[0]!.ToString()).Should().ContainSingle().Which.Should().Be(FunctionQueueKeys.EventRunsNudgeChannel);
+        }
+
+        [Fact]
         public async Task A_retry_reuses_the_references_so_the_runner_resolves_them_afresh()
         {
             // The stored envelope holds references only; the retry copies it with just the

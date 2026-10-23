@@ -44,7 +44,7 @@ namespace Functions.DomainService.Services
         /// than being rewrapped by the caller as a 400 validation failure.
         /// </summary>
         /// <exception cref="FunctionRateLimitedException">A per-minute or per-day limit refused the call.</exception>
-        /// <param name="invokedBy">Only <see cref="InvokedByType.Http"/> calls are rate limited (FN-19).</param>
+        /// <param name="invokedBy">Only <see cref="InvokedByType.Http"/> calls (FN-19) and <see cref="InvokedByType.Event"/> starts are rate limited.</param>
         /// <param name="version">The deployed version being called: its trigger and limits are the live ones.</param>
         Task<AdmissionResult> AdmitAsync(
             FunctionEntity function, string tenantId, string? inputJson, InvokedByType invokedBy, FunctionVersionEntity? version,
@@ -54,7 +54,7 @@ namespace Functions.DomainService.Services
     /// <summary>
     /// Input caps, and the HTTP rate limit (FN-19, decided 2026-10-07).
     /// <para>
-    /// Only HTTP calls are counted, per function per minute (a function's id cannot be faked; a
+    /// Only HTTP calls and runs started by a function event are counted, per function per minute (a function's id cannot be faked; a
     /// caller's IP behind a proxy can). A Public function gets
     /// <c>Functions:RateLimits:PublicPerMinute</c> (600) unless its tenant set its own; a Token
     /// one has no limit unless its tenant set one. Workflow and Test calls are never counted.
@@ -135,8 +135,8 @@ namespace Functions.DomainService.Services
 
             // The switch and the per-function value must BOTH be set. Either one absent means
             // no counter is read or written — the default path costs nothing and refuses nothing.
-            // Only HTTP calls are counted: a workflow or a Test is the tenant's own traffic.
-            if (!_rateLimitsEnabled || invokedBy != InvokedByType.Http)
+            // Only HTTP calls and function events are counted: a workflow or a Test is the tenant's own traffic.
+            if (!_rateLimitsEnabled || invokedBy is not (InvokedByType.Http or InvokedByType.Event))
             {
                 return AdmissionResult.Admit();
             }

@@ -269,6 +269,28 @@ describe('bootstrap end to end', () => {
     });
   });
 
+  test('an event run: ctx.run.invokedBy carries type, id and the event name, frozen', async () => {
+    const envelope = {
+      ...BASE_ENVELOPE,
+      run: { ...BASE_ENVELOPE.run, invokedBy: { type: 'event', id: 'run-9-1-1', name: 'order.created' } },
+      input: { orderId: '7' },
+    };
+    const r = await runBootstrap(`export default async (i, ctx) => {
+      let blocked = false;
+      try { ctx.run.invokedBy.name = 'x'; } catch { blocked = true; }
+      return { by: ctx.run.invokedBy, input: i, blocked, frozen: Object.isFrozen(ctx.run.invokedBy) };
+    };`, envelope);
+    assert.deepEqual(r.result.value, {
+      by: { type: 'event', id: 'run-9-1-1', name: 'order.created' },
+      input: { orderId: '7' }, blocked: true, frozen: true,
+    });
+  });
+
+  test('a run that no event started has invokedBy.name null', async () => {
+    const r = await runBootstrap(`export default async (i, ctx) => ({ name: ctx.run.invokedBy.name });`);
+    assert.equal(r.result.value.name, null);
+  });
+
   test('mutating ctx.context throws inside the function', async () => {
     const r = await runBootstrap(`export default async (i, ctx) => {
       try { ctx.context.tenantId = 'evil'; } catch (e) { return { blocked: true, still: ctx.context.tenantId }; }

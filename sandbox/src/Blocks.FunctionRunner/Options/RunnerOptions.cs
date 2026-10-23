@@ -228,6 +228,15 @@ namespace Blocks.FunctionRunner.Options
         [Range(30, 21600)]
         public int DeferralBudgetSeconds { get; set; } = 600;
 
+        /// <summary>
+        /// How long a run started by a function event may wait in <c>functions:event-runs</c> before the
+        /// runner gives up on it: past this age a claimed entry is not started and its run fails as
+        /// <c>EVENT_EXPIRED</c>. Events are not real time, so this is a bound on staleness, not a promise.
+        /// <c>RUNNER__EventRunMaxWaitSeconds</c>.
+        /// </summary>
+        [Range(10, 86400)]
+        public int EventRunMaxWaitSeconds { get; set; } = 300;
+
         /// <summary>Delivery attempts before an entry is moved to functions:dead.</summary>
         [Range(1, 20)]
         public int MaxAttempts { get; set; } = 3;

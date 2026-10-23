@@ -20,6 +20,9 @@ namespace Functions.DomainService.Services
             string tenantId, SaveEventSettingsRequestDto request, string? actorId, string? actorEmail,
             CancellationToken cancellationToken = default);
 
+        /// <summary>Runs of the function still waiting to start, HTTP and event runs apart. A function of another tenant is not found.</summary>
+        Task<QueueStatusDto> GetQueueStatusAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
+
         /// <summary>What happened to a run's events (its newest attempt that has any). A run of another tenant is not found.</summary>
         Task<RunEventsDto> GetRunEventsAsync(string tenantId, string runId, CancellationToken cancellationToken = default);
     }
@@ -113,6 +116,22 @@ namespace Functions.DomainService.Services
                 tenantId, request.FunctionId, FunctionsConstants.AuditActions.EventsUpdated, actorId, actorEmail,
                 new { Events = events.Select(e => e.Type).ToList(), TriggerEvents = request.TriggerEvents.Count },
                 cancellationToken);
+        }
+
+        public async Task<QueueStatusDto> GetQueueStatusAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            await RequireFunctionAsync(tenantId, functionId, cancellationToken);
+
+            var counts = await _runRepository.GetQueueCountsAsync(tenantId, functionId, cancellationToken);
+            return new QueueStatusDto
+            {
+                HttpQueued = counts.HttpQueued,
+                EventQueued = counts.EventQueued,
+                OldestEventQueuedAt = counts.OldestEventQueuedAt is { } oldest
+                    ? DateTime.SpecifyKind(oldest, DateTimeKind.Utc).ToString("O", System.Globalization.CultureInfo.InvariantCulture)
+                    : null,
+            };
         }
 
         public async Task<RunEventsDto> GetRunEventsAsync(

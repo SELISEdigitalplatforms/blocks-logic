@@ -46,8 +46,26 @@ namespace Functions.DomainService.Repositories
         UnknownAttempt = 4,
     }
 
+    /// <summary>
+    /// How many runs of one function still wait to be started (status Queued), split by what started them: function
+    /// events, and everything else (HTTP, workflow, replay). <see cref="OldestEventQueuedAt"/> is when the oldest waiting
+    /// event run was created; null when none waits.
+    /// </summary>
+    public sealed record FunctionQueueCounts(long HttpQueued, long EventQueued, DateTime? OldestEventQueuedAt);
+
     public interface IFunctionRunRepository
     {
+        /// <summary>
+        /// The run an event already started for a function (same event id), or null. This is what makes a redelivered
+        /// event start no second run. A run closed as <c>EnqueueFailed</c> (it never ran) does not count. Input and Result are not fetched.
+        /// </summary>
+        Task<FunctionRunEntity?> FindEventRunAsync(
+            string tenantId, string functionId, string eventId, CancellationToken cancellationToken = default);
+
+        /// <summary>Queued runs of one function by kind (see <see cref="FunctionQueueCounts"/>), inside the tenant's database.</summary>
+        Task<FunctionQueueCounts> GetQueueCountsAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default);
+
         Task<(IReadOnlyList<FunctionRunEntity> Items, long TotalCount)> GetAllAsync(
             string tenantId, FunctionRunFilter filter, int pageNumber, int pageSize,
             CancellationToken cancellationToken = default);

@@ -1,5 +1,6 @@
 using Blocks.Genesis;
 using Blocks.Genesis.Entities.Logic;
+using Functions.DomainService.Events;
 
 namespace Functions.DomainService.Services
 {
@@ -23,6 +24,13 @@ namespace Functions.DomainService.Services
         /// two triggers are independent settings.
         /// </summary>
         AuthorizationResult AuthorizeForWorkflow(FunctionEntity function, FunctionVersionEntity? version, BlocksContext? context);
+
+        /// <summary>
+        /// Authorizes an invocation from a function event. The deployed version's own subscription IS the authorization:
+        /// allowed exactly when its settings list <paramref name="eventName"/> in <c>TriggerEvents</c>. The run's identity is
+        /// the event message's context, so nothing else is checked — in particular the function need not be Public.
+        /// </summary>
+        AuthorizationResult AuthorizeForEvent(FunctionEventSettingsEntity? versionSettings, string eventName);
     }
 
     /// <summary>
@@ -88,6 +96,14 @@ namespace Functions.DomainService.Services
             }
 
             return AuthorizeCore(trigger, context);
+        }
+
+        public AuthorizationResult AuthorizeForEvent(FunctionEventSettingsEntity? versionSettings, string eventName)
+        {
+            return !string.IsNullOrEmpty(eventName)
+                && versionSettings?.TriggerEvents.Contains(eventName, StringComparer.Ordinal) == true
+                ? AuthorizationResult.Allow()
+                : AuthorizationResult.Deny("this function does not subscribe to this event");
         }
 
         private static AuthorizationResult AuthorizeCore(TriggerConfig trigger, BlocksContext? context)

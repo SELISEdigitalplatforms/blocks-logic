@@ -109,12 +109,14 @@ export function parseEnvelope(raw) {
   if (!isPlainObject(run)) fail('envelope.run is required');
   if (typeof run.id !== 'string' || run.id.length === 0) fail('envelope.run.id is required');
 
-  let invokedBy = _freeze({ type: 'http', id: null });
+  let invokedBy = _freeze({ type: 'http', id: null, name: null });
   if (run.invokedBy !== undefined && run.invokedBy !== null) {
     if (!isPlainObject(run.invokedBy)) fail('envelope.run.invokedBy must be an object');
     invokedBy = _freeze({
       type: stringOrNull(run.invokedBy.type, 'run.invokedBy.type') ?? 'http',
       id: stringOrNull(run.invokedBy.id, 'run.invokedBy.id'),
+      // The event's name when an event started the run (type 'event'); null otherwise.
+      name: stringOrNull(run.invokedBy.name, 'run.invokedBy.name'),
     });
   }
 

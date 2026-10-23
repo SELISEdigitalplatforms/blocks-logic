@@ -104,6 +104,16 @@ namespace Functions.DomainService.Queue
         public static string RunsStream => _prefix + "functions:runs";
 
         /// <summary>
+        /// Runs started by a function event (<see cref="Events.FunctionEvent"/>): the same entry format as
+        /// <see cref="RunsStream"/>, read by the same runners with the same group, from a queue of their own so HTTP
+        /// runs always go first. Mirrors <c>RedisKeys.EventRunsStream</c> in the runner.
+        /// </summary>
+        public static string EventRunsStream => _prefix + "functions:event-runs";
+
+        /// <summary>Wake-up for <see cref="EventRunsStream"/>. Mirrors <c>RedisKeys.EventRunsNudgeChannel</c>.</summary>
+        public static string EventRunsNudgeChannel => _prefix + "functions:event-runs:nudge";
+
+        /// <summary>
         /// Pre-warm requests (sandbox/REUSE.md): one entry per deploy of a version whose trigger has
         /// <c>ReuseSandbox</c> — <c>{tenantId, functionId, versionId, image, count, drainVersionId}</c>.
         /// A runner with <c>RUNNER__SandboxReuse</c> starts <c>count</c> warm sandboxes for the
@@ -185,6 +195,13 @@ namespace Functions.DomainService.Queue
         /// type, reason; never the payload. Trimmed like the other dead streams.
         /// </summary>
         public static string DeadEventsStream => _prefix + "functions:dead-events";
+
+        /// <summary>
+        /// Function events that no function ran to success: the message was invalid, too deep, could not be started,
+        /// or the run failed on its last attempt (or expired in the queue). One entry each — <c>eventId, functionId,
+        /// runId, tenantId, name, reason</c>; never the payload. Trimmed like the other dead streams.
+        /// </summary>
+        public static string DeadFunctionEventsStream => _prefix + "functions:dead-function-events";
 
         // ---- consumer groups ----------------------------------------------------
         /// <summary>The group runners join. The control plane never reads these.</summary>
@@ -357,6 +374,12 @@ namespace Functions.DomainService.Queue
             public const string BuildFailedCode = "BUILD_FAILED";
             public const string SecretUnresolved = "SECRET_UNRESOLVED";
             public const string SecretStoreUnavailable = "SECRET_STORE_UNAVAILABLE";
+
+            /// <summary>
+            /// The runner did not start an event run that waited too long in <see cref="EventRunsStream"/>
+            /// (mirrors <c>ErrorCodes.EventExpired</c>). Read as <see cref="Blocks.Genesis.Entities.Logic.RunErrorCode.Undeliverable"/>.
+            /// </summary>
+            public const string EventExpired = "EVENT_EXPIRED";
 
             /// <summary>
             /// Not sent by the runner — determined here, by

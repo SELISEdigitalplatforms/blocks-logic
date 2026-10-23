@@ -191,7 +191,7 @@ time — as long as each one moves its runner and its control plane together. Co
 the runner's own log, which prints the streams it joined:
 
 ```
-Consuming local:functions:runs as kind-falcon (capacity 10)
+Consuming local:functions:runs and local:functions:event-runs as kind-falcon (capacity 10)
 ```
 
 ### One tenant's share of a host

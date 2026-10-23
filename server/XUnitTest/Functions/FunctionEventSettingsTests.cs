@@ -404,10 +404,67 @@ namespace XUnitTest.Functions
             }
         }
 
+        // ---- the queue status -----------------------------------------------------------
+
+        [Fact]
+        public async Task The_queue_status_counts_http_and_event_runs_apart_with_the_oldest_event_time_in_utc()
+        {
+            _runs.Setup(r => r.GetQueueCountsAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionQueueCounts(3, 2, new DateTime(2026, 10, 23, 8, 30, 0, DateTimeKind.Unspecified)));
+
+            var status = await Service().GetQueueStatusAsync(Tenant, "fn-1");
+
+            status.HttpQueued.Should().Be(3);
+            status.EventQueued.Should().Be(2);
+            status.OldestEventQueuedAt.Should().Be("2026-10-23T08:30:00.0000000Z");
+        }
+
+        [Fact]
+        public async Task With_no_waiting_event_run_the_oldest_time_is_null()
+        {
+            _runs.Setup(r => r.GetQueueCountsAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionQueueCounts(0, 0, null));
+
+            var status = await Service().GetQueueStatusAsync(Tenant, "fn-1");
+
+            (status.HttpQueued, status.EventQueued, status.OldestEventQueuedAt).Should().Be((0L, 0L, (string?)null));
+        }
+
+        [Fact]
+        public void The_queue_status_json_has_exactly_the_contract_field_names()
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(
+                new QueueStatusDto { HttpQueued = 1, EventQueued = 2, OldestEventQueuedAt = null },
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+            json.Should().Be("""{"httpQueued":1,"eventQueued":2,"oldestEventQueuedAt":null}""");
+        }
+
+        [Fact]
+        public async Task The_queue_status_of_a_function_of_another_tenant_is_a_not_found_and_reads_no_counts()
+        {
+            var controller = Controller();
+            try
+            {
+                await controller.Invoking(c => c.GetQueueStatus("fn-9", Service())).Should().ThrowAsync<FunctionNotFoundException>();
+                _runs.Verify(r => r.GetQueueCountsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+
+                _runs.Setup(r => r.GetQueueCountsAsync(Tenant, "fn-1", It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionQueueCounts(1, 0, null));
+                var status = await controller.GetQueueStatus("fn-1", Service());
+                status.Should().NotBeNull();
+                _runs.Verify(r => r.GetQueueCountsAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()), Times.Once);
+            }
+            finally
+            {
+                BlocksContext.SetContext(null, false);
+            }
+        }
+
         [Theory]
         [InlineData("GetEventCatalog", "blocks-logic::function::read")]
         [InlineData("GetEventSettings", "blocks-logic::function::read")]
         [InlineData("GetRunEvents", "blocks-logic::function::read")]
+        [InlineData("GetQueueStatus", "blocks-logic::function::read")]
         [InlineData("SaveEventSettings", "blocks-logic::function::manage")]
         public void Each_endpoint_is_protected_with_the_read_or_manage_permission(string action, string permission)
         {

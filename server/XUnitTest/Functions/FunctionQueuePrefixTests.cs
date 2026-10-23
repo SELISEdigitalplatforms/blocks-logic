@@ -112,6 +112,8 @@ namespace XUnitTest.Functions
             FunctionQueueKeys.BuildResultsStream.Should().Be(RunnerKeys.BuildResultsStream);
             FunctionQueueKeys.TestsStream.Should().Be(RunnerKeys.TestsStream);
             FunctionQueueKeys.DeadStream.Should().Be(RunnerKeys.DeadStream);
+            FunctionQueueKeys.EventRunsStream.Should().Be(RunnerKeys.EventRunsStream);
+            FunctionQueueKeys.EventRunsNudgeChannel.Should().Be(RunnerKeys.EventRunsNudgeChannel);
             FunctionQueueKeys.ImagesKeep.Should().Be(RunnerKeys.ImagesKeep);
 
             FunctionQueueKeys.Run("r1").Should().Be(RunnerKeys.Run("r1"));
@@ -130,21 +132,32 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public void The_event_queue_names_and_the_expiry_code_are_the_agreed_ones()
+        {
+            SetBoth(string.Empty);
+
+            FunctionQueueKeys.EventRunsStream.Should().Be("functions:event-runs");
+            FunctionQueueKeys.EventRunsNudgeChannel.Should().Be("functions:event-runs:nudge");
+            FunctionQueueKeys.DeadFunctionEventsStream.Should().Be("functions:dead-function-events");
+            FunctionQueueKeys.Wire.EventExpired.Should().Be("EVENT_EXPIRED").And.Be(Blocks.FunctionRunner.Contracts.ErrorCodes.EventExpired);
+        }
+
+        [Fact]
         public void Two_environments_never_collide_on_any_key()
         {
             SetBoth("alpha");
             var alpha = new[]
             {
-                FunctionQueueKeys.RunsStream, FunctionQueueKeys.TestsStream,
-                FunctionQueueKeys.BuildsStream, FunctionQueueKeys.Run("same-id"),
+                FunctionQueueKeys.RunsStream, FunctionQueueKeys.TestsStream, FunctionQueueKeys.EventRunsStream,
+                FunctionQueueKeys.BuildsStream, FunctionQueueKeys.Run("same-id"), FunctionQueueKeys.DeadFunctionEventsStream,
                 FunctionQueueKeys.Source("same-id"), FunctionQueueKeys.ImagesKeep,
             };
 
             SetBoth("beta");
             var beta = new[]
             {
-                FunctionQueueKeys.RunsStream, FunctionQueueKeys.TestsStream,
-                FunctionQueueKeys.BuildsStream, FunctionQueueKeys.Run("same-id"),
+                FunctionQueueKeys.RunsStream, FunctionQueueKeys.TestsStream, FunctionQueueKeys.EventRunsStream,
+                FunctionQueueKeys.BuildsStream, FunctionQueueKeys.Run("same-id"), FunctionQueueKeys.DeadFunctionEventsStream,
                 FunctionQueueKeys.Source("same-id"), FunctionQueueKeys.ImagesKeep,
             };
 

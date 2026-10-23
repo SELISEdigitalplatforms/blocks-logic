@@ -47,6 +47,9 @@ namespace XUnitTest.Functions
             public Task<FunctionEntity?> GetByIdForViewAsync(string tenantId, string functionId, CancellationToken cancellationToken = default) =>
                 GetByIdAsync(tenantId, functionId, cancellationToken);
 
+            public Task<IReadOnlyList<FunctionEntity>> GetLiveByIdsAsync(string tenantId, IReadOnlyCollection<string> functionIds, CancellationToken cancellationToken = default) =>
+                throw new NotSupportedException();
+
             public Task<FunctionEntity?> GetByIdAsync(string tenantId, string functionId, CancellationToken cancellationToken = default) =>
                 Task.FromResult(Live.TryGetValue(functionId, out var f) ? Clone(f) : null);
 

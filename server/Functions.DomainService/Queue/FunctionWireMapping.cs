@@ -69,6 +69,9 @@ namespace Functions.DomainService.Queue
             FunctionQueueKeys.Wire.SecretUnresolved => RunErrorCode.SecretUnresolved,
             FunctionQueueKeys.Wire.SecretStoreUnavailable => RunErrorCode.SecretStoreUnavailable,
             FunctionQueueKeys.Wire.Undeliverable => RunErrorCode.Undeliverable,
+            // Genesis has no code of its own for it and is not changed for this. Undeliverable is the platform's
+            // "never ran, not retryable"; the run's message starts with EVENT_EXPIRED so it still reads as what it is.
+            FunctionQueueKeys.Wire.EventExpired => RunErrorCode.Undeliverable,
             _ => RunErrorCode.UserRuntimeError,
         };
 

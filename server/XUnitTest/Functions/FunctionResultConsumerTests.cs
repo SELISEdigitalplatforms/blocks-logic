@@ -31,6 +31,7 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionRunGrantRevoker> _grants = new();
         private readonly Mock<IBuiltInNotificationSender> _builtIn = new();
         private readonly Mock<IFunctionRunEventsRepository> _runEvents = new();
+        private readonly Mock<global::Functions.DomainService.Services.IFunctionEventDeadLetters> _eventDead = new();
         private readonly (IDatabase Database, FakeRedisDatabase Fake) _redis = FakeRedisDatabase.Create();
 
         private readonly FunctionVersionEntity _version = new() { ItemId = "v-1", FunctionId = "fn-1" };
@@ -77,6 +78,7 @@ namespace XUnitTest.Functions
             ItemId = r.ItemId, TenantId = r.TenantId, FunctionId = r.FunctionId, VersionId = r.VersionId,
             Status = r.Status, ErrorCode = r.ErrorCode, Attempt = r.Attempt, MaxAttempts = r.MaxAttempts,
             Result = r.Result, OutputResults = [.. r.OutputResults],
+            InvokedBy = r.InvokedBy, InvokedById = r.InvokedById, ErrorMessage = r.ErrorMessage,
         };
 
         private FunctionResultConsumer Consumer()
@@ -86,7 +88,7 @@ namespace XUnitTest.Functions
             return new FunctionResultConsumer(
                 cache.Object, _runs.Object, _logs.Object, _versions.Object, _images.Object, _functions.Object,
                 _grants.Object, NullLogger<FunctionResultConsumer>.Instance, builtInNotifications: _builtIn.Object,
-                runEvents: _runEvents.Object);
+                runEvents: _runEvents.Object, eventDeadLetters: _eventDead.Object);
         }
 
         private static ResultStreamEntry Entry(params (string Key, string Value)[] overrides)
@@ -319,6 +321,78 @@ namespace XUnitTest.Functions
             _builtIn.Verify(b => b.SendAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>?>(),
                 It.IsAny<BuiltInNotificationPayload>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        // ---- function events: a run an event started that fails for good dead-letters its event ----
+
+        [Fact]
+        public async Task An_event_run_that_failed_on_its_last_attempt_is_handed_to_the_event_dead_letters_once()
+        {
+            _record.InvokedBy = InvokedByType.Event;
+            _record.InvokedById = "evt-1";
+            _record.Attempt = 3;
+
+            await Consumer().ProcessAsync(
+                Entry(("attempt", "3"), ("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError)),
+                CancellationToken.None);
+
+            _eventDead.Verify(d => d.RunFailedAsync(Tenant, It.Is<FunctionRunEntity>(r => r.ItemId == RunId && r.InvokedById == "evt-1")), Times.Once);
+        }
+
+        [Fact]
+        public async Task An_event_run_with_a_retry_pending_is_not_dead_lettered_yet()
+        {
+            _record.InvokedBy = InvokedByType.Event;
+
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.SandboxStartFailed)),
+                CancellationToken.None);
+
+            _eventDead.Verify(d => d.RunFailedAsync(It.IsAny<string>(), It.IsAny<FunctionRunEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task EVENT_EXPIRED_is_terminal_never_retried_and_dead_letters_the_event()
+        {
+            _record.InvokedBy = InvokedByType.Event;
+            _record.InvokedById = "evt-1";
+
+            var outcome = await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.EventExpired),
+                    ("errorMessage", "EVENT_EXPIRED: the event run waited more than 300 s")),
+                CancellationToken.None);
+
+            outcome.Disposition.Should().Be(ResultDisposition.Applied);
+            _runs.Verify(r => r.ApplyResultAsync(
+                Tenant, RunId, 1, RunStatus.Failed, RunErrorCode.Undeliverable, It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<long?>(),
+                It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<RunSandboxReport?>(), It.IsAny<CancellationToken>()), Times.Once);
+            _redis.Fake.Calls("SortedSetAddAsync").Should().BeEmpty("no retry is scheduled");
+            _eventDead.Verify(d => d.RunFailedAsync(Tenant, It.IsAny<FunctionRunEntity>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task A_run_an_event_started_that_succeeds_is_not_dead_lettered()
+        {
+            _record.InvokedBy = InvokedByType.Event;
+
+            await Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            _eventDead.Verify(d => d.RunFailedAsync(It.IsAny<string>(), It.IsAny<FunctionRunEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_duplicate_delivery_of_an_event_runs_failure_dead_letters_nothing_again()
+        {
+            _record.InvokedBy = InvokedByType.Event;
+            _record.Status = RunStatus.Failed;
+            _record.ErrorCode = RunErrorCode.UserRuntimeError;
+
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError)),
+                CancellationToken.None);
+
+            _eventDead.Verify(d => d.RunFailedAsync(It.IsAny<string>(), It.IsAny<FunctionRunEntity>()), Times.Never);
         }
 
         [Fact]

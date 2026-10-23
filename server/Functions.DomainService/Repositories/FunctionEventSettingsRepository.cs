@@ -32,11 +32,16 @@ namespace Functions.DomainService.Repositories
                 if (!_indexedTenants.Add(tenantId)) return;
             }
 
-            // Purge reads by function; the row itself is found by its id.
-            await Collection(tenantId).Indexes.CreateOneAsync(
-                new CreateIndexModel<FunctionEventSettingsEntity>(
-                    Builders<FunctionEventSettingsEntity>.IndexKeys.Ascending(s => s.FunctionId)),
-                cancellationToken: cancellationToken);
+            // Purge reads by function; the row itself is found by its id. The event trigger finds the subscribers of an
+            // event name (a multikey index on TriggerEvents), by function id, with the version it needs to check.
+            var keys = Builders<FunctionEventSettingsEntity>.IndexKeys;
+            await Collection(tenantId).Indexes.CreateManyAsync(
+                [
+                    new CreateIndexModel<FunctionEventSettingsEntity>(keys.Ascending(s => s.FunctionId)),
+                    new CreateIndexModel<FunctionEventSettingsEntity>(
+                        keys.Ascending(s => s.TriggerEvents).Ascending(s => s.FunctionId).Ascending(s => s.VersionId)),
+                ],
+                cancellationToken);
         }
 
         public async Task<FunctionEventSettingsEntity?> GetAsync(
@@ -48,6 +53,22 @@ namespace Functions.DomainService.Repositories
             return await Collection(tenantId)
                 .Find(s => s.ItemId == id && s.FunctionId == functionId)
                 .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<FunctionEventSubscription>> FindSubscriptionsAsync(
+            string tenantId, string eventName, int limit, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(eventName) || limit <= 0) return [];
+
+            await EnsureIndexesAsync(tenantId, cancellationToken);
+            var f = Builders<FunctionEventSettingsEntity>.Filter;
+            var rows = await Collection(tenantId)
+                .Find(f.AnyEq(s => s.TriggerEvents, eventName) & f.Ne(s => s.VersionId, null))
+                .Sort(Builders<FunctionEventSettingsEntity>.Sort.Ascending(s => s.FunctionId))
+                .Project(s => new { s.FunctionId, s.VersionId })
+                .Limit(limit)
+                .ToListAsync(cancellationToken);
+            return [.. rows.Where(r => !string.IsNullOrEmpty(r.VersionId)).Select(r => new FunctionEventSubscription(r.FunctionId, r.VersionId!))];
         }
 
         public async Task SaveDraftAsync(

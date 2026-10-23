@@ -6,8 +6,19 @@ namespace Functions.DomainService.Repositories
     /// The events a function may send (<see cref="FunctionEventSettingsEntity"/>): the draft the editor changes and a
     /// copy per deployed version. Every method takes the tenant explicitly, like the other Functions repositories.
     /// </summary>
+    /// <summary>A deployed version whose settings subscribe to an event name.</summary>
+    public sealed record FunctionEventSubscription(string FunctionId, string VersionId);
+
     public interface IFunctionEventSettingsRepository
     {
+        /// <summary>
+        /// The deployed versions (rows with a version id — never a draft) whose <c>TriggerEvents</c> hold
+        /// <paramref name="eventName"/>, by function id, at most <paramref name="limit"/>. Several versions of one function
+        /// can be listed; the caller keeps the one that is the function's active version.
+        /// </summary>
+        Task<IReadOnlyList<FunctionEventSubscription>> FindSubscriptionsAsync(
+            string tenantId, string eventName, int limit, CancellationToken cancellationToken = default);
+
         /// <summary>The row of a version, or of the draft when <paramref name="versionId"/> is null or empty. Null when there is none.</summary>
         Task<FunctionEventSettingsEntity?> GetAsync(
             string tenantId, string functionId, string? versionId, CancellationToken cancellationToken = default);

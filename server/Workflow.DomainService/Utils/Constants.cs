@@ -52,8 +52,8 @@ namespace Workflow.DomainService.Utils
         public const string LogicMailQueueName = "blocks_email_listener";
 
         /// <summary>
-        /// Function events (a function's <c>ctx.events.add('FunctionEvent', …)</c>). The Worker only SENDS to it for
-        /// now; the consumer that starts functions from it is added with the event trigger.
+        /// Function events (a function's <c>ctx.events.add('FunctionEvent', …)</c>). The Worker sends to it and consumes
+        /// it: <c>FunctionEventConsumer</c> (the event trigger) starts the functions that subscribe to the event's name.
         /// </summary>
         public const string FunctionEventQueueName = "blocks_logic_function_event_listener";
         public const string MigrationCompletionTopic = "blocks_migration_topic1";
@@ -97,9 +97,9 @@ namespace Workflow.DomainService.Utils
                                              ConsumerSubscription.BindToQueue(SchedulerTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(WorkflowImportQueue),
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
-                                             // Declared, not consumed: RabbitMQ drops a message sent to a queue that does not
-                                             // exist. Azure creates its sender on first use, so it needs no entry below.
-                                             new ConsumerSubscription(FunctionEventQueueName, string.Empty, 0, isDeclareOnly: true),
+                                             // Consumed by the event trigger. It also makes sure the queue exists, which RabbitMQ needs
+                                             // before a function can send to it (a message to a missing queue is dropped).
+                                             ConsumerSubscription.BindToQueue(FunctionEventQueueName),
                                              ConsumerSubscription.BindToQueue(CommunicationConstants.MailStatusQueueName),
                                              ConsumerSubscription.BindToQueue(MigrationCompletionTopic),
                                              .. registry,
@@ -118,7 +118,7 @@ namespace Workflow.DomainService.Utils
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, .. registry],
+                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, FunctionEventQueueName, CommunicationConstants.MailStatusQueueName, .. registry],
                     Topics = [MigrationCompletionTopic],
                     QueuePrefetchCount = 40,
                     MaxConcurrentCalls = 40

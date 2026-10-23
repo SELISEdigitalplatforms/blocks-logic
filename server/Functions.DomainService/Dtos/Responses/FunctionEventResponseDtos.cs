@@ -50,4 +50,17 @@ namespace Functions.DomainService.Dtos.Responses
         /// <summary>Why the runner dropped all events of the run (<c>EVENTS_REJECTED: …</c>); null otherwise.</summary>
         public string? Rejected { get; set; }
     }
+
+    /// <summary>
+    /// How many runs of one function wait to be started: HTTP (and every other kind but events) and function events.
+    /// Events are not real time (they go after HTTP runs), so the oldest waiting one shows how far behind they are.
+    /// </summary>
+    public sealed class QueueStatusDto
+    {
+        public long HttpQueued { get; set; }
+        public long EventQueued { get; set; }
+
+        /// <summary>When the oldest waiting event run was queued (ISO 8601, UTC); null when none waits.</summary>
+        public string? OldestEventQueuedAt { get; set; }
+    }
 }

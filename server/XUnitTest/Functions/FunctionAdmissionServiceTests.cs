@@ -371,6 +371,26 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public async Task A_run_an_event_starts_counts_toward_the_functions_rate_limit()
+        {
+            var (cache, database) = Cache(count: 51);
+
+            var act = () => DefaultService(cache).AdmitAsync(Function(perMinute: 50), "tenant_1", "{}", InvokedByType.Event, null);
+
+            (await act.Should().ThrowAsync<FunctionRateLimitedException>()).Which.Message.Should().Contain("50 requests per minute");
+            database.Verify(d => d.StringIncrementAsync(It.IsAny<RedisKey>(), It.IsAny<long>(), It.IsAny<CommandFlags>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task An_event_run_within_the_limit_is_admitted_and_counted()
+        {
+            var (cache, database) = Cache(count: 50);
+
+            (await DefaultService(cache).AdmitAsync(Function(perMinute: 50), "tenant_1", "{}", InvokedByType.Event, null)).IsAdmitted.Should().BeTrue();
+            database.Verify(d => d.StringIncrementAsync(It.IsAny<RedisKey>(), It.IsAny<long>(), It.IsAny<CommandFlags>()), Times.Once);
+        }
+
+        [Fact]
         public async Task The_deployed_versions_access_and_limit_are_the_live_ones()
         {
             var (cache, _) = Cache(count: 601);

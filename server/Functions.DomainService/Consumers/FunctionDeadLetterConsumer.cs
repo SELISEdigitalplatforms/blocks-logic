@@ -52,6 +52,7 @@ namespace Functions.DomainService.Consumers
         private readonly IFunctionBuildRepository _buildRepository;
         private readonly ILogger<FunctionDeadLetterConsumer> _logger;
         private readonly FunctionOwnerNotifier? _notifier;
+        private readonly IFunctionEventDeadLetters? _eventDeadLetters;
 
         public FunctionDeadLetterConsumer(
             ICacheClient cache,
@@ -59,8 +60,10 @@ namespace Functions.DomainService.Consumers
             IFunctionBuildRepository buildRepository,
             ILogger<FunctionDeadLetterConsumer> logger,
             IFunctionRepository? functionRepository = null,
-            IBuiltInNotificationSender? builtInNotifications = null)
+            IBuiltInNotificationSender? builtInNotifications = null,
+            IFunctionEventDeadLetters? eventDeadLetters = null)
         {
+            _eventDeadLetters = eventDeadLetters;
             _notifier = functionRepository is null || builtInNotifications is null
                 ? null
                 : new FunctionOwnerNotifier(functionRepository, builtInNotifications);
@@ -191,7 +194,8 @@ namespace Functions.DomainService.Consumers
             // if/else rather than a switch on the stream names: those are no longer compile-time
             // constants — they carry the configurable queue prefix — and a pattern needs one.
             bool handled;
-            if (string.Equals(sourceStream, FunctionQueueKeys.RunsStream, StringComparison.Ordinal))
+            if (string.Equals(sourceStream, FunctionQueueKeys.RunsStream, StringComparison.Ordinal)
+                || string.Equals(sourceStream, FunctionQueueKeys.EventRunsStream, StringComparison.Ordinal))
             {
                 handled = await ApplyRunAsync(tenantId, entry, reason, cancellationToken);
             }
@@ -274,6 +278,7 @@ namespace Functions.DomainService.Consumers
                     RedisChannel.Literal(FunctionQueueKeys.SyncChannel(runId)), FunctionQueueKeys.Wire.Failed);
 
                 await NotifyRunFailedAsync(tenantId, runId, cancellationToken);
+                await DeadLetterEventRunAsync(tenantId, runId, cancellationToken);
             }
             else
             {
@@ -315,6 +320,21 @@ namespace Functions.DomainService.Consumers
             }
 
             return true;
+        }
+
+        /// <summary>A run an event started that the runner could never deliver: its event is dead-lettered too. Never throws.</summary>
+        private async Task DeadLetterEventRunAsync(string tenantId, string runId, CancellationToken cancellationToken)
+        {
+            if (_eventDeadLetters is null) return;
+            try
+            {
+                var run = await _runRepository.GetByIdAsync(tenantId, runId, cancellationToken);
+                if (run is not null) await _eventDeadLetters.RunFailedAsync(tenantId, run);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning("Could not dead-letter the event of run {RunId} ({ExceptionType})", runId, ex.GetType().Name);
+            }
         }
 
         private async Task NotifyRunFailedAsync(string tenantId, string runId, CancellationToken cancellationToken)

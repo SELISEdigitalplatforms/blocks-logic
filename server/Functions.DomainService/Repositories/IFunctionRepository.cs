@@ -15,6 +15,13 @@ namespace Functions.DomainService.Repositories
             string tenantId, string? searchKey, string? status, string? sortBy,
             int pageNumber, int pageSize, CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// The functions among <paramref name="functionIds"/> that are not deleted and whose status is Live, without their
+        /// source. The event trigger uses it to keep only the subscribers that can run now.
+        /// </summary>
+        Task<IReadOnlyList<FunctionEntity>> GetLiveByIdsAsync(
+            string tenantId, IReadOnlyCollection<string> functionIds, CancellationToken cancellationToken = default);
+
         Task<FunctionEntity?> GetByIdAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
         /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
         Task<FunctionEntity?> GetByIdForViewAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);

@@ -53,6 +53,11 @@ namespace Functions.DomainService.Repositories
                     // index rather than every run document of the function.
                     new CreateIndexModel<FunctionRunEntity>(
                         keys.Ascending(r => r.FunctionId).Ascending(r => r.VersionNumber)),
+                    // The queue status: a function's Queued runs, by kind (events or not), oldest first.
+                    new CreateIndexModel<FunctionRunEntity>(
+                        keys.Ascending(r => r.FunctionId).Ascending(r => r.Status).Ascending(r => r.InvokedBy).Ascending(r => r.CreatedDate)),
+                    // A redelivered event finds the run it already started: one function, one event id.
+                    new CreateIndexModel<FunctionRunEntity>(keys.Ascending(r => r.FunctionId).Ascending(r => r.InvokedById)),
                     // CompletedAt is null until a run finishes, and a TTL index only ever
                     // expires documents whose indexed field holds an actual date — an
                     // in-flight run is never at risk of being swept away mid-execution.
@@ -195,6 +200,53 @@ namespace Functions.DomainService.Repositories
                 .ToListAsync(cancellationToken);
 
             return counts.ToDictionary(c => c.FunctionId, c => c.Count);
+        }
+
+        public async Task<FunctionRunEntity?> FindEventRunAsync(
+            string tenantId, string functionId, string eventId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId) || string.IsNullOrWhiteSpace(eventId)) return null;
+
+            await EnsureIndexesAsync(tenantId, cancellationToken);
+            var f = Builders<FunctionRunEntity>.Filter;
+            var query = f.Eq(r => r.FunctionId, functionId) & f.Eq(r => r.InvokedById, eventId) & f.Eq(r => r.InvokedBy, InvokedByType.Event)
+                // A run closed because its enqueue failed never ran anything: the event must be able to start another.
+                & f.Ne(r => r.ErrorCode, RunErrorCode.EnqueueFailed);
+            var scope = await ReadAsync(tenantId, query, "FindEventRun", useProjection: false);
+            if (!scope.Granted) return null;
+            return await Collection(tenantId).Find(scope.Filter)
+                .Project<FunctionRunEntity>(Builders<FunctionRunEntity>.Projection.Exclude(r => r.Input).Exclude(r => r.Result))
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        public async Task<FunctionQueueCounts> GetQueueCountsAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            var none = new FunctionQueueCounts(0, 0, null);
+            if (string.IsNullOrWhiteSpace(functionId)) return none;
+
+            await EnsureIndexesAsync(tenantId, cancellationToken);
+            var f = Builders<FunctionRunEntity>.Filter;
+            var query = f.Eq(r => r.FunctionId, functionId) & f.Eq(r => r.Status, RunStatus.Queued);
+            var scope = await ReadAsync(tenantId, query, "GetQueueCounts", useProjection: false);
+            if (!scope.Granted) return none;
+
+            var collection = Collection(tenantId);
+            var events = scope.Filter & f.Eq(r => r.InvokedBy, InvokedByType.Event);
+            var others = scope.Filter & f.Ne(r => r.InvokedBy, InvokedByType.Event);
+
+            var eventCount = await collection.CountDocumentsAsync(events, cancellationToken: cancellationToken);
+            var otherCount = await collection.CountDocumentsAsync(others, cancellationToken: cancellationToken);
+            DateTime? oldest = null;
+            if (eventCount > 0)
+            {
+                var first = await collection.Find(events)
+                    .Sort(Builders<FunctionRunEntity>.Sort.Ascending(r => r.CreatedDate))
+                    .Project<FunctionRunEntity>(Builders<FunctionRunEntity>.Projection.Include(r => r.CreatedDate))
+                    .FirstOrDefaultAsync(cancellationToken);
+                oldest = first?.CreatedDate;
+            }
+            return new FunctionQueueCounts(otherCount, eventCount, oldest);
         }
 
         public async Task<FunctionRunEntity?> GetByIdAsync(string tenantId, string runId, CancellationToken cancellationToken = default)

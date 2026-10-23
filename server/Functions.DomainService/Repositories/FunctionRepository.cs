@@ -131,6 +131,20 @@ namespace Functions.DomainService.Repositories
             return (scope.ForView(items), totalCount);
         }
 
+        public async Task<IReadOnlyList<FunctionEntity>> GetLiveByIdsAsync(
+            string tenantId, IReadOnlyCollection<string> functionIds, CancellationToken cancellationToken = default)
+        {
+            if (functionIds.Count == 0) return [];
+
+            var builder = Builders<FunctionEntity>.Filter;
+            var filter = builder.In(f => f.ItemId, functionIds) & NotDeleted & builder.Eq(f => f.Status, FunctionStatus.Live);
+            var scope = await ReadAsync(tenantId, filter, "GetLiveByIds", useProjection: false);
+            if (!scope.Granted) return [];
+            return await Collection(tenantId).Find(scope.Filter)
+                .Project<FunctionEntity>(Builders<FunctionEntity>.Projection.Exclude(f => f.Source))
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task<FunctionEntity?> GetByIdAsync(string tenantId, string functionId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(functionId)) return null;

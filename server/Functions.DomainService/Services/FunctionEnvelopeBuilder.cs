@@ -85,13 +85,17 @@ namespace Functions.DomainService.Services
         /// Public trigger (<see cref="Events.FunctionEventPolicy.AllowedTypes"/>). Null or empty: the envelope has no
         /// <c>events</c> key and the function can add none.
         /// </param>
+        /// <param name="eventName">
+        /// The name of the <c>FunctionEvent</c> that started the run (<c>run.invokedBy.name</c>); null for any other run.
+        /// </param>
         public static string Build(
             FunctionRunEntity run,
             FunctionVersionEntity? version,
             FunctionEntity function,
             BlocksContext? context,
             string? inputJson,
-            IReadOnlyCollection<string>? allowedEvents = null)
+            IReadOnlyCollection<string>? allowedEvents = null,
+            string? eventName = null)
         {
             ArgumentNullException.ThrowIfNull(run);
             ArgumentNullException.ThrowIfNull(function);
@@ -108,11 +112,7 @@ namespace Functions.DomainService.Services
                     ["functionId"] = run.FunctionId,
                     ["version"] = run.VersionNumber,
                     ["attempt"] = run.Attempt,
-                    ["invokedBy"] = new JsonObject
-                    {
-                        ["type"] = InvokedByWire(run.InvokedBy),
-                        ["id"] = run.InvokedById,
-                    },
+                    ["invokedBy"] = InvokedBy(run, eventName),
                 },
                 ["context"] = BuildIdentity(context, authMode),
                 ["env"] = BuildEnv(variables, out var maskedEnvKeys),
@@ -272,6 +272,17 @@ namespace Functions.DomainService.Services
             if (values is null) return array;
             foreach (var value in values) array.Add(value);
             return array;
+        }
+
+        private static JsonObject InvokedBy(FunctionRunEntity run, string? eventName)
+        {
+            var invokedBy = new JsonObject
+            {
+                ["type"] = InvokedByWire(run.InvokedBy),
+                ["id"] = run.InvokedById,
+            };
+            if (!string.IsNullOrEmpty(eventName)) invokedBy["name"] = eventName;
+            return invokedBy;
         }
 
         private static string InvokedByWire(InvokedByType type) => type switch

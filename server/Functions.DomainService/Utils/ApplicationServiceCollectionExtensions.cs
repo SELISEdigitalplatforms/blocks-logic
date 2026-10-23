@@ -2,6 +2,7 @@ using Blocks.Secrets;
 using FluentValidation;
 using Common.InternalService.Access;
 using Functions.DomainService.Consumers;
+using Functions.DomainService.Events;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -54,6 +55,9 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionRunEventsRepository, FunctionRunEventsRepository>();
             services.AddSingleton<IFunctionEventAllowList, FunctionEventAllowList>();
             services.AddSingleton<IFunctionEventSettingsService, FunctionEventSettingsService>();
+            // The event trigger: the name and depth a run's event had, and the dead-letter stream of events no function ran.
+            services.AddSingleton<IFunctionEventRunStore, FunctionEventRunStore>();
+            services.AddSingleton<IFunctionEventDeadLetters, FunctionEventDeadLetters>();
 
             // The artifact store, on the tenant's own storage. It takes the tenant per call and enters
             // that tenant's context itself, so one instance serves every tenant. The storage stack it

@@ -325,7 +325,9 @@ return 1";
                 ]);
                 await _db.KeyExpireAsync(runKey, FunctionQueueKeys.RunTtl);
 
-                await _db.StreamAddAsync(FunctionQueueKeys.RunsStream,
+                // A run an event started goes back to the event queue, so a retry never jumps ahead of HTTP runs.
+                var isEventRun = run.InvokedBy == InvokedByType.Event;
+                await _db.StreamAddAsync(isEventRun ? FunctionQueueKeys.EventRunsStream : FunctionQueueKeys.RunsStream,
                 [
                     new NameValueEntry("runId", entry.RunId),
                     new NameValueEntry("functionId", entry.FunctionId),
@@ -343,7 +345,7 @@ return 1";
                         ? new[] { new NameValueEntry(FunctionQueueKeys.RunReuseField, "1") }
                         : []),
                 ]);
-                StreamWakeup.Publish(_db, FunctionQueueKeys.RunsNudgeChannel);
+                StreamWakeup.Publish(_db, isEventRun ? FunctionQueueKeys.EventRunsNudgeChannel : FunctionQueueKeys.RunsNudgeChannel);
             }
             catch (Exception ex)
             {

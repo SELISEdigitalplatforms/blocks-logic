@@ -57,17 +57,23 @@ namespace Blocks.FunctionRunner.Runs
 
             var consumer = new GroupConsumer(
                 _db, _logger, RedisKeys.RunsStream, RedisKeys.RunnerGroup, _options.RunnerId);
+            // Function-event runs: same group name, entry format and handling, their own stream (see RunSourceSelector).
+            var eventConsumer = new GroupConsumer(
+                _db, _logger, RedisKeys.EventRunsStream, RedisKeys.RunnerGroup, _options.RunnerId);
             await consumer.EnsureGroupAsync().ConfigureAwait(false);
+            await eventConsumer.EnsureGroupAsync().ConfigureAwait(false);
+            var selector = new RunSourceSelector();
 
             // The capacity logged here is the budget's current view, not a configured number:
             // it moves with the host while this loop runs.
             _logger.LogInformation(
-                "Consuming {Stream} as {Consumer} (capacity {Capacity}); function run spans: {Tracing}",
-                RedisKeys.RunsStream, _options.RunnerId, _budget.Capacity, _processor.TracingState);
+                "Consuming {Stream} and {EventStream} as {Consumer} (capacity {Capacity}); function run spans: {Tracing}",
+                RedisKeys.RunsStream, RedisKeys.EventRunsStream, _options.RunnerId, _budget.Capacity, _processor.TracingState);
 
             var idleDelay = TimeSpan.FromMilliseconds(250);
             // Wakes the idle wait below the moment the control plane queues a run.
             using var wakeup = await StreamWakeup.SubscribeAsync(_db, RedisKeys.RunsNudgeChannel).ConfigureAwait(false);
+            using var eventWakeup = await StreamWakeup.SubscribeAsync(_db, RedisKeys.EventRunsNudgeChannel).ConfigureAwait(false);
             var reclaimEvery = TimeSpan.FromSeconds(30);
             var nextReclaim = DateTimeOffset.UtcNow.Add(reclaimEvery);
 
@@ -105,31 +111,30 @@ namespace Blocks.FunctionRunner.Runs
                     // Up to the room this host has, at most MaxReadBatch: one round trip per entry
                     // capped a runner at ~1/RTT claims per second (~29/s at 34 ms, FN-4). Never more
                     // than the room, so nothing is claimed only to be deferred.
-                    var entries = await consumer.ReadNewAsync(count: Math.Min(room, MaxReadBatch), stoppingToken).ConfigureAwait(false);
+                    var entries = await ReadNextAsync(
+                        consumer, eventConsumer, selector, Math.Min(room, MaxReadBatch), stoppingToken).ConfigureAwait(false);
 
                     // On its own timer: the sweep for entries a dead runner left behind used to run
                     // only when no new entry arrived, so under steady traffic it never ran.
                     if (DateTimeOffset.UtcNow >= nextReclaim && room > entries.Count)
                     {
                         nextReclaim = DateTimeOffset.UtcNow.Add(reclaimEvery);
-                        var reclaimed = await consumer.ReclaimAbandonedAsync(
-                            TimeSpan.FromMilliseconds(_options.ClaimIdleMs), count: Math.Min(5, room - entries.Count)).ConfigureAwait(false);
-                        if (reclaimed.Count > 0) entries = [.. entries, .. reclaimed];
+                        entries = await ReclaimAsync(consumer, eventConsumer, entries, room).ConfigureAwait(false);
                     }
 
                     if (entries.Count == 0)
                     {
-                        await wakeup.WaitAsync(idleDelay, stoppingToken).ConfigureAwait(false);
+                        await WaitEitherAsync(wakeup, eventWakeup, idleDelay, stoppingToken).ConfigureAwait(false);
                         continue;
                     }
 
-                    foreach (var entry in entries)
+                    foreach (var (source, entry) in entries)
                     {
                         // Not the stop token: a stopping host stops claiming but lets what it has
                         // started finish (each run has its own deadline, ≤ startup allowance +
                         // timeout + grace). Cancelling here killed calls half-way and ran them
                         // again elsewhere ≥ 90 s later — side effects twice (FN-3, 2026-10-06).
-                        running.Add(HandleGuardedAsync(consumer, entry, CancellationToken.None));
+                        running.Add(HandleGuardedAsync(source, entry, CancellationToken.None));
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -158,6 +163,87 @@ namespace Blocks.FunctionRunner.Runs
 
             _logger.LogInformation("Run loop stopped");
         }
+
+        /// <summary>The sweep for entries a dead runner left behind, on both run streams, within the room left.</summary>
+        private async Task<List<(GroupConsumer Source, ClaimedEntry Entry)>> ReclaimAsync(
+            GroupConsumer runs, GroupConsumer events, List<(GroupConsumer Source, ClaimedEntry Entry)> entries, int room)
+        {
+            var minIdle = TimeSpan.FromMilliseconds(_options.ClaimIdleMs);
+            var reclaimed = await runs.ReclaimAbandonedAsync(minIdle, count: Math.Min(5, room - entries.Count)).ConfigureAwait(false);
+            entries = [.. entries, .. reclaimed.Select(e => (runs, e))];
+            if (room <= entries.Count) return entries;
+
+            var reclaimedEvents = await events.ReclaimAbandonedAsync(minIdle, count: Math.Min(5, room - entries.Count)).ConfigureAwait(false);
+            return [.. entries, .. reclaimedEvents.Select(e => (events, e))];
+        }
+
+        /// <summary>
+        /// Reads up to <paramref name="count"/> new entries from the two run streams by the 1:5 rule
+        /// (<see cref="RunSourceSelector"/>): runs first, one event run after every five while both wait,
+        /// and every free slot to events when the runs stream is empty.
+        /// </summary>
+        internal static async Task<List<(GroupConsumer Source, ClaimedEntry Entry)>> ReadNextAsync(
+            GroupConsumer runs, GroupConsumer events, RunSourceSelector selector, int count, CancellationToken token)
+        {
+            var taken = new List<(GroupConsumer, ClaimedEntry)>();
+            var want = count;
+
+            if (selector.EventDue(DateTimeOffset.UtcNow))
+            {
+                var due = await events.ReadNewAsync(count: 1, token).ConfigureAwait(false);
+                taken.AddRange(due.Select(e => (events, e)));
+                want -= due.Count;
+                NoteEventsRead(selector, due.Count);
+            }
+
+            var runsWanted = selector.RunsToRead(want, DateTimeOffset.UtcNow);
+            var fromRuns = runsWanted > 0
+                ? await runs.ReadNewAsync(runsWanted, token).ConfigureAwait(false)
+                : [];
+            taken.AddRange(fromRuns.Select(e => (runs, e)));
+            selector.TookRuns(fromRuns.Count);
+            want -= fromRuns.Count;
+
+            // The runs stream had less than asked for: the free slots go to events.
+            if (want > 0 && fromRuns.Count < runsWanted)
+            {
+                var fill = await events.ReadNewAsync(want, token).ConfigureAwait(false);
+                taken.AddRange(fill.Select(e => (events, e)));
+                NoteEventsRead(selector, fill.Count);
+            }
+            return taken;
+        }
+
+        private static void NoteEventsRead(RunSourceSelector selector, int taken)
+        {
+            if (taken > 0) selector.TookEvents(taken);
+            else selector.EventsEmpty(DateTimeOffset.UtcNow);
+        }
+
+        /// <summary>
+        /// Waits for the first nudge of either stream, or the interval. The loser's wait is cancelled so it
+        /// cannot swallow a later nudge.
+        /// </summary>
+        private static async Task WaitEitherAsync(StreamWakeup first, StreamWakeup second, TimeSpan interval, CancellationToken token)
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            var a = first.WaitAsync(interval, cts.Token);
+            var b = second.WaitAsync(interval, cts.Token);
+            await Task.WhenAny(a, b).ConfigureAwait(false);
+            await cts.CancelAsync().ConfigureAwait(false);
+            try
+            {
+                await Task.WhenAll(a, b).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            {
+                // The wait that lost the race.
+            }
+        }
+
+        /// <summary>True when an event run waited longer than <paramref name="maxWaitSeconds"/> in its queue.</summary>
+        internal static bool IsEventExpired(long? queuedMs, int maxWaitSeconds) =>
+            queuedMs is { } waited && waited > maxWaitSeconds * 1000L;
 
         /// <summary>
         /// A run that cannot start yet goes back to the end of the queue after a short back-off
@@ -195,7 +281,7 @@ namespace Blocks.FunctionRunner.Runs
                 .Append(new NameValueEntry(RedisKeys.RunDeferralsField, (deferrals + 1).ToString(CultureInfo.InvariantCulture)))
                 .Append(new NameValueEntry(RedisKeys.RunFirstQueuedField, firstQueued.ToString(CultureInfo.InvariantCulture)))
                 .ToArray();
-            await _db.StreamAddAsync(RedisKeys.RunsStream, fields).ConfigureAwait(false);
+            await _db.StreamAddAsync(consumer.Stream, fields).ConfigureAwait(false);
             await consumer.AcknowledgeAsync(entry.Id).ConfigureAwait(false);
         }
 
@@ -298,6 +384,22 @@ namespace Blocks.FunctionRunner.Runs
             if (string.IsNullOrWhiteSpace(job.Image))
             {
                 await consumer.DeadLetterAsync(entry, "the entry carries no image").ConfigureAwait(false);
+                return;
+            }
+
+            // A run started by an event is not real time: past its wait limit it is not started. The run is
+            // failed through the same result path as any other run that never reached a sandbox, and the
+            // control plane closes it as terminal (never retried) and dead-letters the event.
+            if (string.Equals(consumer.Stream, RedisKeys.EventRunsStream, StringComparison.Ordinal)
+                && IsEventExpired(job.QueuedMs, _options.EventRunMaxWaitSeconds))
+            {
+                await _processor.ReportUnexecutedAsync(
+                    job, RunStatuses.Failed, ErrorCodes.EventExpired,
+                    $"{ErrorCodes.EventExpired}: the event run waited more than {_options.EventRunMaxWaitSeconds} s in the queue and was not started",
+                    token).ConfigureAwait(false);
+                await consumer.AcknowledgeAsync(entry.Id).ConfigureAwait(false);
+                _logger.LogWarning(
+                    "Event run {RunId} expired after {WaitedMs} ms in the queue; not started", runId, job.QueuedMs);
                 return;
             }
 

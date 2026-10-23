@@ -154,6 +154,16 @@ namespace BlocksTemplate.Api.Controllers
             return new BaseResponse { IsSuccess = true };
         }
 
+        /// <summary>
+        /// Runs of the function that still wait to start: <c>httpQueued</c> (HTTP, workflow, replay) and <c>eventQueued</c>
+        /// (started by a function event), and <c>oldestEventQueuedAt</c>. Another tenant's function is a 404.
+        /// </summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public async Task<QueueStatusDto> GetQueueStatus(
+            [FromQuery] string functionId, [FromServices] IFunctionEventSettingsService events)
+            => await events.GetQueueStatusAsync(GetTenantId(), functionId, HttpContext.RequestAborted);
+
         /// <summary>What happened to the events of a run (its newest attempt that has any). Never a payload.</summary>
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::function::read")]
