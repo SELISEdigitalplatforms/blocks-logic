@@ -8,6 +8,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
 using Workflow.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.ActionDataV1
 {
@@ -399,7 +400,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
                 if (logToken) LogToken(log, token);
                 if (string.IsNullOrWhiteSpace(token))
-                    throw new NoDelegatedTokenException();
+                    throw NoDelegatedTokenException.ForCurrentRun();
                 request.Headers.Add("Authorization", $"Bearer {token}");
             }
             else if (parameters.AuthenticationType == "clientCredential"

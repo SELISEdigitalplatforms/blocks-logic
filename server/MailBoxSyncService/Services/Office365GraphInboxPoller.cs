@@ -6,6 +6,7 @@ using Mail.DomainService.Shared.Enums;
 using MailBoxSyncService.Entities;
 using Microsoft.Graph.Models.ODataErrors;
 using MimeKit;
+using Blocks.Genesis.Entities.Logic;
 
 namespace MailBoxSyncService.Services
 {

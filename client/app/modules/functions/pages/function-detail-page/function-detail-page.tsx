@@ -6,6 +6,7 @@ import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import {
   Check,
   Copy,
+  Download,
   Loader2,
   Pencil,
   Rocket,
@@ -27,8 +28,12 @@ import { useGetFunction } from "../../hooks/use-function";
 import { useFunctionEditor } from "../../hooks/use-function-editor";
 import { useUpdateFunction } from "../../hooks/use-functions";
 import { useDeploy } from "../../hooks/use-deploy";
+import { useExportFunction } from "../../hooks/use-function-transfer";
+import { NeedsSecretBanner } from "../../components/needs-secret-banner";
+import { downloadExportFile, importErrorOf } from "../../utils/transfer";
 import { BuildProgress } from "../../components/build-progress";
 import { useGetRuns } from "../../hooks/use-runs";
+import { useGetEventSettings } from "../../hooks/use-events";
 import { useGetVersions } from "../../hooks/use-versions";
 import { useFunctionEditorStore } from "../../store/function-editor-store";
 import { TERMINAL_RUN_STATUSES } from "../../types/run.types";
@@ -47,6 +52,10 @@ import { DangerZoneCard } from "../../components/danger-zone-card";
 import { TriggerHttpCard } from "../../components/trigger-http-card";
 import { RateLimitCard } from "../../components/rate-limit-card";
 import { TriggerWorkflowCard } from "../../components/trigger-workflow-card";
+import { TriggerEventCard } from "../../components/trigger-event-card";
+import { EventsCard } from "../../components/events-card";
+import { QueueStatusCard } from "../../components/queue-status-card";
+import { isPublicHttpTrigger } from "../../utils/events";
 import { SandboxReuseCard } from "../../components/sandbox-reuse-card";
 import { SandboxRulesCard } from "../../components/sandbox-rules-card";
 import { FunctionGuide } from "../../components/function-guide";
@@ -158,11 +167,20 @@ const EditorToolButton = ({
   </Tooltip>
 );
 
-const TAB_ORDER = ["code", "trigger", "output", "configuration", "runs", "versions"] as const;
+const TAB_ORDER = [
+  "code",
+  "trigger",
+  "output",
+  "events",
+  "configuration",
+  "runs",
+  "versions",
+] as const;
 const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
   code: "Code",
   trigger: "Trigger",
   output: "Output",
+  events: "Events",
   configuration: "Configuration",
   runs: "Runs",
   versions: "Versions",
@@ -206,6 +224,17 @@ export const FunctionDetailPage = () => {
         : showErrorToast({ errors: "Failed to deploy function" }),
   });
   const { mutateAsync: renameAsync, isPending: isRenaming } = useUpdateFunction();
+  const { mutateAsync: exportAsync, isPending: isExporting } = useExportFunction();
+
+  /** Downloads the saved function (not unsaved edits) as one export file: secrets by name only. */
+  const handleExport = async () => {
+    try {
+      downloadExportFile(await exportAsync(functionId));
+      showSuccessToast({ description: "Export downloaded. Unsaved changes are not in it." });
+    } catch (error) {
+      showErrorToast({ errors: importErrorOf(error).message });
+    }
+  };
 
   const indexJs = useFunctionEditorStore((s) => s.indexJs);
   const packageJson = useFunctionEditorStore((s) => s.packageJson);
@@ -289,6 +318,7 @@ export const FunctionDetailPage = () => {
     // panel's last run, which a test refreshes itself when it starts and when its run settles.
     { autoRefresh: isRunsAutoRefresh && queryParams.tab === "runs", enabled: !!runsFromUtc },
   );
+  const { data: eventSettings } = useGetEventSettings(functionId);
   const { data: versionsData, isLoading: isVersionsLoading } = useGetVersions(functionId);
 
   useEffect(() => {
@@ -365,10 +395,12 @@ export const FunctionDetailPage = () => {
   const hasRunFilters =
     !!queryParams.runStatus || !!queryParams.runTrigger || !!queryParams.runSearch;
 
+  const eventCount = eventSettings?.events.length ?? 0;
   const tabBadges: Record<(typeof TAB_ORDER)[number], string> = {
     code: "",
     trigger: "",
     output: outputActions.length ? String(outputActions.length) : "",
+    events: eventCount ? String(eventCount) : "",
     configuration: variables.length ? String(variables.length) : "",
     runs: runsData?.totalCount ? String(runsData.totalCount) : "",
     versions: isDeployed ? `v${fn.activeVersionNumber}` : "",
@@ -462,6 +494,20 @@ export const FunctionDetailPage = () => {
             <Button
               variant="outline"
               size="sm"
+              className="gap-1.5"
+              onClick={() => void handleExport()}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              Export
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setQueryParams({ tab: "code", runId: "" });
                 requestTestRun();
@@ -494,6 +540,8 @@ export const FunctionDetailPage = () => {
             </Button>
           </div>
         </div>
+
+        <NeedsSecretBanner missing={fn.missingSecrets} duplicate={fn.duplicateSecrets} />
 
         {/* A deploy whose build outlasted the request (202): its progress, and its log if it fails. */}
         {deployBuildId && (
@@ -743,6 +791,7 @@ export const FunctionDetailPage = () => {
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="flex flex-col gap-4">
                 <TriggerWorkflowCard value={trigger} onChange={setTrigger} />
+                <TriggerEventCard functionId={fn.id} />
                 <SandboxReuseCard />
               </div>
               <InvokeSnippetCard functionId={fn.id} trigger={trigger} />
@@ -757,9 +806,18 @@ export const FunctionDetailPage = () => {
             </Card>
           </TabsContent>
 
+          <TabsContent value="events" className="flex flex-col gap-4">
+            <EventsCard functionId={fn.id} isPublic={isPublicHttpTrigger(trigger)} />
+          </TabsContent>
+
           <TabsContent value="configuration" className="flex flex-col gap-4">
             <Card className="overflow-hidden">
-              <VariablesEditor value={variables} onChange={setVariables} />
+              <VariablesEditor
+                value={variables}
+                onChange={setVariables}
+                missingSecrets={fn.missingSecrets}
+                duplicateSecrets={fn.duplicateSecrets}
+              />
             </Card>
             <div className="grid items-start gap-4 xl:grid-cols-2">
               <Card>
@@ -804,6 +862,7 @@ export const FunctionDetailPage = () => {
               />
             ) : (
               <>
+                <QueueStatusCard functionId={fn.id} />
                 <Card>
                   <CardHeader className="mb-4 p-0">
                     <RunsFilterBar

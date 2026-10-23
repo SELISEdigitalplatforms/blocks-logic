@@ -3,12 +3,14 @@ using DomainService.Notification;
 using DomainService.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Api.Controllers
 {
     /// <summary>
     /// Delivery and read-state for user notifications, routed as <c>/api/Notifier/{action}</c>.
-    /// The two send actions are anonymous because internal services call them; everything that reads or
+    /// The two send actions take no bearer token because internal services call them; they check the
+    /// <c>Secret</c> sender header instead (<see cref="INotifierSendGuard"/>). Everything that reads or
     /// mutates a user's own notifications requires a bearer token.
     /// </summary>
     [ApiController]
@@ -16,15 +18,23 @@ namespace Api.Controllers
 
     public class NotifierController : ControllerBase
     {
+        private const string SecretHeader = "Secret";
+
         private readonly INotificationService _notificationService;
+        private readonly INotifierSendGuard _sendGuard;
         private readonly ILogger<NotifierController> _logger;
 
-        /// <summary>Takes the notification service and a logger.</summary>
-        public NotifierController(INotificationService notificationService,ILogger<NotifierController>logger)
+        /// <summary>Takes the notification service, the send guard and a logger.</summary>
+        public NotifierController(INotificationService notificationService, INotifierSendGuard sendGuard,
+            ILogger<NotifierController> logger)
         {
             _notificationService = notificationService;
+            _sendGuard = sendGuard;
             _logger = logger;
         }
+
+        private bool SenderAllowed(string action) =>
+            _sendGuard.IsAllowed(Request.Headers[SecretHeader].ToString(), action);
 
         // Shape only, never the payload: ResponseValue / DenormalizedPayload can carry a secret
         // (SendSecretNotification is the secrets pipeline). User rule 2026-10-08.
@@ -40,8 +50,11 @@ namespace Api.Controllers
 
         /// <summary><c>POST</c> — delivers a notification through the configured channels.</summary>
         [HttpPost]
-        public async Task<BaseResponse> Notify([FromBody] NotifyRequest notifyRequest)
+        public async Task<ActionResult<BaseResponse>> Notify([FromBody] NotifyRequest notifyRequest)
         {
+            if (!SenderAllowed(nameof(Notify)))
+                return Unauthorized();
+
             LogReceived(notifyRequest);
             var response= await _notificationService.NotifyAsync(notifyRequest);
             LogHandled(response);
@@ -54,8 +67,11 @@ namespace Api.Controllers
         /// </summary>
         [ApiExplorerSettings(IgnoreApi = true)]
         [HttpPost]
-        public async Task<BaseResponse> SendSecretNotification([FromBody] NotifyRequest notifyRequest)
+        public async Task<ActionResult<BaseResponse>> SendSecretNotification([FromBody] NotifyRequest notifyRequest)
         {
+            if (!SenderAllowed(nameof(SendSecretNotification)))
+                return Unauthorized();
+
             LogReceived(notifyRequest);
 
             var response = await _notificationService.NotifyAsync(notifyRequest);
@@ -69,7 +85,7 @@ namespace Api.Controllers
         /// arrives in the body despite the <c>GET</c> verb.
         /// </summary>
         [HttpGet]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::notifier::read")]
         public async Task<List<OfflineNotification>> GetUnreadNotificationsBySubscriptionFilter([FromBody] GetUnreadNotificationsRequestBySubscriptionFilter request)
         {
             return await _notificationService.GetUnreadNotificationsBySubscriptionFilter(request);
@@ -77,7 +93,7 @@ namespace Api.Controllers
 
         /// <summary><c>POST</c> — marks every one of the caller's notifications read.</summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::notifier::manage")]
         public async Task<BaseResponse> MarkAllNotificationAsRead()
         {
             return await _notificationService.MarkAllNotificationAsRead();
@@ -85,7 +101,7 @@ namespace Api.Controllers
 
         /// <summary><c>POST</c> — marks one notification read.</summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::notifier::manage")]
         public async Task<BaseResponse> MarkNotificationAsRead([FromBody] MarkNotificationAsReadRequest request)
         {
             return await _notificationService.MarkNotificationAsRead(request);
@@ -93,7 +109,7 @@ namespace Api.Controllers
 
         /// <summary><c>GET</c> — the caller's notifications, filtered and paged by the query string.</summary>
         [HttpGet]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::notifier::read")]
         public async Task<GetNotificationsResponse> GetNotifications([FromQuery] GetNotificationsRequest request)
         {
             return await _notificationService.GetNotificationsAsync(request);

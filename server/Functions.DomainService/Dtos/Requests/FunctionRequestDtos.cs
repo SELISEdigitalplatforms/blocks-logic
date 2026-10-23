@@ -1,4 +1,4 @@
-using Functions.DomainService.Models;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Dtos.Requests
 {
@@ -31,7 +31,7 @@ namespace Functions.DomainService.Dtos.Requests
         public string IndexJs { get; set; } = string.Empty;
         public string PackageJson { get; set; } = string.Empty;
         public string? LockJson { get; set; }
-        /// <summary>See <see cref="Models.FunctionSource.AllowInstallScripts"/>. Absent = off.</summary>
+        /// <summary>See <see cref="FunctionSource.AllowInstallScripts"/>. Absent = off.</summary>
         public bool AllowInstallScripts { get; set; }
         public FunctionLimits Limits { get; set; } = new();
         public RetryPolicy Retry { get; set; } = new();
@@ -123,6 +123,12 @@ namespace Functions.DomainService.Dtos.Requests
 
         /// <summary>Sync up to min(timeout+5s, Functions:HttpSyncWaitMaxSeconds — 30s by default, under typical ingress idle timeouts); otherwise 202 immediately (DECISIONS D5).</summary>
         public bool Wait { get; set; }
+
+        /// <summary>
+        /// The caller asked for <c>Accept: text/event-stream</c>: a sync function answers with two
+        /// events — <c>run</c> once queued, then <c>done</c> or <c>error</c> — instead of one body.
+        /// </summary>
+        public bool Sse { get; set; }
 
         /// <summary>
         /// <c>Prefer: wait=&lt;seconds&gt;</c> from the caller (RFC 7240), parsed by the controller:

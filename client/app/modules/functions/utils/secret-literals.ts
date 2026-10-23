@@ -11,6 +11,10 @@
 const CREDENTIAL_NAME =
   /(key|token|secret|passw|pwd|signature|^sig$|auth|session|credential|cookie|bearer|jwt)/i;
 const SECRET_REF = /\{\{secret\.[\w-]+\}\}/g;
+// An imported reference kept by name until the secret exists, and the export marker for one that had
+// no secret: both are references, never typed values (server: FunctionSecretLiterals).
+const SECRET_NAME_REF = /\{\{secretName\.[A-Za-z0-9][A-Za-z0-9._-]{0,99}\}\}/g;
+const UNRESOLVED_REF = "{{secretUnresolved}}";
 const SCHEME_WORDS = ["bearer", "basic", "token"];
 
 /** True when `name` looks like it holds a credential. */
@@ -20,7 +24,7 @@ export const isCredentialName = (name: string | null | undefined): boolean =>
 /** True when `value` has typed text besides `{{secret.<id>}}` references and an auth scheme word. */
 export const hasTypedValue = (value: string | null | undefined): boolean => {
   if (!value || !value.trim()) return false;
-  const rest = value.replace(SECRET_REF, "").trim();
+  const rest = value.replace(SECRET_REF, "").replace(SECRET_NAME_REF, "").split(UNRESOLVED_REF).join("").trim();
   if (!rest) return false;
   return !SCHEME_WORDS.includes(rest.toLowerCase());
 };

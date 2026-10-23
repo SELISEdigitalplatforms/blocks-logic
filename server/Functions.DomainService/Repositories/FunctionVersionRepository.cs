@@ -1,7 +1,8 @@
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
+using DataAccess.InternalService;
 using Functions.DomainService.Utils;
 using MongoDB.Driver;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
@@ -12,10 +13,16 @@ namespace Functions.DomainService.Repositories
         private readonly HashSet<string> _indexedTenants = [];
         private readonly Lock _indexGate = new();
 
-        public FunctionVersionRepository(IDbContextProvider dbContextProvider)
+        public FunctionVersionRepository(IDbContextProvider dbContextProvider, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
+            _dataAccess = dataAccess;
         }
+        private readonly ILogicDataAccess _dataAccess;
+
+        private Task<ReadScope<FunctionVersionEntity>> ReadAsync(string tenantId, FilterDefinition<FunctionVersionEntity> filter, string callSite, bool useProjection = true) =>
+            _dataAccess.ReadAsync(LogicSchemas.FunctionVersionEntity, filter, $"FunctionVersionRepository.{callSite}", tenantId, useProjection);
+
 
         private IMongoCollection<FunctionVersionEntity> Collection(string tenantId)
             => _dbContextProvider.GetCollection<FunctionVersionEntity>(tenantId, FunctionsConstants.FunctionVersionsCollection);
@@ -45,6 +52,10 @@ namespace Functions.DomainService.Repositories
 
             var filter = Builders<FunctionVersionEntity>.Filter.Eq(v => v.FunctionId, functionId);
             var collection = Collection(tenantId);
+            // Own projection (no Source) is kept for the list; only the resolver row filter is added.
+            var scope = await ReadAsync(tenantId, filter, "GetAll", useProjection: false);
+            if (!scope.Granted) return ([], 0);
+            filter = scope.Filter;
             var totalCount = await collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
             // Each version snapshots its own full copy of the source, which the versions table never
             // shows. GetVersionSourceAsync is the one path that wants the code, and it fetches a single
@@ -57,13 +68,22 @@ namespace Functions.DomainService.Repositories
                 .Limit(Math.Max(1, pageSize))
                 .ToListAsync(cancellationToken);
 
-            return (items, totalCount);
+            return (scope.ForView(items), totalCount);
         }
 
         public async Task<FunctionVersionEntity?> GetByIdAsync(string tenantId, string versionId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(versionId)) return null;
-            return await Collection(tenantId).Find(v => v.ItemId == versionId).FirstOrDefaultAsync(cancellationToken);
+            var scope = await ReadAsync(tenantId, Builders<FunctionVersionEntity>.Filter.Where(v => v.ItemId == versionId), "GetById");
+            return scope.Granted ? await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken) : null;
+        }
+
+        public async Task<FunctionVersionEntity?> GetByIdForViewAsync(string tenantId, string versionId, CancellationToken cancellationToken = default)
+        {
+            // Masked: View column (property) rules clear what the caller may not see. Never save it back.
+            if (string.IsNullOrWhiteSpace(versionId)) return null;
+            var scope = await ReadAsync(tenantId, Builders<FunctionVersionEntity>.Filter.Where(v => v.ItemId == versionId), "GetByIdForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken)) : null;
         }
 
         public async Task<FunctionVersionEntity?> GetByNumberAsync(
@@ -71,14 +91,17 @@ namespace Functions.DomainService.Repositories
         {
             var filter = Builders<FunctionVersionEntity>.Filter.Eq(v => v.FunctionId, functionId)
                        & Builders<FunctionVersionEntity>.Filter.Eq(v => v.Number, number);
-            return await Collection(tenantId).Find(filter).FirstOrDefaultAsync(cancellationToken);
+            var scope = await ReadAsync(tenantId, filter, "GetByNumber");
+            return scope.Granted ? await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken) : null;
         }
 
         public async Task<FunctionVersionEntity?> GetLatestAsync(
             string tenantId, string functionId, CancellationToken cancellationToken = default)
         {
             var filter = Builders<FunctionVersionEntity>.Filter.Eq(v => v.FunctionId, functionId);
-            return await Collection(tenantId).Find(filter)
+            var scope = await ReadAsync(tenantId, filter, "GetLatest");
+            if (!scope.Granted) return null;
+            return await scope.Apply(Collection(tenantId))
                 .SortByDescending(v => v.Number)
                 .Limit(1)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -86,6 +109,9 @@ namespace Functions.DomainService.Repositories
 
         public async Task CreateAsync(string tenantId, FunctionVersionEntity version, CancellationToken cancellationToken = default)
         {
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionVersionEntity, "FunctionVersionRepository.Create", tenantId))
+                throw new UnauthorizedAccessException("Function version create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.FunctionVersionEntity, version, isInsert: true, "FunctionVersionRepository.Create", tenantId);
             await EnsureIndexesAsync(tenantId, cancellationToken);
             await Collection(tenantId).InsertOneAsync(version, cancellationToken: cancellationToken);
         }
@@ -93,8 +119,10 @@ namespace Functions.DomainService.Repositories
         public async Task<IReadOnlyList<FunctionVersionEntity>> GetAllForFunctionAsync(
             string tenantId, string functionId, CancellationToken cancellationToken = default)
         {
+            var scope = await ReadAsync(tenantId, Builders<FunctionVersionEntity>.Filter.Where(v => v.FunctionId == functionId), "GetAllForFunction", useProjection: false);
+            if (!scope.Granted) return [];
             return await Collection(tenantId)
-                .Find(v => v.FunctionId == functionId)
+                .Find(scope.Filter)
                 .Project<FunctionVersionEntity>(Builders<FunctionVersionEntity>.Projection
                     .Exclude(v => v.Source)
                     .Exclude(v => v.Packages))
@@ -107,16 +135,20 @@ namespace Functions.DomainService.Repositories
         {
             if (versionIds.Count == 0) return 0;
 
-            var result = await Collection(tenantId).DeleteManyAsync(
-                Builders<FunctionVersionEntity>.Filter.In(v => v.ItemId, versionIds), cancellationToken);
+            var filter = await _dataAccess.DeleteFilterAsync(LogicSchemas.FunctionVersionEntity,
+                Builders<FunctionVersionEntity>.Filter.In(v => v.ItemId, versionIds), "FunctionVersionRepository.DeleteMany", tenantId);
+            if (filter is null) return 0;
+            var result = await Collection(tenantId).DeleteManyAsync(filter, cancellationToken);
             return result.DeletedCount;
         }
 
         public async Task<long> DeleteAllForFunctionAsync(
             string tenantId, string functionId, CancellationToken cancellationToken = default)
         {
-            var result = await Collection(tenantId).DeleteManyAsync(
-                v => v.FunctionId == functionId, cancellationToken);
+            var filter = await _dataAccess.DeleteFilterAsync(LogicSchemas.FunctionVersionEntity,
+                Builders<FunctionVersionEntity>.Filter.Where(v => v.FunctionId == functionId), "FunctionVersionRepository.DeleteAllForFunction", tenantId);
+            if (filter is null) return 0;
+            var result = await Collection(tenantId).DeleteManyAsync(filter, cancellationToken);
             return result.DeletedCount;
         }
     }

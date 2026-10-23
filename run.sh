@@ -9,6 +9,7 @@ SERVER_DIR="$SCRIPT_DIR/server"
 SOLUTION="$SERVER_DIR/Blocks.slnx"
 API_PROJECT="$SCRIPT_DIR/server/Api/Api.csproj"
 WORKER_PROJECT="$SCRIPT_DIR/server/Worker/Worker.csproj"
+SCHEDULER_PROJECT="$SCRIPT_DIR/server/Scheduler.Worker/Scheduler.Worker.csproj"
 WWWROOT_DIR="$SCRIPT_DIR/server/Api/wwwroot"
 
 API_PORT=5000
@@ -20,15 +21,17 @@ export LOGIC_SSL_KEY="${LOGIC_SSL_KEY:-}"
 
 API_PID=""
 WORKER_PID=""
+SCHEDULER_PID=""
 
 usage() {
 cat <<EOF
 Usage: $0 [OPTION]
 
 Options:
-  -a, --all         Build frontend + run API + Work
+  -a, --all         Build frontend + run API + Worker + Scheduler.Worker
   -b, --backend     Run .NET API
   -w, --worker      Run .NET Worker
+  -s, --scheduler   Run .NET Scheduler.Worker (Hangfire; run one only)
   -f, --frontend    Run frontend dev server
   -k, --kill-port   Kill API port ($API_PORT)
   -n, --npm         Run npm command inside client/
@@ -89,6 +92,7 @@ cleanup() {
 
     [ -n "${API_PID:-}" ] && kill "$API_PID" 2>/dev/null || true
     [ -n "${WORKER_PID:-}" ] && kill "$WORKER_PID" 2>/dev/null || true
+    [ -n "${SCHEDULER_PID:-}" ] && kill "$SCHEDULER_PID" 2>/dev/null || true
 }
 
 trap cleanup EXIT INT TERM
@@ -156,6 +160,11 @@ run_backend() {
 run_worker() {
     echo "Running .NET Worker..."
     dotnet run --project "$WORKER_PROJECT"
+}
+
+run_scheduler() {
+    echo "Running .NET Scheduler.Worker..."
+    dotnet run --project "$SCHEDULER_PROJECT"
 }
 
 # ---------- TESTS ----------
@@ -240,6 +249,10 @@ case "$1" in
         (cd "$SCRIPT_DIR" && run_worker)
         ;;
 
+    -s|--scheduler)
+        (cd "$SCRIPT_DIR" && run_scheduler)
+        ;;
+
     -a|--all)
         free_port $API_PORT
 
@@ -253,7 +266,10 @@ case "$1" in
         (cd "$SCRIPT_DIR" && run_worker) &
         WORKER_PID=$!
 
-        wait $API_PID $WORKER_PID
+        (cd "$SCRIPT_DIR" && run_scheduler) &
+        SCHEDULER_PID=$!
+
+        wait $API_PID $WORKER_PID $SCHEDULER_PID
         ;;
 
     -tf|--test-fe)

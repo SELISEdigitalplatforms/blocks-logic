@@ -1,7 +1,7 @@
 using DomainService.Configuration.Services;
-using DomainService.Entities;
 using DomainService.Shared;
 using FluentValidation;
+using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Notification
 {

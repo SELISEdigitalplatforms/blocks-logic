@@ -20,7 +20,7 @@ RUN set -eux; \
 
 # The trusted runtime: root-owned, world-readable, not writable by anyone. The rootfs is
 # read-only at run time as well; this is the second lock on the same door.
-COPY runtime/bootstrap.mjs runtime/protocol.mjs runtime/envelope.mjs runtime/reuse.mjs /runtime/
+COPY runtime/bootstrap.mjs runtime/protocol.mjs runtime/envelope.mjs runtime/events.mjs runtime/trace.mjs runtime/reuse.mjs /runtime/
 RUN set -eux; \
     chown -R root:root /runtime; \
     chmod 0555 /runtime; \

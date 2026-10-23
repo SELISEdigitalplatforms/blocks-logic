@@ -119,4 +119,43 @@ describe("functionService", () => {
       { runId: "run_1" },
     );
   });
+
+  it("reads the event catalog without a query string", async () => {
+    await functionService.getEventCatalog();
+    expect(http.logicService.get).toHaveBeenCalledWith(
+      expect.stringContaining("/Functions/GetEventCatalog"),
+    );
+  });
+
+  it("reads event settings and queue status by function id", async () => {
+    await functionService.getEventSettings("fn_1");
+    expect(http.logicService.get).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/Functions\/GetEventSettings\?functionId=fn_1$/),
+    );
+
+    await functionService.getQueueStatus("fn_1");
+    expect(http.logicService.get).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/Functions\/GetQueueStatus\?functionId=fn_1$/),
+    );
+  });
+
+  it("reads a run's events by run id", async () => {
+    await functionService.getRunEvents("run_1");
+    expect(http.logicService.get).toHaveBeenCalledWith(
+      expect.stringMatching(/\/Functions\/GetRunEvents\?runId=run_1$/),
+    );
+  });
+
+  it("saves event settings as the whole body", async () => {
+    const body = {
+      functionId: "fn_1",
+      events: [{ type: "FunctionEvent" as const, payload: { name: "order.paid" } }],
+      triggerEvents: ["order.created"],
+    };
+    await functionService.saveEventSettings(body);
+    expect(http.logicService.post).toHaveBeenCalledWith(
+      expect.stringContaining("/Functions/SaveEventSettings"),
+      body,
+    );
+  });
 });

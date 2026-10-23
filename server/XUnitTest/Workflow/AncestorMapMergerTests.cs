@@ -2,6 +2,7 @@ using Workflow.DomainService.Entities;
 using Workflow.DomainService.Nodes;
 using Workflow.DomainService.Utils;
 using FluentAssertions;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

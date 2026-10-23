@@ -10,12 +10,14 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ProtocolWriter, LIMITS, EXIT, CODE } from './protocol.mjs';
 import { parseEnvelope, EnvelopeError } from './envelope.mjs';
+import { withTraceparent } from './trace.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BOOTSTRAP = join(HERE, 'bootstrap.mjs');
@@ -265,6 +267,28 @@ describe('bootstrap end to end', () => {
       tenantId: 't1', authed: true, region: 'ch', runId: 'run_test_1',
       attempt: 1, invokedBy: 'http', frozen: true,
     });
+  });
+
+  test('an event run: ctx.run.invokedBy carries type, id and the event name, frozen', async () => {
+    const envelope = {
+      ...BASE_ENVELOPE,
+      run: { ...BASE_ENVELOPE.run, invokedBy: { type: 'event', id: 'run-9-1-1', name: 'order.created' } },
+      input: { orderId: '7' },
+    };
+    const r = await runBootstrap(`export default async (i, ctx) => {
+      let blocked = false;
+      try { ctx.run.invokedBy.name = 'x'; } catch { blocked = true; }
+      return { by: ctx.run.invokedBy, input: i, blocked, frozen: Object.isFrozen(ctx.run.invokedBy) };
+    };`, envelope);
+    assert.deepEqual(r.result.value, {
+      by: { type: 'event', id: 'run-9-1-1', name: 'order.created' },
+      input: { orderId: '7' }, blocked: true, frozen: true,
+    });
+  });
+
+  test('a run that no event started has invokedBy.name null', async () => {
+    const r = await runBootstrap(`export default async (i, ctx) => ({ name: ctx.run.invokedBy.name });`);
+    assert.equal(r.result.value.name, null);
   });
 
   test('mutating ctx.context throws inside the function', async () => {
@@ -675,5 +699,302 @@ describe('streamed answers in single-run mode (F-5)', () => {
         return new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('hi')); c.close(); } });
       }`);
     assert.equal(r.result.value, 'hi');
+  });
+});
+
+// ------------------------------------------------------------ ctx.events ----
+
+const FN_EVENT = 'FunctionEvent';
+const ORDER_CREATED = 'order.created';
+const BLOCKS_URL = 'https://blocks.example.com/';
+const TRACEPARENT_A = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+const withEvents = (allowed, extra = {}) => ({ ...BASE_ENVELOPE, events: { allowed }, ...extra });
+
+describe('envelope: events and trace', () => {
+  test('absent → no allowed types, no trace', () => {
+    const e = parseEnvelope(JSON.stringify(BASE_ENVELOPE));
+    assert.deepEqual([...e.events.allowed], []);
+    assert.deepEqual(e.trace, { traceparent: null, hosts: [] });
+    assert.ok(Object.isFrozen(e.events) && Object.isFrozen(e.events.allowed) && Object.isFrozen(e.trace));
+  });
+
+  test('parses allowed types, a W3C traceparent and lower-cased hosts', () => {
+    const e = parseEnvelope(JSON.stringify({ ...BASE_ENVELOPE, events: { allowed: ['SendMail'] },
+      trace: { traceparent: TRACEPARENT_A, hosts: ['Api.Example.com', ' '] } }));
+    assert.deepEqual([...e.events.allowed], ['SendMail']);
+    assert.equal(e.trace.traceparent, TRACEPARENT_A);
+    assert.deepEqual([...e.trace.hosts], ['api.example.com']);
+  });
+
+  test('a malformed traceparent is ignored; wrong shapes are rejected', () => {
+    const e = parseEnvelope(JSON.stringify({ ...BASE_ENVELOPE, trace: { traceparent: 'nonsense', hosts: ['a.com'] } }));
+    assert.equal(e.trace.traceparent, null);
+    assert.throws(() => parseEnvelope(JSON.stringify({ ...BASE_ENVELOPE, events: { allowed: 'SendMail' } })), EnvelopeError);
+    assert.throws(() => parseEnvelope(JSON.stringify({ ...BASE_ENVELOPE, trace: { hosts: [1] } })), EnvelopeError);
+  });
+});
+
+describe('protocol writer: events on the result line', () => {
+  test('carries events, scrubs their payloads but not the value, and keeps them out of RESULT_BYTES', () => {
+    const { w, parsed } = collector();
+    w.useRedaction(['sk_secret_value']);
+    const events = [
+      { id: 'r-1-1', type: 'SendMail', json: JSON.stringify({ token: 'sk_secret_value', n: 1 }) },
+      { id: 'r-1-2', type: FN_EVENT, json: JSON.stringify({ name: ORDER_CREATED, data: 42 }) },
+    ];
+    assert.equal(w.result({ answer: 'sk_secret_value' }, events), null);
+    const [line] = parsed();
+    assert.deepEqual(line.value, { answer: 'sk_secret_value' });
+    assert.deepEqual(line.events, [
+      { id: 'r-1-1', type: 'SendMail', payload: { token: '[redacted]', n: 1 } },
+      { id: 'r-1-2', type: FN_EVENT, payload: { name: ORDER_CREATED, data: 42 } },
+    ]);
+  });
+
+  test('a secret that breaks the JSON when masked keeps an object payload with masked text', () => {
+    const { w, parsed } = collector();
+    w.useRedaction(['12345678']);
+    w.result(1, [{ id: 'r-1-1', type: 'SendMail', json: '{"pin":12345678}' }]);
+    assert.deepEqual(parsed()[0].events[0].payload, { _redacted: '{"pin":[redacted]}' });
+  });
+
+  test('no events key when there are none; the value alone is measured against RESULT_BYTES', () => {
+    const { w, parsed } = collector();
+    w.result('x', []);
+    assert.equal('events' in parsed()[0], false);
+    const big = collector();
+    const bigEvent = { id: 'r-1-1', type: 'SendMail', json: JSON.stringify({ a: 'y'.repeat(60 * 1024) }) };
+    assert.equal(big.w.result('z'.repeat(LIMITS.RESULT_BYTES - 100), [bigEvent]), null);
+    assert.equal(parsed().length, 1);
+  });
+});
+
+describe('ctx.events in single-run mode', () => {
+  test('buffers, returns frozen ids from 1, and the result line carries the events', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) {
+        const a = ctx.events.add('SendMail', { purpose: 'p', to: ['a@b.c'] });
+        const b = ctx.events.add('FunctionEvent', { name: 'order.created' });
+        return { a, b, frozen: Object.isFrozen(ctx.events) && Object.isFrozen(a) };
+      }`, withEvents(['SendMail', FN_EVENT]));
+    assert.equal(r.code, 0);
+    assert.deepEqual(r.result.value, { a: { id: 'run_test_1-1-1' }, b: { id: 'run_test_1-1-2' }, frozen: true });
+    assert.deepEqual(r.result.events, [
+      { id: 'run_test_1-1-1', type: 'SendMail', payload: { purpose: 'p', to: ['a@b.c'] } },
+      { id: 'run_test_1-1-2', type: FN_EVENT, payload: { name: ORDER_CREATED, data: null } },
+    ]);
+  });
+
+  test('the payload is a snapshot taken at add time', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) {
+        const p = { purpose: 'one' };
+        ctx.events.add('SendMail', p);
+        p.purpose = 'two';
+      }`, withEvents(['SendMail']));
+    assert.equal(r.result.events[0].payload.purpose, 'one');
+  });
+
+  test('no events → no events key', async () => {
+    const r = await runBootstrap('export default async () => 1', withEvents(['SendMail']));
+    assert.equal('events' in r.result, false);
+  });
+
+  test('a failing handler drops the events', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) {
+        ctx.events.add('SendMail', { a: 1 });
+        throw new Error('boom');
+      }`, withEvents(['SendMail']));
+    assert.equal(r.result.ok, false);
+    assert.equal('events' in r.result, false);
+  });
+
+  test('a type that is not allowed, or unknown, throws a clear error', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) {
+        const msgs = [];
+        for (const t of ['SendMail', 'Other', 5]) {
+          try { ctx.events.add(t, {}); } catch (e) { msgs.push(e.message); }
+        }
+        return msgs;
+      }`, withEvents([FN_EVENT, 'Other']));
+    assert.deepEqual(r.result.value, [
+      'event type "SendMail" is not allowed for this function: add it in the function\'s Events tab',
+      'event type "Other" is not allowed for this function: add it in the function\'s Events tab',
+      'event type "5" is not allowed for this function: add it in the function\'s Events tab',
+    ]);
+  });
+
+  test('a FunctionEvent needs a valid name and only name + data; other types need a plain object', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) {
+        const tries = [
+          ['FunctionEvent', { name: 'Order.Created' }], ['FunctionEvent', { name: 'ab' }],
+          ['FunctionEvent', { data: 1 }], ['FunctionEvent', { name: 'order.created', extra: 1 }],
+          ['FunctionEvent', 'order.created'], ['SendMail', [1]], ['SendMail', null], ['SendMail', 'x'],
+          ['SendMail', new Date()],
+        ];
+        return tries.map(([t, p]) => { try { ctx.events.add(t, p); return 'ok'; } catch { return 'throws'; } });
+      }`, withEvents(['SendMail', FN_EVENT]));
+    assert.deepEqual(r.result.value, Array(9).fill('throws'));
+    assert.equal('events' in r.result, false);
+  });
+
+  test('a payload that cannot be serialized throws', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) {
+        const circular = {}; circular.self = circular;
+        const out = [];
+        for (const p of [circular, { n: 1n }]) { try { ctx.events.add('SendMail', p); out.push('ok'); } catch { out.push('throws'); } }
+        return out;
+      }`, withEvents(['SendMail']));
+    assert.deepEqual(r.result.value, ['throws', 'throws']);
+  });
+
+  test('caps: the 51st event, a payload over 64 KB, and more than 512 KB in total', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) {
+        const out = {};
+        for (let i = 0; i < 50; i++) ctx.events.add('SendMail', { i });
+        try { ctx.events.add('SendMail', { i: 51 }); } catch (e) { out.count = e.message; }
+        return out;
+      }`, withEvents(['SendMail']));
+    assert.match(r.result.value.count, /at most 50 events/);
+    assert.equal(r.result.events.length, 50);
+
+    const size = await runBootstrap(`
+      export default async function (input, ctx) {
+        try { ctx.events.add('SendMail', { a: 'x'.repeat(64 * 1024) }); } catch (e) { return e.message; }
+      }`, withEvents(['SendMail']));
+    assert.match(size.result.value, /limit is 65536 bytes/);
+
+    const total = await runBootstrap(`
+      export default async function (input, ctx) {
+        let n = 0;
+        try { for (;;) { ctx.events.add('SendMail', { a: 'x'.repeat(60 * 1024) }); n++; } } catch (e) { return [n, e.message]; }
+      }`, withEvents(['SendMail']));
+    assert.equal(total.result.value[0], 8); // 8 x ~60 KB fit in 512 KB, the 9th does not
+    assert.match(total.result.value[1], /524288 bytes in total/);
+  });
+
+  test('add after the answer (from ctx.waitUntil work) throws; the answer has the events from before', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) {
+        ctx.events.add('SendMail', { a: 1 });
+        ctx.waitUntil((async () => {
+          await new Promise((r) => setTimeout(r, 20));
+          try { ctx.events.add('SendMail', { late: true }); } catch (e) { console.log('late: ' + e.message); }
+        })());
+        return 1;
+      }`, withEvents(['SendMail']));
+    assert.equal(r.result.events.length, 1);
+    assert.ok(r.logs.some((l) => l.msg === 'late: ctx.events.add was called after its call ended'));
+  });
+
+  test('payloads are masked with the run secrets, the value is not', async () => {
+    const r = await runBootstrap(`
+      export default async function (input, ctx) {
+        ctx.events.add('SendMail', { key: ctx.env.API_KEY });
+        return ctx.env.API_KEY;
+      }`, withEvents(['SendMail'], { env: { API_KEY: 'sk_live_abcdef' }, maskedEnv: ['API_KEY'] }));
+    assert.equal(r.result.value, 'sk_live_abcdef');
+    assert.deepEqual(r.result.events[0].payload, { key: '[redacted]' });
+  });
+});
+
+// ------------------------------------------------------------ fetch trace ----
+
+describe('withTraceparent (unit)', () => {
+  const trace = { traceparent: TRACEPARENT_A, hosts: ['blocks.example.com'] };
+  /** Records what the wrapped fetch receives. */
+  const recorder = () => {
+    const seen = [];
+    const base = (input, init) => { seen.push({ input, init }); return Promise.resolve('ok'); };
+    return { seen, wrapped: withTraceparent(base, () => trace) };
+  };
+  const sent = (r) => new Headers(r.seen.at(-1).init?.headers).get('traceparent');
+
+  test('adds the header for the host and its subdomains, case-insensitively', async () => {
+    const r = recorder();
+    await r.wrapped('https://blocks.example.com/a');
+    assert.equal(sent(r), TRACEPARENT_A);
+    await r.wrapped('https://API.Blocks.Example.com/a');
+    assert.equal(sent(r), TRACEPARENT_A);
+  });
+
+  test('leaves other hosts untouched (including look-alikes)', async () => {
+    const r = recorder();
+    for (const url of ['https://other.com/', 'https://notblocks.example.com/', 'https://blocks.example.com.evil.io/']) {
+      await r.wrapped(url);
+      assert.equal(r.seen.at(-1).init, undefined);
+    }
+  });
+
+  test('works with a URL object and a Request, and does not mutate the caller\'s objects', async () => {
+    const r = recorder();
+    await r.wrapped(new URL('https://blocks.example.com/x'));
+    assert.equal(sent(r), TRACEPARENT_A);
+
+    const req = new Request('https://blocks.example.com/y', { headers: { 'x-a': '1' } });
+    await r.wrapped(req);
+    assert.equal(r.seen.at(-1).input, req);
+    assert.equal(sent(r), TRACEPARENT_A);
+    assert.equal(new Headers(r.seen.at(-1).init.headers).get('x-a'), '1'); // the Request's own headers kept
+    assert.equal(req.headers.has('traceparent'), false);
+
+    const headers = new Headers({ 'x-b': '2' });
+    const init = { method: 'POST', headers };
+    await r.wrapped('https://blocks.example.com/z', init);
+    assert.equal(headers.has('traceparent'), false);
+    assert.deepEqual(Object.keys(init), ['method', 'headers']);
+    assert.equal(r.seen.at(-1).init.method, 'POST');
+  });
+
+  test('init headers as a plain object or array of pairs work', async () => {
+    const r = recorder();
+    await r.wrapped(BLOCKS_URL, { headers: { 'x-a': '1' } });
+    assert.equal(sent(r), TRACEPARENT_A);
+    await r.wrapped(BLOCKS_URL, { headers: [['x-a', '1']] });
+    assert.equal(sent(r), TRACEPARENT_A);
+  });
+
+  test('never overrides a traceparent the caller set', async () => {
+    const r = recorder();
+    const mine = '00-11111111111111111111111111111111-2222222222222222-01';
+    await r.wrapped(BLOCKS_URL, { headers: { Traceparent: mine } });
+    assert.equal(sent(r), mine);
+    await r.wrapped(new Request(BLOCKS_URL, { headers: { traceparent: mine } }));
+    assert.equal(r.seen.at(-1).init, undefined);
+  });
+
+  test('an invalid URL, no trace or no hosts pass through unchanged', async () => {
+    const r = recorder();
+    await r.wrapped('/relative');
+    assert.equal(r.seen.at(-1).init, undefined);
+    for (const t of [null, { traceparent: null, hosts: ['blocks.example.com'] }, { traceparent: TRACEPARENT_A, hosts: [] }]) {
+      const w = withTraceparent((i, n) => { r.seen.push({ input: i, init: n }); return Promise.resolve(); }, () => t);
+      await w(BLOCKS_URL);
+      assert.equal(r.seen.at(-1).init, undefined);
+    }
+  });
+});
+
+describe('fetch trace in single-run mode', () => {
+  test('the header reaches a listed host and not an unlisted one', async () => {
+    const seen = [];
+    const server = createServer((req, res) => { seen.push(req.headers.traceparent ?? null); res.end('ok'); });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    try {
+      const r = await runBootstrap(`
+        export default async function () {
+          await fetch('http://127.0.0.1:${port}/listed');
+          await fetch('http://localhost:${port}/unlisted');
+          return 1;
+        }`, { ...BASE_ENVELOPE, trace: { traceparent: TRACEPARENT_A, hosts: ['127.0.0.1'] } });
+      assert.equal(r.result.ok, true);
+      assert.deepEqual(seen, [TRACEPARENT_A, null]);
+    } finally { server.close(); }
   });
 });

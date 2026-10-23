@@ -15,7 +15,7 @@ namespace XUnitTest.Workflow
         public async Task No_parents_means_no_items_and_no_query()
         {
             var provider = new Mock<IDbContextProvider>(MockBehavior.Strict);
-            var repository = new WorkflowExecutionRepository(provider.Object);
+            var repository = new WorkflowExecutionRepository(provider.Object, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
 
             var items = await repository.GetItemsByNodeIdsAsync("exec-1", new List<Dictionary<string, string>>(), "t1");
 

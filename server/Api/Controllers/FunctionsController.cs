@@ -2,12 +2,12 @@ using Blocks.Genesis;
 using Common.InternalService.Access;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Services;
 using Functions.DomainService.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Blocks.Genesis.Entities.Logic;
 
 namespace BlocksTemplate.Api.Controllers
 {
@@ -50,6 +50,7 @@ namespace BlocksTemplate.Api.Controllers
         private readonly IEndpointAccessAuthorizer _accessAuthorizer;
         private readonly IFunctionPollTokenService _pollTokens;
         private readonly ILogger<FunctionsController> _logger;
+        private readonly IFunctionTransferService? _transferService;
 
         /// <summary>
         /// The management services, plus the shared access authorizer that resolves the tenant on
@@ -65,8 +66,10 @@ namespace BlocksTemplate.Api.Controllers
             IFunctionAuditService auditService,
             IEndpointAccessAuthorizer accessAuthorizer,
             IFunctionPollTokenService pollTokens,
-            ILogger<FunctionsController> logger)
+            ILogger<FunctionsController> logger,
+            IFunctionTransferService? transferService = null)
         {
+            _transferService = transferService;
             _functionService = functionService;
             _deploymentService = deploymentService;
             _invocationService = invocationService;
@@ -123,6 +126,101 @@ namespace BlocksTemplate.Api.Controllers
         [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<FunctionLimitsOptionsDto> GetLimits() => await _functionService.GetLimitsOptionsAsync();
 
+        // ------------------------------------------------------------------ events ----
+        // Function events: the events a function may send (ctx.events.add), edited on the draft and copied to each version
+        // at deploy; and what happened to a run's events. Reads need read, the save needs manage (it decides what a
+        // function may send). Every lookup is inside the caller's tenant database, so another tenant's id is a 404.
+
+        /// <summary>The events a function can be allowed to send, each with its payload template.</summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public FunctionEventCatalogDto GetEventCatalog([FromServices] IFunctionEventSettingsService events)
+            => events.GetCatalog();
+
+        /// <summary>The events of the function's draft; empty when none were saved.</summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public async Task<FunctionEventSettingsDto> GetEventSettings(
+            [FromQuery] string functionId, [FromServices] IFunctionEventSettingsService events)
+            => await events.GetAsync(GetTenantId(), functionId, HttpContext.RequestAborted);
+
+        /// <summary>Saves the draft's events. A deploy copies them to the new version.</summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::function::manage")]
+        public async Task<BaseResponse> SaveEventSettings(
+            [FromBody] SaveEventSettingsRequestDto request, [FromServices] IFunctionEventSettingsService events)
+        {
+            await events.SaveAsync(GetTenantId(), request, GetUserId(), GetEmail(), HttpContext.RequestAborted);
+            return new BaseResponse { IsSuccess = true };
+        }
+
+        /// <summary>
+        /// Runs of the function that still wait to start: <c>httpQueued</c> (HTTP, workflow, replay) and <c>eventQueued</c>
+        /// (started by a function event), and <c>oldestEventQueuedAt</c>. Another tenant's function is a 404.
+        /// </summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public async Task<QueueStatusDto> GetQueueStatus(
+            [FromQuery] string functionId, [FromServices] IFunctionEventSettingsService events)
+            => await events.GetQueueStatusAsync(GetTenantId(), functionId, HttpContext.RequestAborted);
+
+        /// <summary>What happened to the events of a run (its newest attempt that has any). Never a payload.</summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public async Task<RunEventsDto> GetRunEvents(
+            [FromQuery] string runId, [FromServices] IFunctionEventSettingsService events)
+            => await events.GetRunEventsAsync(GetTenantId(), runId, HttpContext.RequestAborted);
+
+        // -------------------------------------------------------- export / import ----
+        // One function per file, the same id in every environment (2026-10-18). Both directions need manage: an export
+        // carries the whole source, and an import writes it. The file holds secret names, never ids or values.
+
+        /// <summary>
+        /// Downloads one function as a <c>blocks.function.export</c> file: source, settings, output actions and
+        /// variables, with every secret reference written as the secret's name. Nothing environment-specific (runs,
+        /// builds, versions, status, counters, authors, access lists) is in it.
+        /// </summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::manage")]
+        public async Task<IActionResult> Export([FromQuery] string functionId)
+        {
+            var file = await Transfer().ExportAsync(GetTenantId(), functionId, GetUserId(), GetEmail());
+            Response.Headers.ContentDisposition = $"attachment; filename=\"{FunctionTransferCodec.FileName(file)}\"";
+            return Content(FunctionTransferCodec.Serialize(file), "application/json");
+        }
+
+        /// <summary>
+        /// Checks an export file against this environment and says what an import would do — <c>new</c>, <c>same</c>,
+        /// <c>changed</c> (with field and file diffs) or <c>blocked</c> — plus missing / duplicate secret names. Writes nothing.
+        /// </summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::function::manage")]
+        [RequestSizeLimit(ImportHardBodyLimitBytes)]
+        public async Task<Functions.DomainService.Dtos.FunctionImportPreviewDto> ImportPreview(
+            [FromBody] Functions.DomainService.Dtos.FunctionImportPreviewRequestDto request)
+            => await Transfer().PreviewAsync(GetTenantId(), request);
+
+        /// <summary>
+        /// Imports an export file: inserts it with the file's id, updates an existing function by the chosen
+        /// resolution (409 when it changed after the preview), or does nothing when it already matches — then builds
+        /// and deploys it. Install scripts always arrive off.
+        /// </summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::function::manage")]
+        [RequestSizeLimit(ImportHardBodyLimitBytes)]
+        public async Task<Functions.DomainService.Dtos.FunctionImportResultDto> Import(
+            [FromBody] Functions.DomainService.Dtos.FunctionImportApplyRequestDto request)
+            => await Transfer().ApplyAsync(GetTenantId(), request, GetUserId(), GetEmail());
+
+        /// <summary>
+        /// Kestrel's cap for an import request: a little above the service's own 3 MB file ceiling, so the service —
+        /// with its own message — is what refuses an oversized file, and a runaway upload still stops here.
+        /// </summary>
+        private const long ImportHardBodyLimitBytes = FunctionTransferCodec.MaxImportBytes + 256 * 1024;
+
+        private IFunctionTransferService Transfer() =>
+            _transferService ?? throw new InvalidOperationException("function export/import is not registered");
+
         // -------------------------------------------------------- test / deploy ----
 
         [HttpPost]
@@ -153,7 +251,7 @@ namespace BlocksTemplate.Api.Controllers
 
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::function::read")]
-        public async Task<Functions.DomainService.Models.FunctionSource> GetVersionSource(
+        public async Task<Blocks.Genesis.Entities.Logic.FunctionSource> GetVersionSource(
             [FromQuery] string functionId, [FromQuery] string versionId)
             => await _functionService.GetVersionSourceAsync(GetTenantId(), functionId, versionId);
 
@@ -161,7 +259,7 @@ namespace BlocksTemplate.Api.Controllers
         [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<FunctionBuildEntitySummary> GetBuild([FromQuery] string buildId)
         {
-            var build = await _buildService.GetAsync(GetTenantId(), buildId);
+            var build = await _buildService.GetForViewAsync(GetTenantId(), buildId);
             return FunctionBuildEntitySummary.From(build);
         }
 
@@ -178,6 +276,33 @@ namespace BlocksTemplate.Api.Controllers
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<RunDetailDto> GetRun([FromQuery] string runId) => await _runService.GetAsync(GetTenantId(), runId);
+
+        /// <summary>
+        /// A run's streamed answer as Server-Sent Events, for the Studio (F-5): every piece from the
+        /// first, as a <c>data:</c> event, then <c>event: done</c> or <c>event: error</c> — the same
+        /// shape a public caller gets. Lets the editor show a Test run's answer while it runs.
+        /// <para>
+        /// The stream's Redis key is per run only, so the run is looked up in the caller's tenant
+        /// first: another tenant's run id is a 404, like <see cref="GetRun"/>. A finished run that
+        /// streamed nothing (or whose stream has expired) answers an empty event stream at once
+        /// rather than waiting for pieces that will never come. A live run that never streams is
+        /// closed by the reader's own time limit, or by the caller once the run ends.
+        /// </para>
+        /// </summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public async Task<IActionResult> StreamRun([FromBody] RunIdRequestDto request, [FromServices] IFunctionStreamReader reader)
+        {
+            var run = await _runService.GetAsync(GetTenantId(), request.RunId, HttpContext.RequestAborted);
+            var finished = Enum.TryParse<RunStatus>(run.Status, out var status) && FunctionWireMapping.IsTerminal(status);
+            if (finished && !await reader.ExistsAsync(request.RunId))
+            {
+                // 200 with no events, not 204: a client reading a body treats a missing one as a failure.
+                Response.ContentType = "text/event-stream; charset=utf-8";
+                return new EmptyResult();
+            }
+            return new FunctionStreamResult(request.RunId, sse: true);
+        }
 
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::function::read")]
@@ -352,6 +477,7 @@ namespace BlocksTemplate.Api.Controllers
             // over 1 MB outright, so accepting more would only create a run that can fail.
             var (body, tooLarge) = await ReadBodyAsync(aborted);
             var (preferAsync, preferWaitSeconds) = ParsePrefer(Request.Headers["Prefer"]);
+            var acceptsSse = Request.Headers.Accept.Any(a => a?.Contains("text/event-stream", StringComparison.OrdinalIgnoreCase) == true);
 
             var request = new InvokeFunctionRequestDto
             {
@@ -372,17 +498,24 @@ namespace BlocksTemplate.Api.Controllers
                 Wait = false,
                 PreferAsync = preferAsync,
                 PreferWaitSeconds = preferWaitSeconds,
+                Sse = acceptsSse,
             };
 
             try
             {
                 var result = await _invocationService.InvokeHttpAsync(tenantId, functionId, request, aborted);
 
-                // The function streams its answer (F-5): the pieces, as they come.
+                // An SSE caller of a sync function: `run` now, then `done` or `error`.
+                if (result.SseWaitSeconds is { } sseWait)
+                {
+                    return new FunctionSseAnswerResult(tenantId, result.RunId, sseWait,
+                        ct => TryIssuePollTokenAsync(tenantId, result.RunId, ct));
+                }
+
+                // The function streams its answer (F-5): the pieces, as they come, as plain text.
                 if (result.Streaming)
                 {
-                    var sse = Request.Headers.Accept.Any(a => a?.Contains("text/event-stream", StringComparison.OrdinalIgnoreCase) == true);
-                    return new FunctionStreamResult(result.RunId, sse);
+                    return new FunctionStreamResult(result.RunId, acceptsSse);
                 }
 
                 // 202 for any run not yet finished — queued, or claimed/starting/running/processing
@@ -681,6 +814,187 @@ namespace BlocksTemplate.Api.Controllers
     /// say so but to stop short: the connection is aborted, so the client sees an incomplete body
     /// rather than a clean end. The run id is in <c>x-blocks-run-id</c> for looking it up.
     /// </summary>
+    /// <summary>
+    /// The public route's answer to an SSE caller of a sync function: exactly two events.
+    /// <list type="bullet">
+    /// <item><c>event: run</c> <c>{ runId }</c> — at once; the run is queued.</item>
+    /// <item><c>event: done</c> <c>{ runId, status, result }</c> — the full response: what the
+    /// handler returned (JSON as JSON), or, for a handler that streams, every piece joined.</item>
+    /// <item>or <c>event: error</c> <c>{ runId, status, errorCode, message }</c> — the run failed,
+    /// or (<c>STILL_RUNNING</c>, with a <c>pollToken</c>) it did not finish in the wait.</item>
+    /// </list>
+    /// <c>: keep-alive</c> comments (not events) hold the connection open past ingress idle
+    /// timeouts while the run works. A caller that leaves does not stop the run.
+    /// </summary>
+    public sealed class FunctionSseAnswerResult(
+        string tenantId, string runId, int waitSeconds, Func<CancellationToken, Task<string?>> issuePollToken,
+        TimeSpan? keepAliveInterval = null) : IActionResult
+    {
+        /// <summary>Above the runtime's whole stream budget (3 MB encoded); more is never sent.</summary>
+        internal const int MaxStreamChars = 4 * 1024 * 1024;
+
+        private readonly TimeSpan _keepAliveInterval = keepAliveInterval ?? TimeSpan.FromSeconds(15);
+
+        public string RunId { get; } = runId;
+        public int WaitSeconds { get; } = waitSeconds;
+
+        public async Task ExecuteResultAsync(ActionContext context)
+        {
+            var http = context.HttpContext;
+            var invocation = http.RequestServices.GetRequiredService<IFunctionInvocationService>();
+            var response = http.Response;
+            var aborted = http.RequestAborted;
+
+            response.StatusCode = 200;
+            response.ContentType = "text/event-stream; charset=utf-8";
+            response.Headers.CacheControl = "no-cache";
+            response.Headers["X-Accel-Buffering"] = "no";
+            response.Headers["x-blocks-run-id"] = RunId;
+            http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
+
+            using var writeLock = new SemaphoreSlim(1, 1);
+            async Task WriteAsync(string text)
+            {
+                await writeLock.WaitAsync(aborted);
+                try
+                {
+                    await response.WriteAsync(text, aborted);
+                    await response.Body.FlushAsync(aborted);
+                }
+                finally
+                {
+                    writeLock.Release();
+                }
+            }
+
+            using var stopKeepAlive = CancellationTokenSource.CreateLinkedTokenSource(aborted);
+            Task? keepAlive = null;
+            try
+            {
+                await response.StartAsync(aborted);
+                await WriteAsync(Event("run", new { runId = RunId }));
+                keepAlive = KeepAliveAsync(WriteAsync, stopKeepAlive.Token);
+
+                var answer = await invocation.AwaitSseAnswerAsync(tenantId, RunId, WaitSeconds, aborted);
+                string last;
+                if (answer.Streaming)
+                {
+                    last = await StreamedAnswerAsync(http.RequestServices.GetRequiredService<IFunctionStreamReader>(), aborted);
+                }
+                else
+                {
+                    last = await FinalAnswerAsync(answer, aborted);
+                }
+
+                await stopKeepAlive.CancelAsync();
+                await keepAlive;
+                await WriteAsync(last);
+            }
+            catch (OperationCanceledException) when (aborted.IsCancellationRequested)
+            {
+                // The caller left; the run goes on and is recorded as usual.
+            }
+            catch (Exception ex) when (response.HasStarted && ex is not OperationCanceledException)
+            {
+                // The run id is already out, so the caller can still poll: say so as the last
+                // event rather than cutting the connection. The run itself is unaffected.
+                http.RequestServices.GetService<ILogger<FunctionSseAnswerResult>>()?
+                    .LogWarning(ex, "Could not wait for the SSE answer of run {RunId}", RunId);
+                await stopKeepAlive.CancelAsync();
+                if (keepAlive is not null) await keepAlive;
+                await WriteAsync(Event("error", new
+                {
+                    runId = RunId,
+                    status = FunctionQueueKeys.Wire.Running,
+                    errorCode = "UNAVAILABLE",
+                    message = "the answer could not be read right now; poll for its result with the pollToken",
+                    pollToken = await issuePollToken(aborted),
+                }));
+            }
+            finally
+            {
+                await stopKeepAlive.CancelAsync();
+                if (keepAlive is not null) await keepAlive;
+            }
+        }
+
+        /// <summary>The pieces of a streamed answer joined into one result, then its end as the last event.</summary>
+        private async Task<string> StreamedAnswerAsync(IFunctionStreamReader reader, CancellationToken aborted)
+        {
+            var text = new System.Text.StringBuilder();
+            await foreach (var piece in reader.ReadAsync(RunId, aborted))
+            {
+                if (!piece.IsEnd)
+                {
+                    if (text.Length + piece.Data!.Length <= MaxStreamChars) text.Append(piece.Data);
+                    continue;
+                }
+                return piece.EndStatus == FunctionQueueKeys.Wire.Succeeded
+                    ? Event("done", new { runId = RunId, status = piece.EndStatus, result = text.ToString() })
+                    : Event("error", new { runId = RunId, status = piece.EndStatus, errorCode = piece.ErrorCode, message = piece.ErrorMessage });
+            }
+            // The reader always ends with an end piece; reaching here means the caller left.
+            aborted.ThrowIfCancellationRequested();
+            return Event("error", new { runId = RunId, status = FunctionQueueKeys.Wire.Failed, errorCode = "STREAM_ENDED", message = "the stream ended without an answer" });
+        }
+
+        private async Task<string> FinalAnswerAsync(InvokeResultDto answer, CancellationToken aborted)
+        {
+            var status = FunctionWireMapping.ToRunStatus(answer.Status, out var recognised);
+            if (!recognised || !FunctionWireMapping.IsTerminal(status))
+            {
+                return Event("error", new
+                {
+                    runId = RunId,
+                    status = answer.Status,
+                    errorCode = "STILL_RUNNING",
+                    message = "the run did not finish in time; poll for its result with the pollToken",
+                    pollToken = await issuePollToken(aborted),
+                });
+            }
+            if (status == RunStatus.Succeeded)
+            {
+                return Event("done", new { runId = RunId, status = answer.Status, result = ResultValue(answer.Result) });
+            }
+            return Event("error", new { runId = RunId, status = answer.Status, errorCode = answer.ErrorCode, message = answer.ErrorMessage });
+        }
+
+        private async Task KeepAliveAsync(Func<string, Task> write, CancellationToken token)
+        {
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(_keepAliveInterval, token);
+                    await write(": keep-alive\n\n");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Stopped: the answer is about to be written, or the caller left.
+            }
+        }
+
+        /// <summary>The stored result as JSON when it is JSON (it always is for a returned value), else as a string.</summary>
+        internal static object? ResultValue(string? result)
+        {
+            if (string.IsNullOrEmpty(result)) return null;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(result);
+                return doc.RootElement.Clone();
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return result;
+            }
+        }
+
+        /// <summary>One SSE event; JSON has no raw newlines, so one <c>data:</c> line is enough.</summary>
+        internal static string Event(string name, object data) =>
+            $"event: {name}\ndata: {System.Text.Json.JsonSerializer.Serialize(data)}\n\n";
+    }
+
     public sealed class FunctionStreamResult(string runId, bool sse) : IActionResult
     {
         public string RunId { get; } = runId;
@@ -765,7 +1079,7 @@ namespace BlocksTemplate.Api.Controllers
         public DateTime CreatedDate { get; set; }
         public DateTime? CompletedAt { get; set; }
 
-        public static FunctionBuildEntitySummary From(Functions.DomainService.Entities.FunctionBuildEntity build) => new()
+        public static FunctionBuildEntitySummary From(Blocks.Genesis.Entities.Logic.FunctionBuildEntity build) => new()
         {
             Id = build.ItemId,
             Status = build.Status.ToString(),
@@ -786,7 +1100,7 @@ namespace BlocksTemplate.Api.Controllers
         public string? Detail { get; set; }
         public DateTime CreatedDate { get; set; }
 
-        public static FunctionAuditEventDto From(Functions.DomainService.Entities.FunctionAuditEventEntity entity) => new()
+        public static FunctionAuditEventDto From(Blocks.Genesis.Entities.Logic.FunctionAuditEventEntity entity) => new()
         {
             Action = entity.Action,
             ActorId = entity.ActorId,

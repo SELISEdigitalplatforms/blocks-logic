@@ -15,6 +15,8 @@ import { EditorNode } from "@blocks-workflow/models/node.model";
 import { getLayoutedElements } from "../utils/layout-utils";
 import { IGetWorkflowExecutionByIdResponse } from "../types/workflow.service.type";
 import { buildExecutedSubgraph } from "../utils/workflow-execution-editor.util";
+import { cloneHandle, findNodeDefinition, upgradeNode } from "../utils/node-upgraders";
+import { vanishedHandleKeys } from "../utils/vanished-handle-keys";
 
 // interface  ExtendNode extends Node, WorkflowNode {}
 
@@ -56,6 +58,7 @@ export type WorkflowState = {
   // Node operations
   addNode: (node: EditorNode) => void;
   updateNode: (nodeId: string, updates: Partial<EditorNode>) => void;
+  updateNodeParameters: (nodeId: string, parameters: Record<string, unknown>) => void;
   deleteNode: (nodeId: string) => void;
   duplicateNode: (nodeId: string) => void;
   copyNode: (nodeId: string) => void;
@@ -87,6 +90,8 @@ export type WorkflowState = {
 
   // Workflow operations
   setWorkflow: (workflow: Workflow) => void;
+  /** After a save: clears the unsaved flag only if nodes and edges are still exactly what was sent. */
+  markSaved: (sentNodesMap: Record<string, EditorNode>, sentEdgesMap: Record<string, Edge>) => void;
   resetWorkflow: () => void;
   tidyUpWorkflow: () => void;
   setStepExecutionData: (execution: IGetWorkflowExecutionByIdResponse) => void;
@@ -271,6 +276,37 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     });
   },
 
+  // Generic parameter write. For a node whose definition derives its handle from its parameters, the
+  // handle is rebuilt and the node's edges on vanished handle keys are removed in the same update.
+  // Any other node behaves exactly like updateNode(nodeId, { parameters }).
+  updateNodeParameters: (nodeId: string, parameters: Record<string, unknown>) => {
+    const { nodesMap, edgesMap, selectedNode } = get();
+    const node = nodesMap[nodeId];
+    if (!node) return;
+    const deriveHandle = findNodeDefinition(node)?.deriveHandle;
+    if (!deriveHandle) {
+      get().updateNode(nodeId, { parameters });
+      return;
+    }
+
+    const handle = deriveHandle(parameters);
+    const vanished = vanishedHandleKeys(node.handle, handle);
+    const updatedNode = { ...node, parameters, handle };
+    const remainingEdges = Object.fromEntries(
+      Object.entries(edgesMap).filter(
+        ([, edge]) =>
+          !(edge.source === nodeId && vanished.sources.includes(edge.sourceHandle ?? "")) &&
+          !(edge.target === nodeId && vanished.targets.includes(edge.targetHandle ?? "")),
+      ),
+    );
+    set({
+      nodesMap: { ...nodesMap, [nodeId]: updatedNode },
+      edgesMap: remainingEdges,
+      selectedNode: selectedNode?.id === nodeId ? updatedNode : selectedNode,
+      hasUnsavedChanges: true,
+    });
+  },
+
   deleteNode: (nodeId: string) => {
     const { nodesMap, edgesMap } = get();
     const { [nodeId]: _, ...remainingNodes } = nodesMap;
@@ -305,6 +341,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     }
     const newNode: EditorNode = {
       ...node,
+      ...(node.handle && { handle: cloneHandle(node.handle) }),
       id: newId,
       name: uniqueName,
       selected: false,
@@ -365,6 +402,7 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
 
       const newNode: EditorNode = {
         ...copiedNode,
+        ...(copiedNode.handle && { handle: cloneHandle(copiedNode.handle) }),
         id: newId,
         name: uniqueName,
         selected: true,
@@ -541,7 +579,8 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     const nodesMap = workflow.nodes
       ? workflow.nodes.reduce(
           (acc, node) => {
-            acc[node.id] = node as EditorNode;
+            // In memory only: the upgrade is saved with the next real edit, never on open.
+            acc[node.id] = upgradeNode(node as EditorNode);
             return acc;
           },
           {} as Record<string, EditorNode>,
@@ -567,9 +606,16 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       ? workflow.nodeExecutions 
       : (get().workflowId === workflow.itemId ? get().executedNodes : (workflow.nodeExecutions ?? []));
 
+    // The open inspector shows selectedNode. Point it at the loaded copy of the same node, so it never
+    // shows values the store (and so the next save) no longer has.
+    const previousSelectedId = get().selectedNode?.id;
+    const reselected = previousSelectedId ? nodesMap[previousSelectedId] : undefined;
+    if (reselected) nodesMap[reselected.id] = { ...reselected, selected: true };
+
     set({
       nodesMap,
       edgesMap,
+      selectedNode: reselected ? nodesMap[reselected.id] : null,
       workflowId: workflow.itemId || null,
       workflowName: workflow.name || "",
       isPublished: workflow.isPublished || false,
@@ -577,6 +623,12 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
       executedItems,
       executedNodes,
     });
+  },
+
+  markSaved: (sentNodesMap, sentEdgesMap) => {
+    const { nodesMap, edgesMap } = get();
+    // An edit made while the save was in flight replaced the map; it is still unsaved.
+    if (nodesMap === sentNodesMap && edgesMap === sentEdgesMap) set({ hasUnsavedChanges: false });
   },
 
 

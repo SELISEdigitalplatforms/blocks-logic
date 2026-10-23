@@ -1,10 +1,11 @@
 ﻿using DomainService.Configuration;
-using DomainService.Entities;
 using DomainService.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Text;
+using Blocks.Genesis.Entities.Os;
+using Blocks.Genesis.Entities.Logic;
 
 
 namespace DomainService.Notification
@@ -33,6 +34,13 @@ namespace DomainService.Notification
 
         public async Task Notify(NotifyRequest notifyRequest, NotificationConfiguration configuration)
         {
+            // Same rule as NotificationService.NotifyAsync, so no in-process caller can send a disabled configuration.
+            if (configuration.IsDisabledByTenant())
+            {
+                _logger.LogInformation("Notify: configuration {ConfigurationName} is disabled by the tenant; nothing sent", configuration.Name);
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(notifyRequest.DenormalizedPayload))
             {
                 _logger.LogWarning("Firebase: DenormalizedPayload is required");

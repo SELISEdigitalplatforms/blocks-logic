@@ -2,13 +2,11 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Functions.DomainService.Dtos.Requests;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using Functions.DomainService.Services;
 using Functions.DomainService.Validation;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
@@ -252,6 +250,28 @@ namespace XUnitTest.Functions
 
         private static FluentValidation.Results.ValidationResult Validate(TriggerConfig trigger) =>
             new TriggerConfigValidator().Validate(trigger);
+
+        [Theory]
+        [InlineData(null, true)]
+        [InlineData("async", true)]
+        [InlineData("sync", true)]
+        [InlineData("sse", true)]
+        [InlineData("SSE", false)]
+        [InlineData("stream", false)]
+        public void The_response_mode_is_async_sync_or_sse(string? mode, bool valid)
+        {
+            Validate(new TriggerConfig { ResponseMode = mode }).IsValid.Should().Be(valid);
+        }
+
+        [Theory]
+        [InlineData("sse", "sse")]
+        [InlineData("sync", "sync")]
+        [InlineData("async", null)]
+        [InlineData(null, null)]
+        public void Saving_keeps_sync_and_sse_and_stores_async_as_null(string? mode, string? stored)
+        {
+            FunctionService.NormalizeForStorage(new TriggerConfig { ResponseMode = mode }).ResponseMode.Should().Be(stored);
+        }
 
         [Theory]
         [InlineData("GET")]

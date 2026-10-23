@@ -1,7 +1,9 @@
 using Blocks.Genesis;
+using DataAccess.InternalService;
 using Workflow.DomainService.Entities;
 using MongoDB.Driver;
 using System.Diagnostics.CodeAnalysis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Repositories
 {
@@ -12,9 +14,12 @@ namespace Workflow.DomainService.Repositories
         private readonly IDbContextProvider _dbContextProvider;
         private const string _collectionName = "WorkflowVersions";
 
-        public WorkflowVersionRepository(IDbContextProvider dbContextProvider)
+        private readonly ILogicDataAccess _dataAccess;
+
+        public WorkflowVersionRepository(IDbContextProvider dbContextProvider, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
+            _dataAccess = dataAccess;
         }
 
 
@@ -23,58 +28,86 @@ namespace Workflow.DomainService.Repositories
             return _dbContextProvider.GetCollection<WorkflowVersionEntity>(tenantId, _collectionName);
         }
 
+        private Task<ReadScope<WorkflowVersionEntity>> ReadAsync(string tenantId, FilterDefinition<WorkflowVersionEntity> filter, string callSite, bool useProjection = true) =>
+            _dataAccess.ReadAsync(LogicSchemas.WorkflowVersionEntity, filter, $"WorkflowVersionRepository.{callSite}", tenantId, useProjection);
+
         public async Task CreateWorkflowVersionAsync(WorkflowVersionEntity versionModel)
         {
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.WorkflowVersionEntity, "WorkflowVersionRepository.CreateWorkflowVersion", versionModel.TenantId))
+                throw new UnauthorizedAccessException("Workflow version create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.WorkflowVersionEntity, versionModel, isInsert: true, "WorkflowVersionRepository.CreateWorkflowVersion", versionModel.TenantId);
             var collection = GetCollection(versionModel.TenantId);
             await collection.InsertOneAsync(versionModel, null);
         }
 
-        public Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string workflowId)
+        public async Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string workflowId)
         {
             var collection = GetCollection(tenantId);
             var filters = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
                          Builders<WorkflowVersionEntity>.Filter.Eq(f => f.WorkflowId, workflowId);
 
-            return collection.Find(filters).SortByDescending(f => f.CreatedDate).ToListAsync();
+            var scope = await ReadAsync(tenantId, filters, "GetWorkflowVersions");
+            return scope.Granted ? scope.ForView(await scope.Apply(collection).SortByDescending(f => f.CreatedDate).ToListAsync()) : [];
         }
 
-        public Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string[] workflowIds)
+        public async Task<List<WorkflowVersionEntity>> GetWorkflowVersionsAsync(string tenantId, string[] workflowIds)
         {
             var collection = GetCollection(tenantId);
             var filters = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
                          Builders<WorkflowVersionEntity>.Filter.In(f => f.WorkflowId, workflowIds);
 
-            return collection.Find(filters).SortByDescending(f => f.CreatedDate).ToListAsync();
+            var scope = await ReadAsync(tenantId, filters, "GetWorkflowVersionsByIds");
+            return scope.Granted ? await scope.Apply(collection).SortByDescending(f => f.CreatedDate).ToListAsync() : [];
         }
 
-        public Task<WorkflowVersionEntity> GetWorkflowVersionAsync(string tenantId, string versionId)
+        public async Task<WorkflowVersionEntity> GetWorkflowVersionAsync(string tenantId, string versionId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
                          Builders<WorkflowVersionEntity>.Filter.Eq(f => f.ItemId, versionId);
-            return collection.Find(filter).FirstOrDefaultAsync();
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflowVersion");
+            return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null!;
         }
 
-        public Task<WorkflowVersionEntity> UpdateWorkflowVersionAsync(string tenantId, string versionId, WorkflowVersionEntity versionModel)
-        {
-            var collection = GetCollection(tenantId);
-            return collection.FindOneAndReplaceAsync(filter => filter.TenantId == tenantId && filter.ItemId == versionId, versionModel);
-        }
-
-        public Task DeleteWorkflowVersionAsync(string tenantId, string versionId)
+        public async Task<WorkflowVersionEntity> GetWorkflowVersionForViewAsync(string tenantId, string versionId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
                          Builders<WorkflowVersionEntity>.Filter.Eq(f => f.ItemId, versionId);
-            return collection.DeleteOneAsync(filter);
+            // Masked: View column (property) rules clear what the caller may not see.
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflowVersionForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(collection).FirstOrDefaultAsync()) : null!;
         }
 
-        public Task DeleteWorkflowVersionsByWorkflowIdAsync(string tenantId, string workflowId)
+        public async Task<WorkflowVersionEntity> UpdateWorkflowVersionAsync(string tenantId, string versionId, WorkflowVersionEntity versionModel)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
-                         Builders<WorkflowVersionEntity>.Filter.Eq(f => f.WorkflowId, workflowId);
-            return collection.DeleteManyAsync(filter);
+            var filter = await _dataAccess.EditFilterAsync(LogicSchemas.WorkflowVersionEntity,
+                Builders<WorkflowVersionEntity>.Filter.Where(f => f.TenantId == tenantId && f.ItemId == versionId),
+                "WorkflowVersionRepository.UpdateWorkflowVersion", tenantId);
+            return filter is null ? null! : await collection.FindOneAndReplaceAsync(filter, versionModel);
+        }
+
+        public async Task DeleteWorkflowVersionAsync(string tenantId, string versionId)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = await _dataAccess.DeleteFilterAsync(LogicSchemas.WorkflowVersionEntity,
+                Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
+                Builders<WorkflowVersionEntity>.Filter.Eq(f => f.ItemId, versionId),
+                "WorkflowVersionRepository.DeleteWorkflowVersion", tenantId);
+            if (filter is null) return;
+            await collection.DeleteOneAsync(filter);
+        }
+
+        public async Task DeleteWorkflowVersionsByWorkflowIdAsync(string tenantId, string workflowId)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = await _dataAccess.DeleteFilterAsync(LogicSchemas.WorkflowVersionEntity,
+                Builders<WorkflowVersionEntity>.Filter.Eq(f => f.TenantId, tenantId) &
+                Builders<WorkflowVersionEntity>.Filter.Eq(f => f.WorkflowId, workflowId),
+                "WorkflowVersionRepository.DeleteWorkflowVersionsByWorkflowId", tenantId);
+            if (filter is null) return;
+            await collection.DeleteManyAsync(filter);
         }
     }
 }

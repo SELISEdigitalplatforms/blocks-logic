@@ -1,10 +1,9 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Models;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {
@@ -96,7 +95,7 @@ namespace Functions.DomainService.Services
             {
                 if (!action.Enabled) continue;
 
-                if (action.Kind != Enums.OutputActionKind.ExternalHttp)
+                if (action.Kind != OutputActionKind.ExternalHttp)
                 {
                     // BlocksProxy: nothing to call yet (open question #2). Not a failure —
                     // the tenant cannot have configured a working one, so there is nothing
@@ -133,6 +132,12 @@ namespace Functions.DomainService.Services
             try
             {
                 (url, headers, body) = await SubstituteAsync(tenantId, action, run.Result, cancellationToken);
+            }
+            catch (SecretNameUnresolvedException ex)
+            {
+                // Names only, never a value: safe to hand back as the action's error.
+                _logger.LogWarning("Output action {ActionId} for run {RunId} not sent: {Reason}", action.Id, run.ItemId, ex.Message);
+                return Failure(action, stopwatch, attempts: 0, error: ex.Message);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
@@ -309,17 +314,75 @@ namespace Functions.DomainService.Services
             foreach (var value in action.Headers.Values) CollectIds(value, ids);
             CollectIds(bodyTemplate, ids);
 
+            // {{secretName.X}}: an imported reference not bound to an id yet (2026-10-18). Looked up by exact name
+            // here, every time (never cached), and only in the action's own fields — never in the run's result,
+            // which is the function's output and must not be able to name a secret to be filled in.
+            var idByName = await ResolveNamesAsync(tenantId, action, ids, cancellationToken);
+
             var secrets = ids.Count == 0
                 ? new Dictionary<string, string>()
                 : await _secretResolver.ResolveAsync(ids, tenantId, cancellationToken);
 
-            var url = Substitute(action.Url, secrets, resultJson: null);
+            var url = Substitute(SubstituteNames(action.Url, idByName, secrets), secrets, resultJson: null);
             var headers = action.Headers.ToDictionary(
-                h => h.Key, h => Substitute(h.Value, secrets, resultJson: null), StringComparer.Ordinal);
-            var body = bodyTemplate is null ? null : Substitute(bodyTemplate, secrets, resultJson);
+                h => h.Key, h => Substitute(SubstituteNames(h.Value, idByName, secrets), secrets, resultJson: null), StringComparer.Ordinal);
+            var body = bodyTemplate is null
+                ? null
+                : Substitute(action.BodyTemplate is null ? bodyTemplate : SubstituteNames(bodyTemplate, idByName, secrets), secrets, resultJson);
 
             return (url, headers, body);
         }
+
+        /// <summary>
+        /// Name → id for every <c>{{secretName.X}}</c> in the action's URL, headers and own body template, adding the
+        /// ids to <paramref name="ids"/> so the values are still read in the one batch. A name with no secret, or with
+        /// more than one, refuses the action with a message that names it.
+        /// </summary>
+        private async Task<IReadOnlyDictionary<string, string>> ResolveNamesAsync(
+            string tenantId, OutputAction action, HashSet<string> ids, CancellationToken cancellationToken)
+        {
+            var names = new List<string>();
+            names.AddRange(FunctionSecretRefs.NamesIn(action.Url));
+            foreach (var value in action.Headers.Values) names.AddRange(FunctionSecretRefs.NamesIn(value));
+            names.AddRange(FunctionSecretRefs.NamesIn(action.BodyTemplate));
+            var distinct = names.Distinct(StringComparer.Ordinal).ToList();
+            var idByName = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (distinct.Count == 0) return idByName;
+
+            var found = await _secretResolver.FindIdsByNameAsync(distinct, tenantId, cancellationToken);
+            foreach (var name in distinct)
+            {
+                var matches = found.TryGetValue(name, out var list) ? list : [];
+                if (matches.Count == 0)
+                {
+                    throw new SecretNameUnresolvedException(
+                        $"no secret named \"{name}\" exists; create it in Blocks OS secrets");
+                }
+                if (matches.Count > 1)
+                {
+                    throw new SecretNameUnresolvedException(
+                        $"more than one secret is named \"{name}\"; keep one, or pick the secret in the editor");
+                }
+                idByName[name] = matches[0];
+                ids.Add(matches[0]);
+            }
+            return idByName;
+        }
+
+        private static string SubstituteNames(
+            string text, IReadOnlyDictionary<string, string> idByName, IReadOnlyDictionary<string, string> secrets)
+        {
+            if (idByName.Count == 0 || string.IsNullOrEmpty(text)) return text;
+            // To the id token, not to the value: the id pass that follows is then the only one that writes values, in
+            // a single pass, so a value that happens to contain "{{secret…}}" text is never expanded again.
+            return FunctionSecretRefs.NamePattern().Replace(text, match =>
+                idByName.TryGetValue(match.Groups[1].Value, out var id) && secrets.ContainsKey(id)
+                    ? FunctionSecretRefs.IdToken(id)
+                    : match.Value);
+        }
+
+        /// <summary>A <c>{{secretName.X}}</c> that matches no secret, or several. The message names X, never a value.</summary>
+        private sealed class SecretNameUnresolvedException(string message) : Exception(message);
 
         private static void CollectIds(string? text, HashSet<string> into)
         {

@@ -21,7 +21,8 @@ export const withTriggerDefaults = (trigger: ITriggerConfig): ITriggerConfig => 
   // out so it never reaches the editor's snapshot or a save.
   const { allowSetCookie: _removed, ...rest } = trigger as ITriggerConfig & { allowSetCookie?: unknown };
   const partial = rest as Partial<ITriggerConfig>;
-  const responseMode: TriggerResponseMode = partial.responseMode === "sync" ? "sync" : "async";
+  const responseMode: TriggerResponseMode =
+    partial.responseMode === "sync" || partial.responseMode === "sse" ? partial.responseMode : "async";
   const httpMethods = Array.isArray(partial.httpMethods)
     ? FUNCTION_HTTP_VERBS.filter((verb) =>
         (partial.httpMethods as string[]).some((m) => m.toUpperCase() === verb),

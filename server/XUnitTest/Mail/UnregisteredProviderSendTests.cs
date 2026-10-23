@@ -9,6 +9,7 @@ using Mail.DomainService.Shared.Enums;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using EmailTemplate = Blocks.Genesis.Entities.Os.EmailTemplate;
 
 namespace XUnitTest.Mail
 {
@@ -49,7 +50,7 @@ namespace XUnitTest.Mail
         [Fact]
         public async Task Send_ProviderWithNoRegisteredSender_ReportsAFailureWithoutThrowing()
         {
-            _repository.Setup(r => r.GetMailToBeSent("mail-1")).ReturnsAsync(AMail(MailServiceProvider.Office365Smtp));
+            var mail = AMail(MailServiceProvider.Office365Smtp);
 
             MailSentEvent? published = null;
             _messageClient
@@ -61,7 +62,7 @@ namespace XUnitTest.Mail
             var service = CreateService(
                 new AmazonSesMailSender(new SmtpClientProvider(new Mock<IServiceProvider>().Object, NullLogger<SmtpClientProvider>.Instance)));
 
-            var result = await service.ProcessSendMailAsync(new SendEmailEvent { ItemId = "mail-1" });
+            var result = await service.ProcessSendMailAsync(mail);
 
             result.Should().BeFalse();
 

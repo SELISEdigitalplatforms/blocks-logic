@@ -4,7 +4,8 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Microsoft.Extensions.Logging;
-using DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
+using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Notification
 {
@@ -25,6 +26,13 @@ namespace DomainService.Notification
 
         public async Task Notify(NotifyRequest notifyRequest, NotificationConfiguration configuration)
         {
+            // Same rule as NotificationService.NotifyAsync, so no in-process caller can send a disabled configuration.
+            if (configuration.IsDisabledByTenant())
+            {
+                _logger.LogInformation("Notify: configuration {ConfigurationName} is disabled by the tenant; nothing sent", configuration.Name);
+                return;
+            }
+
             var clientFactoryProvider = _clientFactoryProvider.GetStrategicClientProvider(configuration.NotificationType);
             var clients = await clientFactoryProvider.GetClientAsync(notifyRequest);
 

@@ -50,40 +50,41 @@ namespace Workflow.DomainService.Utils
         /// <summary>Fallback only, when WORKFLOW_NOTIFICATION_CONFIGURATION_NAME is not set; no environment creates it.</summary>
         public const string WorkflowImportNotificationConfigurationName = "workflow-import";
         public const string LogicMailQueueName = "blocks_email_listener";
+
+        /// <summary>
+        /// Function events (a function's <c>ctx.events.add('FunctionEvent', …)</c>). The Worker sends to it and consumes
+        /// it: <c>FunctionEventConsumer</c> (the event trigger) starts the functions that subscribe to the event's name.
+        /// </summary>
+        public const string FunctionEventQueueName = "blocks_logic_function_event_listener";
         public const string MigrationCompletionTopic = "blocks_migration_topic1";
         public const string AccessTokenCookieName = "access_token";
         public const string RefreshTokenCookieName = "refresh_token";
 
-        private const string DefaultProvider = "azure";
-        private const string RabbitMqProvider = "rabbitmq";
-
         public const string BlocsDomain = "seliseblocks.com";
 
 
-        public static MessageConfiguration GetMessageConfiguration(string messageConnectionString)
-        {
-            var provider = GetProvider(messageConnectionString);
+        /// <summary>Every endpoint, the schedule registry queue included: the Api and MailBoxSyncService.</summary>
+        public static MessageConfiguration GetMessageConfiguration(string messageConnectionString) =>
+            CreateConfiguration(messageConnectionString, includeRegistryQueue: true);
 
-            return provider switch
-            {
-                RabbitMqProvider => CreateRabbitMqConfiguration(),
-                _ => CreateAzureServiceBusConfiguration()
-            };
-        }
+        /// <summary>
+        /// The Worker: every endpoint except the schedule registry queue, which only Scheduler.Worker consumes
+        /// (it hosts Hangfire). Same order and settings as <see cref="GetMessageConfiguration"/> otherwise.
+        /// </summary>
+        public static MessageConfiguration GetWorkerMessageConfiguration(string messageConnectionString) =>
+            CreateConfiguration(messageConnectionString, includeRegistryQueue: false);
 
-        private static string GetProvider(string messageConnectionString)
-        {
-            if (Uri.TryCreate(messageConnectionString, UriKind.Absolute, out var uri) &&
-                (uri.Scheme.Equals("amqp", StringComparison.OrdinalIgnoreCase) ||
-                 uri.Scheme.Equals("amqps", StringComparison.OrdinalIgnoreCase)))
-            {
-                return RabbitMqProvider;
-            }
-            return DefaultProvider;
-        }
+        private static MessageConfiguration CreateConfiguration(string messageConnectionString, bool includeRegistryQueue) =>
+            SchedulerConstants.IsRabbitMq(messageConnectionString)
+                ? CreateRabbitMqConfiguration(includeRegistryQueue)
+                : CreateAzureServiceBusConfiguration(includeRegistryQueue);
 
-        private static MessageConfiguration CreateRabbitMqConfiguration()
+        private static MessageConfiguration CreateRabbitMqConfiguration(bool includeRegistryQueue)
         {
+            ConsumerSubscription[] registry = includeRegistryQueue
+                ? [ConsumerSubscription.BindToQueue(SchedulerConstants.ScheduleJobRegistryQueueName)]
+                : [];
+
             return new MessageConfiguration
             {
                 RabbitMqConfiguration = new RabbitMqConfiguration
@@ -96,9 +97,12 @@ namespace Workflow.DomainService.Utils
                                              ConsumerSubscription.BindToQueue(SchedulerTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(WorkflowImportQueue),
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
+                                             // Consumed by the event trigger. It also makes sure the queue exists, which RabbitMQ needs
+                                             // before a function can send to it (a message to a missing queue is dropped).
+                                             ConsumerSubscription.BindToQueue(FunctionEventQueueName),
                                              ConsumerSubscription.BindToQueue(CommunicationConstants.MailStatusQueueName),
                                              ConsumerSubscription.BindToQueue(MigrationCompletionTopic),
-                                             ConsumerSubscription.BindToQueue(SchedulerConstants.ScheduleJobRegistryQueueName),
+                                             .. registry,
                                              .. AllNodeQueues
                                                  .Select(q => new ConsumerSubscription(q, string.Empty, 8, parallelProcessing: true))],
 
@@ -106,13 +110,15 @@ namespace Workflow.DomainService.Utils
             };
         }
 
-        private static MessageConfiguration CreateAzureServiceBusConfiguration()
+        private static MessageConfiguration CreateAzureServiceBusConfiguration(bool includeRegistryQueue)
         {
+            string[] registry = includeRegistryQueue ? [SchedulerConstants.ScheduleJobRegistryQueueName] : [];
+
             return new MessageConfiguration
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, SchedulerConstants.ScheduleJobRegistryQueueName],
+                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, FunctionEventQueueName, CommunicationConstants.MailStatusQueueName, .. registry],
                     Topics = [MigrationCompletionTopic],
                     QueuePrefetchCount = 40,
                     MaxConcurrentCalls = 40

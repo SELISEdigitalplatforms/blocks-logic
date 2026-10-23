@@ -24,7 +24,7 @@ namespace BlocksTemplate.Api.Controllers
         /// Creates a schedule.
         /// </summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::scheduler::manage")]
         public async Task<BaseMutationResponse> CreateSchedule([FromBody] CreateScheduleRequestDto request)
         {
             return await _scheduleService.CreateScheduleAsync(request);
@@ -34,7 +34,7 @@ namespace BlocksTemplate.Api.Controllers
         /// Updates an existing schedule.
         /// </summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::scheduler::manage")]
         public async Task<BaseMutationResponse> UpdateSchedule([FromBody] UpdateScheduleRequestDto request)
         {
             return await _scheduleService.UpdateScheduleAsync(request);
@@ -44,7 +44,7 @@ namespace BlocksTemplate.Api.Controllers
         /// Permanently deletes a schedule.
         /// </summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::scheduler::manage")]
         public async Task<BaseResponse> DeleteSchedule([FromBody] DeleteScheduleRequestDto request)
         {
             return await _scheduleService.DeleteScheduleAsync(request);
@@ -54,7 +54,7 @@ namespace BlocksTemplate.Api.Controllers
         /// Get schedules.
         /// </summary>
         [HttpPost]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::scheduler::read")]
         public async Task<GetSchedulesResponseDto> GetSchedules([FromBody] GetSchedulesRequestDto request)
         {
             return await _scheduleService.GetSchedulesAsync(request);

@@ -1,4 +1,5 @@
 using Workflow.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Repositories
 {
@@ -28,6 +29,8 @@ namespace Workflow.DomainService.Repositories
         Task<List<WorkflowEntity>> GetWorkflowsUsingFunctionAsync(string tenantId, string functionId, int limit = 50);
 
         Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<WorkflowEntity> GetWorkflowForViewAsync(string tenantId, string workflowId);
 
         Task UpdateWorkflowAsync(WorkflowEntity workflow);
 

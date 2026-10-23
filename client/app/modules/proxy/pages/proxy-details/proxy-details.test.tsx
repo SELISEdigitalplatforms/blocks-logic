@@ -253,4 +253,40 @@ describe("ProxyDetails page", () => {
       expect(toasts.showSuccessToast).toHaveBeenCalledWith({ description: "Proxy paused." }),
     );
   });
+
+  it("warns about secrets the proxy needs and exports the proxy as a file", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(mockProxyService, "get").mockResolvedValue({
+      ...PROXY_MOCK_DATA[0],
+      missingSecrets: ["stripe-key", "dup"],
+      duplicateSecrets: ["dup"],
+    });
+    const file = { format: "blocks.proxy.export", proxy: { slug: "stripe-payments" }, maskedValues: [] };
+    const exportSpy = vi.fn().mockResolvedValue(file);
+    (mockProxyService as unknown as { exportProxy: typeof exportSpy }).exportProxy = exportSpy;
+    const createObjectURL = vi.fn(() => "blob:proxy");
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/proxy/p1"]}>
+        <Routes>
+          <Route path="/proxy/:proxyId" element={<ProxyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const banner = await screen.findByTestId("proxy-needs-secret");
+    expect(within(banner).getByText("stripe-key")).toBeTruthy();
+    expect(within(banner).getByText("dup")).toBeTruthy();
+    expect(banner.textContent).toMatch(/More than one secret has the name/);
+
+    await user.click(screen.getByRole("button", { name: "Export" }));
+
+    await waitFor(() => expect(exportSpy).toHaveBeenCalledWith("p1"));
+    expect(click).toHaveBeenCalled();
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(toasts.showSuccessToast).toHaveBeenCalledWith({ description: "Proxy exported." });
+  });
 });

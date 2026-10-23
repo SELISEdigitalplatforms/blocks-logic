@@ -6,6 +6,7 @@ using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using File = Common.InternalService.Storage.File;
+using Blocks.Genesis.Entities.Data;
 
 namespace Common.InternalService.Storage
 {

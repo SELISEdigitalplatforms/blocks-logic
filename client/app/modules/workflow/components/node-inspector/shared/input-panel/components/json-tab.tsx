@@ -1,6 +1,4 @@
-import { Button } from "@/components/ui-kits/button/button";
-import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
-import { Copy } from "lucide-react";
+import { CopyValueButton } from "../../copy-value-button";
 import { DraggableArrayIndex, DraggableProperty } from "./draggable-property";
 import { formatCellValue } from "../utils/format.util";
 import {
@@ -53,18 +51,18 @@ function RecursiveJsonViewer({
   if (typeof data !== "object" || data === null) {
     if (segments.length === 0) {
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-start gap-2">
           <DraggableProperty
             segments={[]}
             {...referenceProps}
             label="(value)"
             isDraggable={isDraggable}
           />
-          <span className="text-green-600 dark:text-green-400">{formatCellValue(data)}</span>
+          <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] py-1.5 text-green-600 dark:text-green-400">{formatCellValue(data)}</span>
         </div>
       );
     }
-    return <span className="text-green-600 dark:text-green-400">{formatCellValue(data)}</span>;
+    return <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] py-1.5 text-green-600 dark:text-green-400">{formatCellValue(data)}</span>;
   }
 
   const entries = Object.entries(data);
@@ -79,7 +77,7 @@ function RecursiveJsonViewer({
 
         return (
           <div key={key} className="flex flex-col">
-            <div className="flex items-center" style={{ marginLeft: `${(depth + 1) * 1}rem` }}>
+            <div className="flex min-w-0 items-start" style={{ marginLeft: `${(depth + 1) * 1}rem` }}>
               {isArray ? (
                 <DraggableArrayIndex
                   segments={currentSegments}
@@ -99,7 +97,7 @@ function RecursiveJsonViewer({
                 />
               )}
               {!childIsObj ? (
-                <span className="text-green-600 dark:text-green-400">
+                <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] py-1.5 text-green-600 dark:text-green-400">
                   {formatCellValue(val)}
                   {index < entries.length - 1 ? "," : ""}
                 </span>
@@ -143,17 +141,7 @@ export function JsonTab({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="ghost"
-          size="xxs"
-          className="h-7 px-2 text-low-emphasis"
-          aria-label="Copy input JSON"
-          title="Copy input JSON"
-          onClick={() => void copyToClipboard(json)}
-        >
-          <Copy className="h-4 w-4" />
-        </Button>
+        <CopyValueButton value={json} label="Copy input JSON" />
       </div>
       {rows.map((row, index) => (
         <div key={`json-row-${getRowKey(row)}`} className="rounded border border-border/60 p-2">

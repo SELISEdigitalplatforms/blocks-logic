@@ -2,9 +2,7 @@ using Blocks.Genesis;
 using Common.InternalService.Access;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
+using Functions.DomainService.Events;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
@@ -12,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {
@@ -36,6 +35,15 @@ namespace Functions.DomainService.Services
         /// </summary>
         Task<InvokeResultDto> InvokeHttpAsync(
             string tenantId, string functionId, InvokeFunctionRequestDto request, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// The answer an SSE caller waits for, after it was sent the run id: the finished run, a
+        /// run that started streaming (<see cref="InvokeResultDto.Streaming"/> — read its pieces),
+        /// or, when it did not finish in <paramref name="waitSeconds"/> (or is about to be
+        /// retried, or too many requests are already held), the run's not-finished status.
+        /// </summary>
+        Task<InvokeResultDto> AwaitSseAnswerAsync(
+            string tenantId, string runId, int waitSeconds, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Runs the function's <b>current editor source</b> (not a deployed version), building
@@ -80,7 +88,30 @@ namespace Functions.DomainService.Services
         Task<InvokeResultDto> InvokeFromWorkflowAsync(
             string tenantId, string functionId, string? inputJson, BlocksContext? callerContext,
             int? waitTimeoutSeconds, string? workflowExecutionId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Starts a run of the function's <b>active, deployed</b> version for a function event, without waiting for it
+        /// (the event trigger: <see cref="Consumers.FunctionEventConsumer"/>). Authorized by the version's own
+        /// subscription to the event (<see cref="IFunctionAuthorizationService.AuthorizeForEvent"/>); the run's identity is
+        /// the message's context, <paramref name="callerContext"/>.
+        /// <para>
+        /// The handler's <c>input</c> is the event's data; <c>ctx.run.invokedBy</c> is <c>{ type: 'event', id: eventId,
+        /// name }</c>. The run is counted by admission (the function's rate limit), goes to the event queue, and
+        /// remembers the event's depth for the events it sends. <b>One run per event and function:</b> a redelivered
+        /// event finds the run it already started and starts no second one (the result carries that run's id).
+        /// </para>
+        /// </summary>
+        Task<InvokeResultDto> InvokeFromEventAsync(
+            string tenantId, string functionId, FunctionEventInvocation @event, BlocksContext? callerContext,
+            CancellationToken cancellationToken = default);
     }
+
+    /// <summary>One event that starts a function (<see cref="IFunctionInvocationService.InvokeFromEventAsync"/>).</summary>
+    /// <param name="EventId">The event's id: the run's <c>InvokedById</c>, and half of its idempotency key.</param>
+    /// <param name="Name">The event's name (checked against the version's subscription).</param>
+    /// <param name="DataJson">The event's data as JSON text: the handler's <c>input</c>.</param>
+    /// <param name="Depth">The event's depth (<see cref="FunctionEvent.Depth"/>).</param>
+    public sealed record FunctionEventInvocation(string EventId, string Name, string DataJson, int Depth);
 
     /// <summary>
     /// Builds the envelope, admits and authorizes the caller, and queues a run — the write
@@ -176,8 +207,12 @@ namespace Functions.DomainService.Services
             Storage.IFunctionArtifactStore artifacts,
             ICacheClient cache,
             IConfiguration configuration,
-            ILogger<FunctionInvocationService> logger)
+            ILogger<FunctionInvocationService> logger,
+            IFunctionEventSettingsRepository? eventSettings = null,
+            IFunctionEventRunStore? eventRuns = null)
         {
+            _eventSettings = eventSettings;
+            _eventRuns = eventRuns;
             _functionRepository = functionRepository;
             _versionRepository = versionRepository;
             _runRepository = runRepository;
@@ -194,6 +229,31 @@ namespace Functions.DomainService.Services
 
             var maxSyncWaits = Math.Max(1, configuration.GetValue("Functions:MaxConcurrentSyncWaits", DefaultMaxConcurrentSyncWaits));
             _syncWaits = new SemaphoreSlim(maxSyncWaits, maxSyncWaits);
+        }
+
+        /// <summary>Event types a version may send, by version id (see <see cref="FunctionEventAllowedCache"/>).</summary>
+        private readonly FunctionEventAllowedCache _allowedEvents = new();
+
+        private readonly IFunctionEventSettingsRepository? _eventSettings;
+        private readonly IFunctionEventRunStore? _eventRuns;
+
+        /// <summary>
+        /// The event types this run may send. A deployed version's row is a snapshot that never changes, so its answer is
+        /// kept briefly; the draft (a Test run) is read every time because the editor changes it.
+        /// </summary>
+        private async Task<IReadOnlyCollection<string>> AllowedEventsAsync(
+            string tenantId, FunctionEntity function, FunctionVersionEntity? version, CancellationToken cancellationToken)
+        {
+            var settings = _eventSettings;
+            if (settings is null) return [];
+
+            var authMode = (version?.Trigger ?? function.Trigger).AuthMode;
+            async Task<IReadOnlyCollection<string>> ReadAsync() => FunctionEventPolicy.AllowedTypes(
+                await settings.GetAsync(tenantId, function.ItemId, version?.ItemId, cancellationToken), authMode);
+
+            return version is null
+                ? await ReadAsync()
+                : await _allowedEvents.GetOrReadAsync(tenantId, version.ItemId, ReadAsync);
         }
 
         private Task<FunctionVersionEntity?> ActiveVersionAsync(string tenantId, string versionId, CancellationToken cancellationToken)
@@ -287,6 +347,21 @@ namespace Functions.DomainService.Services
             // subscription; without a ceiling a burst of slow calls to a sync function could hold
             // every connection the Api has. Full → this call is simply async: 202 + poll token,
             // which the caller already has to handle for a run that outlasts the wait.
+            // An SSE caller — it asked with Accept: text/event-stream, or the trigger answers in SSE —
+            // is sent the run id first, so its run is only queued here; the wait happens afterwards
+            // (AwaitSseAnswerAsync), with keep-alives on the open connection.
+            request.Sse |= FunctionResponseModes.IsSse(version.Trigger.ResponseMode);
+            if (request.Sse && syncWait is not null)
+            {
+                var queued = await InvokeCoreAsync(
+                    tenantId, function, version, FunctionRunImage.For(version), decision.Context,
+                    InvokedByType.Http, invokedById: null, inputJson, wait: false,
+                    waitTimeoutSeconds: null, cancellationToken);
+                timedRunId = queued.RunId;
+                queued.SseWaitSeconds = SseWaitSeconds((version.Limits ?? function.Limits).Clamp());
+                return queued;
+            }
+
             var holdsSlot = syncWait is not null && _syncWaits.Wait(0);
             if (!holdsSlot) syncWait = null;
 
@@ -333,6 +408,37 @@ namespace Functions.DomainService.Services
             }
         }
 
+        public async Task<InvokeResultDto> AwaitSseAnswerAsync(
+            string tenantId, string runId, int waitSeconds, CancellationToken cancellationToken = default)
+        {
+            // Held connections share the sync waits' bound: full → answered as not finished now.
+            if (!_syncWaits.Wait(0))
+            {
+                return new InvokeResultDto { RunId = runId, Status = FunctionQueueKeys.Wire.Queued };
+            }
+            try
+            {
+                return await WaitForResultAsync(
+                    tenantId, runId, waitSeconds, waitSeconds, cancellationToken,
+                    finishedOnlyWithoutRetry: true, allowStream: true);
+            }
+            finally
+            {
+                _syncWaits.Release();
+            }
+        }
+
+        /// <summary>
+        /// How long an SSE caller waits for the answer: the run's own time limit plus the grace,
+        /// under <c>Functions:SyncWaitMaxSeconds</c>. Not the lower HTTP cap — that exists for
+        /// ingress idle timeouts, which the SSE keep-alives answer.
+        /// </summary>
+        private int SseWaitSeconds(FunctionLimits limits)
+        {
+            var max = Math.Max(1, _configuration.GetValue("Functions:SyncWaitMaxSeconds", DefaultSyncWaitMaxSeconds));
+            return Math.Min(max, limits.TimeoutSeconds + SyncGraceSeconds);
+        }
+
         /// <summary>
         /// How long a public HTTP call holds its request open for the function's answer, or null
         /// for today's fire-and-forget 202 (sandbox/REUSE.md, "Control plane").
@@ -352,7 +458,7 @@ namespace Functions.DomainService.Services
             // Only a function deployed as sync ever holds a request. Prefer: wait= on an async
             // function is ignored, exactly as before sync existed — existing clients that send it
             // keep getting their 202 and never a raw answer they did not ask the tenant for.
-            if (request.PreferAsync || !TriggerConfig.IsSync(trigger.ResponseMode)) return null;
+            if (request.PreferAsync || !FunctionResponseModes.Waits(trigger.ResponseMode)) return null;
 
             var cap = Math.Max(1, _configuration.GetValue("Functions:HttpSyncWaitMaxSeconds", DefaultHttpSyncWaitMaxSeconds));
             if (request.PreferWaitSeconds is { } asked)
@@ -567,6 +673,74 @@ namespace Functions.DomainService.Services
                 waitTimeoutSeconds, cancellationToken);
         }
 
+        public async Task<InvokeResultDto> InvokeFromEventAsync(
+            string tenantId, string functionId, FunctionEventInvocation @event, BlocksContext? callerContext,
+            CancellationToken cancellationToken = default)
+        {
+            var settingsRepository = _eventSettings ?? throw new InvalidOperationException("function event settings are not available");
+            if (_eventRuns is null) throw new InvalidOperationException("the event run store is not available");
+
+            var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
+
+            if (function.Status != FunctionStatus.Live || string.IsNullOrEmpty(function.ActiveVersionId))
+            {
+                throw new FunctionValidationException($"function '{functionId}' is not deployed");
+            }
+
+            var version = await ActiveVersionAsync(tenantId, function.ActiveVersionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{functionId}' has no active version");
+
+            // The subscription of the DEPLOYED version is the authorization (never the draft's list).
+            var subscription = await settingsRepository.GetAsync(tenantId, function.ItemId, version.ItemId, cancellationToken);
+            var authResult = _authorizationService.AuthorizeForEvent(subscription, @event.Name);
+            if (!authResult.Allowed)
+            {
+                throw new FunctionAuthorizationException(authResult.Reason ?? "not authorized");
+            }
+
+            // One run per event and function. The lock only serializes two deliveries that arrive together; the run record
+            // (found by the event id) is what answers every later one, and survives a crash after the lock was taken.
+            var database = _cache.CacheDatabase();
+            var lockKey = FunctionWorkerQueueKeys.EventStartLock(@event.EventId, function.ItemId);
+            if (!await database.StringSetAsync(lockKey, "1", FunctionWorkerQueueKeys.EventStartLockTtl, When.NotExists))
+            {
+                _logger.LogInformation(
+                    "Event {EventId} is already being started for function {FunctionId}; not starting a second run",
+                    @event.EventId, function.ItemId);
+                return new InvokeResultDto { RunId = string.Empty, Status = FunctionQueueKeys.Wire.Queued };
+            }
+
+            try
+            {
+                var existing = await _runRepository.FindEventRunAsync(tenantId, function.ItemId, @event.EventId, cancellationToken);
+                if (existing is not null)
+                {
+                    _logger.LogInformation(
+                        "Event {EventId} already started run {RunId} of function {FunctionId}; not starting a second run",
+                        @event.EventId, existing.ItemId, function.ItemId);
+                    return new InvokeResultDto { RunId = existing.ItemId, Status = FunctionQueueKeys.Wire.Queued };
+                }
+
+                return await InvokeCoreAsync(
+                    tenantId, function, version, FunctionRunImage.For(version), callerContext,
+                    InvokedByType.Event, invokedById: @event.EventId, @event.DataJson, wait: false,
+                    waitTimeoutSeconds: null, cancellationToken, fromEvent: @event);
+            }
+            finally
+            {
+                try
+                {
+                    await database.KeyDeleteAsync(lockKey);
+                }
+                catch (Exception ex) when (ex is RedisException or TimeoutException)
+                {
+                    // It expires on its own.
+                    _logger.LogDebug("Could not release the start lock of event {EventId}: {Message}", @event.EventId, ex.Message);
+                }
+            }
+        }
+
         private async Task<InvokeResultDto> InvokeCoreAsync(
             string tenantId,
             FunctionEntity function,
@@ -581,7 +755,8 @@ namespace Functions.DomainService.Services
             CancellationToken cancellationToken,
             TestBuild? test = null,
             int? httpWaitSeconds = null,
-            bool finishedOnlyWithoutRetry = false)
+            bool finishedOnlyWithoutRetry = false,
+            FunctionEventInvocation? fromEvent = null)
         {
             var admission = await _admissionService.AdmitAsync(function, tenantId, inputJson, invokedBy, version, cancellationToken);
             StepTimer.Current.Value?.Mark("admission");
@@ -614,7 +789,10 @@ namespace Functions.DomainService.Services
                     ? 1
                     : Math.Max(1, (version?.Retry ?? function.Retry).Attempts),
             };
-            run.IdempotencyKey = $"{run.ItemId}-{run.Attempt}";
+            // A run an event started is keyed by the event and the function, so a redelivery of the event is the same key.
+            run.IdempotencyKey = fromEvent is null
+                ? $"{run.ItemId}-{run.Attempt}"
+                : $"{fromEvent.EventId}-{function.ItemId}";
 
             // Warm sandboxes serve every run of a deployed version, whoever calls it — HTTP, a
             // workflow step, a schedule, a replay (user, 2026-10-07: "it must not matter"). The
@@ -628,7 +806,16 @@ namespace Functions.DomainService.Services
             // run as SecretUnresolved (naming the variable) when one cannot be read, and as the
             // retryable SecretStoreUnavailable when the store itself is down. A version snapshot
             // keeps the reference too, so rotating a secret takes effect on the next run.
-            var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson);
+            // The events it may send come from its version's own list (the draft's for a Test), narrowed for a Public trigger.
+            var allowedEvents = await AllowedEventsAsync(tenantId, function, version, cancellationToken);
+            var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson, allowedEvents, fromEvent?.Name);
+
+            // The event's name and depth, kept for the events this run sends and for its dead-letter entry. Before the
+            // record exists (and before any grant is written), so a Redis failure leaves nothing behind to clean up.
+            if (fromEvent is not null && _eventRuns is not null)
+            {
+                await _eventRuns.SaveAsync(run.ItemId, new FunctionEventRunInfo(fromEvent.EventId, fromEvent.Name, fromEvent.Depth));
+            }
 
             // The caller's identity for ctx.blocks.accessToken, as a delegation grant id the runner
             // redeems right before the sandbox starts — never a token. Written now, while the
@@ -899,8 +1086,10 @@ namespace Functions.DomainService.Services
                 entry.Add(new NameValueEntry(FunctionQueueKeys.RunApiTimingsField, timer.ToCompact()));
             }
 
-            await database.StreamAddAsync(FunctionQueueKeys.RunsStream, [.. entry]);
-            StreamWakeup.Publish(database, FunctionQueueKeys.RunsNudgeChannel);
+            // Runs an event started wait in their own queue: HTTP runs always go first (see the runner's RunSourceSelector).
+            var fromEvent = run.InvokedBy == InvokedByType.Event;
+            await database.StreamAddAsync(fromEvent ? FunctionQueueKeys.EventRunsStream : FunctionQueueKeys.RunsStream, [.. entry]);
+            StreamWakeup.Publish(database, fromEvent ? FunctionQueueKeys.EventRunsNudgeChannel : FunctionQueueKeys.RunsNudgeChannel);
         }
 
         /// <summary><see cref="ArtifactUrlOrNullAsync"/>, with any failure logged and read as "go by image".</summary>

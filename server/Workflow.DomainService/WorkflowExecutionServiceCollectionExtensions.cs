@@ -16,8 +16,11 @@ using Workflow.DomainService.Nodes.TriggerEmailV1;
 using Workflow.DomainService.Nodes.TriggerDataV1;
 using Workflow.DomainService.Nodes.TriggerScheduleV1;
 using Workflow.DomainService.Nodes.LogicIFV1;
+using Workflow.DomainService.Nodes.LogicSwitchV2;
 using Workflow.DomainService.Nodes.TriggerWebhookV1;
 using Workflow.DomainService.Nodes.TransformSetFieldV1;
+using Workflow.DomainService.Nodes.TransformSplitOutV2;
+using Workflow.DomainService.Nodes.TransformMergeV2;
 using Workflow.DomainService.Nodes.TransformCodeV1;
 using Workflow.DomainService.Services;
 using DomainService.Utilities;
@@ -37,6 +40,7 @@ namespace Workflow.DomainService
             services.TryAddSingleton<IWorkflowImportTenantSlugResolver, NullWorkflowImportTenantSlugResolver>();
             services.AddSingleton<IWorkflowImportService, WorkflowImportService>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
+            services.AddSingleton<IInProcessGrantReleaser, InProcessGrantReleaser>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
             services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();
             services.AddSingleton<IWorkflowVersionService, WorkflowVersionService>();
@@ -59,10 +63,13 @@ namespace Workflow.DomainService
 
             // Logic nodes
             services.AddSingleton<INodeExecutor, LogicIfV1Node>();
+            services.AddSingleton<INodeExecutor, LogicSwitchV2Node>();
 
 
             // Transform nodes
             services.AddSingleton<INodeExecutor, TransformSetFieldV1Node>();
+            services.AddSingleton<INodeExecutor, TransformSplitOutV2Node>();
+            services.AddSingleton<INodeExecutor, TransformMergeV2Node>();
             services.AddSingleton<INodeExecutor, TransformCodeV1Node>();
 
             // Action nodes

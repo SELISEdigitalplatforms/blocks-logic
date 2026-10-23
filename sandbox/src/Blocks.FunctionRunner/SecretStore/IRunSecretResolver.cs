@@ -24,6 +24,21 @@ namespace Blocks.FunctionRunner.SecretStore
             EnvSecretReferences.Caller caller,
             IReadOnlyCollection<string> secretIds,
             CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Every secret id whose name is <b>exactly</b> (case-sensitive) each of <paramref name="names"/>, for the
+        /// run's tenant and caller — the lookup behind an imported <c>{{secretName.&lt;name&gt;}}</c> (2026-10-18).
+        /// Metadata only: no value is read here, and nothing (not an id, not a miss) is cached. Every asked name is a
+        /// key; no match is an empty list. Throws <see cref="SecretStoreUnavailableException"/> when the store cannot
+        /// be asked. The default knows no names, so such a run fails as <c>SECRET_UNRESOLVED</c>.
+        /// </summary>
+        Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> FindIdsByNameAsync(
+            string tenantId,
+            EnvSecretReferences.Caller caller,
+            IReadOnlyCollection<string> names,
+            CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>(
+                names.Distinct(StringComparer.Ordinal).ToDictionary(n => n, _ => (IReadOnlyList<string>)[], StringComparer.Ordinal));
     }
 
     /// <summary>The outcome of one lookup.</summary>
@@ -46,6 +61,8 @@ namespace Blocks.FunctionRunner.SecretStore
         public const string AccessDenied = "it is not readable in this run's context";
         public const string UnknownTenant = "the run's tenant is not known to the secret store";
         public const string Invalid = "the reference is not a valid secret id";
+        public const string NoSuchName = "no secret has that name; create it in Blocks OS secrets";
+        public const string DuplicateName = "more than one secret has that name; keep one, or pick the secret in the editor";
     }
 
     /// <summary>

@@ -3,11 +3,10 @@ using Blocks.Genesis;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Scheduler.DomainService.Entities;
-using Scheduler.DomainService.Enums;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Repositories;
 using Scheduler.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Scheduler
 {

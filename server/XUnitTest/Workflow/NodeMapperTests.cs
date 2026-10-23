@@ -4,6 +4,7 @@ using Workflow.DomainService.Entities;
 using Workflow.DomainService.Utils;
 using FluentAssertions;
 using MongoDB.Bson;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {
@@ -38,7 +39,48 @@ namespace XUnitTest.Workflow
             entity.Type.Should().Be("transformCode");
             entity.Version.Should().Be("1");
             entity.Position.Should().BeSameAs(dto.Position);
-            entity.Handle.Should().BeSameAs(dto.Handle);
+            entity.Handle.Should().NotBeNull();
+            entity.Handle!.Sources.Should().BeEmpty();
+            entity.Handle.Targets.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void ToEntity_StoresTheHandleEntries()
+        {
+            var dto = Node(Json("{}"), Json("{}"));
+            dto.Handle = new Handle
+            {
+                Sources = [new() { ["key"] = "if-true", ["label"] = "True" }, new() { ["key"] = "if-false", ["label"] = "False" }],
+                Targets = [new() { ["key"] = "target", ["label"] = "" }],
+            };
+
+            var handle = NodeMapper.ToEntity(dto).Handle!;
+
+            handle.Sources.Select(e => e["key"]).Should().Equal("if-true", "if-false");
+            handle.Sources[0]["label"].Should().Be("True");
+            handle.Targets.Single()["key"].Should().Be("target");
+            handle.Sources[0].Should().NotBeSameAs(dto.Handle.Sources[0]);
+        }
+
+        [Fact]
+        public void ToEntity_WithoutHandle_StoresNull()
+        {
+            var dto = Node(Json("{}"), Json("{}"));
+            dto.Handle = null;
+
+            NodeMapper.ToEntity(dto).Handle.Should().BeNull();
+        }
+
+        [Fact]
+        public void ToEntity_NullListsAndEntries_BecomeEmpty()
+        {
+            var dto = Node(Json("{}"), Json("{}"));
+            dto.Handle = new Handle { Sources = null!, Targets = [null!, new() { ["key"] = "target", ["label"] = "" }] };
+
+            var handle = NodeMapper.ToEntity(dto).Handle!;
+
+            handle.Sources.Should().BeEmpty();
+            handle.Targets.Should().ContainSingle().Which["key"].Should().Be("target");
         }
 
         [Fact]

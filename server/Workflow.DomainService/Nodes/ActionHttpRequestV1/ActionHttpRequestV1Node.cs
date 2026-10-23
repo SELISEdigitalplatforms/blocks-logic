@@ -9,6 +9,7 @@ using Workflow.DomainService.Entities;
 using Blocks.Genesis;
 using System.Diagnostics;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
 {
@@ -106,7 +107,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
                 // unauthenticated send: no token fails this item (WS-1).
                 token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
                 if (string.IsNullOrWhiteSpace(token))
-                    throw new NoDelegatedTokenException();
+                    throw NoDelegatedTokenException.ForCurrentRun();
             }
             else if (string.Equals(mode, "clientCredential", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(parameters.ClientId)

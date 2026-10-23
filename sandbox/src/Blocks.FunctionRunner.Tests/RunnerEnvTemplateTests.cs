@@ -114,6 +114,38 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [SkippableFact]
+        public void The_provisioned_template_never_ships_an_empty_value_for_a_non_nullable_numeric_option()
+        {
+            var root = SandboxRoot();
+            Skip.If(root is null, "not running from a source checkout");
+
+            var body = HeredocBody(File.ReadAllText(Path.Combine(root!, "provision", "40-runner-user.sh")));
+
+            // A live "RUNNER__X=" reaches the service as an empty string, and the configuration
+            // binder cannot turn "" into an int or a TimeSpan: the host dies at start-up with
+            // "Failed to convert configuration value ''". It happened with MaxSandboxesPerTenant
+            // on a freshly provisioned VM. An unset option is a commented-out line.
+            var mustHaveValue = typeof(Blocks.FunctionRunner.Options.RunnerOptions).GetProperties()
+                .Where(p => p.CanWrite && Nullable.GetUnderlyingType(p.PropertyType) is null &&
+                            ((p.PropertyType.IsPrimitive && p.PropertyType != typeof(bool)) ||
+                             p.PropertyType == typeof(TimeSpan)))
+                .Select(p => "RUNNER__" + p.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var line in body.Split('\n'))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith('#')) continue;
+
+                var eq = trimmed.IndexOf('=');
+                if (eq <= 0 || !mustHaveValue.Contains(trimmed[..eq])) continue;
+
+                trimmed[(eq + 1)..].Trim().Should().NotBeEmpty(
+                    $"'{trimmed[..eq]}' is numeric; a live empty value crashes the host at start-up - comment the line out instead");
+            }
+        }
+
+        [SkippableFact]
         public void The_runtime_is_pinned_to_runsc_in_what_provisioning_writes()
         {
             var root = SandboxRoot();

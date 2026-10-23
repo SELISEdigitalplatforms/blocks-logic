@@ -1,14 +1,12 @@
 using Blocks.Genesis;
 using FluentAssertions;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using Functions.DomainService.Services;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
@@ -370,6 +368,26 @@ namespace XUnitTest.Functions
 
             (await DefaultService(cache).AdmitAsync(Public(perMinute: 1), "tenant_1", "{}", invokedBy, null)).IsAdmitted.Should().BeTrue();
             database.Verify(d => d.StringIncrementAsync(It.IsAny<RedisKey>(), It.IsAny<long>(), It.IsAny<CommandFlags>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_run_an_event_starts_counts_toward_the_functions_rate_limit()
+        {
+            var (cache, database) = Cache(count: 51);
+
+            var act = () => DefaultService(cache).AdmitAsync(Function(perMinute: 50), "tenant_1", "{}", InvokedByType.Event, null);
+
+            (await act.Should().ThrowAsync<FunctionRateLimitedException>()).Which.Message.Should().Contain("50 requests per minute");
+            database.Verify(d => d.StringIncrementAsync(It.IsAny<RedisKey>(), It.IsAny<long>(), It.IsAny<CommandFlags>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task An_event_run_within_the_limit_is_admitted_and_counted()
+        {
+            var (cache, database) = Cache(count: 50);
+
+            (await DefaultService(cache).AdmitAsync(Function(perMinute: 50), "tenant_1", "{}", InvokedByType.Event, null)).IsAdmitted.Should().BeTrue();
+            database.Verify(d => d.StringIncrementAsync(It.IsAny<RedisKey>(), It.IsAny<long>(), It.IsAny<CommandFlags>()), Times.Once);
         }
 
         [Fact]

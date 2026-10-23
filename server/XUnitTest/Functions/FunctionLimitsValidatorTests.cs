@@ -2,11 +2,10 @@ using System.Text.Json;
 using FluentAssertions;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Models;
 using Functions.DomainService.Validation;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

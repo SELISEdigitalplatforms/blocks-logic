@@ -6,9 +6,12 @@
 #   sudo ./deploy.sh --env-file F    merge F into runner.env first, for an unattended deploy
 #   sudo ./deploy.sh --help
 #
-# Key Vault hosts (BLOCKS_VAULT_TYPE=2) authenticate with the VM's Azure Arc managed identity when
-# it has one, so runner.env then needs only KeyVault__KeyVaultUrl. Without one, it needs
-# KeyVault__ClientId, KeyVault__ClientSecret and KeyVault__TenantId as well.
+# Key Vault hosts (BLOCKS_VAULT_TYPE=2) use the VM's Azure Arc managed identity when it has one:
+# deploy.sh installs the Azure CLI, signs it in as that identity for the service user, and the
+# runner's credential chain picks the CLI sign-in up — runner.env then needs only
+# KeyVault__KeyVaultUrl. Without a working Arc identity it needs KeyVault__ClientId,
+# KeyVault__ClientSecret and KeyVault__TenantId. (Genesis 4.x, checked on 4.1.5 and 4.2.4, excludes managed identity from its
+# credential chain, which is why the CLI route exists.)
 #
 # Safe to re-run: every phase is idempotent, so this is also the way to reconcile a host
 # after editing deny-cidrs, dns-servers, logging.conf or .versions. The service is only
@@ -29,7 +32,7 @@ while [ $# -gt 0 ]; do
       SEED_ENV_FILE="$1"
       ;;
     --env-file=*) SEED_ENV_FILE="${1#--env-file=}" ;;
-    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option '$1' (try --help)" ;;
   esac
   shift
@@ -107,13 +110,70 @@ arc_identity_ok() {
   grep -q '"access_token"' <<<"$resp"
 }
 
+# Why the Azure CLI: Genesis builds its Key Vault credential as a DefaultAzureCredential with the
+# managed-identity step excluded, so the Arc identity cannot be used directly. The chain still
+# contains the Azure CLI credential (what a developer's `az login` feeds), and the CLI can sign in
+# as the Arc identity (`az login --identity`) and mint a fresh token on every call. Net effect: the
+# service authenticates as the VM's identity with no client secret on disk. The sign-in lives in
+# the service user's own config directory (0700), which no sandbox can reach.
+azure_service_user() { printf '%s' "${RUNNER_USER:-blocks-runner}"; }
+azure_config_dir() {
+  local home; home="$(getent passwd "$(azure_service_user)" | cut -d: -f6)"
+  printf '%s/.azure' "${home:-/var/lib/blocks-runner}"
+}
+
+# ensure_azure_cli — install the Azure CLI from Microsoft's apt repository when it is missing.
+# Returns 1 (never dies) when it cannot, so the caller falls back to client credentials.
+ensure_azure_cli() {
+  command -v az >/dev/null 2>&1 && return 0
+  [ "${OS_FAMILY:-}" = debian ] || { warn "Azure CLI install is only automated for apt hosts"; return 1; }
+  local codename arch
+  codename="$(. /etc/os-release && printf '%s' "${VERSION_CODENAME:-}")"
+  arch="$(dpkg --print-architecture)"
+  [ -n "$codename" ] || { warn "cannot tell this release's apt codename — not installing the Azure CLI"; return 1; }
+  curl -fsS -m 20 -o /dev/null "https://packages.microsoft.com/repos/azure-cli/dists/${codename}/Release" \
+    || { warn "Microsoft's Azure CLI repository has no packages for '${codename}'"; return 1; }
+  step "Azure CLI"
+  install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL -m 60 https://packages.microsoft.com/keys/microsoft.asc \
+    | gpg --dearmor --yes -o /etc/apt/keyrings/microsoft.gpg || { warn "could not fetch Microsoft's signing key"; return 1; }
+  chmod 0644 /etc/apt/keyrings/microsoft.gpg
+  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ %s main\n' \
+    "$arch" "$codename" >/etc/apt/sources.list.d/azure-cli.list
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq azure-cli >/dev/null 2>&1 \
+    || { warn "apt could not install azure-cli"; return 1; }
+  command -v az >/dev/null 2>&1
+}
+
+# azure_cli_identity_ok — can the service user get a Key Vault token from the CLI, signed in as the
+# Arc identity? Signs in first when it has to. Nothing is printed: -o none, and the token is not read.
+azure_cli_identity_ok() {
+  local svc cfg home grp
+  svc="$(azure_service_user)"; cfg="$(azure_config_dir)"; home="$(dirname "$cfg")"; grp="$(id -gn "$svc")"
+  install -d -m 0700 -o "$svc" -g "$grp" "$cfg"
+  _az() {
+    sudo -u "$svc" env HOME="$home" AZURE_CONFIG_DIR="$cfg" \
+      IDENTITY_ENDPOINT="http://localhost:40342/metadata/identity/oauth2/token" IMDS_ENDPOINT="http://localhost:40342" \
+      az "$@" --only-show-errors
+  }
+  _az account get-access-token --resource https://vault.azure.net -o none >/dev/null 2>&1 && return 0
+  _az login --identity --allow-no-subscriptions -o none >/dev/null 2>&1 || return 1
+  _az account get-access-token --resource https://vault.azure.net -o none >/dev/null 2>&1
+}
+
 # use_managed_identity — make the runner service able to use that identity itself.
 #
 # Azure.Identity recognises an Arc host by IDENTITY_ENDPOINT and IMDS_ENDPOINT. The agent exports
 # them only to its own extensions, so a plain systemd service never sees them; they go in
-# runner.env. The service user also needs group himds to read the agent's key file. Either change
-# is invisible to a running unit, so both mark ENV_CHANGED and phase 5 restarts it.
+# runner.env, together with AZURE_CONFIG_DIR for the CLI sign-in above. The service user also needs
+# group himds to read the agent's key file. Each change is invisible to a running unit, so all of
+# them mark ENV_CHANGED and phase 5 restarts it.
 use_managed_identity() {
+  if set_env_val AZURE_CONFIG_DIR "$(azure_config_dir)" \
+       "Azure CLI sign-in (az login --identity) used by the Key Vault credential chain. Written by deploy.sh."; then
+    ENV_CHANGED=yes; info "set AZURE_CONFIG_DIR"
+  fi
   if set_env_val IDENTITY_ENDPOINT "http://localhost:40342/metadata/identity/oauth2/token" \
        "Azure Arc managed identity. Written by deploy.sh."; then
     ENV_CHANGED=yes; info "set IDENTITY_ENDPOINT"
@@ -267,17 +327,28 @@ case "$VAULT" in
     require_val BlocksSecret__DatabaseConnectionString
     ;;
   2)
-    # The vault URL is needed either way. Credentials are only needed when this host has no Azure
-    # Arc managed identity to authenticate with — which is preferred whenever it works.
+    # The vault URL is needed either way. Preferred credential: this VM's Azure Arc managed identity,
+    # reached through the Azure CLI (see azure_cli_identity_ok) because Genesis 4.x (checked 4.1.5, 4.2.4) excludes the
+    # managed-identity step from its credential chain. Only when that does not work are client
+    # credentials required. (If both exist, Genesis tries the client secret first.)
     require_val KeyVault__KeyVaultUrl
+    MI_READY=no
     if arc_identity_ok; then
-      ok "vault: Azure Key Vault via managed identity (Azure Arc) — no client secret needed"
-      use_managed_identity
+      use_managed_identity     # env + group himds first: the CLI sign-in below runs as the service user
+      if ensure_azure_cli && azure_cli_identity_ok; then
+        MI_READY=yes
+        ok "vault: Azure Key Vault via the Arc managed identity (Azure CLI sign-in) — no client secret needed"
+      else
+        warn "the Arc identity answers, but the Azure CLI could not sign in with it; falling back to client credentials"
+      fi
     else
-      info "vault: Azure Key Vault — no Azure Arc managed identity on this host, using client credentials"
+      info "vault: Azure Key Vault — no Azure Arc managed identity on this host"
+    fi
+    if [ "$MI_READY" != yes ]; then
       for k in KeyVault__ClientId KeyVault__ClientSecret KeyVault__TenantId; do
         require_val "$k"
       done
+      ok "vault: Azure Key Vault client credentials are configured"
     fi
     ;;
   *) die "$ENV_FILE: BLOCKS_VAULT_TYPE is '${VAULT:-unset}', expected 1 (OnPrem) or 2 (Key Vault)" ;;

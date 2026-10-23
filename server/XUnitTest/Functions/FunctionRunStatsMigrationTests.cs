@@ -1,13 +1,13 @@
 using Blocks.Genesis;
 using FluentAssertions;
 using Functions.DomainService.Consumers;
-using Functions.DomainService.Entities;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
@@ -39,7 +39,7 @@ namespace XUnitTest.Functions
             _provider.Setup(p => p.GetCollection<FunctionRunStatsMigration.LegacyRunStats>(It.IsAny<string>(), FunctionsConstants.LegacyRunStatsCollection))
                 .Returns(Legacy);
 
-            _functions = new FunctionRepository(_provider.Object, NullLogger<FunctionRepository>.Instance);
+            _functions = new FunctionRepository(_provider.Object, NullLogger<FunctionRepository>.Instance, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         }
 
         public void Dispose() => _client.DropDatabase(_databaseName);

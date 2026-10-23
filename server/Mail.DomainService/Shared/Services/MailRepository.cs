@@ -1,10 +1,13 @@
 ﻿using Blocks.Genesis;
+using DataAccess.InternalService;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Mails;
 using Mail.DomainService.Shared.Enums;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Globalization;
+using Blocks.Genesis.Entities.Logic;
+using EmailTemplate = Blocks.Genesis.Entities.Os.EmailTemplate;
 
 namespace Mail.DomainService.Services
 {
@@ -13,9 +16,12 @@ namespace Mail.DomainService.Services
         private const string LastAccumulator = "$last";
         private readonly IDbContextProvider _dbContextProvider;
 
-        public MailRepository(IDbContextProvider dbContextProvider)
+        private readonly ILogicDataAccess _dataAccess;
+
+        public MailRepository(IDbContextProvider dbContextProvider, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
+            _dataAccess = dataAccess;
         }
 
         public IMongoCollection<T> GetCollection<T>()
@@ -163,23 +169,6 @@ namespace Mail.DomainService.Services
             return mailServerConfiguration;
         }
 
-        public async Task<bool> SaveMailToBeSent(MailToBeSent mailToBeSent)
-        {
-            var collection = GetCollection<MailToBeSent>();
-
-            await collection.InsertOneAsync(mailToBeSent);
-
-            return true;
-        }
-
-        public async Task<MailToBeSent> GetMailToBeSent(string itemId)
-        {
-            var collection = GetCollection<MailToBeSent>();
-
-            var result = await collection.Find(x => x.ItemId == itemId).FirstOrDefaultAsync();
-            return result;
-        }
-
         //deprecated
         public async Task<(List<MailBoxEntity> Mails, long TotalCount)> GetMailBoxMails(GetMailBoxMails request)
         {
@@ -306,7 +295,13 @@ namespace Mail.DomainService.Services
                 match.Add("$or", orConditions);
             }
 
+            // Aggregation: the resolver read filter is the first $match; projection is not applied.
+            var scope = await _dataAccess.ReadAsync(LogicSchemas.MailBoxEntity, Builders<MailBoxEntity>.Filter.Empty,
+                "Mail.MailRepository.GetMailBoxAggregatedMails", BlocksContext.GetContext()?.TenantId, useProjection: false);
+            if (!scope.Granted) return ([], 0);
+
             var baseAggregate = collection.Aggregate()
+                .Match(scope.Filter)
                 .Match(typeMatch)
                 .Sort(Builders<MailBoxEntity>.Sort.Ascending(x => x.Date)) 
                 .Group(groupBy)
@@ -331,7 +326,9 @@ namespace Mail.DomainService.Services
             var collection = dbContext.GetCollection<MailBoxEntity>($"{nameof(MailBoxEntity)}s");
             var filter = Builders<MailBoxEntity>.Filter.Eq(x => x.MessageId, messageId);
 
-            var entities = await collection.Find(filter).ToListAsync();
+            var scope = await _dataAccess.ReadAsync(LogicSchemas.MailBoxEntity, filter, "Mail.MailRepository.GetMailBoxMail", tenantId);
+            if (!scope.Granted) return null;
+            var entities = await scope.Apply(collection).ToListAsync();
 
             if (entities.Count == 0)
             {
@@ -352,7 +349,7 @@ namespace Mail.DomainService.Services
                 }
             }
 
-            return latestEntity;
+            return scope.ForView(latestEntity);
         }
     }
 }

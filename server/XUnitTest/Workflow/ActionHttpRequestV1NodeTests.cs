@@ -9,6 +9,7 @@ using Workflow.DomainService.Entities;
 using Workflow.DomainService.Nodes;
 using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 using Workflow.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

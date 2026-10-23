@@ -1,7 +1,6 @@
 using Scheduler.DomainService.Dtos;
 using Scheduler.DomainService.Dtos.Responses;
-using Scheduler.DomainService.Entities;
-using Scheduler.DomainService.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Scheduler.DomainService.Repositories
 {

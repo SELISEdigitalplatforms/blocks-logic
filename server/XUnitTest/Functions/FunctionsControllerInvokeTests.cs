@@ -129,6 +129,31 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public async Task An_sse_caller_is_marked_and_answered_with_the_two_event_stream()
+        {
+            GivenRequest(more: r => r.Headers.Accept = "text/event-stream");
+            ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "QUEUED", SseWaitSeconds = 35 });
+
+            var result = await _controller.Invoke("fn_1", "orders/42");
+
+            _seen!.Sse.Should().BeTrue();
+            var sse = result.Should().BeOfType<FunctionSseAnswerResult>().Subject;
+            sse.RunId.Should().Be("run_1");
+            sse.WaitSeconds.Should().Be(35);
+        }
+
+        [Fact]
+        public async Task A_plain_caller_is_not_marked_sse()
+        {
+            GivenRequest();
+            ServiceAnswers(new InvokeResultDto { RunId = "run_1", Status = "QUEUED" });
+
+            await _controller.Invoke("fn_1", "orders/42");
+
+            _seen!.Sse.Should().BeFalse();
+        }
+
+        [Fact]
         public async Task A_queued_run_is_202_and_a_finished_one_200()
         {
             GivenRequest();

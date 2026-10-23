@@ -1,4 +1,4 @@
-import { Globe, Hourglass, KeyRound, Zap } from "lucide-react";
+import { Globe, Hourglass, KeyRound, Radio, Zap } from "lucide-react";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui-kits/radio-group/radio-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
@@ -60,7 +60,22 @@ const RESPONSE_OPTIONS: Array<{
       "The caller gets the function's answer directly. Return { statusCode, headers, body } to control the HTTP response. If the run takes too long, the caller gets 202 + poll token as usual.",
     icon: Zap,
   },
+  {
+    value: "sse",
+    title: "Stream events (SSE)",
+    description:
+      "The caller gets two Server-Sent Events: run with the run id at once, then done with the full response (or error). No Accept header needed. If the run takes too long, the last event says so and carries a poll token.",
+    icon: Radio,
+  },
 ];
+
+/** What the HTTP endpoint answers, in one sentence per response mode. */
+const ENDPOINT_HINTS: Record<TriggerResponseMode, string> = {
+  async:
+    "Always on. The call returns 202 Accepted with a run id and a poll token — never the result itself, so nothing holds a connection open for the length of a run.",
+  sync: "Always on. The caller waits for the function's answer; a run that takes too long returns 202 Accepted with a run id and a poll token instead.",
+  sse: "Always on. The caller gets an event stream: the run id first, then the full response.",
+};
 
 /**
  * The only method editor. There used to be a GET/POST switch beside it too, but it edited the same
@@ -115,14 +130,13 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
   const rolesQuery = useIamRoles();
   const permissionsQuery = useIamPermissions();
   const isToken = value.authMode === "Token";
-  const isSync = value.responseMode === "sync";
   const hasVerbList = (value.httpMethods ?? []).length > 0;
   const accepted = acceptedHttpVerbs(value);
 
   const onResponseModeChange = (mode: string) => {
     // Cookies only apply to a sync answer; clearing on the way out keeps a hidden "on" from
     // coming back the next time someone picks "Wait for answer".
-    if (mode === "sync") patch({ responseMode: "sync" });
+    if (mode === "sync" || mode === "sse") patch({ responseMode: mode });
     else patch({ responseMode: "async" });
   };
 
@@ -142,19 +156,9 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
         <div className="space-y-3">
           <div>
             <p className="text-sm font-semibold">HTTP endpoint</p>
-            {isSync ? (
-              <p className="text-xs text-muted-foreground">
-                Always on. The caller waits for the function&apos;s answer; a run that takes too
-                long returns <code className="font-mono">202 Accepted</code> with a run id and a
-                poll token instead.
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Always on. The call returns <code className="font-mono">202 Accepted</code> with a
-                run id and a poll token — never the result itself, so nothing holds a connection
-                open for the length of a run.
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              {ENDPOINT_HINTS[value.responseMode] ?? ENDPOINT_HINTS.async}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Accepted methods</span>

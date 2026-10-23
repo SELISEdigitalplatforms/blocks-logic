@@ -1,4 +1,5 @@
 ﻿using Mail.DomainService.Entities;
+using Blocks.Genesis.Entities.Os;
 
 namespace Mail.DomainService.Template
 {

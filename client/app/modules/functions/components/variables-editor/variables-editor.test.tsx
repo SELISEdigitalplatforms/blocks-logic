@@ -155,4 +155,32 @@ describe("VariablesEditor", () => {
 
     expect(screen.queryByText(/save refuses/i)).toBeNull();
   });
+  it("shows a value kept by secret name as the name with its state, never as broken text", async () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <VariablesEditor
+        value={[
+          { key: "STRIPE_KEY", value: "{{secretName.stripe-key}}" },
+          { key: "DB_PASSWORD", value: "{{secretName.db-pass}}" },
+          { key: "SENDGRID_KEY", value: "{{secretName.sendgrid}}" },
+        ]}
+        onChange={onChange}
+        missingSecrets={["stripe-key"]}
+        duplicateSecrets={["db-pass"]}
+      />,
+    );
+
+    expect(screen.getByTestId("variable-0-secret-name").textContent).toContain("stripe-key(not found)");
+    expect(screen.getByTestId("variable-1-secret-name").textContent).toContain("(more than one)");
+    expect(screen.getByTestId("variable-2-secret-name").textContent).toContain("(by name)");
+    // Not refused as a typed credential: it is a reference.
+    expect(screen.queryByText(/looks like a credential/)).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear variable 1 value" }));
+    expect(onChange).toHaveBeenCalledWith([
+      { key: "STRIPE_KEY", value: "" },
+      { key: "DB_PASSWORD", value: "{{secretName.db-pass}}" },
+      { key: "SENDGRID_KEY", value: "{{secretName.sendgrid}}" },
+    ]);
+  });
 });

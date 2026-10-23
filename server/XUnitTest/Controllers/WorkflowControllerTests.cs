@@ -467,7 +467,10 @@ namespace XUnitTest.Controllers
         {
             var method = typeof(WorkflowController).GetMethod(nameof(WorkflowController.GetExecutionLogs))!;
 
-            method.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).Should().NotBeEmpty();
+            method.GetCustomAttributes(typeof(ProtectedEndPointAttribute), inherit: true).Cast<ProtectedEndPointAttribute>()
+                .Single().ResourceName.Should().Be("blocks-logic::workflow::read");
+            method.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).Should()
+                .NotContain(a => a.GetType() == typeof(AuthorizeAttribute), "no plain [Authorize] next to [ProtectedEndPoint]");
             method.GetCustomAttributes(typeof(HttpGetAttribute), inherit: true).Should().NotBeEmpty();
             var route = (RouteAttribute)typeof(WorkflowController).GetCustomAttributes(typeof(RouteAttribute), inherit: true).Single();
             route.Template.Should().Be("[controller]/[action]");

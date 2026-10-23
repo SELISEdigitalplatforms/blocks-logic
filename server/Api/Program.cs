@@ -1,3 +1,4 @@
+using DataAccess.InternalService;
 using Blocks.Extension.DependencyInjection;
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
@@ -64,6 +65,8 @@ builder.Services.Configure<MvcOptions>(options =>
     // every validation failure into a bare 500. The public /api/fn route maps its own and is
     // not affected.
     options.Filters.Add<FunctionExceptionFilter>();
+    // A system schema's validation rules refusing a save (workflows, functions, proxies, schedules): 400.
+    options.Filters.Add<DataValidationExceptionFilter>();
 });
 
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
@@ -76,6 +79,10 @@ services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
 services.AddWorkflowExecutionEngine();
+if (!string.IsNullOrWhiteSpace(secret.CacheConnectionString))
+{
+    services.AddSignalR().AddStackExchangeRedis(secret.CacheConnectionString);
+}
 services.AddProxyServices();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();
@@ -86,6 +93,7 @@ services.AddFunctionsServices(builder.Configuration);
 services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
 services.AddStorageDomainServices();
 services.AddBlocksSecrets();
+services.AddLogicDataAccess();
 services.RegisterBlocksStorageServices();
 await services.RegisterBlocksDeploymentServicesAsync(vaultType);
 
@@ -171,7 +179,9 @@ static bool LooksLikeAFile(PathString path)
 }
 
 ApplicationConfigurations.ConfigureMiddleware(app, tenantValidationPrefixes: new[] { "api/notificationHub" });
-app.MapHub<NotificationHub>("/api/notificationHub").WithDisplayName("Controller/notificationHub");
+// A connection is closed when its token expires; the client reconnects with a fresh login.
+app.MapHub<NotificationHub>("/api/notificationHub", options => options.CloseOnAuthenticationExpiration = true)
+    .WithDisplayName("Controller/notificationHub");
 await app.RunAsync();
 
 static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string webRootPath)

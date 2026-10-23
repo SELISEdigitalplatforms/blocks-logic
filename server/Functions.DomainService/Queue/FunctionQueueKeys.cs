@@ -57,7 +57,7 @@ namespace Functions.DomainService.Queue
         /// the envelope's <c>env</c> carries secret-bound variables as <c>{{secret.&lt;id&gt;}}</c>
         /// references that the runner resolves right before the sandbox starts. A runner that
         /// predates it only accepts 1 and dead-letters anything else, so this control plane in
-        /// front of an old runner fails runs as <see cref="Enums.RunErrorCode.Undeliverable"/>
+        /// front of an old runner fails runs as <see cref="RunErrorCode.Undeliverable"/>
         /// instead of executing a function with reference text where its key should be. Mirrors
         /// <c>RedisKeys.RunProtocolVersion</c> in the runner. Results and builds stay on
         /// <see cref="ProtocolVersion"/>.
@@ -102,6 +102,16 @@ namespace Functions.DomainService.Queue
 
         // ---- streams ------------------------------------------------------------
         public static string RunsStream => _prefix + "functions:runs";
+
+        /// <summary>
+        /// Runs started by a function event (<see cref="Events.FunctionEvent"/>): the same entry format as
+        /// <see cref="RunsStream"/>, read by the same runners with the same group, from a queue of their own so HTTP
+        /// runs always go first. Mirrors <c>RedisKeys.EventRunsStream</c> in the runner.
+        /// </summary>
+        public static string EventRunsStream => _prefix + "functions:event-runs";
+
+        /// <summary>Wake-up for <see cref="EventRunsStream"/>. Mirrors <c>RedisKeys.EventRunsNudgeChannel</c>.</summary>
+        public static string EventRunsNudgeChannel => _prefix + "functions:event-runs:nudge";
 
         /// <summary>
         /// Pre-warm requests (sandbox/REUSE.md): one entry per deploy of a version whose trigger has
@@ -180,6 +190,19 @@ namespace Functions.DomainService.Queue
         /// </summary>
         public static string DeadResultsStream => _prefix + "functions:dead-results";
 
+        /// <summary>
+        /// Function events the Worker could not send after its retries: one entry each — event id, run id, tenant,
+        /// type, reason; never the payload. Trimmed like the other dead streams.
+        /// </summary>
+        public static string DeadEventsStream => _prefix + "functions:dead-events";
+
+        /// <summary>
+        /// Function events that no function ran to success: the message was invalid, too deep, could not be started,
+        /// or the run failed on its last attempt (or expired in the queue). One entry each — <c>eventId, functionId,
+        /// runId, tenantId, name, reason</c>; never the payload. Trimmed like the other dead streams.
+        /// </summary>
+        public static string DeadFunctionEventsStream => _prefix + "functions:dead-function-events";
+
         // ---- consumer groups ----------------------------------------------------
         /// <summary>The group runners join. The control plane never reads these.</summary>
         public const string RunnerGroup = "runners";
@@ -195,6 +218,22 @@ namespace Functions.DomainService.Queue
         public const string RunPhaseBuilding = "building";
         public static string Result(string runId) => $"{_prefix}function:result:{runId}";
         public static string Logs(string runId) => $"{_prefix}function:logs:{runId}";
+
+        /// <summary>
+        /// The events a succeeded run added with <c>ctx.events.add</c>: one JSON array of <c>{id, type, payload}</c>,
+        /// checked by the runner. Same TTL as <see cref="Result"/>. Mirrors <c>RedisKeys.Events</c> in the runner;
+        /// the Worker reads and sends them in a later phase.
+        /// </summary>
+        public static string Events(string runId) => $"{_prefix}function:events:{runId}";
+
+        /// <summary>
+        /// Results-stream fields for the events (mirror <c>RedisKeys.ResultEventsKeyField</c> and its two siblings
+        /// in the runner): the key, how many, and — when the runner dropped them all — <c>EVENTS_REJECTED: &lt;reason&gt;</c>.
+        /// Absent on a run without events, so an entry from an older runner reads as "none".
+        /// </summary>
+        public const string ResultEventsKeyField = "eventsKey";
+        public const string ResultEventCountField = "eventCount";
+        public const string ResultEventsRejectedField = "eventsRejected";
         public static string Lease(string runId) => $"{_prefix}function:lease:{runId}";
         public static string Cancel(string runId) => $"{_prefix}function:cancel:{runId}";
 
@@ -306,7 +345,7 @@ namespace Functions.DomainService.Queue
         // ---- wire status strings ------------------------------------------------
         /// <summary>
         /// The runner sends these exact strings. Kept as constants rather than parsed by
-        /// enum name so a rename of <see cref="Enums.RunStatus"/> cannot silently change the
+        /// enum name so a rename of <see cref="RunStatus"/> cannot silently change the
         /// wire contract.
         /// </summary>
         public static class Wire
@@ -335,6 +374,12 @@ namespace Functions.DomainService.Queue
             public const string BuildFailedCode = "BUILD_FAILED";
             public const string SecretUnresolved = "SECRET_UNRESOLVED";
             public const string SecretStoreUnavailable = "SECRET_STORE_UNAVAILABLE";
+
+            /// <summary>
+            /// The runner did not start an event run that waited too long in <see cref="EventRunsStream"/>
+            /// (mirrors <c>ErrorCodes.EventExpired</c>). Read as <see cref="Blocks.Genesis.Entities.Logic.RunErrorCode.Undeliverable"/>.
+            /// </summary>
+            public const string EventExpired = "EVENT_EXPIRED";
 
             /// <summary>
             /// Not sent by the runner — determined here, by

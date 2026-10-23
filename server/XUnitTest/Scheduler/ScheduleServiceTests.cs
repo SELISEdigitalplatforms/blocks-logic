@@ -1,16 +1,16 @@
 using Blocks.Genesis;
+using Blocks.Genesis.DataAccess.Rules;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Scheduler.DomainService.Dtos.Requests;
-using Scheduler.DomainService.Entities;
-using Scheduler.DomainService.Enums;
 using Scheduler.DomainService.Events;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Repositories;
 using Scheduler.DomainService.Services;
 using SchedulerConstants = Scheduler.DomainService.Utils.SchedulerConstants;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Scheduler
 {
@@ -70,6 +70,20 @@ namespace XUnitTest.Scheduler
             _scheduleRepository.Verify(r => r.CreateAsync(It.Is<Schedule>(s =>
                 s.Name == "Daily sync" &&
                 s.Description == "Fires every weekday")), Times.Once);
+        }
+
+        [Fact]
+        public async Task Create_RefusedByAValidationRule_ReturnsItsMessage_AndQueuesNothing()
+        {
+            var refused = new DataValidationResult();
+            refused.AddError("Name", "Name must be at most 10 characters", "MaxLength");
+            _scheduleRepository.Setup(r => r.CreateAsync(It.IsAny<Schedule>())).ThrowsAsync(new DataValidationException(refused));
+
+            var result = await _service.CreateScheduleAsync(CreateWebhookRequest());
+
+            result.IsSuccess.Should().BeFalse();
+            result.Errors.Should().Equal(new Dictionary<string, string> { ["Name"] = "Name must be at most 10 characters" });
+            _messageClient.VerifyNoOtherCalls();
         }
 
         [Fact]

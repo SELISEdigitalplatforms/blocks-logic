@@ -39,6 +39,7 @@ public sealed class FunctionExceptionFilter : IExceptionFilter
             FunctionAuthorizationException => (StatusCodes.Status401Unauthorized, "unauthorized"),
             FunctionForbiddenException => (StatusCodes.Status403Forbidden, "forbidden"),
             FunctionNotFoundException => (StatusCodes.Status404NotFound, "not_found"),
+            FunctionConflictException => (StatusCodes.Status409Conflict, "conflict"),
             FunctionMethodNotAllowedException => (StatusCodes.Status405MethodNotAllowed, "method_not_allowed"),
             FunctionRequestTooLargeException => (StatusCodes.Status413PayloadTooLarge, "request_too_large"),
             FunctionRateLimitedException => (StatusCodes.Status429TooManyRequests, "rate_limited"),

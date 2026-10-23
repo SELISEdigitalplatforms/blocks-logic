@@ -26,7 +26,7 @@ namespace Api.Controllers
 
         /// <summary><c>GET</c> — the tenant's templates, filtered by the query string.</summary>
         [HttpGet]
-        [Authorize]
+        [ProtectedEndPoint("blocks-logic::template::read")]
         public async Task<GetAllTemplatesResponse> Gets ( [FromQuery] GetAllTemplates request )
         {
             return await _templateService.GetAllTemplatesAsync(request);

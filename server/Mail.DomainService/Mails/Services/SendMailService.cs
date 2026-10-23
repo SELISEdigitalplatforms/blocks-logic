@@ -1,4 +1,5 @@
 ﻿using Blocks.Genesis;
+using DataAccess.InternalService.Notifications;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Mails.Strategies;
@@ -25,6 +26,7 @@ namespace Mail.DomainService.Mails
         private readonly IMailAttachmentResolver _attachmentResolver;
         private readonly IMessageClient _messageClient;
         private readonly MailStatusEventOptions _statusEventOptions;
+        private readonly IBuiltInNotificationSender? _builtIn;
 
         public SendMailService(
             ILogger<SendMailService> logger,
@@ -32,9 +34,11 @@ namespace Mail.DomainService.Mails
             IOutboundMailSenderRegistry senderRegistry,
             IMailAttachmentResolver attachmentResolver,
             IMessageClient messageClient,
-            IOptions<MailStatusEventOptions> statusEventOptions
+            IOptions<MailStatusEventOptions> statusEventOptions,
+            IBuiltInNotificationSender? builtInNotifications = null
         )
         {
+            _builtIn = builtInNotifications;
             _logger = logger;
             _mailRepository = mailRepository;
             _senderRegistry = senderRegistry;
@@ -43,22 +47,50 @@ namespace Mail.DomainService.Mails
             _statusEventOptions = statusEventOptions.Value;
         }
 
-        public async Task<bool> ProcessSendMailAsync(SendEmailEvent sendEmailEvent)
+        public async Task<bool> ProcessSendMailAsync(MailToBeSent mailToBeSent)
         {
-            var mailToBeSent = await _mailRepository.GetMailToBeSent(sendEmailEvent.ItemId);
-
-            // SendEmailConsumer sends by id without going through validation, and the read here can
-            // also miss a just-written document on a secondary. Everything below dereferences the
-            // entity, so bail out with a diagnosable message rather than a NullReferenceException.
-            if (mailToBeSent is null)
+            var sent = await SendCoreAsync(mailToBeSent);
+            if (!sent)
             {
-                _logger.LogError(
-                    "MAIL FAILED (not found): no MailToBeSent document for itemId={ItemId}. It was never persisted, or the read hit a replica that has not caught up.",
-                    sendEmailEvent.ItemId);
-                await PublishStatusAsync(sendEmailEvent.ItemId, null, null, 0, "The mail record could not be found.");
-                return false;
+                await NotifyAdminsAsync(mailToBeSent);
             }
 
+            return sent;
+        }
+
+        /// <summary>
+        /// A mail was not sent: tell the tenant admins (built-in <c>logic-mail-send-failed</c>). This path only
+        /// posts to the Notifier; it never sends a mail, so a failing mail cannot start a mail loop. Test mails
+        /// are skipped (the caller already sees that result). Ids and the purpose only: no address, no body.
+        /// </summary>
+        private async Task NotifyAdminsAsync(MailToBeSent mail)
+        {
+            if (_builtIn is null || mail.IsTestMail) return;
+
+            try
+            {
+                var tenantId = BlocksContext.GetContext()?.TenantId;
+                if (string.IsNullOrWhiteSpace(tenantId)) return;
+
+                await _builtIn.SendToTenantAdminsAsync(
+                    tenantId,
+                    BuiltInNotificationNames.MailSendFailed,
+                    new BuiltInNotificationPayload(
+                        "MailSendFailed",
+                        "Mail not sent",
+                        "An outgoing mail was not sent. Check the mail template and the mail server settings.",
+                        IsSuccess: false,
+                        Ids: new Dictionary<string, string?> { ["mailId"] = mail.ItemId, ["purpose"] = mail.Name }),
+                    throttleKey: mail.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not notify the admins about mail {MailId} ({ExceptionType})", mail.ItemId, ex.GetType().Name);
+            }
+        }
+
+        private async Task<bool> SendCoreAsync(MailToBeSent mailToBeSent)
+        {
             if (mailToBeSent.MailServerConfiguration is null || mailToBeSent.EmailTemplate is null)
             {
                 _logger.LogError(

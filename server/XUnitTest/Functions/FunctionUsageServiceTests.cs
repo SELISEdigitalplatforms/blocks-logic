@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Repositories;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

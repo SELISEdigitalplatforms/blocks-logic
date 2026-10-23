@@ -27,6 +27,19 @@ import {
   ITestFunctionPayload,
 } from "../types/run.types";
 import { IFunctionSource } from "../types/function.types";
+import {
+  IEventCatalog,
+  IEventSettings,
+  IQueueStatus,
+  IRunEventsResponse,
+  ISaveEventSettingsPayload,
+} from "../types/event.types";
+import {
+  IFunctionExportFile,
+  IFunctionImportApplyPayload,
+  IFunctionImportPreview,
+  IFunctionImportResult,
+} from "../types/transfer.types";
 
 export interface IFunctionVersionSummaryResponse {
   data: IFunctionVersionSummary[] | null;
@@ -75,6 +88,19 @@ export class FunctionService {
 
   testFunction = (payload: ITestFunctionPayload): Promise<IInvokeResult> => {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.TEST, payload);
+  };
+
+  /**
+   * A run's streamed answer as Server-Sent Events (see `readSse`). A run that finished without
+   * streaming answers an empty stream.
+   */
+  streamRun = (runId: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> => {
+    return this.logicHttpClient.stream(
+      FUNCTIONS_ENDPOINTS.STREAM_RUN,
+      { runId },
+      { Accept: "text/event-stream" },
+      { signal },
+    );
   };
 
   /** 200 → the new version; 202 → the build is still running (see useDeploy). */
@@ -144,6 +170,22 @@ export class FunctionService {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.CANCEL_RUN, { runId });
   };
 
+  /** One function as an export file: secrets by name, nothing environment-specific. */
+  exportFunction = (functionId: string): Promise<IFunctionExportFile> => {
+    const params = new URLSearchParams({ functionId });
+    return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.EXPORT}?${params.toString()}`);
+  };
+
+  /** What an import of `file` would do here. Writes nothing. */
+  previewImport = (file: IFunctionExportFile): Promise<IFunctionImportPreview> => {
+    return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.IMPORT_PREVIEW, { file });
+  };
+
+  /** Imports `file` (409 when the function changed after the preview), then builds and deploys it. */
+  applyImport = (payload: IFunctionImportApplyPayload): Promise<IFunctionImportResult> => {
+    return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.IMPORT, payload);
+  };
+
   getAuditLog = (
     functionId: string,
     pageNumber = 0,
@@ -155,6 +197,34 @@ export class FunctionService {
       pageSize: String(pageSize),
     });
     return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.GET_AUDIT_LOG}?${params.toString()}`);
+  };
+
+  /** The event types a function may send, each with the payload to start from. */
+  getEventCatalog = (): Promise<IEventCatalog> => {
+    return this.logicHttpClient.get(FUNCTIONS_ENDPOINTS.GET_EVENT_CATALOG);
+  };
+
+  /** The draft's events and trigger events. */
+  getEventSettings = (functionId: string): Promise<IEventSettings> => {
+    const params = new URLSearchParams({ functionId });
+    return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.GET_EVENT_SETTINGS}?${params.toString()}`);
+  };
+
+  /** Replaces the draft's whole event settings. 400 `invalid_request` lists each bad field by path. */
+  saveEventSettings = (payload: ISaveEventSettingsPayload): Promise<IBaseResponse> => {
+    return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.SAVE_EVENT_SETTINGS, payload);
+  };
+
+  /** The events one run sent, and why they were dropped when they were. */
+  getRunEvents = (runId: string): Promise<IRunEventsResponse> => {
+    const params = new URLSearchParams({ runId });
+    return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.GET_RUN_EVENTS}?${params.toString()}`);
+  };
+
+  /** How many calls wait for a sandbox slot: HTTP ones and event ones. */
+  getQueueStatus = (functionId: string): Promise<IQueueStatus> => {
+    const params = new URLSearchParams({ functionId });
+    return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.GET_QUEUE_STATUS}?${params.toString()}`);
   };
 }
 

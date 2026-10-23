@@ -25,7 +25,10 @@ import { SchemaFieldsField } from "./schema-fields-field";
 import { SchemaFieldPickerField } from "./schema-field-picker-field";
 import { TabWithTextField } from "./tab-with-text-field";
 import { CalloutAccordionDisplayField } from "./callout-accordion-display-field";
+import { SplitOutFieldsField } from "./split-out-fields-field";
+import { CommaListField } from "./comma-list-field";
 import { ReadonlyDetailsField } from "./readonly-details-field";
+import { SwitchRulesField } from "./switch-rules-field";
 
 /**
  * Registry of all field components mapped by their field type.
@@ -53,6 +56,7 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   "fixed-key-value-pairs": FixedKeyValuePairsField,
   "key-type-value-pairs": KeyTypeValueField,
   conditions: ConditionsField,
+  "switch-rules": SwitchRulesField,
   array: ArrayField,
   "expression-list": ExpressionListField,
   "path-list": PathListField,
@@ -62,6 +66,8 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   "schema-field-picker": SchemaFieldPickerField,
   "tab-with-text": TabWithTextField,
   "callout-accordion-display": CalloutAccordionDisplayField,
+  "split-out-fields": SplitOutFieldsField,
+  "comma-list": CommaListField,
   "readonly-details": ReadonlyDetailsField,
 };
 

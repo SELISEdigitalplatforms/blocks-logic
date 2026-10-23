@@ -109,10 +109,13 @@ DOTNET_ENVIRONMENT=Production
 # Secret-bound variables arrive as {{secret.<id>}} references and are resolved here, at run
 # start. Must name the same value store as the control plane — see deploy/runner.env.example;
 # without KeyVault__KeyVaultUrl every secret-bound run fails as SECRET_UNRESOLVED.
+# On an Azure Arc VM deploy.sh signs the Azure CLI in as the VM's identity (AZURE_CONFIG_DIR) and
+# the KeyVault__Client* values are not needed; without Arc they are required.
 # KeyVault__KeyVaultUrl=
 # KeyVault__ClientId=
 # KeyVault__ClientSecret=
 # KeyVault__TenantId=
+# AZURE_CONFIG_DIR=
 # Secrets__ValueStore=
 #
 # On a host that is NOT an Azure VM, also set ASPNETCORE_ENVIRONMENT=Development. The Key Vault
@@ -120,8 +123,7 @@ DOTNET_ENVIRONMENT=Production
 # metadata service at. Off Azure that probe is swallowed rather than refused:
 # measured, 200s and then the whole chain fails, so the KeyVault__* client secret above is never
 # tried and every secret-bound run reports "the secret store did not answer within 20s".
-# KeyVaultCredentialFactory skips managed identity when this is Development. Leave it unset on
-# Azure, where managed identity is the right credential and answers immediately.
+# KeyVaultCredentialFactory skips managed identity when this is Development.
 # ASPNETCORE_ENVIRONMENT=Development
 
 # --- Runner identity and paths ----------------------------------------------
@@ -140,12 +142,23 @@ RUNNER__BuildsDir=$STATE_DIR/builds
 # host's private registry and whatever build of the runner it happens to be running.
 RUNNER__QueuePrefix=
 #
-# The most sandbox slots one tenant may hold at once on this host. Empty or 0 derives it as
+# Hosts that get the run's W3C traceparent when a function calls them with fetch() (a listed host
+# or any subdomain of it). Not set = the Blocks domains (seliseblocks.com, blocksdevelopers.com);
+# nothing to do. Set = only the listed hosts, one entry per index; empty turns the header off.
+# Only Blocks hosts; a trace id must not go to third parties.
+# RUNNER__TraceHosts__0=api.example.com
+#
+# How long a run started by a function event may wait in the event queue (functions:event-runs)
+# before the runner gives up on it: older entries are not started and their run fails as
+# EVENT_EXPIRED. Events are not real time. Default 300 (5 minutes).
+# RUNNER__EventRunMaxWaitSeconds=300
+#
+# The most sandbox slots one tenant may hold at once on this host. Unset or 0 derives it as
 # half the host's capacity, rounded up. The host budget on its own is first-come-first-served,
 # so one tenant's burst could hold every slot while every other tenant waited behind it;
 # nothing is rejected either way, a tenant over its share has its entries deferred. Set it to
 # RUNNER__MaxActiveSandboxes or higher to turn the share off.
-RUNNER__MaxSandboxesPerTenant=
+# RUNNER__MaxSandboxesPerTenant=
 RUNNER__Registry=127.0.0.1:5000
 RUNNER__Network=${FN_NETWORK:-blocks-fn-egress}
 RUNNER__ResolvConf=${FN_RESOLV_CONF:-$CONF_DIR/resolv.conf}

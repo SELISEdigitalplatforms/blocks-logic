@@ -14,6 +14,7 @@ import {
   useTestFunction,
 } from "../../hooks/use-runs";
 import { useGetBuild } from "../../hooks/use-versions";
+import { useRunStream } from "../../hooks/use-run-stream";
 import { BuildProgress } from "../build-progress";
 import { useFunctionEditorStore } from "../../store/function-editor-store";
 import { explainRunError } from "../../constants/run-error.constant";
@@ -50,7 +51,7 @@ const STEPS = [
   },
   {
     title: "Run handler",
-    hint: "Your handler is running. Its logs and result appear when it ends.",
+    hint: "Your handler is running. A streamed answer shows below as it arrives; logs and result appear when it ends.",
   },
   { title: "Result", hint: "" },
 ] as const;
@@ -132,6 +133,8 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
   const { mutate: cancelRun, isPending: isCancelling } = useCancelRun();
   const { data: run } = useGetRun({ runId: runId ?? undefined });
   const isRunLive = !!run && !TERMINAL_RUN_STATUSES.includes(run.status);
+  // A handler that streams (`async function*`) is shown piece by piece while it runs.
+  const stream = useRunStream(runId, run?.status === "Running");
   // Logs are recorded with the result, so there is nothing to follow while the run is live.
   const { data: logs, refetch: refetchLogs } = useGetRunLogs(runId ?? undefined, 0, 50);
   const { data: latestTest, refetch: refetchLatestTest } = useLatestTestRun(functionId, {
@@ -302,7 +305,9 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
     .filter(Boolean)
     .join(" · ");
   const explanation = explainRunError(run?.errorCode, run?.errorMessage);
-  const result = run && !isRunLive ? prettyJson(run.result) : null;
+  // A streamed answer is shown as it came; the run's result only keeps its start, so it would repeat it.
+  const hasStream = stream.text !== "";
+  const result = run && !isRunLive && !hasStream ? prettyJson(run.result) : null;
   const showSteps = isActive || !!run || !!buildId;
 
   const buttonLabel = isActive
@@ -480,6 +485,34 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               )}
               {explanation && (
                 <p className="text-xs leading-relaxed text-medium-emphasis">{explanation}</p>
+              )}
+            </div>
+          )}
+
+          {hasStream && (
+            <div className="border-b">
+              <p className="flex items-center gap-1.5 px-4 pt-2.5 text-xs font-semibold">
+                Streamed answer
+                {stream.state === "streaming" && (
+                  <Loader2 aria-label="Streaming" className="h-3 w-3 animate-spin text-primary" />
+                )}
+              </p>
+              <pre
+                aria-label="Streamed answer"
+                aria-live="polite"
+                className="max-h-52 overflow-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11px] leading-relaxed"
+              >
+                {stream.text}
+              </pre>
+              {stream.clipped && (
+                <p className="px-4 pb-2 text-[11px] text-low-emphasis">
+                  Only the first 1 MB is shown here.
+                </p>
+              )}
+              {stream.error && (
+                <p role="alert" className="px-4 pb-2 text-[11px] text-error">
+                  The stream stopped: {stream.error}
+                </p>
               )}
             </div>
           )}

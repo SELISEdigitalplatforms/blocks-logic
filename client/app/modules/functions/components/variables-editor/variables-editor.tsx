@@ -1,14 +1,55 @@
-import { Plus, Trash2, TriangleAlert } from "lucide-react";
+import { KeyRound, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { Input } from "@/components/ui-kits/input/input";
 import { Button } from "@/components/ui-kits/button/button";
 import { VariableRefField, secretIdRef, soleRefKey } from "@/components/variable-picker";
 import { IVariableBinding } from "../../types/function.types";
 import { TYPED_CREDENTIAL_MESSAGE, isTypedCredential } from "../../utils/secret-literals";
+import { soleSecretName } from "../../utils/transfer";
 
 type VariablesEditorProps = {
   value: IVariableBinding[];
   onChange: (value: IVariableBinding[]) => void;
+  /** Names with no secret here (server `missingSecrets`), for `{{secretName.X}}` values. */
+  missingSecrets?: string[];
+  /** Names that match more than one secret here (server `duplicateSecrets`). */
+  duplicateSecrets?: string[];
 };
+
+/**
+ * A value kept by secret NAME (`{{secretName.X}}`, left by an import until the secret exists). The
+ * picker only knows ids, so it is shown read-only as the name with its state instead of as broken
+ * text. Clear empties the value so a secret can be picked the normal way.
+ */
+const SecretNameValue = ({
+  name,
+  state,
+  index,
+  onClear,
+}: {
+  name: string;
+  state: "missing" | "duplicate" | "bound";
+  index: number;
+  onClear: () => void;
+}) => (
+  <div
+    className="flex h-9 min-w-0 items-center gap-2 rounded-md border bg-surface-app px-2.5 text-xs"
+    data-testid={`variable-${index}-secret-name`}
+  >
+    <KeyRound className="h-3.5 w-3.5 shrink-0 text-medium-emphasis" />
+    <span className="truncate font-mono">{name}</span>
+    <span className={state === "bound" ? "text-medium-emphasis" : "text-warning-800"}>
+      {state === "missing" ? "(not found)" : state === "duplicate" ? "(more than one)" : "(by name)"}
+    </span>
+    <button
+      type="button"
+      aria-label={`Clear variable ${index + 1} value`}
+      className="ml-auto shrink-0 text-medium-emphasis hover:text-foreground"
+      onClick={onClear}
+    >
+      <X className="h-3.5 w-3.5" />
+    </button>
+  </div>
+);
 
 const KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 const MAX_VALUE_LENGTH = 4096;
@@ -33,7 +74,12 @@ const looksLikeSecret = ({ value }: IVariableBinding) => SECRET_LOOKING_VALUE.te
  * in which case only a `{{secret.<id>}}` reference is stored and the value is resolved on the
  * host as the run starts.
  */
-export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
+export const VariablesEditor = ({
+  value,
+  onChange,
+  missingSecrets = [],
+  duplicateSecrets = [],
+}: VariablesEditorProps) => {
   const update = (index: number, partial: Partial<IVariableBinding>) => {
     onChange(value.map((v, i) => (i === index ? { ...v, ...partial } : v)));
   };
@@ -80,7 +126,8 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
           {value.map((variable, index) => {
             const keyMessage = keyError(variable.key, index, value);
             const valueMessage = valueError(variable.value);
-            const bound = soleRefKey(variable.value, secretIdRef);
+            const byName = soleSecretName(variable.value);
+            const bound = soleRefKey(variable.value, secretIdRef) ?? byName;
             // Same rule as the host's save check (FunctionSecretLiterals).
             const typedCredential = !bound && isTypedCredential(variable.key, variable.value);
             const secretWarning = !bound && !typedCredential && looksLikeSecret(variable);
@@ -96,14 +143,29 @@ export const VariablesEditor = ({ value, onChange }: VariablesEditorProps) => {
                     onChange={(e) => update(index, { key: e.target.value.toUpperCase() })}
                   />
 
-                  <VariableRefField
-                    value={variable.value}
-                    onChange={(next) => update(index, { value: next })}
-                    codec={secretIdRef}
-                    ariaLabel={`Variable ${index + 1} value`}
-                    placeholder="acct_1P9…"
-                    hint="Stored as a reference and resolved when the run starts, so the value is never saved here."
-                  />
+                  {byName ? (
+                    <SecretNameValue
+                      name={byName}
+                      index={index}
+                      state={
+                        missingSecrets.includes(byName)
+                          ? "missing"
+                          : duplicateSecrets.includes(byName)
+                            ? "duplicate"
+                            : "bound"
+                      }
+                      onClear={() => update(index, { value: "" })}
+                    />
+                  ) : (
+                    <VariableRefField
+                      value={variable.value}
+                      onChange={(next) => update(index, { value: next })}
+                      codec={secretIdRef}
+                      ariaLabel={`Variable ${index + 1} value`}
+                      placeholder="acct_1P9…"
+                      hint="Stored as a reference and resolved when the run starts, so the value is never saved here."
+                    />
+                  )}
 
                   <code className="min-w-0 truncate font-mono text-xs text-medium-emphasis">
                     ctx.env.{variable.key || "NAME"}

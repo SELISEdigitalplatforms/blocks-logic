@@ -3,9 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {
@@ -82,12 +80,22 @@ namespace Functions.DomainService.Services
         /// notably <c>OAuthToken</c> is not, and must never be.
         /// </param>
         /// <param name="inputJson">The caller's input as raw JSON, or null.</param>
+        /// <param name="allowedEvents">
+        /// The event types this run may add with <c>ctx.events.add</c>, already narrowed by the version's list and a
+        /// Public trigger (<see cref="Events.FunctionEventPolicy.AllowedTypes"/>). Null or empty: the envelope has no
+        /// <c>events</c> key and the function can add none.
+        /// </param>
+        /// <param name="eventName">
+        /// The name of the <c>FunctionEvent</c> that started the run (<c>run.invokedBy.name</c>); null for any other run.
+        /// </param>
         public static string Build(
             FunctionRunEntity run,
             FunctionVersionEntity? version,
             FunctionEntity function,
             BlocksContext? context,
-            string? inputJson)
+            string? inputJson,
+            IReadOnlyCollection<string>? allowedEvents = null,
+            string? eventName = null)
         {
             ArgumentNullException.ThrowIfNull(run);
             ArgumentNullException.ThrowIfNull(function);
@@ -104,11 +112,7 @@ namespace Functions.DomainService.Services
                     ["functionId"] = run.FunctionId,
                     ["version"] = run.VersionNumber,
                     ["attempt"] = run.Attempt,
-                    ["invokedBy"] = new JsonObject
-                    {
-                        ["type"] = InvokedByWire(run.InvokedBy),
-                        ["id"] = run.InvokedById,
-                    },
+                    ["invokedBy"] = InvokedBy(run, eventName),
                 },
                 ["context"] = BuildIdentity(context, authMode),
                 ["env"] = BuildEnv(variables, out var maskedEnvKeys),
@@ -126,6 +130,14 @@ namespace Functions.DomainService.Services
                     ["timeoutMs"] = limits.TimeoutSeconds * 1000,
                 },
             };
+
+            if (allowedEvents is { Count: > 0 })
+            {
+                envelope["events"] = new JsonObject
+                {
+                    ["allowed"] = new JsonArray(allowedEvents.Select(t => (JsonNode?)JsonValue.Create(t)).ToArray()),
+                };
+            }
 
             var json = envelope.ToJsonString(SerializerOptions);
 
@@ -227,7 +239,9 @@ namespace Functions.DomainService.Services
             {
                 if (string.IsNullOrWhiteSpace(variable.Key)) continue;
 
-                if (!string.IsNullOrEmpty(variable.Value) && SecretPlaceholder.IsMatch(variable.Value))
+                // {{secretName.X}} (an imported, still unbound reference) is resolved by the runner too.
+                if (!string.IsNullOrEmpty(variable.Value)
+                    && (SecretPlaceholder.IsMatch(variable.Value) || Utils.FunctionSecretRefs.NamePattern().IsMatch(variable.Value)))
                 {
                     maskedEnvKeys.Add(variable.Key);
                 }
@@ -258,6 +272,17 @@ namespace Functions.DomainService.Services
             if (values is null) return array;
             foreach (var value in values) array.Add(value);
             return array;
+        }
+
+        private static JsonObject InvokedBy(FunctionRunEntity run, string? eventName)
+        {
+            var invokedBy = new JsonObject
+            {
+                ["type"] = InvokedByWire(run.InvokedBy),
+                ["id"] = run.InvokedById,
+            };
+            if (!string.IsNullOrEmpty(eventName)) invokedBy["name"] = eventName;
+            return invokedBy;
         }
 
         private static string InvokedByWire(InvokedByType type) => type switch

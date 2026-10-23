@@ -1,10 +1,10 @@
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Models;
+using DataAccess.InternalService;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
@@ -20,11 +20,20 @@ namespace Functions.DomainService.Repositories
         private readonly HashSet<string> _indexedTenants = [];
         private readonly Lock _indexGate = new();
 
-        public FunctionRepository(IDbContextProvider dbContextProvider, ILogger<FunctionRepository> logger)
+        private readonly ILogicDataAccess _dataAccess;
+
+        public FunctionRepository(IDbContextProvider dbContextProvider, ILogger<FunctionRepository> logger, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
             _logger = logger;
+            _dataAccess = dataAccess;
         }
+
+        private Task<ReadScope<FunctionEntity>> ReadAsync(string tenantId, FilterDefinition<FunctionEntity> filter, string callSite, bool useProjection = true) =>
+            _dataAccess.ReadAsync(LogicSchemas.FunctionEntity, filter, $"FunctionRepository.{callSite}", tenantId, useProjection);
+
+        private Task<FilterDefinition<FunctionEntity>?> EditAsync(string tenantId, FilterDefinition<FunctionEntity> filter, string callSite) =>
+            _dataAccess.EditFilterAsync(LogicSchemas.FunctionEntity, filter, $"FunctionRepository.{callSite}", tenantId);
 
         private IMongoCollection<FunctionEntity> Collection(string tenantId)
             => _dbContextProvider.GetCollection<FunctionEntity>(tenantId, FunctionsConstants.FunctionsCollection);
@@ -96,12 +105,16 @@ namespace Functions.DomainService.Repositories
                 filter &= builder.Regex(f => f.Name, new BsonRegularExpression(searchKey, "i"));
             }
             if (!string.IsNullOrWhiteSpace(status) &&
-                Enum.TryParse<Enums.FunctionStatus>(status, ignoreCase: true, out var parsedStatus))
+                Enum.TryParse<FunctionStatus>(status, ignoreCase: true, out var parsedStatus))
             {
                 filter &= builder.Eq(f => f.Status, parsedStatus);
             }
 
             var collection = Collection(tenantId);
+            // Own projection (no Source) is kept for the list; only the resolver row filter is added.
+            var scope = await ReadAsync(tenantId, filter, "GetAll", useProjection: false);
+            if (!scope.Granted) return ([], 0);
+            filter = scope.Filter;
             var totalCount = await collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
             // The list shows name, status, version and counters — never the code. Source carries
             // index.js (up to 2 MB), package.json and the lockfile, so projecting it away keeps
@@ -115,19 +128,43 @@ namespace Functions.DomainService.Repositories
                 .Limit(Math.Max(1, pageSize))
                 .ToListAsync(cancellationToken);
 
-            return (items, totalCount);
+            return (scope.ForView(items), totalCount);
+        }
+
+        public async Task<IReadOnlyList<FunctionEntity>> GetLiveByIdsAsync(
+            string tenantId, IReadOnlyCollection<string> functionIds, CancellationToken cancellationToken = default)
+        {
+            if (functionIds.Count == 0) return [];
+
+            var builder = Builders<FunctionEntity>.Filter;
+            var filter = builder.In(f => f.ItemId, functionIds) & NotDeleted & builder.Eq(f => f.Status, FunctionStatus.Live);
+            var scope = await ReadAsync(tenantId, filter, "GetLiveByIds", useProjection: false);
+            if (!scope.Granted) return [];
+            return await Collection(tenantId).Find(scope.Filter)
+                .Project<FunctionEntity>(Builders<FunctionEntity>.Projection.Exclude(f => f.Source))
+                .ToListAsync(cancellationToken);
         }
 
         public async Task<FunctionEntity?> GetByIdAsync(string tenantId, string functionId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(functionId)) return null;
-            return await Collection(tenantId)
-                .Find(Live(functionId))
-                .FirstOrDefaultAsync(cancellationToken);
+            var scope = await ReadAsync(tenantId, Live(functionId), "GetById");
+            return scope.Granted ? await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken) : null;
+        }
+
+        public async Task<FunctionEntity?> GetByIdForViewAsync(string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            // Masked: View column (property) rules clear what the caller may not see. Never save it back.
+            if (string.IsNullOrWhiteSpace(functionId)) return null;
+            var scope = await ReadAsync(tenantId, Live(functionId), "GetByIdForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken)) : null;
         }
 
         public async Task CreateAsync(string tenantId, FunctionEntity function, CancellationToken cancellationToken = default)
         {
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionEntity, "FunctionRepository.Create", tenantId))
+                throw new UnauthorizedAccessException("Function create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.FunctionEntity, function, isInsert: true, "FunctionRepository.Create", tenantId);
             await EnsureIndexesAsync(tenantId, cancellationToken);
             await Collection(tenantId).InsertOneAsync(function, cancellationToken: cancellationToken);
         }
@@ -139,7 +176,7 @@ namespace Functions.DomainService.Repositories
             var update = Builders<FunctionEntity>.Update
                 .Set(f => f.Name, name)
                 .Set(f => f.Description, description);
-            return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken);
+            return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken, keepHidden: true);
         }
 
         public Task UpdateSourceAndConfigAsync(
@@ -160,7 +197,38 @@ namespace Functions.DomainService.Repositories
             // source hash against the active version's, in FunctionService.IsDirty. Setting it
             // here asked the driver to write a field that has no BSON mapping, which threw
             // "Expression not supported: f.IsDirty" and turned every Save into a 500.
-            return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken);
+            return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken, keepHidden: true);
+        }
+
+        public async Task<bool> UpdateImportedAsync(
+            string tenantId, string functionId, DateTime expectedLastUpdatedDate,
+            string name, string? description, FunctionSource source, string sourceHash,
+            FunctionLimits limits, RetryPolicy retry, TriggerConfig trigger,
+            List<OutputAction> outputActions, List<VariableBinding> variables, string? actorId,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId)) return false;
+
+            // Conditional on the preview's LastUpdatedDate: an edit, deploy or second import in between moves it, and
+            // this then matches nothing instead of overwriting work the importer never saw.
+            var expected = Live(functionId) & Builders<FunctionEntity>.Filter.Eq(f => f.LastUpdatedDate, expectedLastUpdatedDate);
+            var filter = await EditAsync(tenantId, expected, "UpdateImported");
+            if (filter is null) return false;
+
+            var update = Builders<FunctionEntity>.Update
+                .Set(f => f.Name, name)
+                .Set(f => f.Description, description)
+                .Set(f => f.Source, source)
+                .Set(f => f.SourceHash, sourceHash)
+                .Set(f => f.Limits, limits)
+                .Set(f => f.Retry, retry)
+                .Set(f => f.Trigger, trigger)
+                .Set(f => f.OutputActions, outputActions)
+                .Set(f => f.Variables, variables)
+                .Set(f => f.LastUpdatedDate, DateTime.UtcNow)
+                .Set(f => f.LastUpdatedBy, actorId ?? string.Empty);
+            var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+            return result.MatchedCount > 0;
         }
 
         public Task SetActiveVersionAsync(
@@ -170,7 +238,7 @@ namespace Functions.DomainService.Repositories
             var update = Builders<FunctionEntity>.Update
                 .Set(f => f.ActiveVersionId, versionId)
                 .Set(f => f.LastVersionNumber, versionNumber)
-                .Set(f => f.Status, Enums.FunctionStatus.Live)
+                .Set(f => f.Status, FunctionStatus.Live)
                 .Set(f => f.LastDeployedAt, deployedAt);
             // Nothing to clear: what was just deployed matches the working copy, so the derived
             // IsDirty is false on its own. (Same reason as SaveSourceAsync above.)
@@ -183,22 +251,34 @@ namespace Functions.DomainService.Repositories
         {
             var update = Builders<FunctionEntity>.Update
                 .Set(f => f.ActiveVersionId, versionId)
-                .Set(f => f.Status, Enums.FunctionStatus.Live);
+                .Set(f => f.Status, FunctionStatus.Live);
             return ApplyAsync(tenantId, functionId, update, actorId, cancellationToken);
         }
 
-        /// <summary>Stamps who and when, then applies one targeted update.</summary>
-        private Task ApplyAsync(
+        /// <summary>
+        /// Stamps who and when, then applies one targeted update. <paramref name="keepHidden"/>: the values come from
+        /// the caller's edit, so properties a View column rule hides from them keep their stored value when the edit
+        /// carries what their masked read showed.
+        /// </summary>
+        private async Task ApplyAsync(
             string tenantId, string functionId, UpdateDefinition<FunctionEntity> update, string? actorId,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, bool keepHidden = false)
         {
             update = Builders<FunctionEntity>.Update.Combine(
                 update,
                 Builders<FunctionEntity>.Update.Set(f => f.LastUpdatedDate, DateTime.UtcNow),
                 Builders<FunctionEntity>.Update.Set(f => f.LastUpdatedBy, actorId ?? string.Empty));
 
-            return Collection(tenantId).UpdateOneAsync(
-                Live(functionId), update, cancellationToken: cancellationToken);
+            var filter = await EditAsync(tenantId, Live(functionId), "Apply");
+            if (filter is null) return;
+            if (keepHidden)
+            {
+                var kept = await _dataAccess.KeepHiddenAsync(LogicSchemas.FunctionEntity, update, Collection(tenantId), filter, "FunctionRepository.Apply", tenantId);
+                if (kept is null) return;
+                update = kept;
+            }
+            await _dataAccess.CheckUpdateAsync(LogicSchemas.FunctionEntity, update, "FunctionRepository.Apply", tenantId);
+            await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
         }
 
         public async Task RecordRunStartedAsync(
@@ -209,7 +289,10 @@ namespace Functions.DomainService.Repositories
                 var update = Builders<FunctionEntity>.Update
                     .Inc(f => f.TotalRuns, 1)
                     .Max(f => f.LastRunAt, startedAt);
-                await Collection(tenantId).UpdateOneAsync(Live(functionId), update, cancellationToken: cancellationToken);
+                // Hot path: every run start. No-context / other-tenant calls skip inside the helper.
+                var filter = await EditAsync(tenantId, Live(functionId), "RecordRunStarted");
+                if (filter is null) return;
+                await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {
@@ -217,16 +300,16 @@ namespace Functions.DomainService.Repositories
             }
         }
 
-        public Task ImportRunCountersAsync(
+        public async Task ImportRunCountersAsync(
             string tenantId, string functionId, long totalRuns, DateTime? lastRunAt,
             CancellationToken cancellationToken = default)
         {
             var update = Builders<FunctionEntity>.Update.Inc(f => f.TotalRuns, Math.Max(0, totalRuns));
             if (lastRunAt is { } last) update = update.Max(f => f.LastRunAt, last);
             // Tombstoned functions included: harmless, and the document goes with the purge.
-            return Collection(tenantId).UpdateOneAsync(
-                Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId), update,
-                cancellationToken: cancellationToken);
+            var filter = await EditAsync(tenantId, Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId), "ImportRunCounters");
+            if (filter is null) return;
+            await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
         }
 
         public async Task<bool> MarkDeletedAsync(
@@ -241,8 +324,10 @@ namespace Functions.DomainService.Repositories
                 .Set(f => f.Deletion, deletion)
                 .Set(f => f.LastUpdatedDate, deletion.RequestedAt)
                 .Set(f => f.LastUpdatedBy, deletion.RequestedBy ?? string.Empty);
-            var result = await Collection(tenantId).UpdateOneAsync(
-                Live(functionId), update, cancellationToken: cancellationToken);
+            var filter = await EditAsync(tenantId, Live(functionId), "MarkDeleted");
+            if (filter is null) return false;
+            await _dataAccess.CheckUpdateAsync(LogicSchemas.FunctionEntity, update, "FunctionRepository.MarkDeleted", tenantId);
+            var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
             return result.ModifiedCount > 0;
         }
 
@@ -250,8 +335,10 @@ namespace Functions.DomainService.Repositories
             string tenantId, string functionId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(functionId)) return null;
+            var scope = await ReadAsync(tenantId, Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & IsDeleted, "GetDeleted", useProjection: false);
+            if (!scope.Granted) return null;
             return await Collection(tenantId)
-                .Find(Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & IsDeleted)
+                .Find(scope.Filter)
                 .Project<FunctionEntity>(Builders<FunctionEntity>.Projection.Exclude(f => f.Source))
                 .FirstOrDefaultAsync(cancellationToken);
         }
@@ -259,15 +346,17 @@ namespace Functions.DomainService.Repositories
         public async Task<IReadOnlyList<string>> GetDeletedIdsAsync(
             string tenantId, int limit, CancellationToken cancellationToken = default)
         {
+            var scope = await ReadAsync(tenantId, IsDeleted, "GetDeletedIds", useProjection: false);
+            if (!scope.Granted) return [];
             return await Collection(tenantId)
-                .Find(IsDeleted)
+                .Find(scope.Filter)
                 .Sort(Builders<FunctionEntity>.Sort.Ascending("Deletion.RequestedAt"))
                 .Limit(Math.Max(1, limit))
                 .Project(f => f.ItemId)
                 .ToListAsync(cancellationToken);
         }
 
-        public Task RecordPurgePassAsync(
+        public async Task RecordPurgePassAsync(
             string tenantId, string functionId, Services.FunctionPurgeReport report, DateTime at,
             CancellationToken cancellationToken = default)
         {
@@ -280,17 +369,20 @@ namespace Functions.DomainService.Repositories
                 .Inc(f => f.Deletion!.ImagesReleased, (long)report.ImagesReleased)
                 .Inc(f => f.Deletion!.RunsCancelled, (long)report.RunsCancelled)
                 .Set(f => f.Deletion!.LastPassAt, at);
-            return Collection(tenantId).UpdateOneAsync(
-                Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & IsDeleted,
-                update, cancellationToken: cancellationToken);
+            var filter = await EditAsync(tenantId, Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & IsDeleted, "RecordPurgePass");
+            if (filter is null) return;
+            await _dataAccess.CheckUpdateAsync(LogicSchemas.FunctionEntity, update, "FunctionRepository.RecordPurgePass", tenantId);
+            await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
         }
 
         public async Task<bool> DeleteTombstoneAsync(
             string tenantId, string functionId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(functionId)) return false;
-            var result = await Collection(tenantId).DeleteOneAsync(
-                Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & IsDeleted, cancellationToken);
+            var filter = await _dataAccess.DeleteFilterAsync(LogicSchemas.FunctionEntity,
+                Builders<FunctionEntity>.Filter.Eq(f => f.ItemId, functionId) & IsDeleted, "FunctionRepository.DeleteTombstone", tenantId);
+            if (filter is null) return false;
+            var result = await Collection(tenantId).DeleteOneAsync(filter, cancellationToken);
             return result.DeletedCount > 0;
         }
     }

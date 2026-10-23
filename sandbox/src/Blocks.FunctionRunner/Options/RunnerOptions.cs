@@ -101,6 +101,23 @@ namespace Blocks.FunctionRunner.Options
         public string QueuePrefix { get; set; } = string.Empty;
 
         /// <summary>
+        /// Hosts that get the run's W3C <c>traceparent</c> when the function calls them with
+        /// <c>fetch()</c> (a listed host or any subdomain of it), as <c>RUNNER__TraceHosts__0</c>,
+        /// <c>RUNNER__TraceHosts__1</c>, … Not set: <see cref="DefaultTraceHosts"/> (the Blocks domains),
+        /// so no environment setting is needed. Set: only the listed hosts; <c>RUNNER__TraceHosts__0=</c>
+        /// (empty) turns the header off. Other hosts never get it, so a trace id does not leak to third
+        /// parties. The runner writes it into each run's envelope (<c>trace.hosts</c>); the control
+        /// plane cannot. Read through <see cref="EffectiveTraceHosts"/>.
+        /// </summary>
+        public string[]? TraceHosts { get; set; }
+
+        /// <summary>The Blocks domains, used when <see cref="TraceHosts"/> is not set (subdomains included).</summary>
+        internal static readonly string[] DefaultTraceHosts = ["seliseblocks.com", "blocksdevelopers.com"];
+
+        /// <summary>The trace hosts in force: <see cref="TraceHosts"/> when set, else <see cref="DefaultTraceHosts"/>.</summary>
+        internal IReadOnlyList<string> EffectiveTraceHosts => TraceHosts ?? DefaultTraceHosts;
+
+        /// <summary>
         /// The most sandbox slots one tenant may hold at once, as
         /// <c>RUNNER__MaxSandboxesPerTenant</c>, for the whole fleet: the count is one Redis key
         /// all runners share. Zero (the default) derives it as half the fleet's capacity (the sum
@@ -217,6 +234,18 @@ namespace Blocks.FunctionRunner.Options
         /// </summary>
         [Range(30, 21600)]
         public int DeferralBudgetSeconds { get; set; } = 600;
+
+        /// <summary>
+        /// How long a run started by a function event may wait in <c>functions:event-runs</c> before the
+        /// runner gives up on it: past this age a claimed entry is not started and its run fails as
+        /// <c>EVENT_EXPIRED</c>. Events are not real time, so this is a bound on staleness, not a promise.
+        /// <c>RUNNER__EventRunMaxWaitSeconds</c>.
+        /// </summary>
+        [Range(10, 86400)]
+        public int EventRunMaxWaitSeconds { get; set; } = DefaultEventRunMaxWaitSeconds;
+
+        /// <summary>Default of <see cref="EventRunMaxWaitSeconds"/>: 5 minutes.</summary>
+        internal const int DefaultEventRunMaxWaitSeconds = 300;
 
         /// <summary>Delivery attempts before an entry is moved to functions:dead.</summary>
         [Range(1, 20)]

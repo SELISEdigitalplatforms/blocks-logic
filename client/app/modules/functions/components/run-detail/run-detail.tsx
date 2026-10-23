@@ -31,6 +31,8 @@ import {
 import { explainDiscardReason } from "../../utils/trigger";
 import { RunStatusChip } from "../run-status-chip";
 import { RunTiming } from "../run-timing";
+import { RunEvents } from "../run-events";
+import { triggeredByLabel } from "../../utils/events";
 
 const LOG_LEVEL_FILTERS = ["All", "Info", "Warn", "Error"] as const;
 
@@ -253,7 +255,7 @@ export const RunDetail = ({
       value: TRIGGER_LABELS[run.invokedBy] ?? run.invokedBy,
       // The workflow execution (or, for a replay, the original run) that caused this one. Without
       // it "Workflow" says a workflow ran the function but not which one, which is the whole
-      // question once a function is wired into more than one.
+      // question once a function is wired into more than one. For an event run it is the event id.
       hint: run.invokedById ?? undefined,
     },
   ];
@@ -339,7 +341,7 @@ export const RunDetail = ({
             <RunStatusChip status={run.status} />
             <span className="text-xs text-medium-emphasis">
               {formatRelativeTime(run.createdDate)} ({formatAbsoluteTime(run.createdDate)}) ·
-              triggered by {TRIGGER_LABELS[run.invokedBy] ?? run.invokedBy}
+              triggered by {triggeredByLabel(run.invokedBy, run.invokedById, TRIGGER_LABELS)}
             </span>
           </div>
 
@@ -564,6 +566,8 @@ export const RunDetail = ({
           }
         />
       </div>
+
+      <RunEvents runId={run.id} />
 
       {run.outputResults.length > 0 && (
         <Card className="overflow-hidden">

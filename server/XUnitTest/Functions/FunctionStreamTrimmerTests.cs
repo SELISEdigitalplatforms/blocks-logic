@@ -63,6 +63,7 @@ namespace XUnitTest.Functions
 
             _trims.Select(t => t.Stream).Should().BeEquivalentTo([
                 FunctionQueueKeys.RunsStream,
+                FunctionQueueKeys.EventRunsStream,
                 FunctionQueueKeys.ResultsStream,
                 FunctionQueueKeys.BuildsStream,
                 FunctionQueueKeys.BuildResultsStream,
@@ -70,6 +71,8 @@ namespace XUnitTest.Functions
                 FunctionWorkerQueueKeys.OutputsStream,
                 FunctionQueueKeys.DeadStream,
                 FunctionQueueKeys.DeadResultsStream,
+                FunctionQueueKeys.DeadEventsStream,
+                FunctionQueueKeys.DeadFunctionEventsStream,
             ]);
         }
 

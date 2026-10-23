@@ -3,6 +3,7 @@ using Blocks.Genesis;
 using Common.InternalService.Access;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {

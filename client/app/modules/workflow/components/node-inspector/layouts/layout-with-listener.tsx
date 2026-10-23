@@ -14,7 +14,7 @@ type LayoutWithListenerProps = {
 };
 
 export const LayoutWithListener = ({ schema, guide }: LayoutWithListenerProps) => {
-  const { selectedNode, updateNode, editorMode } = useWorkflow();
+  const { selectedNode, updateNode, updateNodeParameters, editorMode } = useWorkflow();
   const [activeTab, setActiveTab] = useState<"parameters" | "settings">("parameters");
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   if (!selectedNode || !schema) return null;
@@ -43,7 +43,7 @@ export const LayoutWithListener = ({ schema, guide }: LayoutWithListenerProps) =
                 fields={schema.parameters}
                 data={selectedNode.parameters || {}}
                 onChange={(changes) => {
-                  updateNode(selectedNode.id, { parameters: changes });
+                  updateNodeParameters(selectedNode.id, changes);
                 }}
               />
             </TabsContent>

@@ -7,6 +7,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DataAccess.InternalService\DataAccess.InternalService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Office 365 outbound: Azure.Identity for the Exchange Online client-credentials token,
          SeliseBlocks.Secrets.OS for resolving the client secret in its tenant at send time. -->
     <PackageReference Include="Azure.Identity" />
@@ -16,6 +20,7 @@
     <PackageReference Include="Microsoft.Graph" />
     <PackageReference Include="Microsoft.Kiota.Abstractions" />
     <PackageReference Include="MimeKit" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
     <PackageReference Include="SeliseBlocks.StorageDriver.OS" />
   </ItemGroup>

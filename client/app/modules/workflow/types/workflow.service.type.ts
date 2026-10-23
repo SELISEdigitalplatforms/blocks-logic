@@ -2,6 +2,7 @@ import { Edge } from "@xyflow/react";
 import { ExecutedItem, ExecutedNode, Workflow, WorkflowSummary, WorkflowVersion, WorkflowExecutionMode } from "../models/workflow.model";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { OutputSchemaField } from "./output-schema.types";
+import type { PersistedNode } from "../utils/to-persisted-node";
 
 export interface IGetWorkflowsPayload {
   pageSize?: number;
@@ -53,9 +54,10 @@ export interface IDuplicateWorkflowResponse {
   errors?: unknown;
 }
 
-export interface IUpdateWorkflowPayload extends Omit<ICreateWorkflowPayload, "name"> {
+export interface IUpdateWorkflowPayload extends Omit<ICreateWorkflowPayload, "name" | "nodes"> {
   itemId: string;
   name?: string;
+  nodes?: PersistedNode[];
 }
 
 export interface IUpdateWorkflowResponse {

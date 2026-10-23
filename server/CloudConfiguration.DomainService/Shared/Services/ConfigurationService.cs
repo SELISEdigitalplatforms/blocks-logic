@@ -5,14 +5,15 @@ using MongoDB.Bson;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using CloudConfiguration.DomainService.Notification.RequestModel;
 using CloudConfiguration.DomainService.Notification.ResponseModel;
-using CloudConfiguration.DomainService.Notification.Entities;
 using CloudConfiguration.DomainService.Storage.RequestModel;
 using CloudConfiguration.DomainService.Storage.Entities;
 using CloudConfiguration.DomainService.Storage.Enums;
-using CloudConfiguration.DomainService.Mail.Entities;
 using CloudConfiguration.DomainService.Mail.RequestModel;
 using System.Collections.Immutable;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Data;
+using Blocks.Genesis.Entities.Os;
+using DataAccess.InternalService;
 
 namespace CloudConfiguration.DomainService.Shared.Services
 {
@@ -61,7 +62,19 @@ namespace CloudConfiguration.DomainService.Shared.Services
                 };
             }
 
-            var repoConfig = await MapAsync(configuration);
+            var stored = await _configurationRepository.GetNotificationConfigurationByNameAsync(configuration.Name);
+            var repoConfig = stored ?? new NotificationConfiguration { ItemId = Guid.NewGuid().ToString(), CreatedDate = DateTime.UtcNow, CreatedBy = BlocksContext.GetContext()?.UserId };
+
+            var refusal = NotificationConfigurationWriteRules.Apply(repoConfig, stored is null, ToWrite(configuration), NotificationConfigurationWriteRules.IsCallerRootTenant(_tenants));
+            if (refusal is { } refused)
+            {
+                _logger.LogWarning("Notification configuration {ConfigurationName} not saved: {Error}", configuration.Name, refused.Error);
+                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { [refused.Field] = refused.Error } };
+            }
+
+            repoConfig.LastUpdatedDate = DateTime.UtcNow;
+            repoConfig.LastUpdatedBy = BlocksContext.GetContext()?.UserId;
+
             await _configurationRepository.SaveNotificationConfigurationAsync(repoConfig);
             return new BaseResponse { IsSuccess = true };
         }
@@ -78,25 +91,32 @@ namespace CloudConfiguration.DomainService.Shared.Services
 
         public async Task<BaseResponse> DeleteNotificationConfigurationAsync(DeleteNotificatoinConfigurationRequest request)
         {
+            var stored = await _configurationRepository.GetNotificationConfigurationByIdAsync(request.ItemId);
+            if (NotificationConfigurationWriteRules.CheckDelete(stored, NotificationConfigurationWriteRules.IsCallerRootTenant(_tenants)) is { } refused)
+            {
+                _logger.LogWarning("Notification configuration {ConfigurationName} not deleted: {Error}", stored?.Name, refused.Error);
+                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { [refused.Field] = refused.Error } };
+            }
+
             return await _configurationRepository.DeleteNotificationConfigurationAsync(request);
         }
 
-        private async Task<NotificationConfiguration> MapAsync(SaveNotificatonConfigurationRequest configuration)
+        private static NotificationConfigurationWrite ToWrite(SaveNotificatonConfigurationRequest configuration) => new()
         {
-            var repoConfig = await _configurationRepository.GetNotificationConfigurationByNameAsync(configuration.Name);
-
-            repoConfig = repoConfig ?? new NotificationConfiguration { ItemId = Guid.NewGuid().ToString(), CreatedDate = DateTime.UtcNow, CreatedBy = BlocksContext.GetContext()?.UserId };
-
-            repoConfig.LastUpdatedDate = DateTime.UtcNow;
-            repoConfig.LastUpdatedBy = BlocksContext.GetContext()?.UserId;
-            repoConfig.Name = configuration.Name;
-            repoConfig.ChannelToNotify = configuration.ChannelToNotify;
-            repoConfig.NotificationType = configuration.NotificationType;
-            repoConfig.EnablePersistence = configuration.EnablePersistence;
-            repoConfig.NotifyMethod = configuration.NotifyMethod;
-
-            return repoConfig;
-        }
+            Name = configuration.Name,
+            ChannelToNotify = configuration.ChannelToNotify,
+            NotificationType = configuration.NotificationType,
+            NotifyMethod = configuration.NotifyMethod,
+            EnablePersistence = configuration.EnablePersistence,
+            IsBuiltIn = configuration.IsBuiltIn,
+            IsDisabled = configuration.IsDisabled,
+            Description = configuration.Description,
+            Importance = configuration.Importance,
+            Kind = configuration.Kind,
+            SourceService = configuration.SourceService,
+            ConsumerAppRecommendation = configuration.ConsumerAppRecommendation,
+            ConsumerAppNote = configuration.ConsumerAppNote,
+        };
 
         #endregion
 
@@ -153,7 +173,8 @@ namespace CloudConfiguration.DomainService.Shared.Services
             repoConfiguration.UploadUrlExpirySeconds = request.UploadUrlExpirySeconds;
             repoConfiguration.DownloadUrlExpirySeconds = request.DownloadUrlExpirySeconds;
             repoConfiguration.MaxFileSizeInBytes = request.MaxFileSizeInBytes;
-            repoConfiguration.UploadCompletionRequiredFor = request.UploadCompletionRequiredFor;
+            repoConfiguration.UploadCompletionRequiredFor = request.UploadCompletionRequiredFor?
+                .Select(Enum.Parse<Blocks.Genesis.Entities.Data.AccessModifier>).ToList();
 
             #endregion
 

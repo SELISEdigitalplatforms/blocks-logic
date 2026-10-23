@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Bson;
 using Proxy.DomainService.Services;
 using Workflow.DomainService.Nodes.TransformSetFieldV1;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

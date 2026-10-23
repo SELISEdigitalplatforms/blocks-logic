@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using XUnitTest.TestHelpers;
 using IConfigurationRepository = DomainService.Configuration.Services.IConfigurationRepository;
+using Blocks.Genesis.Entities.Logic;
+using Blocks.Genesis.Entities.Os;
 
 namespace XUnitTest.Notification
 {

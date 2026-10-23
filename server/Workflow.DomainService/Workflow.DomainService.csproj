@@ -5,8 +5,8 @@
 	<PackageReference Include="Jint"/>
 	<PackageReference Include="Newtonsoft.Json"/>
 	<PackageReference Include="SeliseBlocks.Genesis.OS" />
-	<!--<PackageReference Include="SeliseBlocks.MailDriver" />-->
-	<ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
+	<ProjectReference Include="..\DataAccess.InternalService\DataAccess.InternalService.csproj" />
+    <ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
 	<ProjectReference Include="..\Notification.DomainService\Notification.DomainService.csproj" />
 	<ProjectReference Include="..\Scheduler.DomainService\Scheduler.DomainService.csproj" />
 	<ProjectReference Include="..\Proxy.DomainService\Proxy.DomainService.csproj" />

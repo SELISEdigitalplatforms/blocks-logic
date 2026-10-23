@@ -39,6 +39,19 @@ namespace Proxy.DomainService.Services
         /// </summary>
         Task<IReadOnlyDictionary<string, string>> LookupIdsAsync(
             IReadOnlyCollection<string> names, string tenantId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Import-time lookup (2026-10-18): EVERY secret id whose name is exactly the given name, so a name that
+        /// matches two secrets can be warned about instead of bound to one of them. Names with no match are left
+        /// out. Throws only when the secret store itself cannot be read. The default covers resolvers that can
+        /// only find one id per name.
+        /// </summary>
+        async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> LookupAllIdsAsync(
+            IReadOnlyCollection<string> names, string tenantId, CancellationToken ct = default)
+        {
+            var single = await LookupIdsAsync(names, tenantId, ct);
+            return single.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<string>)new[] { kv.Value }, StringComparer.Ordinal);
+        }
     }
 
     /// <summary>
@@ -295,6 +308,72 @@ namespace Proxy.DomainService.Services
             }
 
             return null;
+        }
+
+        /// <summary>Like <see cref="FindExactIdAsync"/>, but reads every page and returns every exact match.</summary>
+        private static async Task<List<string>> FindAllExactIdsAsync(ISecretService secrets, string name, CancellationToken ct)
+        {
+            var ids = new List<string>();
+            for (var page = 1; page <= MaxFindPages; page++)
+            {
+                var found = await secrets.FindAsync(
+                    new SecretFilter { Search = name, PageSize = FindPageSize, PageNumber = page }, ct);
+                var data = found.Data ?? Array.Empty<SecretResult>();
+
+                ids.AddRange(data
+                    .Where(s => string.Equals(s.Name, name, StringComparison.Ordinal) && !string.IsNullOrEmpty(s.SecretId))
+                    .Select(s => s.SecretId!));
+
+                if (data.Count < FindPageSize || (long)page * FindPageSize >= found.TotalCount)
+                {
+                    break;
+                }
+            }
+
+            return ids.Distinct(StringComparer.Ordinal).ToList();
+        }
+
+        public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> LookupAllIdsAsync(
+            IReadOnlyCollection<string> names, string tenantId, CancellationToken ct = default)
+        {
+            var distinct = names.Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal).ToList();
+            var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+            if (distinct.Count == 0)
+            {
+                return result;
+            }
+
+            var restore = BlocksContext.GetContext();
+            var mustSwap = restore is null
+                || !restore.IsAuthenticated
+                || !string.Equals(restore.TenantId, tenantId, StringComparison.Ordinal);
+            if (mustSwap)
+            {
+                EnterTenantContext(tenantId, restore);
+            }
+
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var secrets = scope.ServiceProvider.GetRequiredService<ISecretService>();
+                foreach (var name in distinct)
+                {
+                    var ids = await FindAllExactIdsAsync(secrets, name, ct);
+                    if (ids.Count == 0) continue;
+                    result[name] = ids;
+                    // Only an unambiguous id is worth caching for the call path.
+                    if (ids.Count == 1) _cache.Set(IdCacheKey(tenantId, name), ids[0], _options.IdCacheTtl);
+                }
+
+                return result;
+            }
+            finally
+            {
+                if (mustSwap)
+                {
+                    BlocksContext.SetContext(restore, restore is not null);
+                }
+            }
         }
 
         public async Task<IReadOnlyDictionary<string, string>> LookupIdsAsync(

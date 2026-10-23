@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Blocks.FunctionRunner.Contracts;
 
 namespace Blocks.FunctionRunner.Runs
@@ -211,6 +212,73 @@ namespace Blocks.FunctionRunner.Runs
             // JSON strings cannot hold a raw newline, so after this the only line break is the
             // one the caller appends.
             return Encoding.UTF8.GetString(buffer.WrittenSpan);
+        }
+
+        /// <summary>
+        /// The envelope with its <c>trace</c> set by the runner: the <c>Function::Run</c> span's W3C
+        /// <paramref name="traceParent"/> (null when there is none) and the <paramref name="hosts"/> that
+        /// get it on <c>fetch()</c>. Always replaces whatever <c>trace</c> the queued envelope carried: the
+        /// control plane never decides where a trace id is sent.
+        /// </summary>
+        /// <exception cref="ForbiddenContentException">The envelope is not a JSON object.</exception>
+        public static string WithTrace(string envelopeJson, string? traceParent, IEnumerable<string> hosts)
+        {
+            ArgumentNullException.ThrowIfNull(hosts);
+
+            var root = ParseRoot(envelopeJson);
+            var hostArray = new JsonArray();
+            foreach (var host in hosts.Where(h => !string.IsNullOrWhiteSpace(h)))
+            {
+                hostArray.Add(JsonValue.Create(host.Trim()));
+            }
+
+            root["trace"] = new JsonObject
+            {
+                ["traceparent"] = string.IsNullOrWhiteSpace(traceParent) ? null : traceParent,
+                ["hosts"] = hostArray,
+            };
+            return root.ToJsonString();
+        }
+
+        /// <summary>
+        /// The event types the control plane allows this function to add (<c>events.allowed</c>); empty
+        /// when the envelope has none or the field is malformed. Passed through to the sandbox
+        /// unchanged — the runner only reads it, to check the events that come back.
+        /// </summary>
+        public static IReadOnlyList<string> AllowedEventTypes(string envelopeJson)
+        {
+            try
+            {
+                if (JsonNode.Parse(envelopeJson) is not JsonObject root
+                    || root["events"] is not JsonObject events
+                    || events["allowed"] is not JsonArray allowed)
+                {
+                    return [];
+                }
+
+                return [.. allowed
+                    .Select(item => item is JsonValue v && v.TryGetValue<string>(out var s) ? s : null)
+                    .Where(s => !string.IsNullOrEmpty(s))
+                    .Cast<string>()
+                    .Distinct(StringComparer.Ordinal)];
+            }
+            catch (JsonException)
+            {
+                return [];
+            }
+        }
+
+        private static JsonObject ParseRoot(string envelopeJson)
+        {
+            try
+            {
+                return JsonNode.Parse(envelopeJson) as JsonObject
+                    ?? throw new ForbiddenContentException("the execution envelope is not a JSON object");
+            }
+            catch (JsonException ex)
+            {
+                throw new ForbiddenContentException($"the execution envelope is not valid JSON: {ex.Message}");
+            }
         }
 
         /// <summary>

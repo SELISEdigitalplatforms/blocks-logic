@@ -1,5 +1,6 @@
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {
@@ -24,5 +25,8 @@ namespace Workflow.DomainService.Services
             string status,
             string data,
             string message);
+
+        /// <summary>A schedule trigger fired but no run started. Tells the workflow owner. Never throws.</summary>
+        public Task NotifyScheduledTriggerDroppedAsync(string tenantId, WorkflowEntity workflow, string reason);
     }
 }

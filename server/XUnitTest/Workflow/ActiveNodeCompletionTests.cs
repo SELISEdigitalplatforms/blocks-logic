@@ -1,6 +1,6 @@
 using FluentAssertions;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

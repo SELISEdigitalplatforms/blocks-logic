@@ -1,10 +1,10 @@
 ﻿using Blocks.Genesis;
-using CloudConfiguration.DomainService.Notification.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Blocks.Genesis.Entities.Os;
 
 namespace CloudConfiguration.DomainService.Notification.ResponseModel
 {

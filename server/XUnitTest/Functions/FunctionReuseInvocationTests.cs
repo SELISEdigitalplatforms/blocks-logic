@@ -2,9 +2,6 @@ using Blocks.Genesis;
 using Common.InternalService.Access;
 using FluentAssertions;
 using Functions.DomainService.Dtos.Requests;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -14,6 +11,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
@@ -193,6 +191,9 @@ namespace XUnitTest.Functions
             service.SyncWaitSeconds(sync, Call(preferWait: 500)).Should().Be(20);
             service.SyncWaitSeconds(sync, Call(preferWait: 0)).Should().BeNull();
             service.SyncWaitSeconds(sync, Call(preferAsync: true)).Should().BeNull();
+            var sse = new TriggerConfig { ResponseMode = "sse" };
+            service.SyncWaitSeconds(sse, Call()).Should().Be(20, "an SSE function waits like a sync one");
+            service.SyncWaitSeconds(sse, Call(preferAsync: true)).Should().BeNull();
         }
 
         [Fact]
@@ -258,6 +259,74 @@ namespace XUnitTest.Functions
             result.Status.Should().Be(FunctionQueueKeys.Wire.Succeeded);
             result.Result.Should().Be("{\"from\":\"runner\"}");
             result.RespondSynchronously.Should().BeTrue();
+        }
+
+        // ---- SSE caller: run id first, the answer after (2026-10-22) ----------------------------
+
+        [Fact]
+        public async Task An_sse_caller_of_a_sync_function_gets_its_run_queued_not_waited_for()
+        {
+            _version.Trigger.ResponseMode = "sync";
+            RunIs(RunStatus.Running); // would hold a waiting caller until its window ran out
+            var call = Call(preferWait: 20);
+            call.Sse = true;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            var result = await Service().InvokeHttpAsync(Tenant, "fn-1", call);
+
+            clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(2));
+            result.RunId.Should().Be(_created!.ItemId);
+            result.SseWaitSeconds.Should().BeGreaterThan(0);
+            result.RespondSynchronously.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task An_sse_function_answers_in_sse_without_the_accept_header()
+        {
+            _version.Trigger.ResponseMode = "sse";
+            RunIs(RunStatus.Running);
+
+            var result = await Service().InvokeHttpAsync(Tenant, "fn-1", Call());
+
+            result.SseWaitSeconds.Should().BeGreaterThan(0);
+            result.RunId.Should().Be(_created!.ItemId);
+        }
+
+        [Fact]
+        public async Task An_sse_function_called_with_prefer_respond_async_gets_the_202()
+        {
+            _version.Trigger.ResponseMode = "sse";
+            RunIs(RunStatus.Queued);
+
+            var result = await Service().InvokeHttpAsync(Tenant, "fn-1", Call(preferAsync: true));
+
+            result.SseWaitSeconds.Should().BeNull();
+            result.Status.Should().Be(FunctionQueueKeys.Wire.Queued);
+        }
+
+        [Fact]
+        public async Task An_sse_caller_of_an_async_function_gets_the_usual_answer()
+        {
+            _version.Trigger.ResponseMode = "async";
+            RunIs(RunStatus.Queued);
+            var call = Call();
+            call.Sse = true;
+
+            var result = await Service().InvokeHttpAsync(Tenant, "fn-1", call);
+
+            result.SseWaitSeconds.Should().BeNull();
+            result.Status.Should().Be(FunctionQueueKeys.Wire.Queued);
+        }
+
+        [Fact]
+        public async Task The_sse_wait_answers_a_finished_run_with_its_result()
+        {
+            RunIs(RunStatus.Succeeded);
+
+            var result = await Service().AwaitSseAnswerAsync(Tenant, "run-1", 5);
+
+            result.Status.Should().Be(FunctionQueueKeys.Wire.Succeeded);
+            result.Result.Should().Be("{\"ok\":true}");
         }
 
         // ---- F-5: a streamed answer takes over the sync wait (2026-10-07) ------------------------

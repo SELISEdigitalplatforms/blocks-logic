@@ -1,7 +1,6 @@
 using Blocks.Genesis;
 using Workflow.DomainService.Events;
 using Workflow.DomainService.Repositories;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Utils;
 using Microsoft.Extensions.Logging;
@@ -10,6 +9,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using System.Diagnostics.CodeAnalysis;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {
@@ -17,7 +17,7 @@ namespace Workflow.DomainService.Services
     public class WorkflowEngineService : IWorkflowEngineService
     {
         private readonly IWorkflowExecutionRepository _workflowExecutionRepository;
-        private readonly IEnumerable<INodeExecutor> _nodeExecutors;
+        private readonly NodeExecutorRegistry _nodeExecutors;
         private readonly IMessageClient _messageClient;
 
         private readonly ILogger<WorkflowEngineService> _logger;
@@ -37,7 +37,7 @@ namespace Workflow.DomainService.Services
         {
             _executionLogger = executionLogger;
             _workflowExecutionRepository = workflowExecutionRepository;
-            _nodeExecutors = nodeExecutors;
+            _nodeExecutors = new NodeExecutorRegistry(nodeExecutors);
             _messageClient = messageClient;
             _logger = logger;
             _workflowNotificationService = workflowNotificationService;
@@ -110,7 +110,11 @@ namespace Workflow.DomainService.Services
                 // Without this the step could not be stopped: it kept waiting until the process was killed, and
                 // the node stayed Running for ever. Only the step's own work sees it; the writes below do not.
                 nodeExecutionContext.CancellationToken = stopping;
-                var executor = _nodeExecutors.First(ne => ne.NodeType == node.Type);
+                var (executor, usedFallback) = _nodeExecutors.Resolve(node.Type, node.Version);
+                if (usedFallback)
+                {
+                    log.Warn(ExecutionLogStages.ExecutorVersionFallback, NodeExecutorRegistry.FallbackLogMessage);
+                }
                 _logger.LogInformation("Node {NodeId} Using executor {ExecutorName}.", node.Id, executor.GetType().Name);
 
                 var result = runInstead != null
@@ -321,6 +325,10 @@ namespace Workflow.DomainService.Services
                 AncestorNodeOutputs = ancestorOutputs,
                 IterationCount = inputItems.Count,
                 HasUpstream = hasUpstream,
+                // Only Merge reads its input per handle; every other node keeps InputItems alone, as before.
+                InputItemsByHandle = node.Type == "merge"
+                    ? InputItemsByHandleBuilder.Build(incomingEdges, inputItems, execution.NodeExecutions)
+                    : new Dictionary<string, IReadOnlyList<WorkflowItemExecutionEntity>>(),
                 ServiceProvider = _serviceProvider,
                 Log = log,
                 PreviousAttemptItems = previousAttemptItems,
@@ -730,6 +738,24 @@ namespace Workflow.DomainService.Services
                     data: execution.Id!,
                     message: $"Workflow '{execution.WorkflowSnapshot.Name}' completed successfully.");
                 LogExecutionCompleted(execution);
+            }
+
+            // A join waits for every parent, and only edges that carried items start it. When this parent sent a
+            // join that is already waiting (another parent sent it items) nothing, start it again so it re-checks:
+            // otherwise it stays active and the run never ends. A join no parent sent items to is not started.
+            var joins = WorkflowBranchRouting.JoinsSentNothing(
+                execution.WorkflowSnapshot.Edges.Where(e => e.Source == node.Id),
+                nodeExecution.OutputCountsByBranch,
+                execution.WorkflowSnapshot.Edges);
+            if (joins.Count > 0 && !isWorkflowComplete)
+            {
+                var latest = await _workflowExecutionRepository.GetByIdAsync(execution.Id, execution.TenantId);
+                var waiting = joins.Where(id => latest?.ActiveNodeIds?.Contains(id) == true).ToList();
+                if (waiting.Count > 0)
+                {
+                    context.Log.Info(ExecutionLogStages.JoinWoken, "Sent no items to {Count} waiting join(s); starting them to re-check.", waiting.Count);
+                    nextNodeIds = [.. nextNodeIds, .. waiting];
+                }
             }
 
             // Build next node events

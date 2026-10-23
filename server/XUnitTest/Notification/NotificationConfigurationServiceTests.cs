@@ -11,6 +11,7 @@ using GetConfigurationsRequest = DomainService.Configuration.GetConfigurationsRe
 using GetConfigurationsResponse = DomainService.Configuration.GetConfigurationsResponse;
 using IConfigurationRepository = DomainService.Configuration.Services.IConfigurationRepository;
 using SaveConfigurationRequest = DomainService.Configuration.SaveConfigurationRequest;
+using Blocks.Genesis.Entities.Os;
 
 namespace XUnitTest.Notification
 {
@@ -31,7 +32,7 @@ namespace XUnitTest.Notification
                       .ReturnsAsync(new ValidationResult());
             TestBlocksContext.Set("tenant-cfg", "user-cfg");
 
-            _sut = new ConfigurationService(_repository.Object, _validator.Object);
+            _sut = new ConfigurationService(_repository.Object, _validator.Object, Mock.Of<ITenants>());
         }
 
         public void Dispose()

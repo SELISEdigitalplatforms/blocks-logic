@@ -11,18 +11,16 @@ vi.mock("../../hooks/use-functions", () => ({ useGetLimitsOptions }));
 const panelText = () => screen.getByTestId("limits-profile").textContent ?? "";
 
 describe("LimitsForm", () => {
-  it("never shows an undecided number, even when the server sends one", () => {
-    // decisions.md 2026-10-08: only decided numbers are shown. Memory, timeout and concurrency are
-    // enforced but not decided, so the panel names them without a value.
+  it("shows memory, timeout and concurrency exactly as the server sends them", () => {
     useGetLimitsOptions.mockReturnValue({
       data: { ...DEFAULT_LIMITS_OPTIONS, memoryMb: 512, timeoutSeconds: 120, concurrency: 40 },
     });
 
     renderWithProviders(<LimitsForm />);
 
-    expect(panelText()).not.toMatch(/512|120|40|128|\bMB\b|\bKB\b/);
-    expect(panelText()).toContain("Memory");
-    expect(panelText()).toContain("Timeout");
+    expect(panelText()).toContain("512 MB per run");
+    expect(panelText()).toContain("120 s per run");
+    expect(panelText()).toContain("40 runs at a time per function");
     expect(panelText()).toContain("queue rather than fail");
   });
 

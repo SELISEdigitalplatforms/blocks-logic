@@ -1,5 +1,6 @@
 ﻿using Blocks.Genesis;
 using Mail.DomainService.Shared.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Mail.DomainService.Utilities;
 

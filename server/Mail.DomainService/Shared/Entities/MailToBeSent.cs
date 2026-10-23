@@ -1,4 +1,5 @@
 ﻿using MongoDB.Bson.Serialization.Attributes;
+using Blocks.Genesis.Entities.Os;
 
 namespace Mail.DomainService.Entities
 {
@@ -33,7 +34,7 @@ namespace Mail.DomainService.Entities
 
         public bool IsTestMail { get; set; }
 
-        /// <summary>Carried through so the status event can be correlated after the read-back.</summary>
+        /// <summary>Carried through so the status event can be correlated.</summary>
         public string? CorrelationId { get; set; }
     }
 }

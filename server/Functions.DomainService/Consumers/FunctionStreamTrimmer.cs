@@ -60,6 +60,7 @@ namespace Functions.DomainService.Consumers
         private static readonly string[] WorkingStreams =
         [
             FunctionQueueKeys.RunsStream,
+            FunctionQueueKeys.EventRunsStream,
             FunctionQueueKeys.ResultsStream,
             FunctionQueueKeys.BuildsStream,
             FunctionQueueKeys.BuildResultsStream,
@@ -72,6 +73,8 @@ namespace Functions.DomainService.Consumers
         [
             FunctionQueueKeys.DeadStream,
             FunctionQueueKeys.DeadResultsStream,
+            FunctionQueueKeys.DeadEventsStream,
+            FunctionQueueKeys.DeadFunctionEventsStream,
         ];
 
         private readonly IDatabase _db;

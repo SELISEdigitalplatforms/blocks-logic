@@ -1,5 +1,5 @@
 using Workflow.DomainService.Entities;
-using Workflow.DomainService.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {
@@ -62,6 +62,26 @@ namespace Workflow.DomainService.Services
             }
 
             return targets;
+        }
+
+        /// <summary>
+        /// Distinct targets of <paramref name="outgoingEdges"/> that have more than one incoming edge (a join)
+        /// and got no items on any edge from this node. Only edges that carried items start a node, so a join
+        /// whose last parent sent it nothing would otherwise never be started.
+        /// </summary>
+        public static List<string> JoinsSentNothing(
+            IEnumerable<EdgeEnity>? outgoingEdges,
+            IReadOnlyDictionary<string, int>? outputCountsByBranch,
+            IReadOnlyList<EdgeEnity>? edges)
+        {
+            var outgoing = (outgoingEdges ?? Array.Empty<EdgeEnity>()).Where(e => e != null && !string.IsNullOrEmpty(e.Target)).ToList();
+            var taken = TakenTargets(outgoing, outputCountsByBranch);
+            var graph = edges ?? Array.Empty<EdgeEnity>();
+            return outgoing
+                .Select(e => e.Target)
+                .Distinct()
+                .Where(target => !taken.Contains(target) && graph.Count(e => e != null && e.Target == target) > 1)
+                .ToList();
         }
 
         /// <summary>

@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using MongoDB.Bson;
 using Proxy.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {
@@ -113,7 +114,7 @@ namespace XUnitTest.Workflow
         {
             var node = new ActionSendMailV1Node(MockMailService(Success()).Object);
             node.NodeType.Should().Be("sendMail");
-            node.Version.Should().Be("1.0");
+            node.Version.Should().Be("v1");
         }
 
         // ----- H4/C7: omitted / empty Attachments -----------------------------------

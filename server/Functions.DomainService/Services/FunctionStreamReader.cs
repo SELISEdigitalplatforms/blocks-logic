@@ -20,6 +20,9 @@ namespace Functions.DomainService.Services
         /// <c>TIMED_OUT</c> made up here. Stops when <paramref name="cancellationToken"/> fires.
         /// </summary>
         IAsyncEnumerable<FunctionStreamPiece> ReadAsync(string runId, CancellationToken cancellationToken);
+
+        /// <summary>Whether the run streamed anything that can still be read (the stream expires after 10 min).</summary>
+        Task<bool> ExistsAsync(string runId) => Task.FromResult(true);
     }
 
     /// <summary>
@@ -103,6 +106,9 @@ namespace Functions.DomainService.Services
                 }
             }
         }
+
+        public Task<bool> ExistsAsync(string runId) =>
+            cache.CacheDatabase().KeyExistsAsync(FunctionQueueKeys.StreamOut(runId));
 
         private static string? NullIfEmpty(RedisValue value) => value.IsNullOrEmpty ? null : value.ToString();
     }

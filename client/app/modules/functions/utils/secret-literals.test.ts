@@ -15,6 +15,12 @@ describe("secret-literals", () => {
     ["Bearer abc123", true],
     ["sk_{{secret.abc-1}}", true],
     ["{{secret.}}", true],
+    // An imported reference kept by name, and the export marker, are references too.
+    ["{{secretName.stripe-key}}", false],
+    ["Bearer {{secretName.stripe-key}}", false],
+    ["{{secretUnresolved}}", false],
+    ["{{secretName.-bad}}", true],
+    ["{{secretName.stripe-key}} sk_live", true],
   ])("hasTypedValue(%s) is %s", (value, expected) => {
     expect(hasTypedValue(value)).toBe(expected);
   });

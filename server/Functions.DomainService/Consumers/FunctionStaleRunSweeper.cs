@@ -1,7 +1,4 @@
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -9,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Consumers
 {
@@ -67,6 +65,7 @@ namespace Functions.DomainService.Consumers
 
         private readonly IDatabase _db;
         private readonly IFunctionRunRepository _runRepository;
+        private readonly IFunctionEventDeadLetters? _eventDeadLetters;
         private readonly IFunctionTenantSource _tenantSource;
         private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionStaleRunSweeper> _logger;
@@ -77,8 +76,10 @@ namespace Functions.DomainService.Consumers
             IFunctionRunRepository runRepository,
             IFunctionTenantSource tenantSource,
             IConfiguration configuration,
-            ILogger<FunctionStaleRunSweeper> logger)
+            ILogger<FunctionStaleRunSweeper> logger,
+            IFunctionEventDeadLetters? eventDeadLetters = null)
         {
+            _eventDeadLetters = eventDeadLetters;
             ArgumentNullException.ThrowIfNull(cache);
             _db = cache.CacheDatabase();
             _runRepository = runRepository;
@@ -303,6 +304,14 @@ namespace Functions.DomainService.Consumers
             _logger.LogWarning(
                 "Closed stale run {RunId} (tenant {TenantId}) from {From} to {To}/{Code}: {Message}",
                 run.ItemId, tenantId, run.Status, newStatus, errorCode, message);
+
+            // A run an event started that is closed without an outcome: its event is dead-lettered. Never throws.
+            if (_eventDeadLetters is not null && newStatus != RunStatus.OutputFailed)
+            {
+                run.Status = newStatus;
+                run.ErrorCode = errorCode;
+                await _eventDeadLetters.RunFailedAsync(tenantId, run);
+            }
 
             try
             {

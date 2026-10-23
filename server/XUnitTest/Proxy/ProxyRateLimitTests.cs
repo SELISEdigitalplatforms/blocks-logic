@@ -12,6 +12,7 @@ using Proxy.DomainService.Services;
 using Proxy.DomainService.Utils;
 using StackExchange.Redis;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Proxy
 {
@@ -241,6 +242,7 @@ namespace XUnitTest.Proxy
             };
             var proxies = new Mock<IProxyRepository>();
             proxies.Setup(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>())).ReturnsAsync(true);
+            proxies.Setup(r => r.SaveEditedConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>())).ReturnsAsync(true);
             proxies.Setup(r => r.GetAsync("t1", "p1")).ReturnsAsync(entity);
             var versions = new List<ProxyVersionEntity>();
             var versionRepo = new Mock<IProxyVersionRepository>();

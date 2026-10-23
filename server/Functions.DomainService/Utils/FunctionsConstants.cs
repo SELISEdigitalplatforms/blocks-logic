@@ -19,6 +19,15 @@ namespace Functions.DomainService.Utils
         public const string FunctionAuditEventsCollection = "FunctionAuditEvents";
 
         /// <summary>
+        /// Function events (logic-owned, not Genesis entities): the events a function may send, per function
+        /// (draft, <c>VersionId</c> null) and per deployed version.
+        /// </summary>
+        public const string FunctionEventSettingsCollection = "FunctionEventSettings";
+
+        /// <summary>What happened to the events of each run attempt (sent, failed, rejected). Never the payload.</summary>
+        public const string FunctionRunEventsCollection = "FunctionRunEvents";
+
+        /// <summary>
         /// Not in the original plan's Mongo table (which lists Functions, FunctionVersions,
         /// FunctionRuns, FunctionRunLogs, FunctionAuditEvents only) — added because the build
         /// cache (DECISIONS D3: one image serves both Test and Deploy) needs somewhere durable
@@ -28,6 +37,9 @@ namespace Functions.DomainService.Utils
 
         /// <summary>Runs older than this are eligible for TTL deletion.</summary>
         public static readonly TimeSpan RunRetention = TimeSpan.FromDays(30);
+
+        /// <summary>Run event results older than this are eligible for TTL deletion (same as the run record).</summary>
+        public static readonly TimeSpan RunEventsRetention = TimeSpan.FromDays(30);
 
         /// <summary>Run logs older than this are eligible for TTL deletion.</summary>
         public static readonly TimeSpan RunLogRetention = TimeSpan.FromDays(30);
@@ -59,6 +71,12 @@ namespace Functions.DomainService.Utils
             public const string Resumed = "FunctionResumed";
             public const string RunCancelled = "RunCancelled";
             public const string RunReplayed = "RunReplayed";
+            /// <summary>An export file was downloaded. Detail: the content hash only.</summary>
+            public const string Exported = "FunctionExported";
+            /// <summary>An import created or changed the function. Detail: status, changed fields, content hash — never source or values.</summary>
+            public const string Imported = "FunctionImported";
+            /// <summary>The events a function may send (or is started by) were saved. Detail: the types and the count of trigger names.</summary>
+            public const string EventsUpdated = "FunctionEventsUpdated";
         }
     }
 }

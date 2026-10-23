@@ -1,5 +1,4 @@
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
@@ -47,8 +46,26 @@ namespace Functions.DomainService.Repositories
         UnknownAttempt = 4,
     }
 
+    /// <summary>
+    /// How many runs of one function still wait to be started (status Queued), split by what started them: function
+    /// events, and everything else (HTTP, workflow, replay). <see cref="OldestEventQueuedAt"/> is when the oldest waiting
+    /// event run was created; null when none waits.
+    /// </summary>
+    public sealed record FunctionQueueCounts(long HttpQueued, long EventQueued, DateTime? OldestEventQueuedAt);
+
     public interface IFunctionRunRepository
     {
+        /// <summary>
+        /// The run an event already started for a function (same event id), or null. This is what makes a redelivered
+        /// event start no second run. A run closed as <c>EnqueueFailed</c> (it never ran) does not count. Input and Result are not fetched.
+        /// </summary>
+        Task<FunctionRunEntity?> FindEventRunAsync(
+            string tenantId, string functionId, string eventId, CancellationToken cancellationToken = default);
+
+        /// <summary>Queued runs of one function by kind (see <see cref="FunctionQueueCounts"/>), inside the tenant's database.</summary>
+        Task<FunctionQueueCounts> GetQueueCountsAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default);
+
         Task<(IReadOnlyList<FunctionRunEntity> Items, long TotalCount)> GetAllAsync(
             string tenantId, FunctionRunFilter filter, int pageNumber, int pageSize,
             CancellationToken cancellationToken = default);
@@ -62,6 +79,8 @@ namespace Functions.DomainService.Repositories
             string tenantId, string functionId, CancellationToken cancellationToken = default);
 
         Task<FunctionRunEntity?> GetByIdAsync(string tenantId, string runId, CancellationToken cancellationToken = default);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<FunctionRunEntity?> GetByIdForViewAsync(string tenantId, string runId, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Run counts per version number for one function, for the versions tab's "Runs" column.
@@ -162,7 +181,7 @@ namespace Functions.DomainService.Repositories
         /// attempt, so a late write never lands on a retry's record.
         /// </summary>
         Task SetTimingsAsync(
-            string tenantId, string runId, int attempt, List<Models.RunTiming> timings, CancellationToken cancellationToken = default);
+            string tenantId, string runId, int attempt, List<RunTiming> timings, CancellationToken cancellationToken = default);
 
         /// <summary>Flips only the status — used for the transient OUTPUT_PROCESSING step between a successful run and output delivery.</summary>
         Task ApplyStatusOnlyAsync(string tenantId, string runId, RunStatus status, CancellationToken cancellationToken = default);
@@ -183,7 +202,7 @@ namespace Functions.DomainService.Repositories
         /// </summary>
         /// <returns>True when this call wrote the verdict.</returns>
         Task<bool> ApplyOutputResultAsync(
-            string tenantId, string runId, int attempt, IReadOnlyList<Models.OutputActionResult> results,
+            string tenantId, string runId, int attempt, IReadOnlyList<OutputActionResult> results,
             RunStatus finalStatus, string? errorMessage, CancellationToken cancellationToken = default);
 
         /// <summary>

@@ -1,5 +1,7 @@
 using System.Text;
 using Blocks.Genesis;
+using Blocks.Genesis.DataAccess.Rules;
+using DataAccess.InternalService;
 using DomainService.Storage;
 using Microsoft.Extensions.Logging;
 using StorageDriver;
@@ -9,6 +11,7 @@ using Workflow.DomainService.Events;
 using Workflow.DomainService.Import;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {
@@ -126,6 +129,12 @@ namespace Workflow.DomainService.Services
                         : "Your workflow is ready.",
                     workflowId: model.ItemId,
                     issues: remapped.Issues);
+            }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the user gets its messages, not a generic failure.
+                var messages = string.Join("; ", ex.ToErrors().Select(e => $"{e.Key}: {e.Value}"));
+                await NotifyFailureAsync(userIds, evt.MessageCoRelationId, messages);
             }
             catch (Exception ex)
             {

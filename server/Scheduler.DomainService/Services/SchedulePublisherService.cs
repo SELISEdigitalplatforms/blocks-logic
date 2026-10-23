@@ -2,11 +2,10 @@ using System.Security.Cryptography;
 using System.Text;
 using Blocks.Genesis;
 using Microsoft.Extensions.Logging;
-using Scheduler.DomainService.Entities;
-using Scheduler.DomainService.Enums;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Repositories;
 using Scheduler.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Scheduler.DomainService.Services
 {

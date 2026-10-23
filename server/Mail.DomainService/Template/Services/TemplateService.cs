@@ -2,11 +2,10 @@
 using FluentValidation;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Mails;
-using Mail.DomainService.Template.Models;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.Extensions.Logging;
 using System.Text;
-using System.Text.Json;
+using Blocks.Genesis.Entities.Os;
 
 namespace Mail.DomainService.Template.Services
 {
@@ -15,17 +14,14 @@ namespace Mail.DomainService.Template.Services
         private readonly IValidator<Template> _validator;
         private readonly ITemplateRepository _templateRepository;
         private readonly ILogger<TemplateService> _logger;
-        private readonly IHttpService _httpService;
 
         public TemplateService(IValidator<Template> validator,
                                ITemplateRepository templateRepository,
-                               ILogger<TemplateService> logger,
-                               IHttpService httpService)
+                               ILogger<TemplateService> logger)
         {
             _validator = validator;
             _templateRepository = templateRepository;
             _logger = logger;
-            _httpService = httpService;
         }
 
         public async Task<BaseMutationResponse> SaveTemplateAsync(Template template)
@@ -181,96 +177,6 @@ namespace Mail.DomainService.Template.Services
             await _templateRepository.DeleteAsync(request.ItemId);
 
             return new BaseMutationResponse { IsSuccess = true };
-        }
-
-        public async Task<BeeLoginResponse?> GetTemplatePluginTokenAsync(
-            string provider,
-            string uId)
-        {
-            _logger.LogInformation(
-                "GetTemplatePluginTokenAsync: started for provider {Provider}",
-                provider);
-
-            try
-            {
-                if (string.IsNullOrWhiteSpace(uId))
-                {
-                    throw new ArgumentException("UID cannot be empty.", nameof(uId));
-                }
-
-                var pluginConfig =
-                    await _templateRepository.GetPluginConfigAsync(provider);
-
-                var headers = pluginConfig.HttpHeders?
-                    .Where(header => !header.Key.Equals(
-                        "Authorization",
-                        StringComparison.OrdinalIgnoreCase))
-                    .ToDictionary(
-                        header => header.Key,
-                        header => header.Value)
-                    ?? new Dictionary<string, string>();
-
-                var payload = PreparePayload(pluginConfig, uId);
-
-                var (response, errorMessage) =
-                    await _httpService.SendRequest<BeeLoginResponse>(
-                        new HttpMethod(pluginConfig.HttpMethod),
-                        pluginConfig.RequestUri,
-                        payload,
-                        pluginConfig.ContentType,
-                        headers);
-
-                if (response is null)
-                {
-                    _logger.LogError(
-                        "Template plugin request failed. Provider: {Provider}, Error: {Error}",
-                        provider,
-                        errorMessage);
-
-                    return null;
-                }
-
-                return response;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "GetTemplatePluginTokenAsync failed for provider {Provider}",
-                    provider);
-
-                return null;
-            }
-        }
-
-        private static object PreparePayload(
-            TemplatePluginConfig pluginConfig,
-            string uid)
-        {
-            if (pluginConfig.ContentType.Equals(
-                    "application/x-www-form-urlencoded",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                var payload =
-                    JsonSerializer.Deserialize<Dictionary<string, string>>(
-                        pluginConfig.Payload)
-                    ?? new Dictionary<string, string>();
-
-                // Always overwrite the configured UID.
-                payload["uid"] = uid;
-
-                return payload;
-            }
-
-            var jsonPayload =
-                JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
-                    pluginConfig.Payload)
-                ?? new Dictionary<string, JsonElement>();
-
-            // Always overwrite the configured UID.
-            jsonPayload["uid"] = JsonSerializer.SerializeToElement(uid);
-
-            return jsonPayload;
         }
     }
 }

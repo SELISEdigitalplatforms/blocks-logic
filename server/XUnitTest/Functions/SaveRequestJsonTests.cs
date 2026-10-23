@@ -1,7 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Functions.DomainService.Dtos.Requests;
-using Functions.DomainService.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

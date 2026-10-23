@@ -28,6 +28,22 @@ namespace XUnitTest.TestHelpers
             BlocksContext.SetContext(context, true);
         }
 
+        /// <summary>An impersonated context: <c>TenantId</c> is the target tenant, <c>OriginalTenantId</c> the caller's own.</summary>
+        public static void SetImpersonated(string tenantId = "tenant-123", string originalTenantId = "root", string userId = "user-123")
+        {
+            var ctor = typeof(BlocksContext)
+                .GetConstructors(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                .Single(c => c.GetParameters().Length >= 16);
+            var args = new object?[]
+            {
+                tenantId, Array.Empty<string>(), userId, true, string.Empty, "org-123",
+                DateTime.UtcNow.AddHours(1), "test@example.com", Array.Empty<string>(),
+                "testuser", string.Empty, "Test User", string.Empty, originalTenantId, string.Empty,
+                true, "session", string.Empty, string.Empty
+            };
+            BlocksContext.SetContext((BlocksContext)ctor.Invoke(args.Take(ctor.GetParameters().Length).ToArray()), true);
+        }
+
         public static void Clear() => BlocksContext.ClearContext();
     }
 }

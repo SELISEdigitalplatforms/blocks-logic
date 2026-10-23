@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Moq;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Data;
 
 namespace XUnitTest.Services
 {

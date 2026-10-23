@@ -1,7 +1,7 @@
 ﻿using Blocks.Genesis;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Mails;
-using Mail.DomainService.Template.Models;
+using Blocks.Genesis.Entities.Os;
 
 namespace Mail.DomainService.Template.Services
 {
@@ -12,6 +12,5 @@ namespace Mail.DomainService.Template.Services
         public Task<EmailTemplate?> GetAsync(GetTemplate request);
         public Task<BaseMutationResponse> CloneTemplateAsync(CloneTemplateRequest request);
         public Task<BaseMutationResponse> DeleteAsync(DeleteTemplateRequest request);
-        Task<BeeLoginResponse?> GetTemplatePluginTokenAsync(string provider, string uId);
     }
 }

@@ -1,5 +1,7 @@
 ﻿using Mail.DomainService.Entities;
 using Mail.DomainService.Mails;
+using Blocks.Genesis.Entities.Logic;
+using EmailTemplate = Blocks.Genesis.Entities.Os.EmailTemplate;
 
 namespace Mail.DomainService.Services
 {
@@ -13,8 +15,6 @@ namespace Mail.DomainService.Services
         Task<MailServerConfiguration> GetMailServerConfigurationByPurpose(string purpose, string language, string organizationId);
         Task<bool> MailTemplateForPurposeExists(string purpose, string language);
         Task<bool> MailServerConfigurationExists(string purpose, string language);
-        Task<bool> SaveMailToBeSent(MailToBeSent mailToBeSent);
-        Task<MailToBeSent> GetMailToBeSent(string itemId);
         Task<(List<MailBoxEntity> Mails, long TotalCount)> GetMailBoxMails(GetMailBoxMails request); //deprecated
         Task<(List<MailBoxEntityResponse> Mails, long TotalCount)> GetMailBoxAggregatedMails(GetMailBoxMails request);
         Task<MailBoxEntity> GetMailBoxMail(string messageId, string tenantId);

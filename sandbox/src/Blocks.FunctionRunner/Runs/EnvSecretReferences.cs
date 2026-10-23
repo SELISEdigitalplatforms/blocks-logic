@@ -29,18 +29,40 @@ namespace Blocks.FunctionRunner.Runs
         /// </summary>
         private static readonly Regex Placeholder = new(@"\{\{secret\.([\w-]+)\}\}", RegexOptions.Compiled);
 
+        /// <summary>
+        /// An imported reference not yet bound to an id (2026-10-18): <c>{{secretName.&lt;name&gt;}}</c>, a Blocks OS secret
+        /// name (<c>^[A-Za-z0-9][A-Za-z0-9._-]*$</c>, at most 100). The runner looks the name up exactly at run start and
+        /// reads its value in the same batch as the ids. Same pattern as the control plane's <c>FunctionSecretRefs</c>.
+        /// </summary>
+        private static readonly Regex NamePlaceholder = new(@"\{\{secretName\.([A-Za-z0-9][A-Za-z0-9._-]{0,99})\}\}", RegexOptions.Compiled);
+
+        /// <summary>Both shapes in one pattern, so substitution is a single pass and a value is never expanded again.</summary>
+        private static readonly Regex Combined = new(
+            @"\{\{secret\.(?<id>[\w-]+)\}\}|\{\{secretName\.(?<name>[A-Za-z0-9][A-Za-z0-9._-]{0,99})\}\}", RegexOptions.Compiled);
+
         /// <summary>The caller identity the control plane recorded in the envelope's <c>context</c>.</summary>
         public sealed record Caller(string? TenantId, string? UserId, string? OrganizationId, IReadOnlyList<string> Roles);
 
         /// <summary>What an envelope asks the runner to resolve.</summary>
         public sealed class Plan
         {
-            internal Plan(IReadOnlyDictionary<string, IReadOnlyList<string>> idsByKey, Caller caller)
+            internal Plan(
+                IReadOnlyDictionary<string, IReadOnlyList<string>> idsByKey,
+                Caller caller,
+                IReadOnlyDictionary<string, IReadOnlyList<string>>? namesByKey = null)
             {
                 IdsByKey = idsByKey;
+                NamesByKey = namesByKey ?? new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
                 Caller = caller;
                 Ids = idsByKey.Values.SelectMany(v => v).Distinct(StringComparer.Ordinal).ToArray();
+                Names = NamesByKey.Values.SelectMany(v => v).Distinct(StringComparer.Ordinal).ToArray();
             }
+
+            /// <summary>Env key &rarr; the secret <b>names</b> its value references (<c>{{secretName.x}}</c>), in order.</summary>
+            public IReadOnlyDictionary<string, IReadOnlyList<string>> NamesByKey { get; }
+
+            /// <summary>Every referenced name, once — looked up exactly, then read with <see cref="Ids"/> in one batch.</summary>
+            public IReadOnlyCollection<string> Names { get; }
 
             /// <summary>Env key &rarr; the secret ids its value references, in order of appearance.</summary>
             public IReadOnlyDictionary<string, IReadOnlyList<string>> IdsByKey { get; }
@@ -50,7 +72,7 @@ namespace Blocks.FunctionRunner.Runs
 
             public Caller Caller { get; }
 
-            public bool IsEmpty => Ids.Count == 0;
+            public bool IsEmpty => Ids.Count == 0 && Names.Count == 0;
         }
 
         /// <summary>
@@ -64,6 +86,7 @@ namespace Blocks.FunctionRunner.Runs
             var root = ParseObject(envelopeJson);
 
             var idsByKey = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+            var namesByKey = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
             if (root["env"] is JsonObject env)
             {
                 foreach (var (key, node) in env)
@@ -71,10 +94,12 @@ namespace Blocks.FunctionRunner.Runs
                     if (node is not JsonValue value || !value.TryGetValue<string>(out var text)) continue;
                     var ids = Placeholder.Matches(text).Select(m => m.Groups[1].Value).ToList();
                     if (ids.Count > 0) idsByKey[key] = ids;
+                    var names = NamePlaceholder.Matches(text).Select(m => m.Groups[1].Value).ToList();
+                    if (names.Count > 0) namesByKey[key] = names;
                 }
             }
 
-            return new Plan(idsByKey, ReadCaller(root["context"] as JsonObject));
+            return new Plan(idsByKey, ReadCaller(root["context"] as JsonObject), namesByKey);
         }
 
         /// <summary>
@@ -96,6 +121,16 @@ namespace Blocks.FunctionRunner.Runs
         /// fails the run instead; the message names the id only.
         /// </exception>
         public static string Apply(string envelopeJson, Plan plan, IReadOnlyDictionary<string, string> values)
+            => Apply(envelopeJson, plan, values, idsByName: null);
+
+        /// <summary>
+        /// <see cref="Apply(string, Plan, IReadOnlyDictionary{string, string})"/> for a plan that also carries names:
+        /// <paramref name="idsByName"/> is the one id each name was bound to for this run. Every token — id or name —
+        /// is replaced in the same single pass.
+        /// </summary>
+        public static string Apply(
+            string envelopeJson, Plan plan, IReadOnlyDictionary<string, string> values,
+            IReadOnlyDictionary<string, string>? idsByName)
         {
             ArgumentNullException.ThrowIfNull(plan);
             ArgumentNullException.ThrowIfNull(values);
@@ -106,15 +141,24 @@ namespace Blocks.FunctionRunner.Runs
             var env = root["env"] as JsonObject
                 ?? throw new InvalidOperationException("the plan names env keys but the envelope has no env");
 
-            foreach (var key in plan.IdsByKey.Keys)
+            foreach (var key in plan.IdsByKey.Keys.Union(plan.NamesByKey.Keys, StringComparer.Ordinal))
             {
                 var text = env[key]!.GetValue<string>();
-                env[key] = Placeholder.Replace(text, match =>
+                env[key] = Combined.Replace(text, match =>
                 {
-                    var id = match.Groups[1].Value;
-                    return values.TryGetValue(id, out var secret)
-                        ? secret
-                        : throw new KeyNotFoundException($"secret '{id}' referenced by '{key}' was not resolved");
+                    if (match.Groups["id"].Success)
+                    {
+                        var id = match.Groups["id"].Value;
+                        return values.TryGetValue(id, out var secret)
+                            ? secret
+                            : throw new KeyNotFoundException($"secret '{id}' referenced by '{key}' was not resolved");
+                    }
+
+                    var name = match.Groups["name"].Value;
+                    return idsByName is not null && idsByName.TryGetValue(name, out var boundId)
+                           && values.TryGetValue(boundId, out var named)
+                        ? named
+                        : throw new KeyNotFoundException($"secret named '{name}' referenced by '{key}' was not resolved");
                 });
             }
 
@@ -127,10 +171,16 @@ namespace Blocks.FunctionRunner.Runs
                 }
             }
             masked.AddRange(plan.IdsByKey.Keys);
+            masked.AddRange(plan.NamesByKey.Keys);
             root["maskedEnv"] = new JsonArray(masked.Distinct(StringComparer.Ordinal)
                 .Select(k => (JsonNode?)JsonValue.Create(k)).ToArray());
 
-            root["maskedValues"] = new JsonArray(plan.Ids
+            var boundIds = plan.Names
+                .Select(n => idsByName is not null && idsByName.TryGetValue(n, out var id) ? id : null)
+                .Where(id => id is not null)
+                .Select(id => id!);
+            root["maskedValues"] = new JsonArray(plan.Ids.Concat(boundIds)
+                .Distinct(StringComparer.Ordinal)
                 .Select(id => values[id])
                 .Where(v => !string.IsNullOrEmpty(v))
                 .Distinct(StringComparer.Ordinal)

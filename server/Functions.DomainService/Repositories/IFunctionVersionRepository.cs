@@ -1,4 +1,4 @@
-using Functions.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
@@ -13,6 +13,8 @@ namespace Functions.DomainService.Repositories
             CancellationToken cancellationToken = default);
 
         Task<FunctionVersionEntity?> GetByIdAsync(string tenantId, string versionId, CancellationToken cancellationToken = default);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<FunctionVersionEntity?> GetByIdForViewAsync(string tenantId, string versionId, CancellationToken cancellationToken = default);
 
         Task<FunctionVersionEntity?> GetByNumberAsync(string tenantId, string functionId, int number, CancellationToken cancellationToken = default);
 

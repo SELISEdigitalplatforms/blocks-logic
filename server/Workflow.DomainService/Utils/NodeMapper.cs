@@ -2,6 +2,7 @@ using System.Text.Json;
 using MongoDB.Bson;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Utils
 {
@@ -27,11 +28,33 @@ namespace Workflow.DomainService.Utils
                 Type = node.Type,
                 Version = node.Version,
                 Position = node.Position,
-                Handle = node.Handle,
+                Handle = ToHandle(node.Handle),
                 Parameters = ToDocument(node.Parameters, node.Id, "parameters"),
                 Settings = ToDocument(node.Settings, node.Id, "settings"),
                 PinData = ToArray(node.PinData, node.Id),
             };
+        }
+
+        // Copies the node's handle. Null lists become empty and null entries are dropped, so readers that
+        // walk the entries (publish copies trigger handles) never meet a null.
+        private static Handle? ToHandle(Handle? handle)
+        {
+            if (handle is null)
+            {
+                return null;
+            }
+
+            return new Handle
+            {
+                Sources = CopyEntries(handle.Sources),
+                Targets = CopyEntries(handle.Targets),
+            };
+        }
+
+        private static List<Dictionary<string, string>> CopyEntries(List<Dictionary<string, string>>? entries)
+        {
+            return entries?.Where(entry => entry is not null).Select(entry => new Dictionary<string, string>(entry)).ToList()
+                ?? new List<Dictionary<string, string>>();
         }
 
         // Missing or null becomes an empty document; anything that is not a JSON object is rejected.

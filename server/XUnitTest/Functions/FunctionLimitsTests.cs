@@ -1,8 +1,7 @@
 using FluentAssertions;
 using RunnerCeilings = Blocks.FunctionRunner.Contracts.Ceilings;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

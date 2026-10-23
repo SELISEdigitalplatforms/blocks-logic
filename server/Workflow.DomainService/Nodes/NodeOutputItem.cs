@@ -1,5 +1,6 @@
 using System.Reflection.Metadata;
 using MongoDB.Bson;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes
 {
@@ -17,13 +18,6 @@ namespace Workflow.DomainService.Nodes
         [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
         public bool IsError { get; init; }
 
-
-    }
-    public class NodeOutputItemData
-    {
-        public BsonValue Parameters { get; set; } = new BsonDocument();
-        public BsonValue Input { get; set; } = new BsonDocument();
-        public BsonValue Output { get; set; } = new BsonDocument();
 
     }
 
