@@ -232,6 +232,54 @@ namespace Blocks.FunctionRunner.Tests
             third.Should().HaveCount(9);
         }
 
+        [SkippableFact]
+        public async Task Expired_event_entries_do_not_use_the_event_turn_the_next_live_one_is_read_at_once()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var runs = new GroupConsumer(_db!, NullLogger.Instance, RedisKeys.RunsStream, RedisKeys.RunnerGroup, "a");
+            var events = new GroupConsumer(_db!, NullLogger.Instance, RedisKeys.EventRunsStream, RedisKeys.RunnerGroup, "a");
+            await runs.EnsureGroupAsync();
+            await events.EnsureGroupAsync();
+            var old = DateTimeOffset.UtcNow.AddMinutes(-10).ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+            for (var i = 0; i < 20; i++) await _db!.StreamAddAsync(RedisKeys.RunsStream, [new NameValueEntry("runId", $"h{i}")]);
+            for (var i = 0; i < 2; i++)
+                await _db!.StreamAddAsync(RedisKeys.EventRunsStream, [new NameValueEntry("runId", $"x{i}"), new NameValueEntry(RedisKeys.RunFirstQueuedField, old)]);
+            await _db!.StreamAddAsync(RedisKeys.EventRunsStream, [new NameValueEntry("runId", "e0")]);
+            var selector = new RunSourceSelector();
+            selector.TookRuns(5);
+
+            var batch = await RunConsumerService.ReadNextAsync(runs, events, selector, count: 16, CancellationToken.None, eventMaxWaitSeconds: 300);
+
+            // Both expired entries (failed by their handler), then the live one, then the runs.
+            string.Concat(batch.Select(b => b.Entry.Get("runId")![0])).Should().StartWith("xxe");
+            selector.Behind.Should().BeFalse("the live event run had just been queued");
+        }
+
+        [SkippableFact]
+        public async Task A_long_waiting_event_run_moves_the_share_to_one_event_per_two_runs()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var runs = new GroupConsumer(_db!, NullLogger.Instance, RedisKeys.RunsStream, RedisKeys.RunnerGroup, "a");
+            var events = new GroupConsumer(_db!, NullLogger.Instance, RedisKeys.EventRunsStream, RedisKeys.RunnerGroup, "a");
+            await runs.EnsureGroupAsync();
+            await events.EnsureGroupAsync();
+            var waited = DateTimeOffset.UtcNow.AddMinutes(-3).ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+            for (var i = 0; i < 20; i++) await _db!.StreamAddAsync(RedisKeys.RunsStream, [new NameValueEntry("runId", $"h{i}")]);
+            for (var i = 0; i < 3; i++)
+                await _db!.StreamAddAsync(RedisKeys.EventRunsStream, [new NameValueEntry("runId", $"e{i}"), new NameValueEntry(RedisKeys.RunFirstQueuedField, waited)]);
+            var selector = new RunSourceSelector();
+
+            var order = new List<string>();
+            for (var turn = 0; turn < 4; turn++)
+            {
+                var batch = await RunConsumerService.ReadNextAsync(runs, events, selector, count: 16, CancellationToken.None, eventMaxWaitSeconds: 300);
+                order.AddRange(batch.Select(b => b.Entry.Get("runId")![0].ToString()));
+            }
+
+            // 5 H, then the first event (waited 3 of 5 minutes → behind), then 2 H per event.
+            string.Concat(order).Should().Be("hhhhh" + "ehh" + "ehh" + "ehh");
+        }
+
         // ------------------------------------------------------------- end to end ----
 
         [SkippableFact]

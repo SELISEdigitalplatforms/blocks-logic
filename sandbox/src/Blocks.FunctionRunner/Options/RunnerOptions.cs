@@ -235,7 +235,10 @@ namespace Blocks.FunctionRunner.Options
         /// <c>RUNNER__EventRunMaxWaitSeconds</c>.
         /// </summary>
         [Range(10, 86400)]
-        public int EventRunMaxWaitSeconds { get; set; } = 300;
+        public int EventRunMaxWaitSeconds { get; set; } = DefaultEventRunMaxWaitSeconds;
+
+        /// <summary>Default of <see cref="EventRunMaxWaitSeconds"/>: 5 minutes.</summary>
+        internal const int DefaultEventRunMaxWaitSeconds = 300;
 
         /// <summary>Delivery attempts before an entry is moved to functions:dead.</summary>
         [Range(1, 20)]

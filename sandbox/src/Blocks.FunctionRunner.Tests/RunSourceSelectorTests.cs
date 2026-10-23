@@ -115,5 +115,85 @@ namespace Blocks.FunctionRunner.Tests
 
             new string([.. order]).Should().StartWith("HHHHHEHHHHHEHHHHHE");
         }
+
+        [Fact]
+        public void An_event_run_that_waited_half_the_limit_puts_the_queue_behind_and_events_come_after_two_runs()
+        {
+            var selector = new RunSourceSelector();
+            selector.TookRuns(5);
+            selector.TookEvents(1);
+            selector.EventWaited(waitedMs: 150_000, limitMs: 300_000);
+
+            selector.Behind.Should().BeTrue();
+            selector.RunsToRead(16, Now).Should().Be(RunSourceSelector.HttpPerEventBehind);
+            selector.TookRuns(2);
+            selector.EventDue(Now).Should().BeTrue();
+        }
+
+        [Fact]
+        public void The_queue_stays_behind_between_a_quarter_and_half_the_limit_and_returns_under_a_quarter()
+        {
+            var selector = new RunSourceSelector();
+            selector.EventWaited(200_000, 300_000);
+
+            selector.EventWaited(100_000, 300_000);
+            selector.Behind.Should().BeTrue("no flapping between a quarter and half");
+
+            selector.EventWaited(74_999, 300_000);
+            selector.Behind.Should().BeFalse();
+            selector.CurrentHttpPerEvent.Should().Be(RunSourceSelector.HttpPerEvent);
+        }
+
+        [Fact]
+        public void An_empty_event_stream_ends_the_behind_state()
+        {
+            var selector = new RunSourceSelector();
+            selector.EventWaited(299_000, 300_000);
+
+            selector.EventsEmpty(Now);
+
+            selector.Behind.Should().BeFalse();
+        }
+
+        [Fact]
+        public void Taking_only_expired_event_entries_keeps_the_event_turn_due()
+        {
+            var selector = new RunSourceSelector();
+            selector.TookRuns(5);
+
+            selector.TookEvents(liveCount: 0);
+
+            selector.EventDue(Now).Should().BeTrue("an expired entry is not started, so it is not the event run");
+        }
+
+        [Fact]
+        public void A_zero_limit_changes_nothing()
+        {
+            var selector = new RunSourceSelector();
+            selector.EventWaited(1_000_000, 0);
+            selector.Behind.Should().BeFalse();
+        }
+
+        [Fact]
+        public void Simulated_while_behind_the_order_is_two_runs_then_one_event_run()
+        {
+            var selector = new RunSourceSelector();
+            selector.EventWaited(200_000, 300_000);
+            var order = new List<char>();
+            for (var step = 0; step < 9; step++)
+            {
+                if (selector.EventDue(Now))
+                {
+                    order.Add('E');
+                    selector.TookEvents(1);
+                    continue;
+                }
+                var take = selector.RunsToRead(1, Now);
+                order.AddRange(Enumerable.Repeat('H', take));
+                selector.TookRuns(take);
+            }
+
+            new string([.. order]).Should().StartWith("HHEHHEHHE");
+        }
     }
 }

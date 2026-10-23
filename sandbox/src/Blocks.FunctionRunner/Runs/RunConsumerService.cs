@@ -112,7 +112,8 @@ namespace Blocks.FunctionRunner.Runs
                     // capped a runner at ~1/RTT claims per second (~29/s at 34 ms, FN-4). Never more
                     // than the room, so nothing is claimed only to be deferred.
                     var entries = await ReadNextAsync(
-                        consumer, eventConsumer, selector, Math.Min(room, MaxReadBatch), stoppingToken).ConfigureAwait(false);
+                        consumer, eventConsumer, selector, Math.Min(room, MaxReadBatch), stoppingToken,
+                        _options.EventRunMaxWaitSeconds).ConfigureAwait(false);
 
                     // On its own timer: the sweep for entries a dead runner left behind used to run
                     // only when no new entry arrived, so under steady traffic it never ran.
@@ -179,21 +180,24 @@ namespace Blocks.FunctionRunner.Runs
 
         /// <summary>
         /// Reads up to <paramref name="count"/> new entries from the two run streams by the 1:5 rule
-        /// (<see cref="RunSourceSelector"/>): runs first, one event run after every five while both wait,
-        /// and every free slot to events when the runs stream is empty.
+        /// (<see cref="RunSourceSelector"/>): runs first, one event run after every five while both wait (every
+        /// two while the event queue is behind), and every free slot to events when the runs stream is empty.
+        /// An expired event entry is still returned (its handler fails it as EVENT_EXPIRED without a sandbox),
+        /// but it does not use the event turn: the next event entry is read at once, within the room.
         /// </summary>
         internal static async Task<List<(GroupConsumer Source, ClaimedEntry Entry)>> ReadNextAsync(
-            GroupConsumer runs, GroupConsumer events, RunSourceSelector selector, int count, CancellationToken token)
+            GroupConsumer runs, GroupConsumer events, RunSourceSelector selector, int count, CancellationToken token,
+            int eventMaxWaitSeconds = RunnerOptions.DefaultEventRunMaxWaitSeconds)
         {
             var taken = new List<(GroupConsumer, ClaimedEntry)>();
             var want = count;
 
-            if (selector.EventDue(DateTimeOffset.UtcNow))
+            while (want > 0 && selector.EventDue(DateTimeOffset.UtcNow))
             {
                 var due = await events.ReadNewAsync(count: 1, token).ConfigureAwait(false);
                 taken.AddRange(due.Select(e => (events, e)));
                 want -= due.Count;
-                NoteEventsRead(selector, due.Count);
+                NoteEventsRead(selector, due, eventMaxWaitSeconds);
             }
 
             var runsWanted = selector.RunsToRead(want, DateTimeOffset.UtcNow);
@@ -209,15 +213,29 @@ namespace Blocks.FunctionRunner.Runs
             {
                 var fill = await events.ReadNewAsync(want, token).ConfigureAwait(false);
                 taken.AddRange(fill.Select(e => (events, e)));
-                NoteEventsRead(selector, fill.Count);
+                NoteEventsRead(selector, fill, eventMaxWaitSeconds);
             }
             return taken;
         }
 
-        private static void NoteEventsRead(RunSourceSelector selector, int taken)
+        private static void NoteEventsRead(RunSourceSelector selector, IReadOnlyCollection<ClaimedEntry> read, int maxWaitSeconds)
         {
-            if (taken > 0) selector.TookEvents(taken);
-            else selector.EventsEmpty(DateTimeOffset.UtcNow);
+            if (read.Count == 0)
+            {
+                selector.EventsEmpty(DateTimeOffset.UtcNow);
+                return;
+            }
+
+            var live = 0;
+            long longest = 0;
+            foreach (var entry in read)
+            {
+                var waited = EntryWaitedMs(entry);
+                if (waited is { } ms) longest = Math.Max(longest, ms);
+                if (!IsEventExpired(waited, maxWaitSeconds)) live++;
+            }
+            selector.TookEvents(live);
+            selector.EventWaited(longest, maxWaitSeconds * 1000L);
         }
 
         /// <summary>
@@ -284,6 +302,15 @@ namespace Blocks.FunctionRunner.Runs
             await _db.StreamAddAsync(consumer.Stream, fields).ConfigureAwait(false);
             await consumer.AcknowledgeAsync(entry.Id).ConfigureAwait(false);
         }
+
+        /// <summary>
+        /// How long an entry has waited: from when its run was first queued (kept across deferrals), else from
+        /// the entry id; null if neither is readable.
+        /// </summary>
+        internal static long? EntryWaitedMs(ClaimedEntry entry) =>
+            long.TryParse(entry.Get(RedisKeys.RunFirstQueuedField), NumberStyles.None, CultureInfo.InvariantCulture, out var first)
+                ? Math.Max(0, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - first)
+                : StreamEntryAgeMs(entry.Id);
 
         /// <summary>Milliseconds since a stream entry was added, from its id (<c>ms-seq</c>); null if unreadable.</summary>
         internal static long? StreamEntryAgeMs(RedisValue id)
@@ -365,9 +392,7 @@ namespace Blocks.FunctionRunner.Runs
                 Reuse = string.Equals(entry.Get(RedisKeys.RunReuseField), "1", StringComparison.Ordinal),
                 ApiTimings = entry.Get(RedisKeys.RunApiTimingsField),
                 // From when the run was first queued, across deferrals.
-                QueuedMs = long.TryParse(entry.Get(RedisKeys.RunFirstQueuedField), NumberStyles.None, CultureInfo.InvariantCulture, out var first)
-                    ? Math.Max(0, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - first)
-                    : StreamEntryAgeMs(entry.Id),
+                QueuedMs = EntryWaitedMs(entry),
                 TraceParent = entry.Get(RedisKeys.TraceParentField),
             };
 
