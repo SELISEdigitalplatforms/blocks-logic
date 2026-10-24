@@ -44,6 +44,10 @@ namespace DomainService.Notification
                 {
                     await Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.ForTenant(groupTenantId));
                 }
+                if (ImpersonatedUserGroup() is { } userGroup)
+                {
+                    await Groups.AddToGroupAsync(Context.ConnectionId, userGroup);
+                }
                 await  base.OnConnectedAsync();
             }
             catch (Exception ex)
@@ -141,6 +145,18 @@ namespace DomainService.Notification
                 tenantIds.Add(originalTenantId);
 
             return tenantIds;
+        }
+
+        /// <summary>
+        /// For an impersonated root tenant user, the group of that user in the project (UserSpecificReceiver).
+        /// </summary>
+        private string? ImpersonatedUserGroup()
+        {
+            var tenantId = Context.User?.FindFirst(TenantIdClaim)?.Value;
+            var userId = Context.User?.FindFirst(UserIdClaim)?.Value;
+            return IsImpersonated() && !string.IsNullOrWhiteSpace(tenantId) && !string.IsNullOrWhiteSpace(userId)
+                ? NotificationGroups.ForTenantUser(tenantId, userId)
+                : null;
         }
 
         // Compared the same way Genesis reads the claim when it builds a context from an HTTP

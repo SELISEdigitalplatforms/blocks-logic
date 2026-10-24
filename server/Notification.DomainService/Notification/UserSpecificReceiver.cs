@@ -47,6 +47,16 @@ namespace DomainService.Notification
             }
 
             var connectionIdStrings = (await _repository.GetItemsAsync<NotificationConnection>(p => notifierPayload.UserIds.Contains(p.UserId))).ToList();
+            var connections = _hubContext.Clients.Clients(connectionIdStrings.Select(p => p.ConnectionId).ToList());
+
+            var userGroups = ImpersonatedUserGroups(notifierPayload.UserIds);
+            if (userGroups.Count != 0)
+            {
+                // Root tenant users working in this project keep their connection row in the root DB, so a
+                // sender using this project's key reaches them through their project user group.
+                return new CompositeClientProxy(connections, _hubContext.Clients.Groups(userGroups));
+            }
+
             if (connectionIdStrings.Count == 0)
             {
                 // The send still succeeds; without this line a notification that reaches no one is invisible.
@@ -54,7 +64,23 @@ namespace DomainService.Notification
                     notifierPayload.UserIds?.Count ?? 0, BlocksContext.GetContext()?.TenantId);
             }
 
-            return _hubContext.Clients.Clients(connectionIdStrings.Select(p => p.ConnectionId).ToList());
+            return connections;
+        }
+
+        /// <summary>
+        /// The project user groups of the target users, for a send with a project's own key. An impersonated
+        /// send already reads the root DB and finds those connections, so it gets none (no double delivery).
+        /// </summary>
+        private static List<string> ImpersonatedUserGroups(List<string>? userIds)
+        {
+            var context = BlocksContext.GetContext();
+            if (context is null || context.Impersonated || string.IsNullOrWhiteSpace(context.TenantId) || userIds is null)
+                return [];
+
+            return userIds.Where(id => !string.IsNullOrWhiteSpace(id))
+                          .Distinct()
+                          .Select(id => NotificationGroups.ForTenantUser(context.TenantId, id))
+                          .ToList();
         }
 
         private async Task<List<string>> GetUserIdsByRolesAsync(List<string> roles, List<string> organizationIds)
