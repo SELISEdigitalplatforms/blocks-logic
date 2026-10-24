@@ -18,6 +18,8 @@ namespace Blocks.FunctionRunner.Tests
     /// sandbox and image resolver faked, because the lease and concurrency Lua are part of the
     /// path and a fake Redis would only re-implement them.
     /// </summary>
+    // Shares the results stream that EventRunQueueTests deletes; must not run alongside it.
+    [Collection("redis-key-prefix")]
     public sealed class RunProcessorEnvelopeTests : IAsyncLifetime
     {
         private ConnectionMultiplexer? _redis;
