@@ -4,6 +4,8 @@ import {
   ReadonlyDetails,
 } from "../node-inspector/form-builder/form-field.types";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { getQueryClient } from "@/providers/query-provider";
+import { PROXY_QUERY_KEY } from "@/modules/proxy/constants";
 import { proxyService } from "@/modules/proxy/services/proxy.service";
 import { Proxy, ProxyMethod } from "@/modules/proxy/types";
 import { resolveEffectiveRoute, trimRoutePath } from "@/modules/proxy/utils";
@@ -24,28 +26,24 @@ const routeParams = (template: string): string[] => {
 const routeLabel = (method: string, path: string) => `${method} ${path === "" ? "/" : path}`;
 
 const PROXY_CACHE_TTL_MS = 30_000;
-const proxyCache = new Map<string, { promise: Promise<Proxy | null>; expiresAt: number }>();
+const proxyDetailKey = (proxyId: string) => [...PROXY_QUERY_KEY, "detail", proxyId];
 
 /**
  * The proxy detail, shared by the Endpoint options and the endpoint config panel so picking an
- * endpoint does not fetch the proxy twice. A request in flight is reused, and a settled one for
- * 30 s; a failed one is dropped so the next call retries.
+ * endpoint does not fetch the proxy twice. Kept in the app's query cache under the proxy detail
+ * key: a request in flight is reused, a settled one for 30 s, a failed one is not kept, and any
+ * proxy change (save, toggle, delete, revert, import) invalidates it so the node shows it at once.
  */
-const getProxyCached = (proxyId: string): Promise<Proxy | null> => {
-  const cached = proxyCache.get(proxyId);
-  if (cached && cached.expiresAt > Date.now()) return cached.promise;
-
-  const entry = { promise: proxyService.get(proxyId), expiresAt: Number.POSITIVE_INFINITY };
-  proxyCache.set(proxyId, entry);
-  entry.promise.then(
-    () => (entry.expiresAt = Date.now() + PROXY_CACHE_TTL_MS),
-    () => proxyCache.delete(proxyId),
-  );
-  return entry.promise;
-};
+const getProxyCached = (proxyId: string): Promise<Proxy | null> =>
+  getQueryClient().fetchQuery({
+    queryKey: proxyDetailKey(proxyId),
+    queryFn: () => proxyService.get(proxyId),
+    staleTime: PROXY_CACHE_TTL_MS,
+  });
 
 /** Forget cached proxy details. Tests call it between cases. */
-export const clearProxyDetailCache = () => proxyCache.clear();
+export const clearProxyDetailCache = () =>
+  getQueryClient().removeQueries({ queryKey: [...PROXY_QUERY_KEY, "detail"] });
 
 const BODY_METHODS = ["POST", "PUT", "PATCH"];
 

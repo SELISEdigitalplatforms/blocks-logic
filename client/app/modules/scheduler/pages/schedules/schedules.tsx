@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
-import { Pagination } from "@/components/ui-kits/pagination/pagination";
+import { PAGE_SIZE_OPTIONS, Pagination } from "@/components/ui-kits/pagination/pagination";
 import { Button } from "@/components/ui-kits/button/button";
 import { Plus } from "lucide-react";
 import { ScheduleList } from "../../components/schedule-list";
@@ -63,7 +63,7 @@ export const Schedules = () => {
                 totalCount={data?.totalCount || 0}
                 page={queryParams.page}
                 pageSize={queryParams.pageSize}
-                pageSizeOptions={[5, 10]}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
                 onChange={(page) => setQueryParams((params) => ({ ...params, page }))}
                 onPageSizeChange={(pageSize) =>
                   setQueryParams((params) => ({
