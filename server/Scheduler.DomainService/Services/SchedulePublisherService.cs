@@ -70,7 +70,7 @@ namespace Scheduler.DomainService.Services
             await PublishScheduledTask(schedule, tenantId);
         }
 
-        private bool ShouldPublishSchedule(Schedule schedule, DateTime currentDate)
+        private static bool ShouldPublishSchedule(Schedule schedule, DateTime currentDate)
         {
             var isWithinStartDate = schedule.StartDate is null ||
                                     currentDate >= schedule.StartDate.Value;
