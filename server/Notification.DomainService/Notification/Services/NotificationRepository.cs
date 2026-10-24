@@ -3,6 +3,7 @@ using DataAccess.InternalService;
 using DomainService.Shared;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using Blocks.Genesis.Entities.Logic;
 
@@ -14,6 +15,12 @@ namespace DomainService.Notification
         private readonly IBlocksSecret _blocksSecret;
 
         private const string _notificationCollection = "OfflineNotifications";
+
+        /// <summary>Stored notifications are deleted by MongoDB this long after <c>CreatedTime</c> (user, 2026-10-24).</summary>
+        public static readonly TimeSpan OfflineNotificationRetention = TimeSpan.FromDays(90);
+
+        // Databases whose OfflineNotifications TTL index was already asked for by this process.
+        private static readonly ConcurrentDictionary<string, bool> _ttlIndexedDbs = new();
         private readonly ILogger<NotificationRepository> _logger;
 
         private readonly ILogicDataAccess _dataAccess;
@@ -85,7 +92,10 @@ namespace DomainService.Notification
         }
 
         private IMongoCollection<OfflineNotification> NotificationCollection() =>
-            ResolvedClientDb().GetCollection<OfflineNotification>(_notificationCollection);
+            NotificationCollection(ResolvedClientDb());
+
+        private static IMongoCollection<OfflineNotification> NotificationCollection(IMongoDatabase database) =>
+            database.GetCollection<OfflineNotification>(_notificationCollection);
 
         public void Save<T>(T data, string collectionName = "")
         {
@@ -143,7 +153,34 @@ namespace DomainService.Notification
             await PrepareInsertAsync(listOfData, "SaveAsyncMany");
             var database = ResolvedClientDb();
             IMongoCollection<T> collection = database.GetCollection<T>(typeof(T).Name + "s");
-           await collection.InsertManyAsync(listOfData);
+            if (typeof(T) == typeof(OfflineNotification))
+                await EnsureOfflineNotificationTtlAsync(database);
+            await collection.InsertManyAsync(listOfData);
+        }
+
+        /// <summary>
+        /// Once per database and process: a TTL index on <c>CreatedTime</c>, so stored notifications nobody reads
+        /// do not grow forever. Best effort: a failure (e.g. an existing index with other options) is logged and
+        /// never stops the notification from being saved.
+        /// </summary>
+        private async Task EnsureOfflineNotificationTtlAsync(IMongoDatabase database)
+        {
+            var databaseName = database.DatabaseNamespace?.DatabaseName ?? string.Empty;
+            if (!_ttlIndexedDbs.TryAdd(databaseName, true))
+                return;
+
+            try
+            {
+                var index = new CreateIndexModel<OfflineNotification>(
+                    Builders<OfflineNotification>.IndexKeys.Ascending(n => n.CreatedTime),
+                    new CreateIndexOptions { ExpireAfter = OfflineNotificationRetention });
+                await NotificationCollection(database).Indexes.CreateOneAsync(index);
+            }
+            catch (MongoException ex)
+            {
+                _logger.LogWarning("OfflineNotifications TTL index not created in {Database} ({ExceptionType}): {Message}",
+                    databaseName, ex.GetType().Name, ex.Message);
+            }
         }
 
         public async Task DeleteAsync<T>(Expression<Func<T, bool>> dataFilters)
