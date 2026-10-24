@@ -2,9 +2,9 @@ using System.Linq.Expressions;
 using DomainService.Notification;
 using DomainService.Shared;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using Moq;
 using Blocks.Genesis.Entities.Logic;
+using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Notification
 {
@@ -17,13 +17,14 @@ namespace XUnitTest.Notification
     {
         private readonly Mock<INotificationRepository> _repository = new();
         private readonly HubContextDouble _hub = new();
+        private readonly CapturingLogger<UserSpecificReceiver> _logger = new();
         private readonly UserSpecificReceiver _sut;
 
         public UserSpecificReceiverTests()
         {
             _sut = new UserSpecificReceiver(
                 _repository.Object,
-                Mock.Of<ILogger<UserSpecificReceiver>>(),
+                _logger,
                 _hub.Object);
         }
 
@@ -50,6 +51,7 @@ namespace XUnitTest.Notification
 
             client.Should().BeSameAs(_hub.SelectedProxy.Object);
             _hub.AddressedConnectionIds.Should().Equal("conn-1", "conn-2", "conn-3");
+            _logger.All.Should().NotContain("nothing delivered live");
         }
 
         [Fact]
@@ -61,6 +63,7 @@ namespace XUnitTest.Notification
 
             client.Should().BeSameAs(_hub.SelectedProxy.Object);
             _hub.AddressedConnectionIds.Should().BeEmpty();
+            _logger.All.Should().Contain("nothing delivered live");
         }
 
         [Fact]

@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using DomainService.Shared;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
@@ -46,6 +47,12 @@ namespace DomainService.Notification
             }
 
             var connectionIdStrings = (await _repository.GetItemsAsync<NotificationConnection>(p => notifierPayload.UserIds.Contains(p.UserId))).ToList();
+            if (connectionIdStrings.Count == 0)
+            {
+                // The send still succeeds; without this line a notification that reaches no one is invisible.
+                _logger.LogWarning("UserSpecificReceiver: no open connection for the {UserCount} target user(s) in tenant {TenantId}; nothing delivered live",
+                    notifierPayload.UserIds?.Count ?? 0, BlocksContext.GetContext()?.TenantId);
+            }
 
             return _hubContext.Clients.Clients(connectionIdStrings.Select(p => p.ConnectionId).ToList());
         }

@@ -116,29 +116,31 @@ namespace XUnitTest.Notifications
         }
 
         [Fact]
-        public async Task DataAccess_KeepsHubConnectionsInTheTenantDatabaseWhileImpersonating()
+        public async Task DataAccess_KeepsHubConnectionsInTheRootDatabaseWhileImpersonating()
         {
+            // An impersonating root tenant user lives in root, and the Blocks services send with the root key.
             SetContext(impersonated: true);
             Collection<NotificationConnection>("NotificationConnections");
             var sut = Build();
 
             await sut.GetItemsAsync<NotificationConnection>(c => true);
 
-            _provider.Verify(p => p.GetDatabase("tenant-1"), Times.Once);
-            _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Never);
+            _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Once);
+            _provider.Verify(p => p.GetDatabase(It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
-        public async Task DataAccess_KeepsHubSubscriptionsInTheTenantDatabaseWhileImpersonating()
+        public async Task DataAccess_KeepsHubSubscriptionsInTheRootDatabaseWhileImpersonating()
         {
+            // An impersonating root tenant user lives in root, and the Blocks services send with the root key.
             SetContext(impersonated: true);
             Collection<NotificationSubscription>("NotificationSubscriptions");
             var sut = Build();
 
             await sut.GetItemsAsync<NotificationSubscription>(c => true);
 
-            _provider.Verify(p => p.GetDatabase("tenant-1"), Times.Once);
-            _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Never);
+            _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Once);
+            _provider.Verify(p => p.GetDatabase(It.IsAny<string>()), Times.Never);
         }
 
         [Fact]

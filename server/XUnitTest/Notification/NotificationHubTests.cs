@@ -49,11 +49,13 @@ namespace XUnitTest.Notification
             GC.SuppressFinalize(this);
         }
 
-        private static ClaimsPrincipal Caller(string? userId, string? tenantId = null)
+        private static ClaimsPrincipal Caller(string? userId, string? tenantId = null, string? originalTenantId = null, bool impersonated = false)
         {
             var claims = new List<Claim>();
             if (userId is not null) claims.Add(new Claim("user_id", userId));
             if (tenantId is not null) claims.Add(new Claim("tenant_id", tenantId));
+            if (originalTenantId is not null) claims.Add(new Claim("original_tenant_id", originalTenantId));
+            if (impersonated) claims.Add(new Claim("impersonated", "true"));
             return new ClaimsPrincipal(new ClaimsIdentity(claims));
         }
 
@@ -85,6 +87,39 @@ namespace XUnitTest.Notification
             await _sut.OnConnectedAsync();
 
             _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:tenant-a", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task OnConnectedAsync_AddsAnImpersonatedConnectionToTheProjectAndTheRootGroup()
+        {
+            _callerContext.SetupGet(c => c.User).Returns(Caller("user-1", "project-p", originalTenantId: "root", impersonated: true));
+
+            await _sut.OnConnectedAsync();
+
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:project-p", It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:root", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task OnConnectedAsync_IgnoresTheOriginalTenantWhenNotImpersonated()
+        {
+            _callerContext.SetupGet(c => c.User).Returns(Caller("user-1", "tenant-a", originalTenantId: "root"));
+
+            await _sut.OnConnectedAsync();
+
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:tenant-a", It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:root", It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task OnConnectedAsync_JoinsOneGroupWhenTheOriginalTenantIsTheTokenTenant()
+        {
+            _callerContext.SetupGet(c => c.User).Returns(Caller("user-1", "root", originalTenantId: "root", impersonated: true));
+
+            await _sut.OnConnectedAsync();
+
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:root", It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
