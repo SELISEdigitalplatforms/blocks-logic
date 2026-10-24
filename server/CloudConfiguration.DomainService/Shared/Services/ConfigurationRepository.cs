@@ -72,15 +72,30 @@ namespace CloudConfiguration.DomainService.Shared.Services
             );
         }
 
+        // Get (one) and Gets (list) must read the same DB, or a listed row opens as null:
+        // impersonated → root DB (KV impersonated:false), others → the caller's tenant DB (KV impersonated:true).
+        private (IMongoDatabase? Database, bool KvImpersonated) NotificationReadScope()
+        {
+            if (BlocksContext.GetContext()?.Impersonated == true)
+            {
+                return (_dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, "BlocksRootDb"), false);
+            }
+
+            return (_dbContextProvider.GetDatabase(), true);
+        }
+
         public async Task<NotificationConfiguration> GetNotificationConfigurationByIdAsync(string id)
         {
-            if (!await LegacyNotificationCollectionExistsAsync(_dbContextProvider.GetDatabase(), _notificatonConfigurationCollectionName))
+            var (database, kvImpersonated) = NotificationReadScope();
+            if (!await LegacyNotificationCollectionExistsAsync(database, _notificatonConfigurationCollectionName))
             {
-                var all = await _keyValueStore.GetByPrefixAsync<NotificationConfiguration>(NotificationKeyPrefix, impersonated: true);
+                var all = await _keyValueStore.GetByPrefixAsync<NotificationConfiguration>(NotificationKeyPrefix, impersonated: kvImpersonated);
                 return all.FirstOrDefault(c => c.ItemId == id)!;
             }
 
-            var collection = _dbContextProvider.GetCollection<NotificationConfiguration>(_notificatonConfigurationCollectionName);
+            var collection = database is not null
+                ? database.GetCollection<NotificationConfiguration>(_notificatonConfigurationCollectionName)
+                : _dbContextProvider.GetCollection<NotificationConfiguration>(_notificatonConfigurationCollectionName);
 
             var filter = Builders<NotificationConfiguration>.Filter.Eq(mc => mc.ItemId, id);
             return await(await collection.FindAsync(filter)).FirstOrDefaultAsync();
@@ -88,31 +103,15 @@ namespace CloudConfiguration.DomainService.Shared.Services
 
         public async Task<GetNotificationConfigurationsResponse> GetNotificationConfigurationsAsync(GetNotificationConfigurationsRequest request)
         {
-            var blocksContext = BlocksContext.GetContext();
-            IMongoCollection<NotificationConfiguration> collection;
-            IMongoDatabase? listDatabase;
-
-            if (blocksContext.Impersonated)
-            {
-                var database = _dbContextProvider.GetDatabase(
-                    _blocksSecret.DatabaseConnectionString,
-                    "BlocksRootDb");
-
-                listDatabase = database;
-                collection = database.GetCollection<NotificationConfiguration>(
-                    _notificatonConfigurationCollectionName);
-            }
-            else
-            {
-                listDatabase = _dbContextProvider.GetDatabase();
-                collection = _dbContextProvider.GetCollection<NotificationConfiguration>(
-                    _notificatonConfigurationCollectionName);
-            }
+            var (listDatabase, kvImpersonated) = NotificationReadScope();
+            var collection = listDatabase is not null
+                ? listDatabase.GetCollection<NotificationConfiguration>(_notificatonConfigurationCollectionName)
+                : _dbContextProvider.GetCollection<NotificationConfiguration>(_notificatonConfigurationCollectionName);
 
             if (!await LegacyNotificationCollectionExistsAsync(listDatabase, _notificatonConfigurationCollectionName))
             {
                 // Old collection is gone (moved to KeyValueStores): same sort, page and count, in memory.
-                var all = await _keyValueStore.GetByPrefixAsync<NotificationConfiguration>(NotificationKeyPrefix, impersonated: !blocksContext.Impersonated);
+                var all = await _keyValueStore.GetByPrefixAsync<NotificationConfiguration>(NotificationKeyPrefix, impersonated: kvImpersonated);
                 return new GetNotificationConfigurationsResponse
                 {
                     // PageSize <= 0 means "all rows", as Mongo Limit = 0 does today.

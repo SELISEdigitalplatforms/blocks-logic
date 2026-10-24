@@ -1,4 +1,4 @@
-using DomainService.Configuration.Validators;
+﻿using DomainService.Configuration.Validators;
 using DomainService.Entities;
 using DomainService.Notification;
 using DomainService.Shared;
@@ -114,6 +114,34 @@ namespace XUnitTest.Notification
             missing.IsValid.Should().BeFalse();
             missing.Errors.Should().Contain(e => e.PropertyName == "SubscriptionFilters");
             supplied.IsValid.Should().BeTrue();
+        }
+
+        [Fact]
+        public void NotifyRequestValidator_KeepsNoConfigurationInAStaticField()
+        {
+            // A static field is shared by every Notify call; two calls at once would check each other's rules.
+            var staticConfigFields = typeof(NotifyRequestValidator)
+                .GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)
+                .Where(f => f.FieldType == typeof(NotificationConfiguration));
+
+            staticConfigFields.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task NotifyRequestValidator_UsesEachRequestsOwnConfiguration()
+        {
+            _configurationRepository.Setup(r => r.GetByNameAsync("personal"))
+                .ReturnsAsync(new NotificationConfiguration { Name = "personal", NotificationType = NotificationReceiverTypes.UserSpecificReceiverType });
+            _configurationRepository.Setup(r => r.GetByNameAsync("everyone"))
+                .ReturnsAsync(new NotificationConfiguration { Name = "everyone", NotificationType = NotificationReceiverTypes.BroadcastReceiverType });
+            var validator = new NotifyRequestValidator(_configurationRepository.Object);
+
+            var results = await Task.WhenAll(
+                validator.ValidateAsync(new NotifyRequest { ConfigurationName = "personal" }),
+                validator.ValidateAsync(new NotifyRequest { ConfigurationName = "everyone" }));
+
+            results[0].IsValid.Should().BeFalse();
+            results[1].IsValid.Should().BeTrue();
         }
 
         [Fact]
