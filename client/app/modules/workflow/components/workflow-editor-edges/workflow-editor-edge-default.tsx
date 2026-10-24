@@ -4,6 +4,9 @@ import { useWorkflowStore } from "../../store";
 import { handleDisplayLabel } from "../../utils/handle-labels";
 import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
 
+/** Space between a source handle and its output's name on the edge, matching the input side's `mr-1.5`. */
+const SOURCE_LABEL_GAP = 6;
+
 export const WorkflowEditorEdgeDefault = ({
   id,
   source,
@@ -80,25 +83,32 @@ export const WorkflowEditorEdgeDefault = ({
 
       {(label || itemCountLabel) && (
         <EdgeLabelRenderer>
-          <div
-            style={{
-              position: "absolute",
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              pointerEvents: "all",
-            }}
-            className="flex flex-col items-center gap-1"
-          >
-            {label && (
-              <div className="rounded-md border border-medium-emphasis bg-background px-1.5 py-0.5 text-[10px] tracking-wider text-medium-emphasis shadow-sm dark:border-accent dark:text-primary">
-                {label}
-              </div>
-            )}
-            {itemCountLabel && (
-              <div className="rounded-full bg-secondary px-2 py-0.5 text-[9px] font-semibold text-secondary-foreground shadow-sm">
-                {itemCountLabel}
-              </div>
-            )}
-          </div>
+          {/* The output's name sits right after its handle, as a Merge input's name sits right before its own,
+              so each end of the edge reads at the node it belongs to. */}
+          {label && (
+            <div
+              style={{
+                position: "absolute",
+                transform: `translate(${sourceX + SOURCE_LABEL_GAP}px, ${sourceY}px) translateY(-50%)`,
+                pointerEvents: "none",
+              }}
+              className="whitespace-nowrap rounded-md border border-medium-emphasis bg-background px-1.5 py-0.5 text-[10px] tracking-wider text-medium-emphasis shadow-sm dark:border-accent dark:text-primary"
+            >
+              {label}
+            </div>
+          )}
+          {itemCountLabel && (
+            <div
+              style={{
+                position: "absolute",
+                transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+                pointerEvents: "all",
+              }}
+              className="rounded-full bg-secondary px-2 py-0.5 text-[9px] font-semibold text-secondary-foreground shadow-sm"
+            >
+              {itemCountLabel}
+            </div>
+          )}
         </EdgeLabelRenderer>
       )}
     </>
