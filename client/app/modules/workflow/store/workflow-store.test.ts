@@ -121,6 +121,21 @@ describe("copy and paste", () => {
     expect(Object.keys(state().edgesMap).length).toBeGreaterThanOrEqual(2);
   });
 
+  it("keeps both edges when two handles join the same pair of nodes", () => {
+    state().addNode(node("a", { selected: true }));
+    state().addNode(node("b", { selected: true }));
+    state().onConnect({ source: "a", sourceHandle: "true", target: "b", targetHandle: "input-1" });
+    state().onConnect({ source: "a", sourceHandle: "false", target: "b", targetHandle: "input-2" });
+    state().copySelectedNodes();
+    state().pasteNodes();
+    const pastedIds = new Set(Object.values(state().nodesMap).filter((n) => n.selected).map((n) => n.id));
+    const pastedEdges = Object.values(state().edgesMap).filter((e) => pastedIds.has(e.source));
+    expect(pastedEdges.map((e) => [e.sourceHandle, e.targetHandle]).sort()).toEqual([
+      ["false", "input-2"],
+      ["true", "input-1"],
+    ]);
+  });
+
   it("pastes with the default offset when no position is given", () => {
     state().addNode(node("a", { selected: true, position: { x: 1, y: 1 } }));
     state().copySelectedNodes();
