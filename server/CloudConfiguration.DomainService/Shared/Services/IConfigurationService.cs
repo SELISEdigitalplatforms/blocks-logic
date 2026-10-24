@@ -2,8 +2,6 @@
 using Microsoft.AspNetCore.Mvc;
 using CloudConfiguration.DomainService.Notification.RequestModel;
 using CloudConfiguration.DomainService.Notification.ResponseModel;
-using CloudConfiguration.DomainService.Storage.Entities;
-using CloudConfiguration.DomainService.Storage.RequestModel;
 using CloudConfiguration.DomainService.Mail.RequestModel;
 using Blocks.Genesis.Entities.Data;
 using Blocks.Genesis.Entities.Os;
@@ -18,15 +16,6 @@ namespace CloudConfiguration.DomainService.Shared.Services
         Task<GetNotificationConfigurationsResponse> GetNotificationConfigurationsAsync(GetNotificationConfigurationsRequest request);
         Task<NotificationConfiguration> GetNotificatoinConfigurationAsync(GetNotificationConfigurationRequest request);
         Task<BaseResponse> DeleteNotificationConfigurationAsync(DeleteNotificatoinConfigurationRequest request);
-
-        #endregion
-
-        #region Storage
-
-        Task<BaseMutationResponse> SaveStorageConfigurationAsync(SaveStorageConfigurationRequest request);
-        Task<List<StorageConfiguration>> GetStorageConfigurationsAsync();
-        Task<StorageConfiguration> GetStorageConfigurationAsync(string configurationName);
-        Task<BaseResponse> DeleteStorageConfigurationAsync(string configurationName);
 
         #endregion
 

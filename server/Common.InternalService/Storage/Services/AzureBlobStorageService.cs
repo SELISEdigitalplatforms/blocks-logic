@@ -3,7 +3,6 @@ using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
 using Blocks.Genesis;
 using Blocks.Genesis.Entities.Data;
-using CloudConfiguration.DomainService.Shared.Services;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Common.InternalService.Storage
@@ -13,7 +12,7 @@ namespace Common.InternalService.Storage
     {
         private readonly BlobContainerClient _containerClient;
 
-        public AzureBlobStorageService(IConfigurationRepository configurationRepository, StorageConfiguration storageConfiguration)
+        public AzureBlobStorageService(StorageConfiguration storageConfiguration)
         {
             var blobServiceClient = new BlobServiceClient(storageConfiguration.ConnectionString);
             _containerClient = blobServiceClient.GetBlobContainerClient(BlocksContext.GetContext()?.TenantId.ToLower());

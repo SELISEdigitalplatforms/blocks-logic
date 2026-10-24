@@ -5,8 +5,6 @@ using Microsoft.IdentityModel.Protocols;
 using CloudConfiguration.DomainService.Shared.Services;
 using CloudConfiguration.DomainService.Notification.RequestModel;
 using CloudConfiguration.DomainService.Notification.Validators;
-using CloudConfiguration.DomainService.Storage.RequestModel;
-using CloudConfiguration.DomainService.Storage.Validators;
 using CloudConfiguration.DomainService.Mail.RequestModel;
 using CloudConfiguration.DomainService.Mail.Validators;
 
@@ -20,7 +18,6 @@ namespace CloudConfiguration.DomainService.Shared.Utilities
             serviceCollection.AddSingleton<IConfigurationRepository, ConfigurationRepository>();
 
             serviceCollection.AddSingleton<IValidator<SaveNotificatonConfigurationRequest>, NotificationConfigurationValidator>();
-            serviceCollection.AddSingleton<IValidator<SaveStorageConfigurationRequest>, StorageConfigurationValidator>();
             serviceCollection.AddSingleton<IValidator<MailConfiguration>, MailConfigurationValidator>();
         }
     }

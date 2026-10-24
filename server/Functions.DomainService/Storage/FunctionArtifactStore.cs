@@ -1,6 +1,6 @@
 using Blocks.Genesis;
-using CloudConfiguration.DomainService.Shared.Services;
 using Common.InternalService.Storage;
+using DomainService.Configuration;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -187,7 +187,7 @@ namespace Functions.DomainService.Storage
 
             try
             {
-                var configurations = _services.GetService<IConfigurationRepository>();
+                var configurations = _services.GetService<IStorageConfigurationProvider>();
                 var storageFactory = _services.GetService<IStorageServiceFactory>();
                 if (configurations is null || storageFactory is null)
                 {
@@ -196,7 +196,7 @@ namespace Functions.DomainService.Storage
                 }
 
                 var configuration = await configurations
-                    .GetStorageConfigurationByNameAsync(StorageConfigurationName)
+                    .GetByNameAsync(StorageConfigurationName, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (configuration is null)

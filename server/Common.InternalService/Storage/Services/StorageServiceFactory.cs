@@ -1,4 +1,3 @@
-using CloudConfiguration.DomainService.Storage.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Blocks.Genesis.Entities.Data;
 

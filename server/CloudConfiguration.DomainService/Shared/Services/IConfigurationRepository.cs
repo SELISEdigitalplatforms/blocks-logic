@@ -1,7 +1,6 @@
 ﻿using Blocks.Genesis;
 using CloudConfiguration.DomainService.Notification.RequestModel;
 using CloudConfiguration.DomainService.Notification.ResponseModel;
-using CloudConfiguration.DomainService.Storage.Entities;
 using CloudConfiguration.DomainService.Mail.RequestModel;
 using System.Linq.Expressions;
 using Blocks.Genesis.Entities.Data;
@@ -18,17 +17,6 @@ namespace CloudConfiguration.DomainService.Shared.Services
         Task<GetNotificationConfigurationsResponse> GetNotificationConfigurationsAsync(GetNotificationConfigurationsRequest request);
         Task<BaseResponse> DeleteNotificationConfigurationAsync(DeleteNotificatoinConfigurationRequest request);
         Task<NotificationConfiguration> GetNotificationConfigurationByNameAsync(string name);
-
-        #endregion
-
-        #region Storage
-
-        public Task SaveStorageConfigurationAsync(StorageConfiguration configuration);
-        Task<StorageConfiguration> GetStorageConfigurationByNameAsync(string configurationName);
-        Task<List<StorageConfiguration>> GetAllStorageConfigurationsByDateAsync();
-        Task DeleteStorageConfigurationByNameAsync(string configurationName);
-        Task<StorageConfiguration> GetStorageConfigurationByIdAsync(string itemId);
-        Task<StorageConfiguration?> GetStorageConfigurationStrategyAsync(string storageStrategy);
 
         #endregion
 

@@ -2,7 +2,7 @@ using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Blocks.Genesis;
-using CloudConfiguration.DomainService.Shared.Services;
+using DomainService.Configuration;
 using Microsoft.AspNetCore.Http;
 
 namespace Common.InternalService.Storage
@@ -21,7 +21,7 @@ namespace Common.InternalService.Storage
     /// </remarks>
     public class CertificateStorageService : ICertificateStorageService
     {
-        private readonly IConfigurationRepository _configurationRepository;
+        private readonly IStorageConfigurationProvider _storageConfigurations;
 
         private const string DefaultConfigurationName = "Default";
         private const string CertificateContainerName = "certificates";
@@ -34,9 +34,9 @@ namespace Common.InternalService.Storage
         // sends that to UpdateTokenValidationParameters rather than to this endpoint.
         private static readonly string[] AllowedExtensions = [".crt", ".der", ".pfx", ".p12"];
 
-        public CertificateStorageService(IConfigurationRepository configurationRepository)
+        public CertificateStorageService(IStorageConfigurationProvider storageConfigurations)
         {
-            _configurationRepository = configurationRepository;
+            _storageConfigurations = storageConfigurations;
         }
 
         public async Task<UploadCertificateResponse> UploadPublicCertificateAsync(UploadCertificateRequest request)
@@ -58,7 +58,7 @@ namespace Common.InternalService.Storage
                 return rejection;
             }
 
-            var configuration = await _configurationRepository.GetStorageConfigurationByNameAsync(DefaultConfigurationName);
+            var configuration = await _storageConfigurations.GetByNameAsync(DefaultConfigurationName);
 
             if (string.IsNullOrWhiteSpace(configuration?.ConnectionString))
             {

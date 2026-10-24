@@ -539,28 +539,13 @@
         </member>
         <member name="T:BlocksTemplate.Api.Controllers.StorageController">
             <summary>
-            Storage-provider configuration plus the pre-signed URL flow for uploads and downloads, routed as
-            <c>/api/Storage/{action}</c>. File bytes never pass through this API — callers get a URL and talk
-            to the provider directly.
+            The pre-signed URL flow for uploads and downloads, routed as <c>/api/Storage/{action}</c>. File bytes
+            never pass through this API — callers get a URL and talk to the provider directly. Storage-provider
+            configuration lives in blocks-os (<c>/Storage/Save|Gets|Get|Delete</c>); logic only reads it.
             </summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.#ctor(CloudConfiguration.DomainService.Shared.Services.IConfigurationService,StorageDriver.IStorageDriverService)">
-            <summary>Takes the configuration service and the storage driver.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Save(CloudConfiguration.DomainService.Storage.RequestModel.SaveStorageConfigurationRequest)">
-            <summary><c>POST</c> — creates or updates a storage-provider configuration.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Gets(CloudConfiguration.DomainService.Storage.RequestModel.GetStorageConfigurationsRequest)">
-            <summary>
-            <c>GET</c> — every storage configuration for the tenant. The request object is accepted for
-            signature symmetry and is deliberately unused.
-            </summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Get(CloudConfiguration.DomainService.Storage.RequestModel.GetStorageConfigurationRequest)">
-            <summary><c>GET</c> — one storage configuration.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Delete(CloudConfiguration.DomainService.Storage.RequestModel.DeleteStorageConfigurationRequest)">
-            <summary><c>DELETE</c> — removes a storage configuration.</summary>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.#ctor(StorageDriver.IStorageDriverService)">
+            <summary>Takes the storage driver.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetPreSignedUrlForUpload(DomainService.Storage.GetPreSignedUrlForUploadRequest)">
             <summary><c>POST</c> — a pre-signed URL the client uploads to directly.</summary>
