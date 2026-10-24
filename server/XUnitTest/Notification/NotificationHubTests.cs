@@ -98,6 +98,7 @@ namespace XUnitTest.Notification
 
             _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:project-p", It.IsAny<CancellationToken>()), Times.Once);
             _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:root", It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:project-p:user:user-1", It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
@@ -108,7 +109,7 @@ namespace XUnitTest.Notification
             await _sut.OnConnectedAsync();
 
             _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:tenant-a", It.IsAny<CancellationToken>()), Times.Once);
-            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:root", It.IsAny<CancellationToken>()), Times.Never);
+            _groups.Verify(g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
@@ -119,7 +120,8 @@ namespace XUnitTest.Notification
             await _sut.OnConnectedAsync();
 
             _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:root", It.IsAny<CancellationToken>()), Times.Once);
-            _groups.Verify(g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:root:user:user-1", It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
         }
 
         [Fact]
