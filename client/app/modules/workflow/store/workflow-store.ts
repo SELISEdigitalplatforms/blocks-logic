@@ -416,11 +416,13 @@ export const createWorkflowStore = () => createStore<WorkflowState>((set, get) =
     });
 
     if (copiedEdges && copiedEdges.length > 0) {
-      copiedEdges.forEach((edge) => {
+      copiedEdges.forEach((edge, i) => {
         const newSource = oldToNewId[edge.source];
         const newTarget = oldToNewId[edge.target];
         if (newSource && newTarget) {
-          const newEdgeId = `xy-edge__${newSource}-${newTarget}`;
+          // Two edges between the same nodes (If true and false into one Merge) must not share an id, as on import.
+          let newEdgeId = `xy-edge__${newSource}-${newTarget}`;
+          if (newEdgesMap[newEdgeId]) newEdgeId = `${newEdgeId}-${i}`;
           newEdgesMap[newEdgeId] = {
             ...edge,
             id: newEdgeId,

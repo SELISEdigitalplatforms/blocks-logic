@@ -10,6 +10,7 @@ using Workflow.DomainService.Nodes;
 using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 using Workflow.DomainService.Services;
 using Blocks.Genesis.Entities.Logic;
+using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Workflow
 {
@@ -121,7 +122,8 @@ namespace XUnitTest.Workflow
                 new TestHttpClientFactory(handler),
                 Mock.Of<IWorkflowAuthService>(),
                 Mock.Of<IClientCredentialTokenService>(),
-                NullLogger<ActionHttpRequestV1Node>.Instance);
+                NullLogger<ActionHttpRequestV1Node>.Instance,
+                TestOutboundGuard.ResolvingTo());
 
             var result = await node.RunAsync(context);
 
@@ -201,7 +203,8 @@ namespace XUnitTest.Workflow
                 new TestHttpClientFactory(handler),
                 Mock.Of<IWorkflowAuthService>(),
                 Mock.Of<IClientCredentialTokenService>(),
-                NullLogger<ActionHttpRequestV1Node>.Instance);
+                NullLogger<ActionHttpRequestV1Node>.Instance,
+                TestOutboundGuard.ResolvingTo());
             return (await node.RunAsync(context), sent);
         }
 
@@ -297,7 +300,8 @@ namespace XUnitTest.Workflow
                 new TestHttpClientFactory(new CaptureHandler(responseBody)),
                 Mock.Of<IWorkflowAuthService>(),
                 Mock.Of<IClientCredentialTokenService>(),
-                NullLogger<ActionHttpRequestV1Node>.Instance);
+                NullLogger<ActionHttpRequestV1Node>.Instance,
+                TestOutboundGuard.ResolvingTo());
 
             return await node.RunAsync(context);
         }

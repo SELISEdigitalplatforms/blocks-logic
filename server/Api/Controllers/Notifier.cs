@@ -1,4 +1,5 @@
 ﻿using Blocks.Genesis;
+using BlocksTemplate.Api.Security;
 using DomainService.Notification;
 using DomainService.Shared;
 using Microsoft.AspNetCore.Authorization;
@@ -9,9 +10,10 @@ namespace Api.Controllers
 {
     /// <summary>
     /// Delivery and read-state for user notifications, routed as <c>/api/Notifier/{action}</c>.
-    /// The two send actions take no bearer token because internal services call them; they check the
-    /// <c>Secret</c> sender header instead (<see cref="INotifierSendGuard"/>). Everything that reads or
-    /// mutates a user's own notifications requires a bearer token.
+    /// The two send actions stay open without a bearer token because internal services call them with the
+    /// <c>Secret</c> sender header; a caller without it needs a valid token with
+    /// <c>blocks-logic::notifier::send</c> (<see cref="INotifierSendGuard"/>, <see cref="INotifierSendPermission"/>).
+    /// Everything that reads or mutates a user's own notifications requires a bearer token.
     /// </summary>
     [ApiController]
     [Route("[controller]/[action]")]
@@ -22,19 +24,25 @@ namespace Api.Controllers
 
         private readonly INotificationService _notificationService;
         private readonly INotifierSendGuard _sendGuard;
+        private readonly INotifierSendPermission _sendPermission;
         private readonly ILogger<NotifierController> _logger;
 
-        /// <summary>Takes the notification service, the send guard and a logger.</summary>
+        /// <summary>Takes the notification service, the send guard, the send permission check and a logger.</summary>
         public NotifierController(INotificationService notificationService, INotifierSendGuard sendGuard,
-            ILogger<NotifierController> logger)
+            INotifierSendPermission sendPermission, ILogger<NotifierController> logger)
         {
             _notificationService = notificationService;
             _sendGuard = sendGuard;
+            _sendPermission = sendPermission;
             _logger = logger;
         }
 
-        private bool SenderAllowed(string action) =>
-            _sendGuard.IsAllowed(Request.Headers[SecretHeader].ToString(), action);
+        private Task<bool> SenderAllowedAsync(string? secret, string action) =>
+            _sendGuard.IsAllowedAsync(secret, () => _sendPermission.CheckAsync(HttpContext), action);
+
+        // The Genesis permission handler can answer 429 itself (resource quota); then nothing more is written.
+        private ActionResult Refused() =>
+            Response.HasStarted ? new EmptyResult() : Unauthorized();
 
         // Shape only, never the payload: ResponseValue / DenormalizedPayload can carry a secret
         // (SendSecretNotification is the secrets pipeline). User rule 2026-10-08.
@@ -50,10 +58,12 @@ namespace Api.Controllers
 
         /// <summary><c>POST</c> — delivers a notification through the configured channels.</summary>
         [HttpPost]
-        public async Task<ActionResult<BaseResponse>> Notify([FromBody] NotifyRequest notifyRequest)
+        [NotifierOptionalToken]
+        public async Task<ActionResult<BaseResponse>> Notify([FromBody] NotifyRequest notifyRequest,
+            [FromHeader(Name = SecretHeader)] string? secret = null)
         {
-            if (!SenderAllowed(nameof(Notify)))
-                return Unauthorized();
+            if (!await SenderAllowedAsync(secret, nameof(Notify)))
+                return Refused();
 
             LogReceived(notifyRequest);
             var response= await _notificationService.NotifyAsync(notifyRequest);
@@ -67,10 +77,12 @@ namespace Api.Controllers
         /// </summary>
         [ApiExplorerSettings(IgnoreApi = true)]
         [HttpPost]
-        public async Task<ActionResult<BaseResponse>> SendSecretNotification([FromBody] NotifyRequest notifyRequest)
+        [NotifierOptionalToken]
+        public async Task<ActionResult<BaseResponse>> SendSecretNotification([FromBody] NotifyRequest notifyRequest,
+            [FromHeader(Name = SecretHeader)] string? secret = null)
         {
-            if (!SenderAllowed(nameof(SendSecretNotification)))
-                return Unauthorized();
+            if (!await SenderAllowedAsync(secret, nameof(SendSecretNotification)))
+                return Refused();
 
             LogReceived(notifyRequest);
 

@@ -10,6 +10,7 @@ using Workflow.DomainService.Nodes.ActionDataV1;
 using Workflow.DomainService.Nodes.ActionProxy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Blocks.Extension.DependencyInjection;
 using Common.InternalService.Access;
 using Workflow.DomainService.Nodes.TriggerEmailV1;
@@ -96,6 +97,16 @@ namespace Workflow.DomainService
             services.RegisterAllNotificationApplicationServices();
 
             services.AddHttpClient();
+
+            // HTTP Request step: own outbound guard and a guarded named client (connect-time address
+            // check, at most 5 redirects, 10 MB response cap in the node).
+            services.AddOptions<WorkflowHttpNodeOptions>().BindConfiguration(WorkflowHttpNodeOptions.SectionName);
+            services.AddSingleton<IWorkflowOutboundGuard>(sp =>
+                new WorkflowOutboundGuard(sp.GetRequiredService<IOptions<WorkflowHttpNodeOptions>>()));
+            services.AddHttpClient(WorkflowOutboundGuard.HttpClientName, client =>
+                    client.MaxResponseContentBufferSize = WorkflowOutboundGuard.MaxResponseBytes)
+                .ConfigurePrimaryHttpMessageHandler(sp =>
+                    WorkflowOutboundGuard.CreatePrimaryHandler(sp.GetRequiredService<IWorkflowOutboundGuard>()));
             return services;
         }
     }
