@@ -6,9 +6,11 @@ using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Workflow.DomainService.Entities;
 using Blocks.Genesis.Entities.Logic;
+using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 
 namespace Workflow.DomainService.Nodes.ActionDataV1
 {
@@ -30,14 +32,17 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         private readonly IWorkflowAuthService _workflowAuthService;
         private readonly IConfiguration _configuration;
         private readonly ILogger<ActionDataV1Node> _logger;
+        private readonly IWorkflowOutboundGuard _outboundGuard;
 
         public ActionDataV1Node(
             IHttpClientFactory httpClientFactory,
             IClientCredentialTokenService clientCredentialTokenService,
             IWorkflowAuthService workflowAuthService,
             IConfiguration configuration,
-            ILogger<ActionDataV1Node> logger)
+            ILogger<ActionDataV1Node> logger,
+            IWorkflowOutboundGuard outboundGuard)
         {
+            _outboundGuard = outboundGuard;
             _httpClientFactory = httpClientFactory;
             _clientCredentialTokenService = clientCredentialTokenService;
             _workflowAuthService = workflowAuthService;
@@ -121,9 +126,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     ? $"{{ get{parameters.SchemaName}s {{ items {{ {fieldsList} }} totalCount }} }}"
                     : $"{{ get{parameters.SchemaName}s(where: {{ {whereClause} }}) {{ items {{ {fieldsList} }} totalCount }} }}";
 
-                var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: true);
-                response.EnsureSuccessStatusCode();
-                var responseString = await response.Content.ReadAsStringAsync();
+                var responseString = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: true);
                 var responseJson = JsonDocument.Parse(responseString).RootElement;
 
                 // Extract items from response
@@ -193,9 +196,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var inputFields = BuildGraphQLInputFields(data);
                     var graphqlQuery = $"mutation {{ insert{parameters.SchemaName}(input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
-                    response.EnsureSuccessStatusCode();
-                    var responseString = await response.Content.ReadAsStringAsync();
+                    var responseString = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
                     var responseJson = ParseMutationResponse(responseString, $"insert{parameters.SchemaName}");
 
                     outputItems.Add(new NodeOutputItem
@@ -241,9 +242,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var inputFields = BuildGraphQLInputFields(data);
                     var graphqlQuery = $"mutation {{ update{parameters.SchemaName}(where: {{ {whereClause} }}, input: {{ {inputFields} }}) {{ acknowledged totalImpactedData itemId }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
-                    response.EnsureSuccessStatusCode();
-                    var responseString = await response.Content.ReadAsStringAsync();
+                    var responseString = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
                     var responseJson = ParseMutationResponse(responseString, $"update{parameters.SchemaName}");
 
                     outputItems.Add(new NodeOutputItem
@@ -288,9 +287,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                     var whereClause = BuildWhereClause(parameters, context.InputItems[i], context);
                     var graphqlQuery = $"mutation {{ delete{parameters.SchemaName}(where: {{ {whereClause} }}) {{ acknowledged totalImpactedData itemId message }} }}";
 
-                    var response = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
-                    response.EnsureSuccessStatusCode();
-                    var responseString = await response.Content.ReadAsStringAsync();
+                    var responseString = await SendGraphQLRequestAsync(parameters, graphqlQuery, context.TenantId, context.Log, logToken: i == 0);
                     var responseJson = ParseMutationResponse(responseString, $"delete{parameters.SchemaName}");
 
                     outputItems.Add(new NodeOutputItem
@@ -339,9 +336,7 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                         ? parameters.RawQuery
                         : ResolveGraphQlTemplate(parameters.RawQuery, context.InputItems[i], context);
 
-                    var response = await SendGraphQLRequestAsync(parameters, resolvedQuery, context.TenantId, context.Log, logToken: i == 0);
-                    response.EnsureSuccessStatusCode();
-                    var responseString = await response.Content.ReadAsStringAsync();
+                    var responseString = await SendGraphQLRequestAsync(parameters, resolvedQuery, context.TenantId, context.Log, logToken: i == 0);
                     var responseJson = JsonDocument.Parse(responseString).RootElement;
 
                     if (responseJson.TryGetProperty("errors", out var errors) &&
@@ -385,36 +380,19 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         /// </summary>
         /// <param name="logToken">Write the token stage line; true for the first request of a run only, so the
         /// line appears once rather than once per item.</param>
-        private async Task<HttpResponseMessage> SendGraphQLRequestAsync(
+        private async Task<string> SendGraphQLRequestAsync(
             ActionDataV1Parameters parameters, string graphqlQuery, string tenantId,
             NodeExecutionLog? log = null, bool logToken = false)
         {
-            var httpClient = _httpClientFactory.CreateClient();
-            var requestUrl = $"{parameters.ApiBaseUrl}/api/gateway";
-            var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
-            // Authenticate based on selected authentication type
-            if (string.Equals(parameters.AuthenticationType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
-            {
-                // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
-                // unauthenticated send: no token fails this item (WS-1).
-                var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
-                if (logToken) LogToken(log, token);
-                if (string.IsNullOrWhiteSpace(token))
-                    throw NoDelegatedTokenException.ForCurrentRun();
+            // Checked before any token is made: the URL (http/https, private addresses refused for an
+            // untrusted host), then where a Blocks token may go. The base URL is a saved node parameter.
+            var target = BuildGatewayUri(parameters.ApiBaseUrl);
+            await _outboundGuard.EnsureAllowedAsync(target);
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, target);
+            var token = await GetTokenAsync(parameters, tenantId, target, log, logToken);
+            if (token is not null)
                 request.Headers.Add("Authorization", $"Bearer {token}");
-            }
-            else if (parameters.AuthenticationType == "clientCredential"
-                && !string.IsNullOrWhiteSpace(parameters.ClientId) && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
-            {
-                var clientCredentialEntity = new ClientCredential
-                {
-                    ItemId = parameters.ClientId,
-                    ClientSecret = parameters.ClientSecret
-                };
-                var token = await _clientCredentialTokenService.GetTokenAsync(clientCredentialEntity, tenantId);
-                request.Headers.Add("Authorization", $"Bearer {token}");
-                if (logToken) LogToken(log, token);
-            }
 
             request.Headers.Add("x-blocks-key", tenantId);
             request.Content = new StringContent(
@@ -422,7 +400,77 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 System.Text.Encoding.UTF8,
                 "application/json");
 
-            return await httpClient.SendAsync(request);
+            // Guarded client: connect-time address check on every hop, at most 5 redirects.
+            var httpClient = _httpClientFactory.CreateClient(WorkflowOutboundGuard.HttpClientName);
+            try
+            {
+                using var timeout = new CancellationTokenSource(httpClient.Timeout);
+                using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                response.EnsureSuccessStatusCode();
+                return await WorkflowHttpResponseReader.ReadAsStringCappedAsync(
+                    response.Content, WorkflowOutboundGuard.MaxResponseBytes, timeout.Token);
+            }
+            catch (HttpRequestException ex) when (ex.InnerException is WorkflowOutboundBlockedException blocked)
+            {
+                // Refused at connect time (a redirect hop or a DNS answer that changed): report it as itself.
+                ExceptionDispatchInfo.Throw(blocked);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// The bearer token for the selected authentication, or null for none. A Blocks token goes only
+        /// to a trusted Blocks host: any other host throws <see cref="BlocksTokenHostNotTrustedException"/>
+        /// before a token is made.
+        /// </summary>
+        private async Task<string?> GetTokenAsync(
+            ActionDataV1Parameters parameters, string tenantId, Uri target, NodeExecutionLog? log, bool logToken)
+        {
+            if (string.Equals(parameters.AuthenticationType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
+            {
+                EnsureTokenHostTrusted(target);
+                // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
+                // unauthenticated send: no token fails this item (WS-1).
+                var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
+                if (logToken) LogToken(log, token);
+                if (string.IsNullOrWhiteSpace(token))
+                    throw NoDelegatedTokenException.ForCurrentRun();
+                return token;
+            }
+
+            if (parameters.AuthenticationType == "clientCredential"
+                && !string.IsNullOrWhiteSpace(parameters.ClientId) && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
+            {
+                EnsureTokenHostTrusted(target);
+                var clientCredentialEntity = new ClientCredential
+                {
+                    ItemId = parameters.ClientId,
+                    ClientSecret = parameters.ClientSecret
+                };
+                var token = await _clientCredentialTokenService.GetTokenAsync(clientCredentialEntity, tenantId);
+                if (logToken) LogToken(log, token);
+                return token;
+            }
+
+            return null;
+        }
+
+        private void EnsureTokenHostTrusted(Uri target)
+        {
+            if (!_outboundGuard.IsTrustedHost(target))
+                throw new BlocksTokenHostNotTrustedException();
+        }
+
+        /// <summary><c>{ApiBaseUrl}/api/gateway</c>; a base that is not an absolute http/https URL is refused.</summary>
+        private static Uri BuildGatewayUri(string? apiBaseUrl)
+        {
+            if (!Uri.TryCreate($"{apiBaseUrl}/api/gateway", UriKind.Absolute, out var target)
+                || (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new WorkflowOutboundBlockedException();
+            }
+
+            return target;
         }
 
         /// <summary>Whether a token was obtained, never the token itself.</summary>
