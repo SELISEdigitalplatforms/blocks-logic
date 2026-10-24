@@ -1,11 +1,9 @@
 ﻿using Blocks.Genesis;
-using DataAccess.InternalService;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Linq.Expressions;
 using CloudConfiguration.DomainService.Notification.ResponseModel;
 using CloudConfiguration.DomainService.Notification.RequestModel;
-using CloudConfiguration.DomainService.Storage.Entities;
 using CloudConfiguration.DomainService.Mail.RequestModel;
 using Blocks.Genesis.Entities.Data;
 using Blocks.Genesis.Entities.Os;
@@ -19,26 +17,17 @@ namespace CloudConfiguration.DomainService.Shared.Services
         private const string _captchaConfigurationCollectionName = "CaptchaConfigurations";
         private const string _iamConfigurationCollectionName = "IamConfigurations";
         private const string _notificatonConfigurationCollectionName = "NotificationConfigurations";
-        private const string _storageCollectionName = "StorageConfigurations";
         private const string _mailConfigurationCollectionName = "MailServerConfigurations";
         private const string NotificationKeyPrefix = "notification-config:";
         private readonly IBlocksSecret _blocksSecret;
         private readonly IKeyValueStore _keyValueStore;
 
-        private readonly ILogicDataAccess _dataAccess;
-
-        public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, IKeyValueStore keyValueStore, ILogicDataAccess dataAccess)
+        public ConfigurationRepository(IDbContextProvider dbContextProvider, IBlocksSecret blocksSecret, IKeyValueStore keyValueStore)
         {
             _dbContextProvider = dbContextProvider;
             _blocksSecret = blocksSecret;
             _keyValueStore = keyValueStore;
-            _dataAccess = dataAccess;
         }
-
-        // StorageConfiguration is data-owned; logic wraps it here because every site opens the caller's own tenant DB
-        // (ambient GetCollection, no tenantId), so the resolver loads the right policies.
-        private Task<ReadScope<StorageConfiguration>> ReadStorageAsync(FilterDefinition<StorageConfiguration> filter, string callSite) =>
-            _dataAccess.ReadAsync(LogicSchemas.StorageConfiguration, filter, $"CloudConfiguration.ConfigurationRepository.{callSite}", useProjection: false);
 
         // Live check: does the DB this method uses today still have the old collection? One extra
         // round trip, admin paths only. A null database (no context) keeps today's path.
@@ -158,76 +147,6 @@ namespace CloudConfiguration.DomainService.Shared.Services
             await collection.DeleteOneAsync(filter);
 
             return new BaseResponse { IsSuccess = true };
-        }
-
-        #endregion
-
-        #region Storage
-
-        public async Task SaveStorageConfigurationAsync(StorageConfiguration configuration)
-        {
-            var collection = _dbContextProvider.GetCollection<StorageConfiguration>(_storageCollectionName);
-
-            var filter = await _dataAccess.EditFilterAsync(LogicSchemas.StorageConfiguration,
-                Builders<StorageConfiguration>.Filter.Eq(mc => mc.ItemId, configuration.ItemId),
-                "CloudConfiguration.ConfigurationRepository.SaveStorageConfiguration");
-            // Denied EDIT: no write. Upsert insert half is not gated separately (flagged in the report).
-            if (filter is null) return;
-
-            await collection.ReplaceOneAsync(
-                filter,
-                configuration,
-                new ReplaceOptions { IsUpsert = true }
-            );
-        }
-
-        public async Task<StorageConfiguration> GetStorageConfigurationByNameAsync(string configurationName)
-        {
-            var collection = _dbContextProvider.GetCollection<StorageConfiguration>(_storageCollectionName);
-
-            var scope = await ReadStorageAsync(Builders<StorageConfiguration>.Filter.Eq(mc => mc.Name, configurationName), "GetStorageConfigurationByName");
-            return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null!;
-        }
-
-        public async Task<List<StorageConfiguration>> GetAllStorageConfigurationsByDateAsync()
-        {
-            var collection = _dbContextProvider.GetCollection<StorageConfiguration>(_storageCollectionName);
-            var scope = await ReadStorageAsync(Builders<StorageConfiguration>.Filter.Where(_ => true), "GetAllStorageConfigurationsByDate");
-            if (!scope.Granted) return [];
-
-            using var cursor = await collection.FindAsync(scope.Filter, new FindOptions<StorageConfiguration>
-            {
-                Sort = Builders<StorageConfiguration>.Sort.Ascending(doc => doc.LastUpdatedDate)
-            });
-
-            return await cursor.ToListAsync();
-        }
-
-        public async Task DeleteStorageConfigurationByNameAsync(string configurationName)
-        {
-            var collection = _dbContextProvider.GetCollection<StorageConfiguration>(_storageCollectionName);
-            var filter = await _dataAccess.DeleteFilterAsync(LogicSchemas.StorageConfiguration,
-                Builders<StorageConfiguration>.Filter.Eq(mc => mc.Name, configurationName),
-                "CloudConfiguration.ConfigurationRepository.DeleteStorageConfigurationByName");
-            if (filter is null) return;
-
-            await collection.DeleteOneAsync(filter);
-        }
-
-        public async Task<StorageConfiguration> GetStorageConfigurationByIdAsync(string itemId)
-        {
-            var collection = _dbContextProvider.GetCollection<StorageConfiguration>(_storageCollectionName);
-
-            var scope = await ReadStorageAsync(Builders<StorageConfiguration>.Filter.Eq(mc => mc.ItemId, itemId), "GetStorageConfigurationById");
-            return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null!;
-        }
-
-        public async Task<StorageConfiguration?> GetStorageConfigurationStrategyAsync(string storageStrategy)
-        {
-            var collection = _dbContextProvider.GetCollection<StorageConfiguration>(_storageCollectionName);
-
-            var scope = await ReadStorageAsync(Builders<StorageConfiguration>.Filter.Eq(mc => mc.StorageStrategy, storageStrategy), "GetStorageConfigurationStrategy");
-            return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null;
         }
 
         #endregion

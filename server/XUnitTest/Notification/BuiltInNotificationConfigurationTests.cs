@@ -4,7 +4,6 @@ using Blocks.Genesis.Entities.Logic;
 using Blocks.Genesis.Entities.Os;
 using CloudConfiguration.DomainService.Mail.RequestModel;
 using CloudConfiguration.DomainService.Notification.RequestModel;
-using CloudConfiguration.DomainService.Storage.RequestModel;
 using DataAccess.InternalService;
 using DomainService.Entities;
 using DomainService.Notification;
@@ -448,8 +447,7 @@ namespace XUnitTest.Notification
                        .ReturnsAsync(new BaseResponse { IsSuccess = true });
 
             _sut = new CloudConfigurationService(_repository.Object, validator.Object,
-                Mock.Of<IValidator<SaveStorageConfigurationRequest>>(), Mock.Of<IValidator<MailConfiguration>>(),
-                Mock.Of<IMessageClient>(), NullLogger<CloudConfigurationService>.Instance, BuiltInFixtures.Tenants().Object);
+                Mock.Of<IValidator<MailConfiguration>>(), NullLogger<CloudConfigurationService>.Instance, BuiltInFixtures.Tenants().Object);
         }
 
         public void Dispose()

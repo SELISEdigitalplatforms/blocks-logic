@@ -27,7 +27,7 @@ public class NotificationConfigKeyValueTests : IDisposable
 
     public void Dispose() => _fixture.Dispose();
 
-    private CloudRepository Cloud() => new(_fixture.Provider, _fixture.Secret, _kv.Object, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
+    private CloudRepository Cloud() => new(_fixture.Provider, _fixture.Secret, _kv.Object);
 
     private SendRepository Send() =>
         new(_fixture.Provider, _fixture.Secret, NullLogger<SendRepository>.Instance, _kv.Object);

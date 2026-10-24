@@ -20,10 +20,6 @@ namespace XUnitTest.Controllers
         public static IEnumerable<object[]> Protected() => new[]
         {
             Row(typeof(CertificateController), "UploadCertificate", "blocks-os::project::mutate-token-validation-params"),
-            Row(typeof(StorageController), "Save", "blocks-os::storage::mutate"),
-            Row(typeof(StorageController), "Delete", "blocks-os::storage::mutate"),
-            Row(typeof(StorageController), "Gets", "blocks-os::storage::gets"),
-            Row(typeof(StorageController), "Get", "blocks-os::storage::gets"),
             Row(typeof(NotificationController), "Gets", "blocks-os::notification::gets"),
             Row(typeof(NotificationController), "Get", "blocks-os::notification::gets"),
             Row(typeof(global::Api.Controllers.ProjectController), "Gets", "blocks-os::project::projects"),

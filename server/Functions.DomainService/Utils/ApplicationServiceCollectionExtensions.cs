@@ -1,3 +1,4 @@
+using Blocks.Extension.DependencyInjection;
 using Blocks.Secrets;
 using FluentValidation;
 using Common.InternalService.Access;
@@ -62,10 +63,9 @@ namespace Functions.DomainService.Utils
             // The artifact store, on the tenant's own storage. It takes the tenant per call and enters
             // that tenant's context itself, so one instance serves every tenant. The storage stack it
             // uses is registered by the Api (RegisterCommonInternalServices) but not by the Worker, so
-            // it is TryAdd-ed here — harmless where the host already has it. The store resolves these
+            // it is added here — idempotent where the host already has it. The store resolves these
             // on use, never in its constructor (see FunctionArtifactStore).
-            services.TryAddSingleton<CloudConfiguration.DomainService.Shared.Services.IConfigurationRepository,
-                CloudConfiguration.DomainService.Shared.Services.ConfigurationRepository>();
+            services.AddBlocksStorageConfiguration();
             services.TryAddSingleton<Common.InternalService.Storage.IStorageServiceFactory,
                 Common.InternalService.Storage.StorageServiceFactory>();
             services.AddSingleton<Storage.IFunctionArtifactStore, Storage.FunctionArtifactStore>();

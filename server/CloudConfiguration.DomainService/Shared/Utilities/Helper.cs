@@ -4,18 +4,6 @@ namespace CloudConfiguration.DomainService.Shared.Utilities
 {
     public static class Helper
     {
-        public static string GetMaskedCloudStorageRegionEndPoint(string endPoint)
-        {
-            if (string.IsNullOrEmpty(endPoint))
-                return string.Empty;
-
-            ReadOnlySpan<char> span = endPoint.AsSpan();
-            if (span.Length <= 2)
-                return new string('*', span.Length);
-
-            return $"{span[0]}{new string('*', span.Length - 2)}{span[^1]}";
-        }
-
         /// <summary>
         /// Encrypts the given plaintext using the provided Base64 secret key.
         /// </summary>
@@ -74,19 +62,6 @@ namespace CloudConfiguration.DomainService.Shared.Utilities
                 result = string.Empty;
                 return false;
             }
-        }
-
-        /// <summary>
-        /// Generates a random 256-bit (32-byte) AES key and returns it as a Base64 string.
-        /// </summary>
-        public static string GenerateAesKey()
-        {
-            byte[] key = new byte[32]; // 256-bit key
-            using (var rng = RandomNumberGenerator.Create())
-            {
-                rng.GetBytes(key);
-            }
-            return Convert.ToBase64String(key);
         }
     }
 }
