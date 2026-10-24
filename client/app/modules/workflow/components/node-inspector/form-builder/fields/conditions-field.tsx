@@ -85,7 +85,21 @@ export const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> 
 export const LIST_OPERATORS = new Set(["in", "not_in"]);
 const LIST_HINT = "List: JSON array or comma-separated values";
 
-export function DroppableConditionInput({ id, value, onChange, placeholder, disabled, readOnly, isMultiline, variablePicker, trailingAction, className, ariaLabel }: { id: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; readOnly?: boolean; isMultiline: boolean; variablePicker?: VariablePickerConfig | null; trailingAction?: React.ReactNode; className?: string; ariaLabel?: string }) {
+type DroppableConditionInputProps = Readonly<{
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  readOnly?: boolean;
+  isMultiline: boolean;
+  variablePicker?: VariablePickerConfig | null;
+  trailingAction?: React.ReactNode;
+  className?: string;
+  ariaLabel?: string;
+}>;
+
+export function DroppableConditionInput({ id, value, onChange, placeholder, disabled, readOnly, isMultiline, variablePicker, trailingAction, className, ariaLabel }: DroppableConditionInputProps) {
   return (
     <div className={cn("relative w-full")}>
       <ExpressionHighlighter value={value || ""} isMultiline={isMultiline} variablePicker={variablePicker} trailingAction={trailingAction}>
