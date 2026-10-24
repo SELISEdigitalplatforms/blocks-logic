@@ -190,8 +190,12 @@ namespace XUnitTest.Workflow
             var seen = new List<(string Path, string? Auth)>();
             var server = ServeAsync(listener, port, seen);
 
+            // HttpListener binds each prefix to the first address its host resolves to; where "localhost"
+            // is ::1 first (GitHub runners), that is a separate socket from 127.0.0.1. Connect each host
+            // to the address its prefix is bound to, or the request lands on the wrong socket and 404s.
+            var localhost = Dns.GetHostAddresses("localhost")[0];
             var guard = new WorkflowOutboundGuard(null,
-                (_, _) => Task.FromResult(new[] { IPAddress.Loopback }), _ => false);
+                (host, _) => Task.FromResult(new[] { host == "localhost" ? localhost : IPAddress.Loopback }), _ => false);
             using var client = new HttpClient(WorkflowOutboundGuard.CreatePrimaryHandler(guard));
 
             using var request = new HttpRequestMessage(HttpMethod.Get, $"http://127.0.0.1:{port}/cross");
