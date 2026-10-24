@@ -14,6 +14,8 @@ namespace DomainService.Notification
     {
         private const string TenantIdClaim = "tenant_id";
         private const string UserIdClaim = "user_id";
+        private const string OriginalTenantIdClaim = "original_tenant_id";
+        private const string ImpersonatedClaim = "impersonated";
 
         private readonly INotificationService _notificationService;
         private readonly ILogger<NotificationHub> _logger;
@@ -37,11 +39,10 @@ namespace DomainService.Notification
             {
                 SetPrincipal();
                 await _notificationService.CreateConnectionAsync(Context.ConnectionId);
-                var tenantId = Context.User?.FindFirst(TenantIdClaim)?.Value;
-                if (!string.IsNullOrWhiteSpace(tenantId))
+                // Broadcasts go to these groups only (BroadcastReceiver), so they never cross tenants.
+                foreach (var groupTenantId in BroadcastTenantIds())
                 {
-                    // Broadcasts go to this group only (BroadcastReceiver), so they never cross tenants.
-                    await Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.ForTenant(tenantId));
+                    await Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.ForTenant(groupTenantId));
                 }
                 await  base.OnConnectedAsync();
             }
@@ -124,18 +125,37 @@ namespace DomainService.Notification
             };
         }
 
+        /// <summary>
+        /// The tenants whose broadcasts reach this connection: the token tenant, and for an impersonated
+        /// root tenant user also the original (root) tenant, because the Blocks services broadcast with the root key.
+        /// </summary>
+        private List<string> BroadcastTenantIds()
+        {
+            var tenantIds = new List<string>();
+            var tenantId = Context.User?.FindFirst(TenantIdClaim)?.Value;
+            if (!string.IsNullOrWhiteSpace(tenantId))
+                tenantIds.Add(tenantId);
+
+            var originalTenantId = Context.User?.FindFirst(OriginalTenantIdClaim)?.Value;
+            if (IsImpersonated() && !string.IsNullOrWhiteSpace(originalTenantId) && !tenantIds.Contains(originalTenantId))
+                tenantIds.Add(originalTenantId);
+
+            return tenantIds;
+        }
+
+        // Compared the same way Genesis reads the claim when it builds a context from an HTTP
+        // request, so an impersonated connection and an impersonated request agree on which
+        // database the repository resolves.
+        private bool IsImpersonated() => Context.User?.FindFirst(ImpersonatedClaim)?.Value == "true";
+
         private void SetupActivity()
         {
             if (Activity.Current == null) return;
 
             var tenantId = Context.User?.FindFirst(TenantIdClaim)?.Value;
-            var originaltenantId = Context.User?.FindFirst("original_tenant_id")?.Value;
+            var originaltenantId = Context.User?.FindFirst(OriginalTenantIdClaim)?.Value;
             var userId = Context.User?.FindFirst(UserIdClaim)?.Value;
-
-            // Compared the same way Genesis reads the claim when it builds a context from an HTTP
-            // request, so an impersonated connection and an impersonated request agree on which
-            // database the repository resolves.
-            var impersonated = Context.User?.FindFirst("impersonated")?.Value == "true";
+            var impersonated = IsImpersonated();
 
             BlocksContext.SetContext(BlocksContext.Create(
                 tenantId: tenantId ?? string.Empty,

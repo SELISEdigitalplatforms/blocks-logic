@@ -46,25 +46,16 @@ namespace DomainService.Notification
         private string? TargetDb() =>
             BlocksContext.GetContext() is { Impersonated: true } ? _blocksSecret.RootDatabaseName : null;
 
-        /// <summary>
-        /// Hub connections and subscriptions always live in the token tenant's DB, impersonated or not:
-        /// the senders look them up there (request tenant), so a root DB row would never be found.
-        /// </summary>
-        private static bool IsHubRecord<T>() =>
-            typeof(T) == typeof(NotificationConnection) || typeof(T) == typeof(NotificationSubscription);
-
-        private string? TargetDb<T>() => IsHubRecord<T>() ? null : TargetDb();
-
         private async Task<ReadScope<T>> ReadAsync<T>(string schema, FilterDefinition<T> filter, string callSite) =>
-            await _dataAccess.ReadAsync(schema, filter, $"NotificationRepository.{callSite}", TargetDb<T>());
+            await _dataAccess.ReadAsync(schema, filter, $"NotificationRepository.{callSite}", TargetDb());
 
         private Task<FilterDefinition<T>?> EditAsync<T>(string schema, FilterDefinition<T> filter, string callSite) =>
-            _dataAccess.EditFilterAsync(schema, filter, $"NotificationRepository.{callSite}", TargetDb<T>());
+            _dataAccess.EditFilterAsync(schema, filter, $"NotificationRepository.{callSite}", TargetDb());
 
         private async Task GateInsertAsync<T>(string callSite)
         {
             if (SchemaOf<T>() is { } schema
-                && !await _dataAccess.InsertAllowedAsync(schema, $"NotificationRepository.{callSite}", TargetDb<T>()))
+                && !await _dataAccess.InsertAllowedAsync(schema, $"NotificationRepository.{callSite}", TargetDb()))
                 throw new UnauthorizedAccessException("Notification create is not allowed by the data access policy.");
         }
 
@@ -74,15 +65,18 @@ namespace DomainService.Notification
             if (SchemaOf<T>() is not { } schema)
                 return;
             foreach (var record in records)
-                await _dataAccess.PrepareWriteAsync(schema, record, isInsert: true, $"NotificationRepository.{callSite}", TargetDb<T>());
+                await _dataAccess.PrepareWriteAsync(schema, record, isInsert: true, $"NotificationRepository.{callSite}", TargetDb());
         }
 
-        private IMongoDatabase ResolvedClientDb<T>() => ResolvedClientDb(tenantDbOnly: IsHubRecord<T>());
-
-        private IMongoDatabase ResolvedClientDb(bool tenantDbOnly = false)
+        /// <summary>
+        /// Impersonated callers (a root tenant user working in a project) use the ROOT DB for everything,
+        /// hub connections and subscriptions included: the user lives in root, and the Blocks services
+        /// send their notifications with the root key, so they look the connections up in root.
+        /// </summary>
+        private IMongoDatabase ResolvedClientDb()
         {
             var blocksContext = BlocksContext.GetContext() ?? throw new InvalidOperationException("Tenant context is required.");
-            if (blocksContext.Impersonated && !tenantDbOnly)
+            if (blocksContext.Impersonated)
             {
                 return _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName);
             }
@@ -95,14 +89,14 @@ namespace DomainService.Notification
 
         public void Save<T>(T data, string collectionName = "")
         {
-            var database = ResolvedClientDb<T>();
+            var database = ResolvedClientDb();
             IMongoCollection<T> collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             collection.InsertOne(data);
         }
 
         public async Task<T> GetItemAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
-            var database = ResolvedClientDb<T>();
+            var database = ResolvedClientDb();
             var collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
@@ -119,7 +113,7 @@ namespace DomainService.Notification
 
         public async Task<List<T>> GetItemsAsync<T>(Expression<Func<T, bool>> filterExpression, string collectionName = "")
         {
-            var database = ResolvedClientDb<T>();
+            var database = ResolvedClientDb();
             var collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? typeof(T).Name + "s" : collectionName);
             var filterBuilder = Builders<T>.Filter;
             var filter = filterBuilder.Where(filterExpression);
@@ -138,7 +132,7 @@ namespace DomainService.Notification
         {
             await GateInsertAsync<T>("SaveAsync");
             await PrepareInsertAsync([data], "SaveAsync");
-            var database = ResolvedClientDb<T>();
+            var database = ResolvedClientDb();
             IMongoCollection<T> collection = database.GetCollection<T>(string.IsNullOrWhiteSpace(collectionName) ? (typeof(T).Name + "s") : collectionName);
             await collection.InsertOneAsync(data);
         }
@@ -147,18 +141,18 @@ namespace DomainService.Notification
         {
             await GateInsertAsync<T>("SaveAsyncMany");
             await PrepareInsertAsync(listOfData, "SaveAsyncMany");
-            var database = ResolvedClientDb<T>();
+            var database = ResolvedClientDb();
             IMongoCollection<T> collection = database.GetCollection<T>(typeof(T).Name + "s");
            await collection.InsertManyAsync(listOfData);
         }
 
         public async Task DeleteAsync<T>(Expression<Func<T, bool>> dataFilters)
         {
-            var database = ResolvedClientDb<T>();
+            var database = ResolvedClientDb();
             IMongoCollection<T> collection = database.GetCollection<T>(typeof(T).Name + "s");
             if (SchemaOf<T>() is { } schema)
             {
-                var filter = await _dataAccess.DeleteFilterAsync(schema, Builders<T>.Filter.Where(dataFilters), "NotificationRepository.Delete", TargetDb<T>());
+                var filter = await _dataAccess.DeleteFilterAsync(schema, Builders<T>.Filter.Where(dataFilters), "NotificationRepository.Delete", TargetDb());
                 if (filter is null) return;
                 await collection.DeleteManyAsync(filter);
                 return;
@@ -169,7 +163,7 @@ namespace DomainService.Notification
 
         public IQueryable<T> GetItems<T>()
         {
-            var database = ResolvedClientDb<T>();
+            var database = ResolvedClientDb();
             return database.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
         }
 
