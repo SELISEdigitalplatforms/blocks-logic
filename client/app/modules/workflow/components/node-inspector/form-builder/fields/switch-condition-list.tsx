@@ -161,19 +161,6 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
               </div>
             )}
             <div className="group relative rounded-md border focus-within:border-primary">
-              {conditions.length > 1 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Remove condition ${index + 1}`}
-                  disabled={locked}
-                  onClick={() => onChange(conditions.filter((_, i) => i !== index))}
-                  className="absolute right-1 top-1 z-30 h-7 w-7 opacity-0 hover:text-destructive group-focus-within:opacity-100 group-hover:opacity-100"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              )}
               <div className="px-1">
                 <DroppableConditionInput
                   id={`${idPrefix}.${index}.left`}
@@ -185,6 +172,22 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
                   disabled={locked}
                   isMultiline={false}
                   variablePicker={operandPicker(index, "left")}
+                  // Beside the key button, not on top of it: both used to sit in the top-right corner.
+                  trailingAction={
+                    conditions.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Remove condition ${index + 1}`}
+                        disabled={locked}
+                        onClick={() => onChange(conditions.filter((_, i) => i !== index))}
+                        className="h-7 w-7 opacity-0 hover:text-destructive group-focus-within:opacity-100 group-hover:opacity-100"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )
+                  }
                   className={segmentInput}
                 />
               </div>

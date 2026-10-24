@@ -14,6 +14,7 @@ import {
 	FunctionSquare,
 	Waypoints,
 	Split,
+	Signpost,
 	Merge,
 } from "lucide-react";
 import { deriveMergeHandle } from "@blocks-workflow/utils/merge-handles";
@@ -186,7 +187,7 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 	},
 	{
 		id: "logic-switch-v2",
-		icon: <Split className="h-5 w-5 text-success" />,
+		icon: <Signpost className="h-5 w-5 text-success" />,
 		title: "Switch",
 		description:
 			"Route each item to one of many outputs by rules.",
