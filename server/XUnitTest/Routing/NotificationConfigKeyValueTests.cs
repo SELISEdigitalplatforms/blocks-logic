@@ -1,4 +1,4 @@
-using Blocks.Genesis;
+﻿using Blocks.Genesis;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
@@ -87,6 +87,19 @@ public class NotificationConfigKeyValueTests : IDisposable
 
         result.Configurations.Single().Name.Should().Be("root-cfg");
         _kv.Verify(k => k.GetByPrefixAsync<CloudConfig>(Prefix, false, default), Times.Once);
+        _kv.Verify(k => k.GetByPrefixAsync<CloudConfig>(Prefix, true, default), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetById_Impersonated_OldCollectionGoneInRoot_ReadsRootKv_LikeTheList()
+    {
+        TestBlocksContext.SetImpersonated("dev", "root");
+        _kv.Setup(k => k.GetByPrefixAsync<CloudConfig>(Prefix, false, default))
+            .ReturnsAsync(new List<CloudConfig> { CloudCfg("r", "root-cfg", DateTime.UtcNow) });
+
+        var result = await Cloud().GetNotificationConfigurationByIdAsync("r");
+
+        result.Name.Should().Be("root-cfg");
         _kv.Verify(k => k.GetByPrefixAsync<CloudConfig>(Prefix, true, default), Times.Never);
     }
 

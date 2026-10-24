@@ -4,7 +4,7 @@ import { WorkflowList } from "../../components/workflow-list";
 import { AddWorkflow } from "../../components/add-workflow";
 import { ImportWorkflow } from "../../components/import-workflow";
 import { WorkflowFilterToolBar } from "../../components/workflow-filter-toolbar";
-import { Pagination } from "@/components/ui-kits/pagination/pagination";
+import { PAGE_SIZE_OPTIONS, Pagination } from "@/components/ui-kits/pagination/pagination";
 import { useGetWorkflows } from "@blocks-workflow/hooks/use-workflow-api";
 import { useWorkflowFilterQueryParams } from "@blocks-workflow/hooks";
 
@@ -53,7 +53,7 @@ export const Workflows = () => {
                   totalCount={data?.totalCount || 0}
                   page={queryParams.page}
                   pageSize={queryParams.pageSize}
-                  pageSizeOptions={[10, 20]}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
                   onChange={(page) => setQueryParams((params) => ({ ...params, page }))}
                   onPageSizeChange={(pageSize) =>
                     setQueryParams((params) => ({

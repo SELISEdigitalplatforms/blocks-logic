@@ -71,7 +71,8 @@ namespace XUnitTest.Workflow
                 new Mock<IClientCredentialTokenService>().Object,
                 new Mock<IWorkflowAuthService>().Object,
                 new ConfigurationBuilder().Build(),
-                NullLogger<ActionDataV1Node>.Instance);
+                NullLogger<ActionDataV1Node>.Instance,
+                TestOutboundGuard.ResolvingTo());
 
             var result = await node.RunAsync(Context(clientCredential: false, withInput: false));
 
@@ -116,7 +117,8 @@ namespace XUnitTest.Workflow
                 tokenService.Object,
                 new Mock<IWorkflowAuthService>().Object,
                 new ConfigurationBuilder().Build(),
-                NullLogger<ActionDataV1Node>.Instance);
+                NullLogger<ActionDataV1Node>.Instance,
+                TestOutboundGuard.ResolvingTo());
 
             var result = await node.RunAsync(Context(clientCredential));
             result.IsSuccess.Should().BeTrue();
@@ -137,7 +139,7 @@ namespace XUnitTest.Workflow
                 { "CollectionName", "Tasks" },
                 { "SchemaName", "Task" },
                 { "ActionType", "getData" },
-                { "ApiBaseUrl", "https://api.example.com" },
+                { "ApiBaseUrl", "https://api.seliseblocks.com" },
                 { "AuthenticationType", clientCredential ? "clientCredential" : "" },
                 { "ClientId", clientCredential ? "client-1" : "" },
                 { "ClientSecret", clientCredential ? "s3cr3t" : "" },

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FileUp, Loader2, Plus, RotateCcw } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
-import { Pagination } from "@/components/ui-kits/pagination/pagination";
+import { PAGE_SIZE_OPTIONS, Pagination } from "@/components/ui-kits/pagination/pagination";
 import { Button } from "@/components/ui-kits/button/button";
 import { FunctionsTable } from "../../components/functions-table";
 import { FunctionsFilterToolBar } from "../../components/functions-filter-toolbar";
@@ -91,14 +91,14 @@ export const FunctionsPage = () => {
               onCreateFunction={() => setIsCreateOpen(true)}
             />
 
-            {/* One page of results needs no pager — matches the runs tab, which guards the same way. */}
-            {!!data?.totalCount && data.totalCount > Number(queryParams.pageSize) && (
+            {/* The pager hides itself when there is one page and no page size worth choosing. */}
+            {!!data?.totalCount && (
               <div className="mt-5 flex justify-end">
                 <Pagination
                   totalCount={data?.totalCount || 0}
                   page={queryParams.page}
                   pageSize={queryParams.pageSize}
-                  pageSizeOptions={[5, 10, 20]}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
                   onChange={(page) => setQueryParams((params) => ({ ...params, page }))}
                   onPageSizeChange={(pageSize) =>
                     setQueryParams((params) => ({ ...params, pageSize, page: 0 }))

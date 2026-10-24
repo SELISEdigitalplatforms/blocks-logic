@@ -66,6 +66,8 @@ export const useUpdateWorkflow = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workflows"] });
       queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      // The versions list shows whether the draft differs from the published version.
+      queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
     },
   });
 };
@@ -139,6 +141,9 @@ export const useCreateWorkflowVersion = () => {
     mutationFn: workflowService.createWorkflowVersion,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
+      // The list and the editor banner show the workflow's version and whether it has changes.
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow"] });
     },
   });
 };

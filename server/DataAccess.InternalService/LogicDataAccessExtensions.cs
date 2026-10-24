@@ -13,6 +13,7 @@ public static class LogicDataAccessExtensions
     public static IServiceCollection AddLogicDataAccess(this IServiceCollection services)
     {
         services.AddBlocksDataAccess();
+        services.AddSingleton<IAccessPrincipalAccessor, BlocksContextPrincipalAccessor>();
         services.AddSingleton<ILogicDataAccess, LogicDataAccess>();
         // The one sender of the built-in notifications; every host that calls this gets it.
         services.AddSingleton<IBuiltInNotificationSender, BuiltInNotificationSender>();

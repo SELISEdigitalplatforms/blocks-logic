@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { functionService } from "../services/function.service";
 import { IFunctionDetail } from "../types/function.types";
@@ -20,8 +20,12 @@ export const useFunctionEditor = (
   const hydrate = useFunctionEditorStore((s) => s.hydrate);
   const isDirty = useFunctionEditorStore((s) => s.isDirty);
 
+  const hydratedId = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!functionDetail) return;
+    const sameFunction = hydratedId.current === functionDetail.id;
+    if (sameFunction && useFunctionEditorStore.getState().isDirty) return;
+    hydratedId.current = functionDetail.id;
     hydrate({
       indexJs: functionDetail.indexJs,
       packageJson: functionDetail.packageJson,
@@ -32,9 +36,10 @@ export const useFunctionEditor = (
       outputActions: functionDetail.outputActions,
       variables: functionDetail.variables,
     });
-    // Only re-hydrate when a different function's data arrives, not on every store write.
+    // Re-hydrate when a different function arrives, or when this one changed on the server (another
+    // tab, another user, a deploy) — but never over edits not saved yet: they are newer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [functionDetail?.id]);
+  }, [functionDetail?.id, functionDetail?.lastUpdatedDate]);
 
   const { mutateAsync: saveMutateAsync, isPending: isSaving } = useMutation({
     mutationKey: [FUNCTIONS_QUERY_KEY, "save"],

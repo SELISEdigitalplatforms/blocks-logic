@@ -221,13 +221,14 @@ namespace XUnitTest.Workflow
         {
             var handler = new CaptureHandler("""{"data":{"getTasks":{"items":[{"ItemId":"1"}],"totalCount":1}}}""");
             var node = new ActionDataV1Node(Factory(handler), Mock.Of<IClientCredentialTokenService>(),
-                Auth(delegatedToken), new ConfigurationBuilder().Build(), NullLogger<ActionDataV1Node>.Instance);
+                Auth(delegatedToken), new ConfigurationBuilder().Build(), NullLogger<ActionDataV1Node>.Instance,
+                TestOutboundGuard.ResolvingTo());
             var parameters = new BsonDocument
             {
                 { "CollectionName", "Tasks" },
                 { "SchemaName", "Task" },
                 { "ActionType", "getData" },
-                { "ApiBaseUrl", "https://api.example.com" },
+                { "ApiBaseUrl", "https://api.seliseblocks.com" },
                 { "AuthenticationType", authenticationType },
             };
             return (await node.RunAsync(Context(parameters)), handler);

@@ -103,8 +103,8 @@ export const Proxies = () => {
               rowCount={queryParams.pageSize}
             />
 
-            {/* One page of results needs no pager — same guard the Functions list uses. */}
-            {totalCount > queryParams.pageSize && (
+            {/* The pager hides itself when there is one page and no page size worth choosing. */}
+            {totalCount > 0 && (
               <div className="mt-5 flex justify-end">
                 <Pagination
                   totalCount={totalCount}

@@ -719,6 +719,64 @@
         <member name="M:BlocksTemplate.Api.Security.CspReportEndpoint.ResetForTests">
             <summary>Test hook: start every test from an empty budget.</summary>
         </member>
+        <member name="T:BlocksTemplate.Api.Security.INotifierSendPermission">
+            <summary>Reads the caller's bearer token for the notifier send permission.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.INotifierSendPermission.CheckAsync(Microsoft.AspNetCore.Http.HttpContext)">
+            <summary>What the token of <paramref name="httpContext"/> says about <see cref="F:BlocksTemplate.Api.Security.NotifierSendPermission.Resource"/>.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.NotifierSendPermission">
+            <summary>
+            The token path of the notifier send actions. The permission is resolved by Genesis's own <c>Protected</c>
+            policy (the one behind every <c>[ProtectedEndPoint]</c>): a <c>Permissions</c> row for the resource in the
+            caller's tenant and organization whose roles match the caller's, or the resource in the token's permission
+            claims. The send actions carry no <c>[ProtectedEndPoint]</c> (the secret path must stay open), so the
+            resource name goes in through the <c>HttpContext.Items</c> key that policy reads.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.NotifierSendPermission.Resource">
+            <summary>The permission a token needs to send a notification.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.NotifierSendPermission.ProtectedPolicy">
+            <summary>Genesis's permission policy (<c>ProtectedEndPointAttribute.Policy</c>).</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.NotifierSendPermission.ResourceItemKey">
+            <summary>
+            The <c>HttpContext.Items</c> key the Genesis permission handler reads the resource from
+            (<c>BlocksConstants.ProtectedResourceName</c>, internal in Genesis).
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.NotifierSendPermission.#ctor(Microsoft.AspNetCore.Authorization.IAuthorizationService,Blocks.Genesis.ITenants,Microsoft.Extensions.Logging.ILogger{BlocksTemplate.Api.Security.NotifierSendPermission})">
+            <summary>Takes the authorization service, the tenant list (to find a cookie token) and a logger.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.NotifierSendPermission.CheckAsync(Microsoft.AspNetCore.Http.HttpContext)">
+            <inheritdoc />
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute">
+            <summary>
+            Makes Genesis validate a bearer token on an action that must stay open without one. Genesis parses the token
+            only on endpoints with authorization metadata; this attribute adds it with a policy that every caller meets,
+            so a call without a token still reaches the action (which then checks the secret or the permission itself).
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute.PolicyName">
+            <summary>The policy name; registered by <see cref="M:BlocksTemplate.Api.Security.NotifierSendAuthorization.AddNotifierSendPolicy(Microsoft.Extensions.DependencyInjection.IServiceCollection)"/>.</summary>
+        </member>
+        <member name="P:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute.Policy">
+            <inheritdoc />
+        </member>
+        <member name="P:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute.Roles">
+            <inheritdoc />
+        </member>
+        <member name="P:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute.AuthenticationSchemes">
+            <inheritdoc />
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.NotifierSendAuthorization">
+            <summary>Service registration for the notifier send token path.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.NotifierSendAuthorization.AddNotifierSendPolicy(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>Registers <see cref="T:BlocksTemplate.Api.Security.INotifierSendPermission"/> and the open policy of <see cref="T:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute"/>.</summary>
+        </member>
         <member name="T:BlocksTemplate.Api.Security.CspMode">
             <summary>How the CSP header is sent. Set by <c>Csp:Mode</c> (env var <c>Csp__Mode</c>).</summary>
         </member>
@@ -752,20 +810,21 @@
         <member name="T:Api.Controllers.NotifierController">
             <summary>
             Delivery and read-state for user notifications, routed as <c>/api/Notifier/{action}</c>.
-            The two send actions take no bearer token because internal services call them; they check the
-            <c>Secret</c> sender header instead (<see cref="T:DomainService.Notification.INotifierSendGuard"/>). Everything that reads or
-            mutates a user's own notifications requires a bearer token.
+            The two send actions stay open without a bearer token because internal services call them with the
+            <c>Secret</c> sender header; a caller without it needs a valid token with
+            <c>blocks-logic::notifier::send</c> (<see cref="T:DomainService.Notification.INotifierSendGuard"/>, <see cref="T:BlocksTemplate.Api.Security.INotifierSendPermission"/>).
+            Everything that reads or mutates a user's own notifications requires a bearer token.
             </summary>
         </member>
-        <member name="M:Api.Controllers.NotifierController.#ctor(DomainService.Notification.INotificationService,DomainService.Notification.INotifierSendGuard,Microsoft.Extensions.Logging.ILogger{Api.Controllers.NotifierController})">
-            <summary>Takes the notification service, the send guard and a logger.</summary>
+        <member name="M:Api.Controllers.NotifierController.#ctor(DomainService.Notification.INotificationService,DomainService.Notification.INotifierSendGuard,BlocksTemplate.Api.Security.INotifierSendPermission,Microsoft.Extensions.Logging.ILogger{Api.Controllers.NotifierController})">
+            <summary>Takes the notification service, the send guard, the send permission check and a logger.</summary>
         </member>
-        <member name="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest)">
+        <member name="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest,System.String)">
             <summary><c>POST</c> — delivers a notification through the configured channels.</summary>
         </member>
-        <member name="M:Api.Controllers.NotifierController.SendSecretNotification(DomainService.Shared.NotifyRequest)">
+        <member name="M:Api.Controllers.NotifierController.SendSecretNotification(DomainService.Shared.NotifyRequest,System.String)">
             <summary>
-            <c>POST</c> — the secrets-pipeline variant of <see cref="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest)"/>, hidden from the API explorer.
+            <c>POST</c> — the secrets-pipeline variant of <see cref="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest,System.String)"/>, hidden from the API explorer.
             Same service call; kept separate so its traffic is distinguishable in logs.
             </summary>
         </member>
