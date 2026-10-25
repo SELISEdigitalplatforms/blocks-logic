@@ -24,6 +24,12 @@ export interface IDeployPending {
   status: BuildStatus;
 }
 
+/** The build a deploy still waits for; both null when no deploy is building. */
+export interface IPendingDeploy {
+  buildId: string | null;
+  status: BuildStatus | null;
+}
+
 export const isDeployPending = (result: unknown): result is IDeployPending =>
   typeof result === "object" && result !== null && "buildId" in result && !("number" in result);
 

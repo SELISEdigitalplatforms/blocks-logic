@@ -14,6 +14,7 @@ import {
 } from "../types/function.types";
 import {
   IFunctionBuild,
+  IPendingDeploy,
   IFunctionVersionSummary,
   IDeployPending,
   IGetVersionsResponse,
@@ -133,6 +134,11 @@ export class FunctionService {
   getBuild = (buildId: string): Promise<IFunctionBuild> => {
     const params = new URLSearchParams({ buildId });
     return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.GET_BUILD}?${params.toString()}`);
+  };
+
+  getPendingDeploy = (functionId: string): Promise<IPendingDeploy> => {
+    const params = new URLSearchParams({ functionId });
+    return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.GET_PENDING_DEPLOY}?${params.toString()}`);
   };
 
   getRuns = (payload: IGetRunsPayload): Promise<IGetRunsResponse> => {

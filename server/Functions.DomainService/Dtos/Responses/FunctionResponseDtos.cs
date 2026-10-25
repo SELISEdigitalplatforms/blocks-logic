@@ -262,6 +262,13 @@ namespace Functions.DomainService.Dtos.Responses
     }
 
     /// <summary>What the invoke endpoint returns: 202 immediately, or the full result after waiting.</summary>
+    /// <summary>The build a deploy still waits for. Both fields are null when no deploy is building.</summary>
+    public sealed class PendingDeployDto
+    {
+        public string? BuildId { get; set; }
+        public string? Status { get; set; }
+    }
+
     public sealed class InvokeResultDto
     {
         public string RunId { get; set; } = string.Empty;

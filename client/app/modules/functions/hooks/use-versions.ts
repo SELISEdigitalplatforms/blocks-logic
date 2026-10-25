@@ -21,6 +21,16 @@ export const useGetVersionSource = (
   });
 };
 
+/** The deploy still building for this function, read once on load so a reload keeps showing it. */
+export const useGetPendingDeploy = (functionId: string | undefined) => {
+  return useQuery({
+    queryKey: [FUNCTIONS_QUERY_KEY, "pending-deploy", functionId],
+    queryFn: () => functionService.getPendingDeploy(functionId!),
+    enabled: !!functionId,
+    refetchOnWindowFocus: false,
+  });
+};
+
 export const useGetBuild = (buildId: string | undefined) => {
   return useQuery({
     queryKey: [FUNCTIONS_QUERY_KEY, "build", buildId],

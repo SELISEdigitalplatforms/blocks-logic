@@ -255,6 +255,12 @@ namespace BlocksTemplate.Api.Controllers
             [FromQuery] string functionId, [FromQuery] string versionId)
             => await _functionService.GetVersionSourceAsync(GetTenantId(), functionId, versionId);
 
+        // A reloaded editor asks this to keep showing a deploy that is still building.
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::function::read")]
+        public async Task<PendingDeployDto> GetPendingDeploy([FromQuery] string functionId)
+            => await _deploymentService.GetPendingAsync(GetTenantId(), functionId);
+
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::function::read")]
         public async Task<FunctionBuildEntitySummary> GetBuild([FromQuery] string buildId)
