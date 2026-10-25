@@ -70,7 +70,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
                     // Checked before any token is made: the URL, then where a Blocks token may go.
                     var uri = new Uri(url, UriKind.Absolute);
                     await _outboundGuard.EnsureAllowedAsync(uri, context.CancellationToken);
-                    await ApplyAuthenticationAsync(parameters, headers, context.TenantId, uri);
+                    await ApplyAuthenticationAsync(parameters, headers, context.TenantId);
 
                     requestLog.Sending(i);
                     var stopwatch = Stopwatch.StartNew();
@@ -95,14 +95,11 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         /// Blocks Authentication without a delegated token throws <see cref="NoDelegatedTokenException"/>
         /// (the item fails). Client Credential reads the secret by client id; no token (missing or inactive
         /// client, refused call) sends without an Authorization header, as before.
-        /// A Blocks token goes only to a trusted Blocks host; any other host throws
-        /// <see cref="BlocksTokenHostNotTrustedException"/> and nothing is sent.
         /// </summary>
         private async Task ApplyAuthenticationAsync(
             ActionHttpRequestV1Parameters parameters,
             Dictionary<string, string> headers,
-            string tenantId,
-            Uri target)
+            string tenantId)
         {
             if (headers.Keys.Any(key => string.Equals(key, AuthorizationHeaderName, StringComparison.OrdinalIgnoreCase)))
                 return;
@@ -114,7 +111,6 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             string? token = null;
             if (string.Equals(mode, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
-                EnsureTokenHostTrusted(target);
                 // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
                 // unauthenticated send: no token fails this item (WS-1).
                 token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
@@ -124,19 +120,12 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             else if (string.Equals(mode, "clientCredential", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(parameters.ClientId))
             {
-                EnsureTokenHostTrusted(target);
                 // The secret is read from IAM's ClientCredentials by id; the node stores only the client id.
                 token = await _clientCredentialTokenService.GetTokenAsync(parameters.ClientId, tenantId);
             }
 
             if (string.IsNullOrWhiteSpace(token)) return;
             headers[AuthorizationHeaderName] = $"Bearer {token}";
-        }
-
-        private void EnsureTokenHostTrusted(Uri target)
-        {
-            if (!_outboundGuard.IsTrustedHost(target))
-                throw new BlocksTokenHostNotTrustedException();
         }
 
         private (string url, string httpMethod, Dictionary<string, string> headers, string bodyContent, string contentType) PrepareRequest(
