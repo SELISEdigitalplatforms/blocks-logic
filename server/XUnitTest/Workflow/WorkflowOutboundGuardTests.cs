@@ -3,7 +3,6 @@ using System.Net.Sockets;
 using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using Moq;
 using Workflow.DomainService.Entities;
@@ -18,7 +17,7 @@ namespace XUnitTest.Workflow
     public class WorkflowOutboundGuardTests
     {
         private const string BlocksUrl = "https://api.seliseblocks.com/x";
-        private const string ForeignUrl = "https://evil-seliseblocks.com/x";
+        private const string ForeignUrl = "https://api.slsblx.com/x";
 
         private static readonly IPAddress PrivateAddress = IPAddress.Parse("10.1.2.3");
 
@@ -111,50 +110,17 @@ namespace XUnitTest.Workflow
             await act.Should().NotThrowAsync();
         }
 
-        [Fact]
-        public async Task EnsureAllowedAsync_allows_a_trusted_host_that_resolves_to_a_private_address()
-        {
-            var guard = TestOutboundGuard.ResolvingTo(PrivateAddress);
-
-            var act = () => guard.EnsureAllowedAsync(new Uri(BlocksUrl));
-
-            await act.Should().NotThrowAsync("in-cluster DNS may answer with a private address");
-        }
-
-        [Fact]
-        public async Task EnsureAllowedAsync_does_not_trust_a_look_alike_host_that_resolves_to_a_private_address()
-        {
-            var guard = TestOutboundGuard.ResolvingTo(PrivateAddress);
-
-            var act = () => guard.EnsureAllowedAsync(new Uri(ForeignUrl));
-
-            await act.Should().ThrowAsync<WorkflowOutboundBlockedException>();
-        }
-
-        // ---------- trusted hosts ----------
-
         [Theory]
-        [InlineData("https://seliseblocks.com/", true)]
-        [InlineData("https://api.seliseblocks.com/", true)]
-        [InlineData("https://API.SeliseBlocks.com./", true)]
-        [InlineData("https://a.b.blocksdevelopers.com/", true)]
-        [InlineData("https://evil-seliseblocks.com/", false)]
-        [InlineData("https://seliseblocks.com.evil.com/", false)]
-        [InlineData("https://notblocksdevelopers.com/", false)]
-        [InlineData("https://10.0.0.1/", false)]
-        public void IsTrustedHost_matches_on_a_dot_boundary(string url, bool expected)
+        [InlineData(BlocksUrl)]
+        [InlineData("https://blocksapi.dev.slsblx.com/x")]
+        [InlineData("https://dev-data.blocksdevelopers.com/x")]
+        public async Task EnsureAllowedAsync_refuses_a_blocks_host_that_resolves_to_a_private_address(string url)
         {
-            TestOutboundGuard.ResolvingTo().IsTrustedHost(new Uri(url)).Should().Be(expected);
-        }
+            var guard = TestOutboundGuard.ResolvingTo(PrivateAddress);
 
-        [Fact]
-        public void Configured_trusted_hosts_replace_the_defaults()
-        {
-            var options = Options.Create(new WorkflowHttpNodeOptions { TrustedHosts = ["Blocks.Internal."] });
-            var guard = new WorkflowOutboundGuard(options);
+            var act = () => guard.EnsureAllowedAsync(new Uri(url));
 
-            guard.IsTrustedHost(new Uri("https://svc.blocks.internal/")).Should().BeTrue();
-            guard.IsTrustedHost(new Uri(BlocksUrl)).Should().BeFalse();
+            await act.Should().ThrowAsync<WorkflowOutboundBlockedException>("no host is exempt from the private network rule");
         }
 
         // ---------- connect-time check ----------
@@ -163,7 +129,7 @@ namespace XUnitTest.Workflow
         public async Task Connect_refuses_when_dns_answers_private_at_connect_time()
         {
             var calls = 0;
-            var guard = new WorkflowOutboundGuard(null,
+            var guard = new WorkflowOutboundGuard(
                 (_, _) => Task.FromResult(Interlocked.Increment(ref calls) == 1
                     ? new[] { TestOutboundGuard.PublicAddress }
                     : new[] { IPAddress.Loopback }),
@@ -194,7 +160,7 @@ namespace XUnitTest.Workflow
             // is ::1 first (GitHub runners), that is a separate socket from 127.0.0.1. Connect each host
             // to the address its prefix is bound to, or the request lands on the wrong socket and 404s.
             var localhost = Dns.GetHostAddresses("localhost")[0];
-            var guard = new WorkflowOutboundGuard(null,
+            var guard = new WorkflowOutboundGuard(
                 (host, _) => Task.FromResult(new[] { host == "localhost" ? localhost : IPAddress.Loopback }), _ => false);
             using var client = new HttpClient(WorkflowOutboundGuard.CreatePrimaryHandler(guard));
 
@@ -377,27 +343,27 @@ namespace XUnitTest.Workflow
         }
 
         [Theory]
-        [InlineData("blocksAuthentication")]
-        [InlineData("clientCredential")]
-        public async Task Node_refuses_a_blocks_token_for_a_foreign_host_and_sends_nothing(string mode)
+        [InlineData("blocksAuthentication", "Bearer delegated-1")]
+        [InlineData("clientCredential", "Bearer cc-1")]
+        public async Task Node_sends_the_token_to_any_public_host(string mode, string expected)
         {
             var run = await Run(Params(ForeignUrl, mode));
 
-            ErrorMessage(run.Result).Should().Be(BlocksTokenHostNotTrustedException.DefaultMessage);
-            run.Handler.Requests.Should().BeEmpty();
-            run.Auth.Verify(a => a.CreateBlocksAuthorizationTokenAsync(It.IsAny<CancellationToken>()), Times.Never);
-            run.ClientCredential.Verify(c => c.GetTokenAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            run.Handler.Requests.Should().ContainSingle().Which.Headers.Authorization!.ToString().Should().Be(expected);
+            run.Factory.LastName.Should().Be(WorkflowOutboundGuard.HttpClientName);
         }
 
         [Theory]
-        [InlineData("blocksAuthentication", "Bearer delegated-1")]
-        [InlineData("clientCredential", "Bearer cc-1")]
-        public async Task Node_sends_a_blocks_token_to_a_trusted_host_even_on_a_private_address(string mode, string expected)
+        [InlineData("blocksAuthentication")]
+        [InlineData("clientCredential")]
+        public async Task Node_refuses_a_blocks_host_on_a_private_address_before_a_token_is_made(string mode)
         {
             var run = await Run(Params(BlocksUrl, mode), resolvesTo: PrivateAddress);
 
-            run.Handler.Requests.Should().ContainSingle().Which.Headers.Authorization!.ToString().Should().Be(expected);
-            run.Factory.LastName.Should().Be(WorkflowOutboundGuard.HttpClientName);
+            ErrorMessage(run.Result).Should().Be(WorkflowOutboundBlockedException.DefaultMessage);
+            run.Handler.Requests.Should().BeEmpty();
+            run.Auth.Verify(a => a.CreateBlocksAuthorizationTokenAsync(It.IsAny<CancellationToken>()), Times.Never);
+            run.ClientCredential.Verify(c => c.GetTokenAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
