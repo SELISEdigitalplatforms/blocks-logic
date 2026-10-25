@@ -67,7 +67,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         type: "select",
         label: "Client Credential",
         info: "Select a client credential for authenticating with the Data Gateway API",
-        key: "clientCredential_composite",
+        key: "clientId",
         required: false,
         searchable: true,
         options: (_data, config) => {
@@ -77,20 +77,10 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
               res
                 .filter((item) => item.isActive)
                 .map((item) => ({
-                  value: `${item.itemId}:::${item.clientSecret}`,
+                  value: item.itemId,
                   label: item.name,
                 })),
             );
-        },
-        onChange: (value: unknown, _data: unknown, _config: unknown) => {
-          const parts = (value as string).split(":::");
-          const clientId = parts[0] || "";
-          const clientSecret = parts[1] || "";
-          return {
-            clientCredential_composite: value,
-            clientId,
-            clientSecret,
-          };
         },
         dependsOn: {
           key: "authenticationType",
@@ -253,9 +243,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       schemaName: "",
       projectShortKey: "",
       authenticationType: "",
-      clientCredential_composite: "",
       clientId: "",
-      clientSecret: "",
       filter: {},
       fieldMapping: {},
       getFields: [],

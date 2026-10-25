@@ -384,13 +384,13 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
             ActionDataV1Parameters parameters, string graphqlQuery, string tenantId,
             NodeExecutionLog? log = null, bool logToken = false)
         {
-            // Checked before any token is made: the URL (http/https, private addresses refused for an
-            // untrusted host), then where a Blocks token may go. The base URL is a saved node parameter.
+            // Checked before any token is made: http/https only, no private address. The base URL is a
+            // saved node parameter.
             var target = BuildGatewayUri(parameters.ApiBaseUrl);
             await _outboundGuard.EnsureAllowedAsync(target);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, target);
-            var token = await GetTokenAsync(parameters, tenantId, target, log, logToken);
+            var token = await GetTokenAsync(parameters, tenantId, log, logToken);
             if (token is not null)
                 request.Headers.Add("Authorization", $"Bearer {token}");
 
@@ -419,16 +419,13 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
         }
 
         /// <summary>
-        /// The bearer token for the selected authentication, or null for none. A Blocks token goes only
-        /// to a trusted Blocks host: any other host throws <see cref="BlocksTokenHostNotTrustedException"/>
-        /// before a token is made.
+        /// The bearer token for the selected authentication, or null for none.
         /// </summary>
         private async Task<string?> GetTokenAsync(
-            ActionDataV1Parameters parameters, string tenantId, Uri target, NodeExecutionLog? log, bool logToken)
+            ActionDataV1Parameters parameters, string tenantId, NodeExecutionLog? log, bool logToken)
         {
             if (string.Equals(parameters.AuthenticationType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
-                EnsureTokenHostTrusted(target);
                 // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
                 // unauthenticated send: no token fails this item (WS-1).
                 var token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
@@ -438,27 +435,15 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 return token;
             }
 
-            if (parameters.AuthenticationType == "clientCredential"
-                && !string.IsNullOrWhiteSpace(parameters.ClientId) && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
+            if (parameters.AuthenticationType == "clientCredential" && !string.IsNullOrWhiteSpace(parameters.ClientId))
             {
-                EnsureTokenHostTrusted(target);
-                var clientCredentialEntity = new ClientCredential
-                {
-                    ItemId = parameters.ClientId,
-                    ClientSecret = parameters.ClientSecret
-                };
-                var token = await _clientCredentialTokenService.GetTokenAsync(clientCredentialEntity, tenantId);
+                // The secret is read from IAM's ClientCredentials by id; the node stores only the client id.
+                var token = await _clientCredentialTokenService.GetTokenAsync(parameters.ClientId, tenantId);
                 if (logToken) LogToken(log, token);
                 return token;
             }
 
             return null;
-        }
-
-        private void EnsureTokenHostTrusted(Uri target)
-        {
-            if (!_outboundGuard.IsTrustedHost(target))
-                throw new BlocksTokenHostNotTrustedException();
         }
 
         /// <summary><c>{ApiBaseUrl}/api/gateway</c>; a base that is not an absolute http/https URL is refused.</summary>

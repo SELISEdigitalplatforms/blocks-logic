@@ -1,25 +1,9 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using Microsoft.Extensions.Options;
 
 namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
 {
-    /// <summary>Settings of the HTTP Request step (<c>Workflow:HttpNode</c>).</summary>
-    public sealed class WorkflowHttpNodeOptions
-    {
-        public const string SectionName = "Workflow:HttpNode";
-
-        /// <summary>Used when <see cref="TrustedHosts"/> is empty.</summary>
-        public static readonly IReadOnlyList<string> DefaultTrustedHosts = ["seliseblocks.com", "blocksdevelopers.com"];
-
-        /// <summary>
-        /// Blocks hosts. A Blocks token (Blocks Authentication, Client Credential) is sent only to one of
-        /// these or a subdomain of one. Empty = <see cref="DefaultTrustedHosts"/>.
-        /// </summary>
-        public List<string> TrustedHosts { get; set; } = [];
-    }
-
     /// <summary>The HTTP Request step may not call this destination. Never retried.</summary>
     public sealed class WorkflowOutboundBlockedException : Exception
     {
@@ -27,18 +11,6 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             "The URL must be http or https and must not point to a private, loopback, link-local or reserved address.";
 
         public WorkflowOutboundBlockedException() : base(DefaultMessage)
-        {
-        }
-    }
-
-    /// <summary>A Blocks token was about to be sent to a host that is not a Blocks host.</summary>
-    public sealed class BlocksTokenHostNotTrustedException : Exception
-    {
-        public const string DefaultMessage =
-            "Blocks Authentication and Client Credential send a Blocks token only to Blocks hosts. " +
-            "Use a Blocks URL, or set the Authorization header yourself.";
-
-        public BlocksTokenHostNotTrustedException() : base(DefaultMessage)
         {
         }
     }
@@ -54,23 +26,18 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
     }
 
     /// <summary>
-    /// Outbound rules of the HTTP Request step. Own copy for this module (decision: modules do not share
-    /// guard code). Three layers:
+    /// Outbound rules of the HTTP Request step: no call into a private network. Own copy for this module
+    /// (decision: modules do not share guard code). Two layers, no host is exempt:
     /// <list type="number">
     /// <item><see cref="EnsureAllowedAsync"/> before the send: http/https only, a literal IP must pass,
     /// a host name is resolved and every address must pass.</item>
     /// <item><see cref="ConnectAsync"/> as the client's <see cref="SocketsHttpHandler.ConnectCallback"/>:
     /// resolves again, checks every address and connects to those addresses only. Runs for every
     /// connection, so it covers DNS rebinding and every redirect hop.</item>
-    /// <item>Trusted (Blocks) hosts skip the address check: in-cluster DNS may answer with private IPs.
-    /// A literal IP is never trusted.</item>
     /// </list>
     /// </summary>
     public interface IWorkflowOutboundGuard
     {
-        /// <summary>True when <paramref name="uri"/>'s host is a trusted Blocks host or a subdomain of one.</summary>
-        bool IsTrustedHost(Uri uri);
-
         /// <summary>Throws <see cref="WorkflowOutboundBlockedException"/> when the step may not call <paramref name="uri"/>.</summary>
         Task EnsureAllowedAsync(Uri uri, CancellationToken cancellationToken = default);
 
@@ -90,27 +57,19 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         /// <summary>Redirect hops the client follows.</summary>
         public const int MaxRedirects = 5;
 
-        private readonly string[] _trustedHosts;
         private readonly Func<string, CancellationToken, Task<IPAddress[]>> _resolve;
         private readonly Func<IPAddress, bool> _isBlocked;
 
-        public WorkflowOutboundGuard(IOptions<WorkflowHttpNodeOptions> options)
-            : this(options.Value.TrustedHosts, Dns.GetHostAddressesAsync, IsBlockedAddress)
+        public WorkflowOutboundGuard()
+            : this(Dns.GetHostAddressesAsync, IsBlockedAddress)
         {
         }
 
-        /// <summary>Test seam: trusted hosts, a host resolver and the address rule.</summary>
+        /// <summary>Test seam: a host resolver and the address rule.</summary>
         public WorkflowOutboundGuard(
-            IEnumerable<string>? trustedHosts,
             Func<string, CancellationToken, Task<IPAddress[]>> resolve,
             Func<IPAddress, bool> isBlocked)
         {
-            var hosts = (trustedHosts ?? [])
-                .Select(NormalizeHost)
-                .Where(h => h.Length > 0)
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
-            _trustedHosts = hosts.Length > 0 ? hosts : WorkflowHttpNodeOptions.DefaultTrustedHosts.ToArray();
             _resolve = resolve;
             _isBlocked = isBlocked;
         }
@@ -132,12 +91,6 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
                 UseCookies = false,
                 ConnectCallback = guard.ConnectAsync,
             };
-        }
-
-        public bool IsTrustedHost(Uri uri)
-        {
-            ArgumentNullException.ThrowIfNull(uri);
-            return IsTrustedHostName(uri.HostNameType, uri.IdnHost);
         }
 
         public Task EnsureAllowedAsync(Uri uri, CancellationToken cancellationToken = default)
@@ -182,8 +135,8 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         }
 
         /// <summary>
-        /// Resolves <paramref name="host"/> (a literal IP resolves to itself). Every address must pass,
-        /// unless the host is a trusted name. A DNS failure throws its own <see cref="SocketException"/>.
+        /// Resolves <paramref name="host"/> (a literal IP resolves to itself). Every address must pass.
+        /// A DNS failure throws its own <see cref="SocketException"/>.
         /// </summary>
         private async Task<IPAddress[]> ResolveCheckedAsync(string host, CancellationToken cancellationToken)
         {
@@ -204,33 +157,13 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
                 throw new SocketException((int)SocketError.HostNotFound);
             }
 
-            if (!IsTrustedHostName(UriHostNameType.Dns, trimmed) && addresses.Any(_isBlocked))
+            if (addresses.Any(_isBlocked))
             {
                 throw new WorkflowOutboundBlockedException();
             }
 
             return addresses;
         }
-
-        /// <summary>Exact match or a subdomain, on a dot boundary. A literal IP is never trusted.</summary>
-        private bool IsTrustedHostName(UriHostNameType type, string host)
-        {
-            if (type is UriHostNameType.IPv4 or UriHostNameType.IPv6)
-            {
-                return false;
-            }
-
-            var name = NormalizeHost(host);
-            if (name.Length == 0 || IPAddress.TryParse(name.Trim('[', ']'), out _))
-            {
-                return false;
-            }
-
-            return _trustedHosts.Any(t => name == t || name.EndsWith("." + t, StringComparison.Ordinal));
-        }
-
-        private static string NormalizeHost(string? host) =>
-            (host ?? string.Empty).Trim().TrimEnd('.').ToLowerInvariant();
 
         /// <summary>
         /// True for an address the step must never reach: unspecified, loopback, private (RFC 1918),

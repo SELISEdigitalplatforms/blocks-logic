@@ -102,6 +102,25 @@ describe("WorkflowEditorEdgeDefault", () => {
     expect(screen.getByText("True")).toBeTruthy();
   });
 
+  it("pins the output label right after the source handle and keeps the item count on its own at the midpoint", () => {
+    renderWithProviders(
+      <WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId: "if-true", sourceX: 40, sourceY: 20 })} />,
+      {
+        seedWorkflow: (store) =>
+          store.setState({
+            nodesMap: ifSourceNode(),
+            stepExecutionTraversedEdgeIds: new Set(["e1"]),
+            executedNodes: [executedNode({ outputCountsByBranch: { True: 2 } })],
+          }),
+      },
+    );
+    const label = screen.getByText("True");
+    const count = screen.getByText("2 items");
+    expect(label.style.transform).toBe("translate(46px, 20px) translateY(-50%)");
+    expect(count.style.transform).toContain("translate(-50%, -50%)");
+    expect(label.contains(count) || count.contains(label)).toBe(false);
+  });
+
   it("takes the label from the source node's handle entry", () => {
     const nodesMap = ifSourceNode();
     nodesMap.n1.handle.sources[1].label = "Otherwise";

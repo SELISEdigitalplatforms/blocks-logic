@@ -83,6 +83,47 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
+        public async Task ClientCredential_passes_only_the_client_id_so_the_secret_comes_from_iam()
+        {
+            TestBlocksContext.Clear();
+
+            var captured = await RunGetDataWithClientCredentialAsync();
+
+            captured.TokenClientId.Should().Be("client-1");
+            captured.Authorization.Should().Be("Bearer token-abc");
+        }
+
+        [Fact]
+        public async Task ClientCredential_with_no_token_sends_without_authorization_as_before()
+        {
+            TestBlocksContext.Clear();
+
+            var handler = new StubHandler(HttpStatusCode.OK,
+                """{"data":{"getTasks":{"items":[{"ItemId":"1"}],"totalCount":1}}}""");
+            var factory = new Mock<IHttpClientFactory>();
+            factory.Setup(f => f.CreateClient(It.IsAny<string>()))
+                .Returns(() => new HttpClient(handler, disposeHandler: false));
+            var tokenService = new Mock<IClientCredentialTokenService>();
+            tokenService
+                .Setup(s => s.GetTokenAsync(It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync((string?)null);
+
+            var node = new ActionDataV1Node(
+                factory.Object,
+                tokenService.Object,
+                new Mock<IWorkflowAuthService>().Object,
+                new ConfigurationBuilder().Build(),
+                NullLogger<ActionDataV1Node>.Instance,
+                TestOutboundGuard.ResolvingTo());
+
+            var result = await node.RunAsync(Context(clientCredential: true));
+
+            result.IsSuccess.Should().BeTrue();
+            handler.Request.Should().NotBeNull();
+            handler.Request!.Headers.Authorization.Should().BeNull();
+        }
+
+        [Fact]
         public async Task Gateway_request_sets_x_blocks_key_from_context_without_client_credential()
         {
             TestBlocksContext.Clear();
@@ -106,10 +147,11 @@ namespace XUnitTest.Workflow
                 .Returns(() => new HttpClient(handler, disposeHandler: false));
 
             string? tokenTenantId = null;
+            string? tokenClientId = null;
             var tokenService = new Mock<IClientCredentialTokenService>();
             tokenService
-                .Setup(s => s.GetTokenAsync(It.IsAny<ClientCredential>(), It.IsAny<string>()))
-                .Callback<ClientCredential, string>((_, tenantId) => tokenTenantId = tenantId)
+                .Setup(s => s.GetTokenAsync(It.IsAny<string>(), It.IsAny<string>()))
+                .Callback<string, string>((clientId, tenantId) => { tokenClientId = clientId; tokenTenantId = tenantId; })
                 .ReturnsAsync("token-abc");
 
             var node = new ActionDataV1Node(
@@ -127,6 +169,7 @@ namespace XUnitTest.Workflow
             handler.Request!.RequestUri!.AbsolutePath.Should().Be("/api/gateway");
 
             return new CapturedRequest(
+                tokenClientId,
                 tokenTenantId,
                 handler.Request.Headers.TryGetValues("x-blocks-key", out var keys) ? keys.Single() : null,
                 handler.Request.Headers.Authorization?.ToString());
@@ -142,7 +185,8 @@ namespace XUnitTest.Workflow
                 { "ApiBaseUrl", "https://api.seliseblocks.com" },
                 { "AuthenticationType", clientCredential ? "clientCredential" : "" },
                 { "ClientId", clientCredential ? "client-1" : "" },
-                { "ClientSecret", clientCredential ? "s3cr3t" : "" },
+                // What older editors saved once IAM stopped returning secrets: must be ignored.
+                { "ClientSecret", clientCredential ? "undefined" : "" },
             };
 
             var item = new WorkflowItemExecutionEntity
@@ -174,7 +218,7 @@ namespace XUnitTest.Workflow
             };
         }
 
-        private sealed record CapturedRequest(string? TokenTenantId, string? BlocksKey, string? Authorization);
+        private sealed record CapturedRequest(string? TokenClientId, string? TokenTenantId, string? BlocksKey, string? Authorization);
 
         private sealed class StubHandler : HttpMessageHandler
         {

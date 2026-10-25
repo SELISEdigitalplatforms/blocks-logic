@@ -9,7 +9,7 @@ namespace XUnitTest.TestHelpers
         public static readonly IPAddress PublicAddress = IPAddress.Parse("93.184.216.34");
 
         public static WorkflowOutboundGuard ResolvingTo(params IPAddress[] addresses) =>
-            new(null, (_, _) => Task.FromResult(addresses.Length > 0 ? addresses : [PublicAddress]),
+            new((_, _) => Task.FromResult(addresses.Length > 0 ? addresses : [PublicAddress]),
                 WorkflowOutboundGuard.IsBlockedAddress);
     }
 }

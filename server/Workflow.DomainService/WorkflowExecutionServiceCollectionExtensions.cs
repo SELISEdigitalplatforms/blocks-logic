@@ -92,6 +92,7 @@ namespace Workflow.DomainService
             services.AddSingleton<IExecutionLogRetentionProvider, LmtExecutionLogRetentionProvider>();
             services.AddSingleton<IExecutionLogService, ExecutionLogService>();
 
+            services.AddSingleton<IClientCredentialRepository, ClientCredentialRepository>();
             services.AddSingleton<IClientCredentialTokenService, ClientCredentialTokenService>();
 
             services.RegisterAllNotificationApplicationServices();
@@ -100,9 +101,7 @@ namespace Workflow.DomainService
 
             // HTTP Request step: own outbound guard and a guarded named client (connect-time address
             // check, at most 5 redirects, 10 MB response cap in the node).
-            services.AddOptions<WorkflowHttpNodeOptions>().BindConfiguration(WorkflowHttpNodeOptions.SectionName);
-            services.AddSingleton<IWorkflowOutboundGuard>(sp =>
-                new WorkflowOutboundGuard(sp.GetRequiredService<IOptions<WorkflowHttpNodeOptions>>()));
+            services.AddSingleton<IWorkflowOutboundGuard>(_ => new WorkflowOutboundGuard());
             services.AddHttpClient(WorkflowOutboundGuard.HttpClientName, client =>
                     client.MaxResponseContentBufferSize = WorkflowOutboundGuard.MaxResponseBytes)
                 .ConfigurePrimaryHttpMessageHandler(sp =>

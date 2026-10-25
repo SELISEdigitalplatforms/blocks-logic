@@ -16,15 +16,14 @@ using XUnitTest.TestHelpers;
 namespace XUnitTest.Workflow
 {
     /// <summary>
-    /// The Data node uses the HTTP Request step's outbound guard: a Blocks token goes only to a
-    /// trusted Blocks host, an untrusted host may not resolve to a private address, the guarded
-    /// named client is used, and the 10 MB response cap applies.
+    /// The Data node uses the HTTP Request step's outbound guard: no host, Blocks or not, may resolve
+    /// to a private address, the guarded named client is used, and the 10 MB response cap applies.
     /// </summary>
     public sealed class ActionDataV1NodeOutboundGuardTests : IDisposable
     {
         private const string TenantId = "tenant-1";
-        private const string TrustedBase = "https://api.seliseblocks.com";
-        private const string UntrustedBase = "https://collector.example.com";
+        private const string BlocksBase = "https://api.seliseblocks.com";
+        private const string PublicBase = "https://blocksapi.dev.slsblx.com";
         private const string ClientCredentialMode = "clientCredential";
         private const string BlocksAuthenticationMode = "blocksAuthentication";
         private const string OkBody = """{"data":{"getTasks":{"items":[{"ItemId":"1"}],"totalCount":1}}}""";
@@ -37,7 +36,7 @@ namespace XUnitTest.Workflow
         public ActionDataV1NodeOutboundGuardTests()
         {
             TestBlocksContext.Clear();
-            _tokens.Setup(s => s.GetTokenAsync(It.IsAny<ClientCredential>(), It.IsAny<string>())).ReturnsAsync("cc-token");
+            _tokens.Setup(s => s.GetTokenAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync("cc-token");
             _auth.Setup(a => a.CreateBlocksAuthorizationTokenAsync(It.IsAny<CancellationToken>())).ReturnsAsync("delegated-token");
             _factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(() => new HttpClient(_handler, disposeHandler: false));
         }
@@ -99,47 +98,36 @@ namespace XUnitTest.Workflow
 
         private void NoTokenMade()
         {
-            _tokens.Verify(s => s.GetTokenAsync(It.IsAny<ClientCredential>(), It.IsAny<string>()), Times.Never);
+            _tokens.Verify(s => s.GetTokenAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
             _auth.Verify(a => a.CreateBlocksAuthorizationTokenAsync(It.IsAny<CancellationToken>()), Times.Never);
-        }
-
-        [Theory]
-        [InlineData(ClientCredentialMode, UntrustedBase)]
-        [InlineData(BlocksAuthenticationMode, UntrustedBase)]
-        [InlineData(ClientCredentialMode, "https://seliseblocks.com.collector.example")]
-        [InlineData(BlocksAuthenticationMode, "https://notseliseblocks.com")]
-        public async Task Token_to_an_untrusted_host_fails_the_item_before_a_token_is_made(string mode, string apiBaseUrl)
-        {
-            var result = await Node().RunAsync(Context(Params(apiBaseUrl, mode)));
-
-            ShouldBeErrorItem(result, BlocksTokenHostNotTrustedException.DefaultMessage);
-            _handler.Requests.Should().BeEmpty();
-            NoTokenMade();
         }
 
         [Theory]
         [InlineData(ClientCredentialMode, "Bearer cc-token")]
         [InlineData(BlocksAuthenticationMode, "Bearer delegated-token")]
-        public async Task Token_to_a_trusted_host_is_sent_through_the_guarded_client(string mode, string expected)
+        public async Task Token_to_a_public_host_is_sent_through_the_guarded_client(string mode, string expected)
         {
-            var result = await Node().RunAsync(Context(Params(TrustedBase, mode)));
+            var result = await Node().RunAsync(Context(Params(PublicBase, mode)));
 
             result.OutputItems.Should().ContainSingle().Which.Data.Output.AsBsonDocument.Contains("error").Should().BeFalse();
             var request = _handler.Requests.Should().ContainSingle().Subject;
-            request.RequestUri.Should().Be(new Uri(TrustedBase + "/api/gateway"));
+            request.RequestUri.Should().Be(new Uri(PublicBase + "/api/gateway"));
             request.Headers.Authorization!.ToString().Should().Be(expected);
             _factory.Verify(f => f.CreateClient(WorkflowOutboundGuard.HttpClientName), Times.Once);
         }
 
-        [Fact]
-        public async Task Trusted_host_may_resolve_to_a_private_address()
+        [Theory]
+        [InlineData(ClientCredentialMode)]
+        [InlineData(BlocksAuthenticationMode)]
+        public async Task Blocks_host_resolving_to_a_private_address_is_refused_before_a_token_is_made(string mode)
         {
             var guard = TestOutboundGuard.ResolvingTo(IPAddress.Parse("10.1.2.3"));
 
-            var result = await Node(guard).RunAsync(Context(Params("https://dev-data.blocksdevelopers.com", ClientCredentialMode)));
+            var result = await Node(guard).RunAsync(Context(Params("https://dev-data.blocksdevelopers.com", mode)));
 
-            result.OutputItems.Should().ContainSingle().Which.Data.Output.AsBsonDocument.Contains("error").Should().BeFalse();
-            _handler.Requests.Should().ContainSingle();
+            ShouldBeErrorItem(result, WorkflowOutboundBlockedException.DefaultMessage);
+            _handler.Requests.Should().BeEmpty();
+            NoTokenMade();
         }
 
         [Theory]
@@ -157,20 +145,20 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task Untrusted_host_resolving_to_a_private_address_is_refused()
+        public async Task Public_name_resolving_to_a_private_address_is_refused()
         {
             var guard = TestOutboundGuard.ResolvingTo(IPAddress.Parse("192.168.1.10"));
 
-            var result = await Node(guard).RunAsync(Context(Params(UntrustedBase, "")));
+            var result = await Node(guard).RunAsync(Context(Params(PublicBase, "")));
 
             ShouldBeErrorItem(result, WorkflowOutboundBlockedException.DefaultMessage);
             _handler.Requests.Should().BeEmpty();
         }
 
         [Fact]
-        public async Task Untrusted_public_host_without_a_token_is_still_called()
+        public async Task Public_host_without_a_token_is_still_called()
         {
-            var result = await Node().RunAsync(Context(Params(UntrustedBase, "")));
+            var result = await Node().RunAsync(Context(Params(PublicBase, "")));
 
             result.OutputItems.Should().ContainSingle().Which.Data.Output.AsBsonDocument.Contains("error").Should().BeFalse();
             _handler.Requests.Should().ContainSingle().Which.Headers.Authorization.Should().BeNull();
@@ -181,13 +169,13 @@ namespace XUnitTest.Workflow
         {
             _handler = new CaptureHandler(OkBody, declaredLength: WorkflowOutboundGuard.MaxResponseBytes + 1);
 
-            var result = await Node().RunAsync(Context(Params(TrustedBase, ClientCredentialMode)));
+            var result = await Node().RunAsync(Context(Params(BlocksBase, ClientCredentialMode)));
 
             ShouldBeErrorItem(result, ResponseTooLargeException.DefaultMessage);
         }
 
         [Fact]
-        public async Task Configured_base_url_on_a_default_trusted_host_still_works()
+        public async Task Configured_base_url_is_used_when_the_node_has_none()
         {
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?> { ["ApiBaseUrl"] = "https://dev-data.blocksdevelopers.com" })
