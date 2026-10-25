@@ -101,7 +101,7 @@ namespace Blocks.FunctionRunner.Runs
             }
 
             var group = RedisKeys.WarmGroup(_options.RunnerId);
-            var consumer = new GroupConsumer(_db, _logger, RedisKeys.WarmStream, group, _options.RunnerId);
+            var consumer = new GroupConsumer(_db, _logger, RedisKeys.WarmStream, group, _options.RunnerId, fromStart: false);
             await EnsureGroupAsync(group).ConfigureAwait(false);
 
             _logger.LogInformation("Consuming {Stream} as {Group}", RedisKeys.WarmStream, group);
