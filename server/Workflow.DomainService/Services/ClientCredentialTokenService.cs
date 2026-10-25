@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Workflow.DomainService.Repositories;
 
 namespace Workflow.DomainService.Services
 {
@@ -29,6 +30,15 @@ namespace Workflow.DomainService.Services
         /// <param name="tenantId">The project key (used as X-Blocks-Key header)</param>
         /// <returns>The access token or null if failed</returns>
         Task<string?> GetTokenAsync(ClientCredential clientCredentials, string tenantId);
+
+        /// <summary>
+        /// Gets an access token for the client with this id, reading its secret from the tenant's IAM data.
+        /// Workflow nodes store only the client id.
+        /// </summary>
+        /// <param name="clientId">The client credential id selected on the node</param>
+        /// <param name="tenantId">The project key: picks the tenant database and is sent as X-Blocks-Key</param>
+        /// <returns>The access token, or null when there is no active client with this id or the token call failed</returns>
+        Task<string?> GetTokenAsync(string clientId, string tenantId);
     }
 
     /// <summary>
@@ -39,15 +49,31 @@ namespace Workflow.DomainService.Services
         private readonly ILogger<ClientCredentialTokenService> _logger;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
+        private readonly IClientCredentialRepository _clientCredentialRepository;
 
         public ClientCredentialTokenService(
             ILogger<ClientCredentialTokenService> logger,
             IHttpClientFactory httpClientFactory,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IClientCredentialRepository clientCredentialRepository)
         {
             _logger = logger;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
+            _clientCredentialRepository = clientCredentialRepository;
+        }
+
+        public async Task<string?> GetTokenAsync(string clientId, string tenantId)
+        {
+            var credential = await _clientCredentialRepository.GetClientCredentialAsync(tenantId, clientId);
+            if (credential == null || !credential.IsActive || string.IsNullOrWhiteSpace(credential.ClientSecret))
+            {
+                // Null like a refused token call: the node then sends without auth, as it always did.
+                _logger.LogWarning("No active client credential for ClientId: {ClientId}", clientId);
+                return null;
+            }
+
+            return await GetTokenAsync(credential, tenantId);
         }
 
         public async Task<string?> GetTokenAsync(ClientCredential clientCredentials, string tenantId)

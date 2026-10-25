@@ -37,7 +37,7 @@ namespace XUnitTest.Workflow
         public ActionDataV1NodeOutboundGuardTests()
         {
             TestBlocksContext.Clear();
-            _tokens.Setup(s => s.GetTokenAsync(It.IsAny<ClientCredential>(), It.IsAny<string>())).ReturnsAsync("cc-token");
+            _tokens.Setup(s => s.GetTokenAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync("cc-token");
             _auth.Setup(a => a.CreateBlocksAuthorizationTokenAsync(It.IsAny<CancellationToken>())).ReturnsAsync("delegated-token");
             _factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(() => new HttpClient(_handler, disposeHandler: false));
         }
@@ -99,7 +99,7 @@ namespace XUnitTest.Workflow
 
         private void NoTokenMade()
         {
-            _tokens.Verify(s => s.GetTokenAsync(It.IsAny<ClientCredential>(), It.IsAny<string>()), Times.Never);
+            _tokens.Verify(s => s.GetTokenAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
             _auth.Verify(a => a.CreateBlocksAuthorizationTokenAsync(It.IsAny<CancellationToken>()), Times.Never);
         }
 

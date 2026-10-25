@@ -361,7 +361,7 @@ namespace XUnitTest.Workflow
             var auth = new Mock<IWorkflowAuthService>();
             auth.Setup(a => a.CreateBlocksAuthorizationTokenAsync(It.IsAny<CancellationToken>())).ReturnsAsync("delegated-1");
             var clientCredential = new Mock<IClientCredentialTokenService>();
-            clientCredential.Setup(c => c.GetTokenAsync(It.IsAny<ClientCredential>(), It.IsAny<string>())).ReturnsAsync("cc-1");
+            clientCredential.Setup(c => c.GetTokenAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync("cc-1");
             var guard = resolvesTo is null ? TestOutboundGuard.ResolvingTo() : TestOutboundGuard.ResolvingTo(resolvesTo);
             var node = new ActionHttpRequestV1Node(factory, auth.Object, clientCredential.Object,
                 NullLogger<ActionHttpRequestV1Node>.Instance, guard);
@@ -386,7 +386,7 @@ namespace XUnitTest.Workflow
             ErrorMessage(run.Result).Should().Be(BlocksTokenHostNotTrustedException.DefaultMessage);
             run.Handler.Requests.Should().BeEmpty();
             run.Auth.Verify(a => a.CreateBlocksAuthorizationTokenAsync(It.IsAny<CancellationToken>()), Times.Never);
-            run.ClientCredential.Verify(c => c.GetTokenAsync(It.IsAny<ClientCredential>(), It.IsAny<string>()), Times.Never);
+            run.ClientCredential.Verify(c => c.GetTokenAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
 
         [Theory]

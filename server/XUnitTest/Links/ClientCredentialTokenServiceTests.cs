@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
@@ -67,7 +68,8 @@ namespace XUnitTest.Links
             HttpStatusCode status = HttpStatusCode.OK,
             string body = """{"accessToken":"token-abc","expiresIn":3600}""",
             Exception? shouldThrow = null,
-            string? endpoint = "https://iam.example.com/api/oidc/token")
+            string? endpoint = "https://iam.example.com/api/oidc/token",
+            ClientCredential? stored = null)
         {
             var handler = new StubHandler(status, body, shouldThrow);
             var factory = new Mock<IHttpClientFactory>();
@@ -82,10 +84,46 @@ namespace XUnitTest.Links
 
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 
+            var repository = new Mock<IClientCredentialRepository>();
+            repository.Setup(r => r.GetClientCredentialAsync("project-1", "client-1")).ReturnsAsync(stored);
+
             return (new ClientCredentialTokenService(
                 NullLogger<ClientCredentialTokenService>.Instance,
                 factory.Object,
-                configuration), handler);
+                configuration,
+                repository.Object), handler);
+        }
+
+        [Fact]
+        public async Task By_client_id_the_secret_is_read_from_the_repository_and_exchanged()
+        {
+            var (sut, handler) = Build(stored: new ClientCredential { ItemId = "client-1", ClientSecret = "s3cr3t", IsActive = true });
+
+            var token = await sut.GetTokenAsync("client-1", "project-1");
+
+            token.Should().Be("token-abc");
+            handler.RequestBody.Should().Contain("client_id=client-1");
+            handler.RequestBody.Should().Contain("client_secret=s3cr3t");
+            handler.Request!.Headers.GetValues("X-Blocks-Key").Should().ContainSingle().Which.Should().Be("project-1");
+        }
+
+        public static TheoryData<ClientCredential?> UnusableCredentials() => new()
+        {
+            null,
+            new ClientCredential { ItemId = "client-1", ClientSecret = "s3cr3t", IsActive = false },
+            new ClientCredential { ItemId = "client-1", ClientSecret = "", IsActive = true },
+        };
+
+        [Theory]
+        [MemberData(nameof(UnusableCredentials))]
+        public async Task By_client_id_a_missing_inactive_or_secretless_client_yields_null_and_calls_nothing(ClientCredential? stored)
+        {
+            var (sut, handler) = Build(stored: stored);
+
+            var token = await sut.GetTokenAsync("client-1", "project-1");
+
+            token.Should().BeNull();
+            handler.Request.Should().BeNull();
         }
 
         [Fact]
