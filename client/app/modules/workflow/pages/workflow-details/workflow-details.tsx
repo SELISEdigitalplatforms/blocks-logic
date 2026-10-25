@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { Button } from "@/components/ui-kits/button/button";
 import {
@@ -28,7 +28,12 @@ import { WorkflowStoreProvider, useWorkflowStoreApi } from "../../store";
 import { useWorkflow, useAutoSaveWorkflow } from "../../hooks";
 import { Separator } from "@/components/ui-kits/separator/separator";
 import { format } from "date-fns";
-import { useGetWorkflowById } from "@blocks-workflow/hooks/use-workflow-api";
+import { useGetWorkflowById, useUpdateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
+import {
+  hasLegacyClientCredential,
+  upgradeClientCredentialParameters,
+} from "../../utils/client-credential-upgrade";
+import { toPersistedNode } from "../../utils/to-persisted-node";
 import { WorkflowExecutions } from "@blocks-workflow/components/workflow-execution";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { showErrorToast } from "@/hooks/use-toast";
@@ -57,6 +62,9 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
 
   const { hasUnsavedChanges, setWorkflow, setLastSuccessfulExecutionData } = useWorkflow();
   const workflowStore = useWorkflowStoreApi();
+  const { mutateAsync: updateWorkflow } = useUpdateWorkflow();
+  // Workflows whose legacy client credential fields were already saved away, so a refetch never repeats it.
+  const migratedWorkflowIds = useRef(new Set<string>());
 
   const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } =
     useGetWorkflowById({ id: workflowId });
@@ -78,12 +86,24 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
         const editor = workflowStore.getState();
         if (editor.hasUnsavedChanges && editor.workflowId === workflowData.itemId) return;
         setWorkflow(workflowData);
+
+        // Save once so the legacy id:::secret composite and stored secret leave the workflow. Only that
+        // change is saved: the stored nodes, not the store's copy (its other upgrades wait for a real edit).
+        const needsMigration = workflowData.nodes?.some(hasLegacyClientCredential);
+        if (needsMigration && !migratedWorkflowIds.current.has(workflowData.itemId)) {
+          migratedWorkflowIds.current.add(workflowData.itemId);
+          updateWorkflow({
+            itemId: workflowData.itemId,
+            nodes: workflowData.nodes.map((node) => toPersistedNode(upgradeClientCredentialParameters(node))),
+            edges: workflowData.edges,
+          }).catch(() => migratedWorkflowIds.current.delete(workflowData.itemId));
+        }
       } else {
         showErrorToast({ errors: "Workflow not found" });
         navigate(scoped("/app/workflow"));
       }
     }
-  }, [data, isFetched, isFetchedAfterMount, setWorkflow, navigate, workflowStore]);
+  }, [data, isFetched, isFetchedAfterMount, setWorkflow, navigate, workflowStore, updateWorkflow]);
 
   const { isSaving, saveNow } = useAutoSaveWorkflow({
     workflowId,

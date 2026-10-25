@@ -23,7 +23,7 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         public string ClientId { get; set; } = string.Empty;
 
         /// <summary>
-        /// Client secret when <see cref="AuthenticationType"/> is <c>clientCredential</c>.
+        /// Legacy: older workflows saved the secret here. Ignored; the secret is read from IAM by <see cref="ClientId"/>.
         /// </summary>
         public string ClientSecret { get; set; } = string.Empty;
 

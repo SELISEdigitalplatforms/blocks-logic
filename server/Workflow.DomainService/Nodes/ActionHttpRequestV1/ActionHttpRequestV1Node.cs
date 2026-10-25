@@ -93,7 +93,8 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         /// Adds a bearer token when Authentication is Blocks Authentication or Client Credential
         /// and no Authorization header was already set manually (manual value always wins).
         /// Blocks Authentication without a delegated token throws <see cref="NoDelegatedTokenException"/>
-        /// (the item fails). Client Credential keeps its behaviour.
+        /// (the item fails). Client Credential reads the secret by client id; no token (missing or inactive
+        /// client, refused call) sends without an Authorization header, as before.
         /// A Blocks token goes only to a trusted Blocks host; any other host throws
         /// <see cref="BlocksTokenHostNotTrustedException"/> and nothing is sent.
         /// </summary>
@@ -121,13 +122,11 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
                     throw NoDelegatedTokenException.ForCurrentRun();
             }
             else if (string.Equals(mode, "clientCredential", StringComparison.OrdinalIgnoreCase)
-                && !string.IsNullOrWhiteSpace(parameters.ClientId)
-                && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
+                && !string.IsNullOrWhiteSpace(parameters.ClientId))
             {
                 EnsureTokenHostTrusted(target);
-                token = await _clientCredentialTokenService.GetTokenAsync(
-                    new ClientCredential { ItemId = parameters.ClientId, ClientSecret = parameters.ClientSecret },
-                    tenantId);
+                // The secret is read from IAM's ClientCredentials by id; the node stores only the client id.
+                token = await _clientCredentialTokenService.GetTokenAsync(parameters.ClientId, tenantId);
             }
 
             if (string.IsNullOrWhiteSpace(token)) return;

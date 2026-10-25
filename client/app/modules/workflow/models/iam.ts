@@ -9,7 +9,8 @@ export interface IClientConfigResponse {
   lastUpdatedBy: string;
   organizationIds: string[];
   tags: string[];
-  clientSecret: string;
+  /** Masked by IAM's list endpoint; never use it. Nodes store only itemId. */
+  clientSecret?: string;
   roles: string[];
   isActive: boolean;
   audiences: string[];

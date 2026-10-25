@@ -5,6 +5,7 @@ import type {
   WorkflowNode,
 } from "../models/node.model";
 import { getNodeDefinition } from "../components/node-library-panel/node-definitions";
+import { upgradeClientCredentialParameters } from "./client-credential-upgrade";
 
 /** Versions a stored node may carry; anything else is read as "v1". */
 const KNOWN_VERSIONS: readonly string[] = ["v1", "v2", "v3"] satisfies NodeVersion[];
@@ -44,15 +45,7 @@ export const findNodeDefinition = (
 ): WorkflowNodeDefinition | undefined =>
   getNodeDefinition(node.category, node.type, normaliseVersion(node.version));
 
-/**
- * Brings a stored node up to the newest version this bundle knows, in memory only. Pure: the input is
- * never mutated, and a node already current comes back unchanged (the same object).
- * - A missing or unknown version is read as "v1".
- * - A node without a matching definition is returned as is.
- * - Afterwards a definition with `deriveHandle` always rebuilds the handle from the parameters; any
- *   other definition fills a null, missing or empty handle from its template.
- */
-export const upgradeNode = <T extends WorkflowNode>(node: T): T => {
+const upgradeNodeShape = <T extends WorkflowNode>(node: T): T => {
   let version = normaliseVersion(node.version);
   let definition = getNodeDefinition(node.category, node.type, version);
   if (!definition) return node;
@@ -77,3 +70,15 @@ export const upgradeNode = <T extends WorkflowNode>(node: T): T => {
   }
   return upgraded;
 };
+
+/**
+ * Brings a stored node up to the newest version this bundle knows, in memory only. Pure: the input is
+ * never mutated, and a node already current comes back unchanged (the same object).
+ * - A missing or unknown version is read as "v1".
+ * - A node without a matching definition is returned as is.
+ * - Afterwards a definition with `deriveHandle` always rebuilds the handle from the parameters; any
+ *   other definition fills a null, missing or empty handle from its template.
+ * - Client Credential parameters move to the `clientId`-only shape (see upgradeClientCredentialParameters).
+ */
+export const upgradeNode = <T extends WorkflowNode>(node: T): T =>
+  upgradeClientCredentialParameters(upgradeNodeShape(node));
