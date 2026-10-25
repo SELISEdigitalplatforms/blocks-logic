@@ -8,7 +8,9 @@ using System.Diagnostics.CodeAnalysis;
 using Workflow.DomainService.Entities;
 using Blocks.Genesis;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
 {
@@ -24,17 +26,20 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         private readonly IWorkflowAuthService _workflowAuthService;
         private readonly IClientCredentialTokenService _clientCredentialTokenService;
         private readonly ILogger<ActionHttpRequestV1Node> _logger;
+        private readonly IWorkflowOutboundGuard _outboundGuard;
 
         public ActionHttpRequestV1Node(
             IHttpClientFactory httpClientFactory,
             IWorkflowAuthService workflowAuthService,
             IClientCredentialTokenService clientCredentialTokenService,
-            ILogger<ActionHttpRequestV1Node> logger)
+            ILogger<ActionHttpRequestV1Node> logger,
+            IWorkflowOutboundGuard outboundGuard)
         {
             _httpClientFactory = httpClientFactory;
             _workflowAuthService = workflowAuthService;
             _clientCredentialTokenService = clientCredentialTokenService;
             _logger = logger;
+            _outboundGuard = outboundGuard;
         }
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, ActionHttpRequestV1Parameters? nodeparameters)
@@ -62,12 +67,15 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
                         return NodeExecutionResult.Failed(ex.ForItem(i), outputItems);
                     }
 
-                    await ApplyAuthenticationAsync(parameters, headers, context.TenantId);
+                    // Checked before any token is made: the URL, then where a Blocks token may go.
+                    var uri = new Uri(url, UriKind.Absolute);
+                    await _outboundGuard.EnsureAllowedAsync(uri, context.CancellationToken);
+                    await ApplyAuthenticationAsync(parameters, headers, context.TenantId, uri);
 
                     requestLog.Sending(i);
                     var stopwatch = Stopwatch.StartNew();
                     var index = i;
-                    var responseBody = await SendHttpRequestAsync(httpMethod, url, headers, bodyContent, contentType,
+                    var responseBody = await SendHttpRequestAsync(httpMethod, uri, headers, bodyContent, contentType,
                         onStatus: status => requestLog.Response(index, status, stopwatch.ElapsedMilliseconds));
                     BuildOutputItems(outputItems, responseBody, context, parameters, i);
                 }
@@ -86,11 +94,14 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
         /// and no Authorization header was already set manually (manual value always wins).
         /// Blocks Authentication without a delegated token throws <see cref="NoDelegatedTokenException"/>
         /// (the item fails). Client Credential keeps its behaviour.
+        /// A Blocks token goes only to a trusted Blocks host; any other host throws
+        /// <see cref="BlocksTokenHostNotTrustedException"/> and nothing is sent.
         /// </summary>
         private async Task ApplyAuthenticationAsync(
             ActionHttpRequestV1Parameters parameters,
             Dictionary<string, string> headers,
-            string tenantId)
+            string tenantId,
+            Uri target)
         {
             if (headers.Keys.Any(key => string.Equals(key, AuthorizationHeaderName, StringComparison.OrdinalIgnoreCase)))
                 return;
@@ -102,16 +113,18 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             string? token = null;
             if (string.Equals(mode, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
+                EnsureTokenHostTrusted(target);
                 // Delegated token only. Never the caller's raw BlocksContext.OAuthToken, and never an
                 // unauthenticated send: no token fails this item (WS-1).
                 token = await _workflowAuthService.CreateBlocksAuthorizationTokenAsync();
                 if (string.IsNullOrWhiteSpace(token))
-                    throw new NoDelegatedTokenException();
+                    throw NoDelegatedTokenException.ForCurrentRun();
             }
             else if (string.Equals(mode, "clientCredential", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(parameters.ClientId)
                 && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
             {
+                EnsureTokenHostTrusted(target);
                 token = await _clientCredentialTokenService.GetTokenAsync(
                     new ClientCredential { ItemId = parameters.ClientId, ClientSecret = parameters.ClientSecret },
                     tenantId);
@@ -119,6 +132,12 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
 
             if (string.IsNullOrWhiteSpace(token)) return;
             headers[AuthorizationHeaderName] = $"Bearer {token}";
+        }
+
+        private void EnsureTokenHostTrusted(Uri target)
+        {
+            if (!_outboundGuard.IsTrustedHost(target))
+                throw new BlocksTokenHostNotTrustedException();
         }
 
         private (string url, string httpMethod, Dictionary<string, string> headers, string bodyContent, string contentType) PrepareRequest(
@@ -195,10 +214,11 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
             }
         }
         // Send HTTP request and get response as list of items (to support array responses) like if response is an array, each element will be a separate item; if response is an object, it will be a single item
-        private async Task<JsonElement> SendHttpRequestAsync(string httpMethod, string url, Dictionary<string, string> headers, string bodyContent, string contentType = "application/json", Action<int>? onStatus = null)
+        private async Task<JsonElement> SendHttpRequestAsync(string httpMethod, Uri url, Dictionary<string, string> headers, string bodyContent, string contentType = "application/json", Action<int>? onStatus = null)
         {
-            var httpClient = _httpClientFactory.CreateClient();
-            var request = new HttpRequestMessage(new HttpMethod(httpMethod), url);
+            // Guarded client: connect-time address check on every hop, at most 5 redirects.
+            var httpClient = _httpClientFactory.CreateClient(WorkflowOutboundGuard.HttpClientName);
+            using var request = new HttpRequestMessage(new HttpMethod(httpMethod), url);
             // Add headers
             foreach (var header in headers)
             {
@@ -212,12 +232,20 @@ namespace Workflow.DomainService.Nodes.ActionHttpRequestV1
 
             try
             {
-                HttpResponseMessage response;
-                response = await httpClient.SendAsync(request);
+                // Headers first, then a capped body read; the client timeout still covers both.
+                using var timeout = new CancellationTokenSource(httpClient.Timeout);
+                using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
                 onStatus?.Invoke((int)response.StatusCode);
                 response.EnsureSuccessStatusCode();
-                var responseString = await response.Content.ReadAsStringAsync();
+                var responseString = await WorkflowHttpResponseReader.ReadAsStringCappedAsync(
+                    response.Content, WorkflowOutboundGuard.MaxResponseBytes, timeout.Token);
                 return JsonDocument.Parse(responseString).RootElement.Clone();
+            }
+            catch (HttpRequestException ex) when (ex.InnerException is WorkflowOutboundBlockedException blocked)
+            {
+                // Refused at connect time (a redirect hop or a DNS answer that changed): report it as itself.
+                ExceptionDispatchInfo.Throw(blocked);
+                throw;
             }
             catch (HttpRequestException ex)
             {

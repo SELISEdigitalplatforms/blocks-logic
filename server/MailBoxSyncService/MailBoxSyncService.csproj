@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DataAccess.InternalService\DataAccess.InternalService.csproj" />
     <ProjectReference Include="..\Workflow.DomainService\Workflow.DomainService.csproj" />
     <ProjectReference Include="..\Mail.DomainService\Mail.DomainService.csproj" />
   </ItemGroup>

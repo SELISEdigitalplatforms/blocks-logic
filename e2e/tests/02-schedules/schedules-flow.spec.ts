@@ -195,8 +195,8 @@ test.describe("flow: Schedules menu", () => {
     const createFormName = uniqueName();
     await gotoScheduleNew(form, page);
 
-    await test.step("[Positive] Active switch is on by default and Add Header adds an extra header row", async () => {
-      await expect(form.activeSwitch).toBeChecked();
+    await test.step("[Positive] Active switch is hidden on create and Add Header adds an extra header row", async () => {
+      await expect(form.activeSwitch).toHaveCount(0);
       await form.clickAddHeader();
       await expect(form.headerKeyInput).toBeVisible();
       await expect(form.headerValueInput).toBeVisible();

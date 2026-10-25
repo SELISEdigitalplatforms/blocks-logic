@@ -15,6 +15,7 @@ namespace DomainService.Utilities
             serviceCollection.AddSignalR(); 
 
             serviceCollection.AddSingleton<INotificationService, NotificationService>();
+            serviceCollection.AddSingleton<INotifierSendGuard, NotifierSendGuard>();
             serviceCollection.AddSingleton<INotificationRepository, NotificationRepository>();
             serviceCollection.AddSingleton<INotifierServiceFactory, NotifierServiceFactory>();
             serviceCollection.AddSingleton<IStrategicClientProviderFactory, StrategicClientProviderFactory>();

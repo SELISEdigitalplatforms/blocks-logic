@@ -11,6 +11,7 @@ const getRun = vi.fn();
 const getRunLogs = vi.fn();
 const getRuns = vi.fn();
 const cancelRun = vi.fn();
+const streamRun = vi.fn();
 
 vi.mock("../../services/function.service", () => ({
   functionService: {
@@ -20,8 +21,21 @@ vi.mock("../../services/function.service", () => ({
     getRunLogs: (...args: unknown[]) => getRunLogs(...args),
     getRuns: (...args: unknown[]) => getRuns(...args),
     cancelRun: (...args: unknown[]) => cancelRun(...args),
+    streamRun: (...args: unknown[]) => streamRun(...args),
   },
 }));
+
+/** An SSE body that sends these events, then stays open until `end` is called. */
+const sseBody = (text: string) => {
+  let end = () => {};
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(text));
+      end = () => controller.close();
+    },
+  });
+  return { body, end: () => end() };
+};
 
 const renderPanel = () => renderWithProviders(<TestPanel functionId="fn_1" onOpenRun={vi.fn()} />);
 
@@ -36,6 +50,7 @@ describe("TestPanel", () => {
     getRun.mockResolvedValue(null);
     getRunLogs.mockResolvedValue({ data: [], totalCount: 0 });
     getRuns.mockResolvedValue({ data: [], totalCount: 0 });
+    streamRun.mockReturnValue(new Promise(() => {}));
   });
 
   it("shows each real step, with the current one explained", async () => {
@@ -140,6 +155,53 @@ describe("TestPanel", () => {
     const returned = await screen.findByLabelText("Returned value");
     expect(returned.textContent).toContain('"mongo": "healthy"');
     expect(screen.getByText("Succeeded", { selector: "li span" })).toBeTruthy();
+  });
+
+  it("shows a streamed answer while the handler runs, before the run ends", async () => {
+    testFunction.mockResolvedValue({ runId: "run_1", status: "Running" });
+    getRun.mockResolvedValue({ id: "run_1", status: "Running", attempts: [] });
+    const { body } = sseBody("data: Hel\n\ndata: lo\n\n");
+    streamRun.mockResolvedValue(body);
+
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /run test/i }));
+
+    const streamed = await screen.findByLabelText("Streamed answer", { selector: "pre" });
+    await waitFor(() => expect(streamed.textContent).toBe("Hello"));
+    expect(streamRun).toHaveBeenCalledWith("run_1", expect.any(AbortSignal));
+    expect(screen.getByLabelText("Streaming")).toBeTruthy();
+  });
+
+  it("says why a stream stopped, and does not repeat it as the returned value", async () => {
+    testFunction.mockResolvedValue({ runId: "run_1", status: "Running" });
+    getRun
+      .mockResolvedValueOnce({ id: "run_1", status: "Running", attempts: [] })
+      .mockResolvedValue({ id: "run_1", status: "Failed", result: '"part"', attempts: [] });
+    const { body } = sseBody(
+      'data: part\n\nevent: error\ndata: {"runId":"run_1","status":"FAILED","message":"boom"}\n\n',
+    );
+    streamRun.mockResolvedValue(body);
+
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /run test/i }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("boom");
+    expect(screen.getByLabelText("Streamed answer", { selector: "pre" }).textContent).toBe("part");
+    await waitFor(() => expect(screen.getByText("Failed", { selector: "li span" })).toBeTruthy(), {
+      timeout: 4000,
+    });
+    expect(screen.queryByLabelText("Returned value")).toBeNull();
+  });
+
+  it("does not open a stream for a run that never reached its handler", async () => {
+    testFunction.mockResolvedValue({ runId: "run_1", status: "Queued" });
+    getRun.mockResolvedValue({ id: "run_1", status: "Claimed", attempts: [] });
+
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /run test/i }));
+
+    await screen.findByText(/installing your packages/i);
+    expect(streamRun).not.toHaveBeenCalled();
   });
 
   it("follows the build when Test answers with one instead of a run", async () => {

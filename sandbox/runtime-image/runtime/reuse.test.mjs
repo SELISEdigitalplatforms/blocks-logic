@@ -756,3 +756,106 @@ describe('reuse mode: streamed answers (F-5)', () => {
     } finally { await s.close(); }
   });
 });
+
+describe('reuse mode: ctx.events', () => {
+  const allowed = { events: { allowed: ['SendMail', 'FunctionEvent'] } };
+
+  test('each call has its own buffer and ids; the line keeps the call tag', async () => {
+    const s = sandbox({ 'index.js': `
+      export default async function (input, ctx) {
+        ctx.events.add('SendMail', { to: input.call });
+        return ctx.events.add('FunctionEvent', { name: 'order.created', data: input.call });
+      }` });
+    try {
+      await s.ready();
+      const a = await s.call('A', allowed);
+      const b = await s.call('B', { ...allowed, run: { id: 'B', attempt: 2 } });
+      assert.equal(a.result.call, 'A');
+      assert.deepEqual(a.result.value, { id: 'A-1-2' });
+      assert.deepEqual(a.result.events.map((e) => [e.id, e.type]), [['A-1-1', 'SendMail'], ['A-1-2', 'FunctionEvent']]);
+      assert.deepEqual(b.result.events.map((e) => e.id), ['B-2-1', 'B-2-2']);
+      assert.deepEqual(b.result.events[1].payload, { name: 'order.created', data: 'B' });
+    } finally { await s.close(); }
+  });
+
+  test('failure and timeout drop the events; not-allowed types throw', async () => {
+    const s = sandbox({ 'index.js': `
+      export default async function (input, ctx) {
+        let denied;
+        try { ctx.events.add('SendMail', {}); } catch (e) { denied = e.message; }
+        if (input.call === 'F') { ctx.events.add('FunctionEvent', { name: 'abc' }); throw new Error('boom'); }
+        return denied;
+      }` });
+    try {
+      await s.ready();
+      const f = await s.call('F', { events: { allowed: ['FunctionEvent'] } });
+      assert.equal(f.result.ok, false);
+      assert.equal('events' in f.result, false);
+      const n = await s.call('N', { events: { allowed: ['FunctionEvent'] } });
+      assert.match(n.result.value, /is not allowed for this function/);
+      assert.equal('events' in n.result, false);
+    } finally { await s.close(); }
+  });
+
+  test('add after the answer, inside waitUntil, and from a ctx kept after the call throws', async () => {
+    const s = sandbox({ 'index.js': `
+      let kept;
+      export default async function (input, ctx) {
+        if (input.call === 'B') { try { kept.events.add('SendMail', {}); return 'added'; } catch (e) { return e.message; } }
+        kept = ctx;
+        ctx.waitUntil((async () => {
+          await new Promise((r) => setTimeout(r, 20));
+          try { ctx.events.add('SendMail', { late: 1 }); } catch (e) { ctx.log.info('late: ' + e.message); }
+        })());
+        ctx.events.add('SendMail', { early: 1 });
+        return 1;
+      }` });
+    try {
+      await s.ready();
+      const a = await s.call('A', allowed);
+      assert.equal(a.result.events.length, 1);
+      assert.ok(a.logs.some((l) => l.msg === 'late: ctx.events.add was called after its call ended'));
+      const b = await s.call('B', allowed);
+      assert.equal(b.result.value, 'ctx.events.add was called after its call ended');
+    } finally { await s.close(); }
+  });
+
+  test('caps and redaction apply per call', async () => {
+    const s = sandbox({ 'index.js': `
+      export default async function (input, ctx) {
+        ctx.events.add('SendMail', { key: ctx.env.API_KEY });
+        try { ctx.events.add('SendMail', { a: 'x'.repeat(64 * 1024) }); } catch (e) { return e.message; }
+      }` });
+    try {
+      await s.ready();
+      const a = await s.call('A', { ...allowed, env: { API_KEY: 'sk_live_abcdef' }, maskedEnv: ['API_KEY'] });
+      assert.match(a.result.value, /limit is 65536 bytes/);
+      assert.deepEqual(a.result.events[0].payload, { key: '[redacted]' });
+    } finally { await s.close(); }
+  });
+});
+
+describe('reuse mode: fetch trace', () => {
+  test('each call sends its own traceparent, and only to its listed hosts', async () => {
+    const seen = [];
+    const server = createServer((req, res) => { seen.push([req.url, req.headers.traceparent ?? null]); res.end('ok'); });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const tpA = '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01';
+    const tpB = '00-cccccccccccccccccccccccccccccccc-dddddddddddddddd-01';
+    const s = sandbox({ 'index.js': `
+      export default async function (input) {
+        await fetch('http://127.0.0.1:${port}/' + input.call);
+        await fetch('http://localhost:${port}/other-' + input.call);
+        return 1;
+      }` });
+    try {
+      await s.ready();
+      await s.call('A', { trace: { traceparent: tpA, hosts: ['127.0.0.1'] } });
+      await s.call('B', { trace: { traceparent: tpB, hosts: ['127.0.0.1'] } });
+      await s.call('C');
+      assert.deepEqual(seen, [['/A', tpA], ['/other-A', null], ['/B', tpB], ['/other-B', null],
+        ['/C', null], ['/other-C', null]]);
+    } finally { await s.close(); server.close(); }
+  });
+});

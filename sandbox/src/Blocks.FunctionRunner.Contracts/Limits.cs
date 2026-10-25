@@ -54,6 +54,21 @@ namespace Blocks.FunctionRunner.Contracts
         public const long LogBytes = 1024 * 1024;
         public const int LogLines = 10_000;
 
+        /// <summary>Function events (<c>ctx.events.add</c>): at most this many per call.</summary>
+        public const int EventsPerCall = 50;
+
+        /// <summary>One event's serialized payload. Checked in the sandbox, here, and again in the Worker.</summary>
+        public const int EventPayloadBytes = 64 * 1024;
+
+        /// <summary>All payloads of one call together. Kept under the bus's 256 KB-per-message ceiling per event.</summary>
+        public const int EventsTotalBytes = 512 * 1024;
+
+        /// <summary>
+        /// What a call's events add to the output the runner reads: their payloads plus each event's id,
+        /// type and framing. Added to every per-run output ceiling, so events never eat the result's room.
+        /// </summary>
+        public const int EventsLineBytes = EventsTotalBytes + (64 * 1024);
+
         /// <summary>
         /// Per-function concurrent runs: a range of 1–25, defaulting to 2.
         /// <para>

@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Workflow.DomainService.Entities;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {
@@ -281,6 +281,68 @@ namespace XUnitTest.Workflow
 
             WorkflowBranchRouting.IsReady("child", edges, executions, activeNodeIds: Array.Empty<string>())
                 .Should().BeTrue();
+        }
+
+        // ---------- SPEC6: Switch keys are branches like any other ----------
+
+        private const string SwitchA = "switch-handle-source-aaaaa1";
+        private const string SwitchB = "switch-handle-source-bbbbb2";
+        private const string SwitchFallback = "switch-handle-source-fallback";
+
+        [Fact]
+        public void TakenTargets_SwitchKeys_StartOnlyChildrenOnKeysThatCarriedItems()
+        {
+            var edges = new[]
+            {
+                Edge("switch", "a", SwitchA),
+                Edge("switch", "b", SwitchB),
+                Edge("switch", "f", SwitchFallback),
+            };
+
+            WorkflowBranchRouting.TakenTargets(edges, new Dictionary<string, int> { [SwitchB] = 2, [SwitchFallback] = 1 })
+                .Should().BeEquivalentTo("b", "f");
+        }
+
+        [Fact]
+        public void IsReady_JoinBehindAnUntakenSwitchKey_DoesNotWait()
+        {
+            var edges = new[]
+            {
+                Edge("switch", "live", SwitchA),
+                Edge("switch", "dead", SwitchB),
+                Edge("live", "merge", "source"),
+                Edge("dead", "merge", "source"),
+            };
+            var executions = new[]
+            {
+                Node("switch", 1, new() { [SwitchA] = 1 }),
+                Node("live", 2, new() { ["source"] = 1 }),
+            };
+
+            WorkflowBranchRouting.IsReady("merge", edges, executions, activeNodeIds: new[] { "merge" })
+                .Should().BeTrue();
+        }
+
+        [Fact]
+        public void JoinsSentNothing_OnlyJoinsThisNodeSentNoItems()
+        {
+            var edges = new[]
+            {
+                Edge("a", "join", "source"),
+                Edge("b", "join", "source"),
+                Edge("a", "single", "source"),
+                Edge("a", "fed", "source"),
+                Edge("c", "fed", "source"),
+                Edge("a", "join2", "if-false"),
+                Edge("a", "join2", "if-true"),
+                Edge("d", "join2", "source"),
+            };
+            var counts = new Dictionary<string, int> { ["if-true"] = 1 };
+
+            // "join": two parents, a sent nothing. "single": one parent. "join2": a sent items on if-true.
+            WorkflowBranchRouting.JoinsSentNothing(edges.Where(e => e.Source == "a"), counts, edges)
+                .Should().Equal("join", "fed");
+            WorkflowBranchRouting.JoinsSentNothing(null, counts, edges).Should().BeEmpty();
         }
 
         private static NodeExecutionEntity Node(

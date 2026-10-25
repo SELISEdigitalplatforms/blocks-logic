@@ -4,7 +4,7 @@ using Mail.DomainService.Mails;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Net.WebSockets;
-using System.Text.RegularExpressions;
+using Blocks.Genesis.Entities.Os;
 
 namespace Mail.DomainService.Template.Services
 {
@@ -12,7 +12,6 @@ namespace Mail.DomainService.Template.Services
     {
         private readonly IDbContextProvider _dbContextProvider;
         private const string _collectionName = "EmailTemplates";
-        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
 
         public TemplateRepository(IDbContextProvider dbContextProvider)
         {
@@ -110,21 +109,6 @@ namespace Mail.DomainService.Template.Services
             var filter = Builders<EmailTemplate>.Filter.Eq(mc => mc.ItemId, itemId);
 
             await collection.DeleteOneAsync(filter);
-        }
-
-        public async Task<TemplatePluginConfig> GetPluginConfigAsync(string pluginProvider)
-        {
-            var dataBase = _dbContextProvider.GetDatabase(BlocksContext.GetContext()?.TenantId ?? "");
-            var collection = dataBase.GetCollection<TemplatePluginConfig>($"{nameof(TemplatePluginConfig)}s");
-
-            var normalizedProvider = Regex.Replace(pluginProvider?.Trim() ?? "", @"\s+", " ", RegexOptions.None, RegexTimeout);
-
-            var filter = Builders<TemplatePluginConfig>.Filter.Regex(
-               x => x.PluginProvider,
-               new BsonRegularExpression($"^{Regex.Escape(normalizedProvider)}$", "i")
-            );
-
-            return await collection.Find(filter).FirstOrDefaultAsync();
         }
     }
 }

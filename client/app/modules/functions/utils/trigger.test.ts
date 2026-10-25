@@ -51,6 +51,10 @@ describe("withTriggerDefaults", () => {
     expect(next.httpMethods).toEqual(["PATCH"]);
   });
 
+  it("keeps the sse response mode", () => {
+    expect(withTriggerDefaults({ ...legacy, responseMode: "sse" }).responseMode).toBe("sse");
+  });
+
   it("treats an unknown response mode as background", () => {
     const next = withTriggerDefaults({
       ...legacy,

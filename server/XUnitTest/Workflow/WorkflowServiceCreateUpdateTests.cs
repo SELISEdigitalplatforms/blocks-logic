@@ -10,6 +10,7 @@ using Moq;
 using MongoDB.Bson;
 using Scheduler.DomainService.Services;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {
@@ -161,6 +162,9 @@ namespace XUnitTest.Workflow
                 .Returns(Task.CompletedTask);
             _workflowRepository
                 .Setup(r => r.GetWorkflowAsync("tenant-wf", It.IsAny<string>()))
+                .ReturnsAsync(() => captured!);
+            _workflowRepository
+                .Setup(r => r.GetWorkflowForViewAsync("tenant-wf", It.IsAny<string>()))
                 .ReturnsAsync(() => captured!);
 
             const string settings = "{\"retry\":2,\"note\":\"x\"}";

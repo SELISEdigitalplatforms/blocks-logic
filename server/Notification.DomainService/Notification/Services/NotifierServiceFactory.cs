@@ -1,5 +1,6 @@
 ﻿using DomainService.Shared;
 using Microsoft.Extensions.DependencyInjection;
+using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Notification
 {

@@ -1,7 +1,5 @@
 using Blocks.Genesis;
 using FluentAssertions;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -10,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

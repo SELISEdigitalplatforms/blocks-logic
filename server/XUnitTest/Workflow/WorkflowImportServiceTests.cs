@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Blocks.Genesis;
+using Blocks.Genesis.DataAccess.Rules;
 using DomainService.Storage;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,6 +15,7 @@ using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using Workflow.DomainService.Utils;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {
@@ -114,6 +116,33 @@ namespace XUnitTest.Workflow
                 "Workflow imported",
                 It.IsAny<string>(),
                 saved.ItemId,
+                0), Times.Once);
+        }
+
+        [Fact]
+        public async Task ImportAsync_RefusedByAValidationRule_NotifiesItsMessage()
+        {
+            SetupDownload("""{"name":"Imported","settings":{},"nodes":[],"edges":[]}""");
+            var refused = new DataValidationResult();
+            refused.AddError("Name", "Name must be at most 5 characters", "MaxLength");
+            _repository.Setup(r => r.CreateWorkflowAsync(It.IsAny<WorkflowEntity>()))
+                .ThrowsAsync(new DataValidationException(refused));
+
+            await _sut.ImportAsync(new WorkflowImportEvent
+            {
+                FileId = "file-1",
+                MessageCoRelationId = "cor-rule",
+                TenantId = "tenant-abc",
+                UserId = "user-abc",
+            });
+
+            _notifications.Verify(n => n.NotifyImportAsync(
+                It.Is<List<string>>(ids => ids.Contains("user-abc")),
+                "cor-rule",
+                false,
+                "Workflow import failed",
+                "Name: Name must be at most 5 characters",
+                null,
                 0), Times.Once);
         }
 

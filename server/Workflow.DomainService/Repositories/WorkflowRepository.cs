@@ -1,7 +1,9 @@
 using Blocks.Genesis;
+using DataAccess.InternalService;
 using Workflow.DomainService.Entities;
 using MongoDB.Driver;
 using System.Diagnostics.CodeAnalysis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Repositories
 {
@@ -12,9 +14,12 @@ namespace Workflow.DomainService.Repositories
         private readonly IDbContextProvider _dbContextProvider;
         private const string _collectionName = "Workflows";
 
-        public WorkflowRepository(IDbContextProvider dbContextProvider)
+        private readonly ILogicDataAccess _dataAccess;
+
+        public WorkflowRepository(IDbContextProvider dbContextProvider, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
+            _dataAccess = dataAccess;
 
         }
 
@@ -27,14 +32,19 @@ namespace Workflow.DomainService.Repositories
             return _dbContextProvider.GetCollection<WorkflowEntity>(tenantId, _collectionName);
         }
 
-        public Task CreateWorkflowAsync(WorkflowEntity workflow)
-        {
+        private Task<ReadScope<WorkflowEntity>> ReadAsync(string tenantId, FilterDefinition<WorkflowEntity> filter, string callSite, bool useProjection = true) =>
+            _dataAccess.ReadAsync(LogicSchemas.WorkflowEntity, filter, $"WorkflowRepository.{callSite}", tenantId, useProjection);
 
+        public async Task CreateWorkflowAsync(WorkflowEntity workflow)
+        {
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.WorkflowEntity, "WorkflowRepository.CreateWorkflow", workflow.TenantId))
+                throw new UnauthorizedAccessException("Workflow create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.WorkflowEntity, workflow, isInsert: true, "WorkflowRepository.CreateWorkflow", workflow.TenantId);
             var collection = GetCollection(workflow.TenantId);
-            return collection.InsertOneAsync(workflow, null);
+            await collection.InsertOneAsync(workflow, null);
         }
 
-        public Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished)
+        public async Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowEntity>.Filter.Empty;
@@ -56,10 +66,11 @@ namespace Workflow.DomainService.Repositories
                     );
                 }
             }
-            return collection.CountDocumentsAsync(filter);
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflowsCount");
+            return scope.Granted ? await collection.CountDocumentsAsync(scope.Filter) : 0;
         }
 
-        public Task<List<WorkflowEntity>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished)
+        public async Task<List<WorkflowEntity>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowEntity>.Filter.Empty;
@@ -81,17 +92,30 @@ namespace Workflow.DomainService.Repositories
                     );
                 }
             }
-            return collection.Find(filter)
+            var scope = await ReadAsync(tenantId, filter, "GetAllWorkflows");
+            if (!scope.Granted) return [];
+            return scope.ForView(await scope.Apply(collection)
                 .SortByDescending(x => x.CreatedDate)
                 .Skip(pageNumber * pageSize)
-                .Limit(pageSize).ToListAsync();
+                .Limit(pageSize).ToListAsync());
         }
 
-        public Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId)
+        public async Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId)
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowEntity>.Filter.Eq(w => w.ItemId, workflowId);
-            return collection.Find(filter).FirstOrDefaultAsync();
+            // Entity may be written back by the caller (ReplaceOne): read it whole, no projection.
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflow", useProjection: false);
+            return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null!;
+        }
+
+        public async Task<WorkflowEntity> GetWorkflowForViewAsync(string tenantId, string workflowId)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = Builders<WorkflowEntity>.Filter.Eq(w => w.ItemId, workflowId);
+            // Masked: View column (property) rules clear what the caller may not see.
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflowForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(collection).FirstOrDefaultAsync()) : null!;
         }
 
         public async Task<List<WorkflowEntity>> GetWorkflowsByMailServerConfigurationIdAsync(string tenantId, string mailServerConfigurationId)
@@ -114,7 +138,8 @@ namespace Workflow.DomainService.Repositories
                 Builders<WorkflowEntity>.Filter.ElemMatch(w => w.PublishedMeta.TriggerNodes, publishedNode));
 
             var filter = Builders<WorkflowEntity>.Filter.Or(draftMatch, publishedMatch);
-            return await collection.Find(filter).ToListAsync();
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflowsByMailServerConfiguration", useProjection: false);
+            return scope.Granted ? await scope.Apply(collection).ToListAsync() : [];
         }
 
         public async Task<List<WorkflowEntity>> GetWorkflowsUsingFunctionAsync(
@@ -143,7 +168,10 @@ namespace Workflow.DomainService.Repositories
                 .Include(w => w.TenantId)
                 .Include(w => w.IsPublished);
 
-            return await collection.Find(filter)
+            // Own projection kept (UI list); only the resolver row filter is added.
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflowsUsingFunction", useProjection: false);
+            if (!scope.Granted) return [];
+            return await collection.Find(scope.Filter)
                 .Project<WorkflowEntity>(projection)
                 .Limit(Math.Max(1, limit))
                 .ToListAsync();
@@ -164,7 +192,8 @@ namespace Workflow.DomainService.Repositories
                 Builders<WorkflowEntity>.Filter.ElemMatch(w => w.Nodes, nodeFilter)
             );
 
-            return await collection.Find(filter).ToListAsync();
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflowsByDataCollection", useProjection: false);
+            return scope.Granted ? await scope.Apply(collection).ToListAsync() : [];
         }
 
         public async Task<List<WorkflowEntity>> GetPublishWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation)
@@ -183,7 +212,8 @@ namespace Workflow.DomainService.Repositories
                 Builders<WorkflowEntity>.Filter.ElemMatch(w => w.PublishedMeta.TriggerNodes, nodeFilter)
             );
 
-            return await collection.Find(filter).ToListAsync();
+            var scope = await ReadAsync(tenantId, filter, "GetPublishWorkflowsByDataCollection", useProjection: false);
+            return scope.Granted ? await scope.Apply(collection).ToListAsync() : [];
         }
 
         public async Task UpdateWorkflowAsync(WorkflowEntity workflow)
@@ -192,18 +222,25 @@ namespace Workflow.DomainService.Repositories
                 throw new InvalidOperationException("TenantId is required for workflow");
 
             var collection = GetCollection(workflow.TenantId);
-            var result = await collection.ReplaceOneAsync(item => item.ItemId == workflow.ItemId, workflow);
-            if (result.MatchedCount == 0)
+            var filter = await _dataAccess.EditFilterAsync(LogicSchemas.WorkflowEntity,
+                Builders<WorkflowEntity>.Filter.Eq(item => item.ItemId, workflow.ItemId), "WorkflowRepository.UpdateWorkflow", workflow.TenantId);
+            if (filter is not null)
+                await _dataAccess.PrepareReplaceAsync(LogicSchemas.WorkflowEntity, workflow, collection, filter, "WorkflowRepository.UpdateWorkflow", workflow.TenantId);
+            // Denied: no write; the existing "not found" error is the answer.
+            var result = filter is null ? null : await collection.ReplaceOneAsync(filter, workflow);
+            if (result is null || result.MatchedCount == 0)
             {
                 throw new KeyNotFoundException($"Workflow with ItemId '{workflow.ItemId}' not found");
             }
         }
 
-        public Task DeleteWorkflowAsync(string tenantId, string workflowId)
+        public async Task DeleteWorkflowAsync(string tenantId, string workflowId)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowEntity>.Filter.Eq(w => w.ItemId, workflowId);
-            return collection.DeleteOneAsync(filter);
+            var filter = await _dataAccess.DeleteFilterAsync(LogicSchemas.WorkflowEntity,
+                Builders<WorkflowEntity>.Filter.Eq(w => w.ItemId, workflowId), "WorkflowRepository.DeleteWorkflow", tenantId);
+            if (filter is null) return;
+            await collection.DeleteOneAsync(filter);
         }
 
     }

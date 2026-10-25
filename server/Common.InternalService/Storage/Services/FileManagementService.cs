@@ -1,11 +1,11 @@
 using Blocks.Genesis;
-using CloudConfiguration.DomainService.Shared.Services;
-using CloudConfiguration.DomainService.Storage.Entities;
+using DomainService.Configuration;
 using FluentValidation;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using File = Common.InternalService.Storage.File;
+using Blocks.Genesis.Entities.Data;
 
 namespace Common.InternalService.Storage
 {
@@ -16,7 +16,7 @@ namespace Common.InternalService.Storage
         private readonly IFileVersionRepository _versionRepository;
         private readonly IStorageServiceFactory _storageServiceFactory;
         private readonly IDirectoryRepository _directoryRepository;
-        private readonly IConfigurationRepository _configurationRepository;
+        private readonly IStorageConfigurationProvider _storageConfigurations;
         private readonly IValidator<GetPreSignedUrlForUploadRequest> _requestValidator;
         private readonly IContentAccessResolver _accessResolver;
         private readonly IContentAccessRepository _accessRepository;
@@ -27,7 +27,7 @@ namespace Common.InternalService.Storage
             IFileRepository fileRepository,
             IStorageServiceFactory storageServiceFactory,
             IFileVersionRepository versionRepository,
-            IConfigurationRepository configurationRepository,
+            IStorageConfigurationProvider storageConfigurations,
             IDirectoryRepository directoryRepository,
             IValidator<GetPreSignedUrlForUploadRequest> requestValidator,
             IContentAccessResolver accessResolver,
@@ -37,7 +37,7 @@ namespace Common.InternalService.Storage
             _fileRepository = fileRepository;
             _storageServiceFactory = storageServiceFactory;
             _versionRepository = versionRepository;
-            _configurationRepository = configurationRepository;
+            _storageConfigurations = storageConfigurations;
             _directoryRepository = directoryRepository;
             _requestValidator = requestValidator;
             _accessResolver = accessResolver;
@@ -175,10 +175,8 @@ namespace Common.InternalService.Storage
 
         private const string DefaultConfigurationName = "Default";
 
-        private async Task<StorageConfiguration> GetConfigurationAsync(string? configurationName)
-        {
-            return await _configurationRepository.GetStorageConfigurationByNameAsync(configurationName ?? DefaultConfigurationName);
-        }
+        private Task<StorageConfiguration?> GetConfigurationAsync(string? configurationName) =>
+            _storageConfigurations.GetByNameAsync(configurationName ?? DefaultConfigurationName);
 
         private IStorageService GetStorageService(StorageConfiguration configuration)
         {

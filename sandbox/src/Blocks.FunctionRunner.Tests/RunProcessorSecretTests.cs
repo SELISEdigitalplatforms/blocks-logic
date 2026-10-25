@@ -20,6 +20,8 @@ namespace Blocks.FunctionRunner.Tests
     /// faked: what the sandbox is handed, what is refused before it is ever started, and that a
     /// value never reaches Redis, the result entry or a log line.
     /// </summary>
+    // Shares the results stream that EventRunQueueTests deletes; must not run alongside it.
+    [Collection("redis-key-prefix")]
     public sealed class RunProcessorSecretTests : IAsyncLifetime
     {
         private const string Tenant = "tenant_secret_test";
@@ -450,7 +452,8 @@ namespace Blocks.FunctionRunner.Tests
 
             resolver.Calls.Should().BeEmpty();
             sandbox.Calls.Should().Be(1);
-            sandbox.EnvelopeContentSeen.Should().Be(legacy);
+            // Untouched apart from the `trace` the runner now sets on every envelope.
+            sandbox.EnvelopeContentSeen.Should().Be(ExecutionEnvelope.WithTrace(legacy, null, RunnerOptions.DefaultTraceHosts));
         }
 
         [SkippableFact]

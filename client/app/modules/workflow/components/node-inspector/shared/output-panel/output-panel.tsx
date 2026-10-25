@@ -1,10 +1,9 @@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { ScrollArea, ScrollBar } from "@/components/ui-kits/scroll-area/scroll-area";
 import { useWorkflowStore } from "@blocks-workflow/store";
-import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
 import { useCallback, useMemo, useState } from "react";
 import { inferSchemaFromRuntimeRows } from "@blocks-workflow/utils/runtime-node-data";
-import { ChevronDown, ChevronUp, Copy, Pencil, Pin, PinOff, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Pin, PinOff, TriangleAlert } from "lucide-react";
 import { useWorkflow } from "@blocks-workflow/hooks/use-workflow";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
@@ -13,12 +12,30 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/to
 import { showErrorToast } from "@/hooks/use-toast";
 import { NodeExecutionStatus } from "@blocks-workflow/utils/workflow-execution-editor.util";
 import type { ExecutedNode } from "@blocks-workflow/models/workflow.model";
+import { CopyValueButton } from "../copy-value-button";
+import { itemCountLabel, outputBranchGroups, showsBranchHeaders, type OutputBranchGroup } from "@blocks-workflow/utils/output-branches";
+import { fieldsNotFound } from "@blocks-workflow/utils/split-out";
+import { mergeInputCounts, mergeInputsWithoutData } from "@blocks-workflow/utils/merge-handles";
 
-type BranchGroup = {
-  branch: string;
-  rows: unknown[];
+type BranchGroup = OutputBranchGroup & {
   schema: ReturnType<typeof inferSchemaFromRuntimeRows>;
 };
+
+/** A branch's name (its output's label, not its key), item count, and a copy button for the key. */
+const BranchHeader = ({ group, className = "" }: { group: BranchGroup; className?: string }) => (
+  <div className={`group/branch flex min-w-0 items-center gap-2 ${className}`}>
+    <span title={group.key} className="truncate text-xs font-semibold text-high-emphasis">
+      {group.title}
+    </span>
+    <span className="shrink-0 text-xs text-low-emphasis">{itemCountLabel(group.rows.length)}</span>
+    <CopyValueButton
+      value={group.key}
+      label={`Copy branch key of ${group.title}`}
+      className="-my-0.5 ml-auto h-5 shrink-0 px-1 opacity-0 focus-visible:opacity-100 group-hover/branch:opacity-100"
+      iconClassName="h-3.5 w-3.5"
+    />
+  </div>
+);
 
 export const OutputPanel = ({
   isCollapsed,
@@ -33,6 +50,7 @@ export const OutputPanel = ({
   const selectedNode = useWorkflowStore((s) => s.selectedNode);
   const executedItems = useWorkflowStore((s) => s.executedItems);
   const executedNodes = useWorkflowStore((s) => s.executedNodes);
+  const edgesMap = useWorkflowStore((s) => s.edgesMap);
   const { editorMode, updateNode, lastSuccessfulExecutionData } = useWorkflow();
   const hasMockData = selectedNode?.pinData != null;
 
@@ -44,7 +62,8 @@ export const OutputPanel = ({
       const rows = Array.isArray(selectedNode.pinData) ? selectedNode.pinData : [selectedNode.pinData];
       return [
         {
-          branch: "default",
+          key: "default",
+          title: "default",
           rows,
           schema: inferSchemaFromRuntimeRows(rows),
         },
@@ -64,15 +83,43 @@ export const OutputPanel = ({
         return acc;
       }, new Map<string, unknown[]>());
 
-    return Array.from(groupedRows.entries()).map(([branch, rows]) => ({
-      branch,
-      rows,
-      schema: inferSchemaFromRuntimeRows(rows),
+    // Nothing ran yet: no groups, so every tab shows its usual empty state.
+    if (groupedRows.size === 0) return [];
+    return outputBranchGroups(selectedNode, groupedRows).map((group) => ({
+      ...group,
+      schema: inferSchemaFromRuntimeRows(group.rows),
     }));
   }, [executedItems, selectedNode]);
 
   // The error the server saved on this node's latest run (nodeExecution.error). It used to be stored
   // and never shown, so a failed test step looked like one with no output (WF-40).
+  // Split Out: how many items went in and came out, and the fields no input item had (n8n's hint).
+  const splitOutSummary = useMemo(() => {
+    if (!selectedNode || selectedNode.type !== "splitOut" || selectedNode.pinData != null) return null;
+    const run = latestRun(executedNodes, selectedNode.id);
+    if (!run || run.status === NodeExecutionStatus.Failed) return null;
+    const parameters = (selectedNode.parameters ?? {}) as Record<string, unknown>;
+    const input = Array.isArray(run.input) ? run.input : [];
+    return {
+      inputCount: run.inputItemCount ?? input.length,
+      outputCount: run.outputItemCount ?? 0,
+      notFound: fieldsNotFound(parameters.fields, input, parameters.disableDotNotation !== true),
+    };
+  }, [executedNodes, selectedNode]);
+
+  // Merge: how many items each input received on the latest run.
+  const mergeSummary = useMemo(() => {
+    if (!selectedNode || selectedNode.type !== "merge" || selectedNode.pinData != null) return null;
+    const run = latestRun(executedNodes, selectedNode.id);
+    if (!run || run.status === NodeExecutionStatus.Failed) return null;
+    const parameters = (selectedNode.parameters ?? {}) as Record<string, unknown>;
+    const inputs = mergeInputCounts(selectedNode.id, parameters.numberInputs, Object.values(edgesMap), (sourceId) => {
+      const source = latestRun(executedNodes, sourceId);
+      return source?.status === NodeExecutionStatus.Completed ? source.outputCountsByBranch : undefined;
+    });
+    return { inputs, withoutData: mergeInputsWithoutData(parameters.runWhen, inputs) };
+  }, [edgesMap, executedNodes, selectedNode]);
+
   const failedRunError = useMemo(
     () => (selectedNode ? latestRunError(executedNodes, selectedNode.id) : null),
     [executedNodes, selectedNode],
@@ -83,12 +130,7 @@ export const OutputPanel = ({
     [runtimeOutputByBranch],
   );
 
-  const hasMultipleBranches = runtimeOutputByBranch.length > 1;
-
-  const handleCopyExpression = useCallback((value: unknown) => {
-    const stringValue = typeof value === "string" ? value : JSON.stringify(value);
-    copyToClipboard(stringValue);
-  }, []);
+  const hasMultipleBranches = showsBranchHeaders(runtimeOutputByBranch);
 
   const handleSetMockDataClick = useCallback(() => {
     setIsEditingMock(true);
@@ -209,6 +251,7 @@ export const OutputPanel = ({
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
+              aria-label={isCollapsed ? "Expand output" : "Collapse output"}
               className="text-low-emphasis hover:bg-surface-hover rounded p-1 transition-colors"
             >
               {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
@@ -224,6 +267,36 @@ export const OutputPanel = ({
         >
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p className="whitespace-pre-wrap break-words">{failedRunError}</p>
+        </div>
+      )}
+
+      {splitOutSummary && !isEditingMock && (
+        <div className="mt-2 flex shrink-0 flex-col gap-1.5">
+          <p className="text-xs text-medium-emphasis">
+            {countItems(splitOutSummary.inputCount)} in → {countItems(splitOutSummary.outputCount)} out
+          </p>
+          {splitOutSummary.notFound.map((field) => (
+            <output key={field} className="flex gap-2 rounded border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="break-words">The field &apos;{field}&apos; wasn&apos;t found in any input item</span>
+            </output>
+          ))}
+        </div>
+      )}
+
+      {mergeSummary && !isEditingMock && (
+        <div className="mt-2 flex shrink-0 flex-col gap-1.5">
+          <p className="text-xs text-medium-emphasis">
+            {mergeSummary.inputs.map(({ label, count }) => `${label} · ${countItems(count)}`).join("   ")}
+          </p>
+          {mergeSummary.withoutData.length > 0 && (
+            <output className="flex gap-2 rounded border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="break-words">
+                Run When is All: {mergeSummary.withoutData.join(", ")} brought no items, so nothing was output.
+              </span>
+            </output>
+          )}
         </div>
       )}
 
@@ -255,15 +328,14 @@ export const OutputPanel = ({
           ) : (
             <div className="flex flex-col gap-3">
               {runtimeOutputByBranch.map((group) => (
-                <div key={group.branch} className="flex flex-col gap-2">
-                  {hasMultipleBranches && (
-                    <p className="px-1 text-xs font-semibold uppercase tracking-wide text-medium-emphasis">
-                      Branch: {group.branch}
-                    </p>
+                <div key={group.key} className="flex flex-col gap-2">
+                  {hasMultipleBranches && <BranchHeader group={group} className="px-1" />}
+                  {hasMultipleBranches && group.rows.length === 0 && (
+                    <p className="rounded border border-dashed border-border/60 px-2 py-1.5 text-xs text-low-emphasis">No items went to this output.</p>
                   )}
                   {group.rows.map((row, index) => (
                     <div
-                      key={`${group.branch}-${index}`}
+                      key={`${group.key}-${index}`}
                       className="rounded border border-border/60 p-2"
                     >
                       <p className="mb-1 text-xs font-semibold text-medium-emphasis">
@@ -273,26 +345,24 @@ export const OutputPanel = ({
                         <div className="flex flex-col gap-1">
                           {group.schema.map((field) => (
                             <div
-                              key={`${group.branch}-${index}-${field.key}`}
-                              className="hover:bg-surface-hover group flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCopyExpression(row[field.key]);
-                              }}
-                              title={`Click to copy value for ${field.key}`}
+                              key={`${group.key}-${index}-${field.key}`}
+                              className="hover:bg-surface-hover group flex min-w-0 items-start gap-2 rounded px-2 py-1 text-xs"
                             >
-                              <span className="font-mono text-high-emphasis">{field.key}:</span>
-                              <span className="text-low-emphasis">
+                              <span className="shrink-0 py-0.5 font-mono text-high-emphasis">{field.key}:</span>
+                              <span className="min-w-0 flex-1 whitespace-pre-wrap py-0.5 text-low-emphasis [overflow-wrap:anywhere]">
                                 {formatCellValue(row[field.key])}
                               </span>
-                              <span className="ml-auto hidden text-[10px] text-low-emphasis group-hover:inline">
-                                click to copy
-                              </span>
+                              <CopyValueButton
+                                value={toCopyText(row[field.key])}
+                                label={`Copy value of ${field.key}`}
+                                className="-my-0.5 h-5 px-1 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                                iconClassName="h-3.5 w-3.5"
+                              />
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="px-2 py-1 text-xs text-low-emphasis">
+                        <p className="whitespace-pre-wrap px-2 py-1 text-xs text-low-emphasis [overflow-wrap:anywhere]">
                           {formatCellValue(row)}
                         </p>
                       )}
@@ -310,11 +380,13 @@ export const OutputPanel = ({
           {hasMultipleBranches ? (
             <div className="flex flex-col gap-3">
               {runtimeOutputByBranch.map((group) => (
-                <div key={group.branch} className="rounded border border-border/60 p-2">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-medium-emphasis">
-                    Branch: {group.branch}
-                  </p>
-                  <RuntimeTable rows={group.rows} />
+                <div key={group.key} className="rounded border border-border/60 p-2">
+                  <BranchHeader group={group} className="mb-2" />
+                  {group.rows.length === 0 ? (
+                    <p className="text-xs text-low-emphasis">No items went to this output.</p>
+                  ) : (
+                    <RuntimeTable rows={group.rows} />
+                  )}
                 </div>
               ))}
             </div>
@@ -329,11 +401,13 @@ export const OutputPanel = ({
           {hasMultipleBranches ? (
             <div className="flex flex-col gap-3 p-2">
               {runtimeOutputByBranch.map((group) => (
-                <div key={group.branch} className="rounded border border-border/60">
-                  <p className="border-b border-border/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-medium-emphasis">
-                    Branch: {group.branch}
-                  </p>
-                  <RuntimeJson rows={group.rows} />
+                <div key={group.key} className="rounded border border-border/60">
+                  <BranchHeader group={group} className="border-b border-border/60 px-3 py-2" />
+                  {group.rows.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-low-emphasis">No items went to this output.</p>
+                  ) : (
+                    <RuntimeJson rows={group.rows} />
+                  )}
                 </div>
               ))}
             </div>
@@ -384,7 +458,10 @@ function RuntimeTable({ rows }: { rows: unknown[] }) {
           {rows.map((row, index) => (
             <tr key={index}>
               {columns.map((column) => (
-                <td key={column} className="border-b border-border/50 px-2 py-1 text-high-emphasis">
+                <td
+                  key={column}
+                  className="max-w-xs whitespace-normal border-b border-border/50 px-2 py-1 align-top text-high-emphasis [overflow-wrap:anywhere]"
+                >
                   {column === primitiveColumn
                     ? !isRecord(row)
                       ? formatCellValue(row)
@@ -412,18 +489,8 @@ function RuntimeJson({ rows }: { rows: unknown[] }) {
 
   return (
     <div className="relative">
-      <Button
-        type="button"
-        variant="ghost"
-        size="xxs"
-        className="absolute right-2 top-2 h-7 px-2 text-low-emphasis"
-        aria-label="Copy output JSON"
-        title="Copy output JSON"
-        onClick={() => void copyToClipboard(json)}
-      >
-        <Copy className="h-4 w-4" />
-      </Button>
-      <pre className="p-3 pr-12 text-xs leading-relaxed text-high-emphasis">
+      <CopyValueButton value={json} label="Copy output JSON" className="absolute right-2 top-2" />
+      <pre className="whitespace-pre-wrap p-3 pr-12 text-xs leading-relaxed text-high-emphasis [overflow-wrap:anywhere]">
         <code>{json}</code>
       </pre>
     </div>
@@ -435,10 +502,16 @@ function RuntimeJson({ rows }: { rows: unknown[] }) {
  * stored a user-facing message hold ex.ToString(): cut it before the stack trace and drop the
  * "System.Exception: " prefix.
  */
-function latestRunError(executedNodes: ExecutedNode[] | null | undefined, nodeId: string): string | null {
-  const latest = (executedNodes ?? [])
+const countItems = (count: number) => `${count} ${count === 1 ? "item" : "items"}`;
+
+function latestRun(executedNodes: ExecutedNode[] | null | undefined, nodeId: string): ExecutedNode | null {
+  return (executedNodes ?? [])
     .filter((ne) => ne.nodeId === nodeId)
     .reduce<ExecutedNode | null>((last, ne) => (!last || ne.runIndex >= last.runIndex ? ne : last), null);
+}
+
+function latestRunError(executedNodes: ExecutedNode[] | null | undefined, nodeId: string): string | null {
+  const latest = latestRun(executedNodes, nodeId);
   if (!latest || latest.status !== NodeExecutionStatus.Failed) return null;
 
   const message = (latest.error ?? "").split(/\r?\n\s+at /)[0].replace(/^System\.Exception:\s*/, "").trim();
@@ -455,6 +528,10 @@ function formatCellValue(value: unknown): string {
   } catch {
     return "[unserializable]";
   }
+}
+
+function toCopyText(value: unknown): string {
+  return typeof value === "string" ? value : formatCellValue(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

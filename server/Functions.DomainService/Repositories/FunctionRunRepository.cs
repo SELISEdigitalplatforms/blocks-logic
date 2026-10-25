@@ -1,10 +1,10 @@
 using System.Text.RegularExpressions;
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
+using DataAccess.InternalService;
 using Functions.DomainService.Utils;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
@@ -15,10 +15,19 @@ namespace Functions.DomainService.Repositories
         private readonly HashSet<string> _indexedTenants = [];
         private readonly Lock _indexGate = new();
 
-        public FunctionRunRepository(IDbContextProvider dbContextProvider)
+        private readonly ILogicDataAccess _dataAccess;
+
+        public FunctionRunRepository(IDbContextProvider dbContextProvider, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
+            _dataAccess = dataAccess;
         }
+
+        private Task<ReadScope<FunctionRunEntity>> ReadAsync(string tenantId, FilterDefinition<FunctionRunEntity> filter, string callSite, bool useProjection = true) =>
+            _dataAccess.ReadAsync(LogicSchemas.FunctionRunEntity, filter, $"FunctionRunRepository.{callSite}", tenantId, useProjection);
+
+        private Task<FilterDefinition<FunctionRunEntity>?> EditAsync(string tenantId, FilterDefinition<FunctionRunEntity> filter, string callSite) =>
+            _dataAccess.EditFilterAsync(LogicSchemas.FunctionRunEntity, filter, $"FunctionRunRepository.{callSite}", tenantId);
 
         private IMongoCollection<FunctionRunEntity> Collection(string tenantId)
             => _dbContextProvider.GetCollection<FunctionRunEntity>(tenantId, FunctionsConstants.FunctionRunsCollection);
@@ -44,6 +53,11 @@ namespace Functions.DomainService.Repositories
                     // index rather than every run document of the function.
                     new CreateIndexModel<FunctionRunEntity>(
                         keys.Ascending(r => r.FunctionId).Ascending(r => r.VersionNumber)),
+                    // The queue status: a function's Queued runs, by kind (events or not), oldest first.
+                    new CreateIndexModel<FunctionRunEntity>(
+                        keys.Ascending(r => r.FunctionId).Ascending(r => r.Status).Ascending(r => r.InvokedBy).Ascending(r => r.CreatedDate)),
+                    // A redelivered event finds the run it already started: one function, one event id.
+                    new CreateIndexModel<FunctionRunEntity>(keys.Ascending(r => r.FunctionId).Ascending(r => r.InvokedById)),
                     // CompletedAt is null until a run finishes, and a TTL index only ever
                     // expires documents whose indexed field holds an actual date — an
                     // in-flight run is never at risk of being swept away mid-execution.
@@ -97,6 +111,10 @@ namespace Functions.DomainService.Repositories
             }
 
             var collection = Collection(tenantId);
+            // Own projection (no Input/Result) is kept for the list; only the resolver row filter is added.
+            var scope = await ReadAsync(tenantId, query, "GetAll", useProjection: false);
+            if (!scope.Granted) return ([], 0);
+            query = scope.Filter;
             var totalCount = await collection.CountDocumentsAsync(query, cancellationToken: cancellationToken);
             // Input (up to 1 MB) and Result (up to 5 MB) are not in RunSummaryDto, so fetching
             // them to build a 20-row table would move up to ~120 MB per page for nothing. An
@@ -113,10 +131,10 @@ namespace Functions.DomainService.Repositories
             return (items, totalCount);
         }
 
-        private static readonly Enums.RunStatus[] NonTerminalStatuses =
+        private static readonly RunStatus[] NonTerminalStatuses =
         [
-            Enums.RunStatus.Queued, Enums.RunStatus.Claimed, Enums.RunStatus.Starting,
-            Enums.RunStatus.Running, Enums.RunStatus.OutputProcessing,
+            RunStatus.Queued, RunStatus.Claimed, RunStatus.Starting,
+            RunStatus.Running, RunStatus.OutputProcessing,
         ];
 
         public async Task<IReadOnlySet<string>> GetVersionIdsWithActiveRunsAsync(
@@ -127,8 +145,10 @@ namespace Functions.DomainService.Repositories
                 & builder.In(r => r.Status, NonTerminalStatuses)
                 & builder.Ne(r => r.VersionId, null);
 
+            var scope = await ReadAsync(tenantId, filter, "GetVersionIdsWithActiveRuns", useProjection: false);
+            if (!scope.Granted) return new HashSet<string>(StringComparer.Ordinal);
             var runs = await Collection(tenantId)
-                .Find(filter)
+                .Find(scope.Filter)
                 .Project(r => r.VersionId)
                 .ToListAsync(cancellationToken);
 
@@ -149,9 +169,12 @@ namespace Functions.DomainService.Repositories
             var query = builder.Eq(r => r.FunctionId, functionId)
                 & builder.In(r => r.VersionNumber, versionNumbers);
 
+            // Aggregation: the resolver read filter is the first $match; projection is not applied.
+            var scope = await ReadAsync(tenantId, query, "CountByVersion", useProjection: false);
+            if (!scope.Granted) return new Dictionary<int, long>();
             var counts = await Collection(tenantId)
                 .Aggregate()
-                .Match(query)
+                .Match(scope.Filter)
                 .Group(r => r.VersionNumber, g => new { VersionNumber = g.Key, Count = g.LongCount() })
                 .ToListAsync(cancellationToken);
 
@@ -168,19 +191,78 @@ namespace Functions.DomainService.Repositories
             var query = builder.In(r => r.FunctionId, functionIds)
                 & builder.Gte(r => r.CreatedDate, since);
 
+            var scope = await ReadAsync(tenantId, query, "CountSinceByFunction", useProjection: false);
+            if (!scope.Granted) return new Dictionary<string, long>();
             var counts = await Collection(tenantId)
                 .Aggregate()
-                .Match(query)
+                .Match(scope.Filter)
                 .Group(r => r.FunctionId, g => new { FunctionId = g.Key, Count = g.LongCount() })
                 .ToListAsync(cancellationToken);
 
             return counts.ToDictionary(c => c.FunctionId, c => c.Count);
         }
 
+        public async Task<FunctionRunEntity?> FindEventRunAsync(
+            string tenantId, string functionId, string eventId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(functionId) || string.IsNullOrWhiteSpace(eventId)) return null;
+
+            await EnsureIndexesAsync(tenantId, cancellationToken);
+            var f = Builders<FunctionRunEntity>.Filter;
+            var query = f.Eq(r => r.FunctionId, functionId) & f.Eq(r => r.InvokedById, eventId) & f.Eq(r => r.InvokedBy, InvokedByType.Event)
+                // A run closed because its enqueue failed never ran anything: the event must be able to start another.
+                & f.Ne(r => r.ErrorCode, RunErrorCode.EnqueueFailed);
+            var scope = await ReadAsync(tenantId, query, "FindEventRun", useProjection: false);
+            if (!scope.Granted) return null;
+            return await Collection(tenantId).Find(scope.Filter)
+                .Project<FunctionRunEntity>(Builders<FunctionRunEntity>.Projection.Exclude(r => r.Input).Exclude(r => r.Result))
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        public async Task<FunctionQueueCounts> GetQueueCountsAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            var none = new FunctionQueueCounts(0, 0, null);
+            if (string.IsNullOrWhiteSpace(functionId)) return none;
+
+            await EnsureIndexesAsync(tenantId, cancellationToken);
+            var f = Builders<FunctionRunEntity>.Filter;
+            var query = f.Eq(r => r.FunctionId, functionId) & f.Eq(r => r.Status, RunStatus.Queued);
+            var scope = await ReadAsync(tenantId, query, "GetQueueCounts", useProjection: false);
+            if (!scope.Granted) return none;
+
+            var collection = Collection(tenantId);
+            var events = scope.Filter & f.Eq(r => r.InvokedBy, InvokedByType.Event);
+            var others = scope.Filter & f.Ne(r => r.InvokedBy, InvokedByType.Event);
+
+            var eventCount = await collection.CountDocumentsAsync(events, cancellationToken: cancellationToken);
+            var otherCount = await collection.CountDocumentsAsync(others, cancellationToken: cancellationToken);
+            DateTime? oldest = null;
+            if (eventCount > 0)
+            {
+                var first = await collection.Find(events)
+                    .Sort(Builders<FunctionRunEntity>.Sort.Ascending(r => r.CreatedDate))
+                    .Project<FunctionRunEntity>(Builders<FunctionRunEntity>.Projection.Include(r => r.CreatedDate))
+                    .FirstOrDefaultAsync(cancellationToken);
+                oldest = first?.CreatedDate;
+            }
+            return new FunctionQueueCounts(otherCount, eventCount, oldest);
+        }
+
         public async Task<FunctionRunEntity?> GetByIdAsync(string tenantId, string runId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(runId)) return null;
-            return await Collection(tenantId).Find(r => r.ItemId == runId).FirstOrDefaultAsync(cancellationToken);
+            // Hot path: the /api/fn sync-wait loop polls this. Anonymous callers skip the resolver.
+            var scope = await ReadAsync(tenantId, Builders<FunctionRunEntity>.Filter.Where(r => r.ItemId == runId), "GetById");
+            return scope.Granted ? await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken) : null;
+        }
+
+        public async Task<FunctionRunEntity?> GetByIdForViewAsync(string tenantId, string runId, CancellationToken cancellationToken = default)
+        {
+            // Masked: View column (property) rules clear what the caller may not see. Never save it back.
+            if (string.IsNullOrWhiteSpace(runId)) return null;
+            var scope = await ReadAsync(tenantId, Builders<FunctionRunEntity>.Filter.Where(r => r.ItemId == runId), "GetByIdForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(Collection(tenantId)).FirstOrDefaultAsync(cancellationToken)) : null;
         }
 
         public async Task<long> DeleteAllForFunctionAsync(
@@ -188,12 +270,18 @@ namespace Functions.DomainService.Repositories
         {
             if (string.IsNullOrWhiteSpace(functionId)) return 0;
 
-            var result = await Collection(tenantId).DeleteManyAsync(r => r.FunctionId == functionId, cancellationToken);
+            var deleteFilter = await _dataAccess.DeleteFilterAsync(LogicSchemas.FunctionRunEntity,
+                Builders<FunctionRunEntity>.Filter.Where(r => r.FunctionId == functionId), "FunctionRunRepository.DeleteAllForFunction", tenantId);
+            if (deleteFilter is null) return 0;
+            var result = await Collection(tenantId).DeleteManyAsync(deleteFilter, cancellationToken);
             return result.DeletedCount;
         }
 
         public async Task CreateAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken = default)
         {
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.FunctionRunEntity, "FunctionRunRepository.Create", tenantId))
+                throw new UnauthorizedAccessException("Function run create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.FunctionRunEntity, run, isInsert: true, "FunctionRunRepository.Create", tenantId);
             await EnsureIndexesAsync(tenantId, cancellationToken);
             await Collection(tenantId).InsertOneAsync(run, cancellationToken: cancellationToken);
         }
@@ -264,7 +352,7 @@ namespace Functions.DomainService.Repositories
                 .Set(r => r.CompletedAt, completedAt)
                 .Set(r => r.LogsTruncated, logsTruncated)
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow)
-                .Push(r => r.Attempts, new Models.RunAttempt
+                .Push(r => r.Attempts, new RunAttempt
                 {
                     Number = attempt,
                     Status = status,
@@ -302,14 +390,18 @@ namespace Functions.DomainService.Repositories
             // One conditional update: the attempt and status are both what is checked and what
             // is written, so a read-then-write would let two deliveries of the same result both
             // pass the check and push the attempt twice.
+            var editFilter = await EditAsync(tenantId, AcceptsResultFilter(runId, attempt), "ApplyResult");
+            if (editFilter is null) return ApplyResultOutcome.NotFound;
             var writeResult = await Collection(tenantId).UpdateOneAsync(
-                AcceptsResultFilter(runId, attempt), update, cancellationToken: cancellationToken);
+                editFilter, update, cancellationToken: cancellationToken);
             if (writeResult.ModifiedCount > 0) return ApplyResultOutcome.Applied;
 
             // Refused. Only now read the record — on the miss path alone — to say why, which the
             // consumer needs to tell a harmless redelivery from a result that should never exist.
+            var currentScope = await ReadAsync(tenantId, Builders<FunctionRunEntity>.Filter.Where(r => r.ItemId == runId), "ApplyResult.Refused", useProjection: false);
+            if (!currentScope.Granted) return ApplyResultOutcome.NotFound;
             var current = await Collection(tenantId)
-                .Find(r => r.ItemId == runId)
+                .Find(currentScope.Filter)
                 .Project(r => new { r.Attempt })
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -341,7 +433,7 @@ namespace Functions.DomainService.Repositories
                 .Unset(r => r.DiscardReason)
                 .Unset(r => r.HandoverMs)
                 .Unset(r => r.Timings)
-                .Set(r => r.OutputResults, new List<Models.OutputActionResult>())
+                .Set(r => r.OutputResults, new List<OutputActionResult>())
                 .Set(r => r.IdempotencyKey, $"{runId}-{attempt}")
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
 
@@ -352,8 +444,10 @@ namespace Functions.DomainService.Repositories
                 & f.Eq(r => r.Attempt, attempt - 1)
                 & f.In(r => r.Status, TerminalStatuses);
 
+            var editFilter = await EditAsync(tenantId, filter, "ResetForRetry");
+            if (editFilter is null) return false;
             var result = await Collection(tenantId).UpdateOneAsync(
-                filter, update, cancellationToken: cancellationToken);
+                editFilter, update, cancellationToken: cancellationToken);
             return result.ModifiedCount > 0;
         }
 
@@ -380,9 +474,10 @@ namespace Functions.DomainService.Repositories
             // One conditional update, not read-then-write: the status is both the thing being
             // checked and the thing being set, so anything less than an atomic compare-and-set
             // can lose a real result to a stale dead letter.
-            var filter = Builders<FunctionRunEntity>.Filter.And(
+            var filter = await EditAsync(tenantId, Builders<FunctionRunEntity>.Filter.And(
                 Builders<FunctionRunEntity>.Filter.Eq(r => r.ItemId, runId),
-                Builders<FunctionRunEntity>.Filter.Nin(r => r.Status, TerminalStatuses));
+                Builders<FunctionRunEntity>.Filter.Nin(r => r.Status, TerminalStatuses)), "FailIfNotTerminal");
+            if (filter is null) return false;
 
             var update = Builders<FunctionRunEntity>.Update
                 .Set(r => r.Status, RunStatus.Failed)
@@ -400,22 +495,25 @@ namespace Functions.DomainService.Repositories
             return result.ModifiedCount > 0;
         }
 
-        public Task SetTimingsAsync(
-            string tenantId, string runId, int attempt, List<Models.RunTiming> timings, CancellationToken cancellationToken = default)
+        public async Task SetTimingsAsync(
+            string tenantId, string runId, int attempt, List<RunTiming> timings, CancellationToken cancellationToken = default)
         {
             var f = Builders<FunctionRunEntity>.Filter;
             var update = Builders<FunctionRunEntity>.Update.Set(r => r.Timings, timings);
-            return Collection(tenantId).UpdateOneAsync(
-                f.Eq(r => r.ItemId, runId) & f.Eq(r => r.Attempt, attempt), update, cancellationToken: cancellationToken);
+            var filter = await EditAsync(tenantId, f.Eq(r => r.ItemId, runId) & f.Eq(r => r.Attempt, attempt), "SetTimings");
+            if (filter is null) return;
+            await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
         }
 
-        public Task ApplyStatusOnlyAsync(
+        public async Task ApplyStatusOnlyAsync(
             string tenantId, string runId, RunStatus status, CancellationToken cancellationToken = default)
         {
             var update = Builders<FunctionRunEntity>.Update
                 .Set(r => r.Status, status)
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
-            return Collection(tenantId).UpdateOneAsync(r => r.ItemId == runId, update, cancellationToken: cancellationToken);
+            var filter = await EditAsync(tenantId, Builders<FunctionRunEntity>.Filter.Where(r => r.ItemId == runId), "ApplyStatusOnly");
+            if (filter is null) return;
+            await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
         }
 
         public async Task<bool> TryBeginOutputProcessingAsync(
@@ -431,12 +529,14 @@ namespace Functions.DomainService.Repositories
                 .Set(r => r.Status, RunStatus.OutputProcessing)
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
 
-            var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+            var editFilter = await EditAsync(tenantId, filter, "TryBeginOutputProcessing");
+            if (editFilter is null) return false;
+            var result = await Collection(tenantId).UpdateOneAsync(editFilter, update, cancellationToken: cancellationToken);
             return result.ModifiedCount > 0;
         }
 
         public async Task<bool> ApplyOutputResultAsync(
-            string tenantId, string runId, int attempt, IReadOnlyList<Models.OutputActionResult> results,
+            string tenantId, string runId, int attempt, IReadOnlyList<OutputActionResult> results,
             RunStatus finalStatus, string? errorMessage, CancellationToken cancellationToken = default)
         {
             var f = Builders<FunctionRunEntity>.Filter;
@@ -451,7 +551,9 @@ namespace Functions.DomainService.Repositories
                 .Set(r => r.ErrorMessage, errorMessage)
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
 
-            var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+            var editFilter = await EditAsync(tenantId, filter, "ApplyOutputResult");
+            if (editFilter is null) return false;
+            var result = await Collection(tenantId).UpdateOneAsync(editFilter, update, cancellationToken: cancellationToken);
             return result.ModifiedCount > 0;
         }
 
@@ -468,7 +570,9 @@ namespace Functions.DomainService.Repositories
                 filter &= f.Gte(r => r.LastUpdatedDate, updatedNotBefore.Value);
             }
 
-            return await Collection(tenantId).Find(filter)
+            var scope = await ReadAsync(tenantId, filter, "FindStaleCandidates", useProjection: false);
+            if (!scope.Granted) return [];
+            return await Collection(tenantId).Find(scope.Filter)
                 .Project<FunctionRunEntity>(Builders<FunctionRunEntity>.Projection
                     .Exclude(r => r.Input)
                     .Exclude(r => r.Result))
@@ -498,7 +602,9 @@ namespace Functions.DomainService.Repositories
                 .Set(r => r.CompletedAt, completedAt)
                 .Set(r => r.LastUpdatedDate, DateTime.UtcNow);
 
-            var result = await Collection(tenantId).UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+            var editFilter = await EditAsync(tenantId, filter, "CloseStale");
+            if (editFilter is null) return false;
+            var result = await Collection(tenantId).UpdateOneAsync(editFilter, update, cancellationToken: cancellationToken);
             return result.ModifiedCount > 0;
         }
     }

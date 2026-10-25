@@ -31,7 +31,7 @@ export const ProxyHistoryTab = ({ proxyId, active }: { proxyId: string; active: 
     const res = await revertVersion.mutateAsync({ proxyId, versionId });
     if (!res.isSuccess)
       return showErrorToast({
-        errors: res.message || res.errors || "Unable to revert this proxy version.",
+        errors: res.message || "Unable to revert this proxy version.",
       });
     showSuccessToast({ description: "Proxy version reverted." });
   };

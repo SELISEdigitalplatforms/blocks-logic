@@ -66,6 +66,7 @@ jobs:
       client_dockerfile_path: ${{ steps.config.outputs.client_dockerfile_path }} # Path to Dockerfile
       worker_dockerfile_path: ${{ steps.config.outputs.worker_dockerfile_path }} # Path to Window/Console service Dockerfile
       mailboxsync_dockerfile_path: ${{ steps.config.outputs.mailboxsync_dockerfile_path }}
+      scheduler_dockerfile_path: ${{ steps.config.outputs.scheduler_dockerfile_path }}
       dependency_track_host: ${{ steps.config.outputs.dependency_track_host }} # e.g., api-dt.seliseblocks.com
       dependency_track_frontend_url: ${{ steps.config.outputs.dependency_track_frontend_url }} # e.g., sca.seliseblocks.com
       dotnet_version: ${{ steps.config.outputs.dotnet_version }}
@@ -96,6 +97,7 @@ jobs:
           echo "client_dockerfile_path=${DOCKERFILE_CLIENT:-./Dockerfile}" >> $GITHUB_OUTPUT
           echo "worker_dockerfile_path=${DOCKERFILE_WORKER:-./Dockerfile.worker}" >> $GITHUB_OUTPUT
           echo "mailboxsync_dockerfile_path=${DOCKERFILE_MAILBOXSYNC:-./Dockerfile.mailboxsync}" >> $GITHUB_OUTPUT
+          echo "scheduler_dockerfile_path=${DOCKERFILE_SCHEDULER:-./Dockerfile.scheduler}" >> $GITHUB_OUTPUT
 
           # From vars.env (if loaded) or fallback to defaults
           echo "service_name=${SERVICE_NAME:-github.event.repository.name}" >> $GITHUB_OUTPUT
@@ -294,12 +296,13 @@ jobs:
 
   # Update GitOps repository
   update-gitops-worker:
-    needs: [initialization, build-worker]
+    needs: [initialization, build-worker, update-gitops-scheduler]
     if: |
       github.event_name == 'push' &&
       always() &&
       needs.initialization.result == 'success' &&
-      needs.build-worker.result == 'success'
+      needs.build-worker.result == 'success' &&
+      needs.update-gitops-scheduler.result == 'success'
     uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/update-gitops-central.yml@main
     with:
       SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}
@@ -353,6 +356,51 @@ jobs:
       IMAGE_TAG: ${{ needs.build-mailboxsync.outputs.image_tag }}
       COMMIT_TAG: ${{ needs.build-mailboxsync.outputs.commit_tag }}
       SEMANTIC_TAG: ${{ needs.build-mailboxsync.outputs.semantic_tag }}
+      TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }}
+      CLUSTER_NAME: ${{ needs.initialization.outputs.cluster_name }}
+    secrets:
+      SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
+      DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
+
+  # Scheduler.Worker (blocks-logic-scheduler-worker): hosts Hangfire. One replica only; the Worker's
+  # GitOps update waits for this one, so a Worker without Hangfire never ships alone.
+  build-scheduler:
+    needs: [initialization, sonarqube]
+    if: |
+      github.event_name == 'push' &&
+      always() &&
+      needs.initialization.result == 'success' &&
+      (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'skipped')
+    uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/build-push.yml@main
+    with:
+      SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}
+      SERVICE_TYPE: "scheduler-worker"
+      ENVIRONMENT: ${{ needs.initialization.outputs.environment }}
+      TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }}
+      DOCKERFILE_PATH: ${{ needs.initialization.outputs.scheduler_dockerfile_path }}
+      BUILD_ARGS: |
+        BUILD_VERSION=${{ github.sha }}
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
+      SELISE_GITHUB_PAT: ${{ secrets.SELISE_GITHUB_PAT }}
+
+  update-gitops-scheduler:
+    needs: [initialization, build-scheduler]
+    if: |
+      github.event_name == 'push' &&
+      always() &&
+      needs.initialization.result == 'success' &&
+      needs.build-scheduler.result == 'success'
+    uses: SELISEdigitalplatforms/blocks-inventory/.github/workflows/update-gitops-central.yml@main
+    with:
+      SERVICE_NAME: ${{ needs.initialization.outputs.service_name }}
+      SERVICE_TYPE: "scheduler-worker"
+      ENVIRONMENT: ${{ needs.initialization.outputs.environment }}
+      IMAGE_TAG: ${{ needs.build-scheduler.outputs.image_tag }}
+      COMMIT_TAG: ${{ needs.build-scheduler.outputs.commit_tag }}
+      SEMANTIC_TAG: ${{ needs.build-scheduler.outputs.semantic_tag }}
       TAG_STRATEGY: ${{ needs.initialization.outputs.tag_strategy }}
       CLUSTER_NAME: ${{ needs.initialization.outputs.cluster_name }}
     secrets:

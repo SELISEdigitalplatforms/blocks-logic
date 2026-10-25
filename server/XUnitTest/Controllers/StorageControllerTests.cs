@@ -1,5 +1,6 @@
+using Blocks.Genesis;
+using Blocks.Genesis.Entities.Data;
 using BlocksTemplate.Api.Controllers;
-using CloudConfiguration.DomainService.Shared.Services;
 using DomainService.Storage;
 using FluentAssertions;
 using Moq;
@@ -18,13 +19,12 @@ namespace XUnitTest.Controllers
     /// </summary>
     public class StorageControllerTests
     {
-        private readonly Mock<IConfigurationService> _configurationService = new();
         private readonly Mock<IStorageDriverService> _storageDriverService = new();
         private readonly StorageController _controller;
 
         public StorageControllerTests()
         {
-            _controller = new StorageController(_configurationService.Object, _storageDriverService.Object);
+            _controller = new StorageController(_storageDriverService.Object);
         }
 
         [Fact]

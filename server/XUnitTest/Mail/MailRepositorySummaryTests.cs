@@ -22,7 +22,7 @@ namespace XUnitTest.Mail
             _dbContextProvider
                 .Setup(p => p.GetCollection<MailServerConfiguration>("MailServerConfigurations"))
                 .Returns(_configs.Object);
-            _repository = new MailRepository(_dbContextProvider.Object);
+            _repository = new MailRepository(_dbContextProvider.Object, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         }
 
         public void Dispose() => TestBlocksContext.Clear();

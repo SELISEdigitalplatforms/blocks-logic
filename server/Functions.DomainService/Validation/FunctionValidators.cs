@@ -2,9 +2,9 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using FluentValidation;
 using Functions.DomainService.Dtos.Requests;
-using Functions.DomainService.Models;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Validation
 {
@@ -182,8 +182,8 @@ namespace Functions.DomainService.Validation
                 .WithMessage("Each HTTP method may be listed only once.");
 
             RuleFor(x => x.ResponseMode)
-                .Must(m => m is null or TriggerConfig.ResponseModes.Async or TriggerConfig.ResponseModes.Sync)
-                .WithMessage($"Response mode must be \"{TriggerConfig.ResponseModes.Async}\" or \"{TriggerConfig.ResponseModes.Sync}\".");
+                .Must(m => m is null or TriggerConfig.ResponseModes.Async or TriggerConfig.ResponseModes.Sync or FunctionResponseModes.Sse)
+                .WithMessage($"Response mode must be \"{TriggerConfig.ResponseModes.Async}\", \"{TriggerConfig.ResponseModes.Sync}\" or \"{FunctionResponseModes.Sse}\".");
         }
     }
 
@@ -205,7 +205,7 @@ namespace Functions.DomainService.Validation
     {
         public OutputActionValidator()
         {
-            When(x => x.Kind == Enums.OutputActionKind.ExternalHttp && x.Enabled, () =>
+            When(x => x.Kind == OutputActionKind.ExternalHttp && x.Enabled, () =>
             {
                 RuleFor(x => x.Url)
                     .Must(FunctionValidationRules.IsValidAbsoluteHttpUrl)

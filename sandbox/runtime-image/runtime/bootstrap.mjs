@@ -17,6 +17,8 @@
 import { readFileSync } from 'node:fs';
 import { ProtocolWriter, LIMITS, EXIT, CODE, isStream, pumpStream } from './protocol.mjs';
 import { parseEnvelope, EnvelopeError, blocksWithToken } from './envelope.mjs';
+import { createEventBuffer } from './events.mjs';
+import { withTraceparent } from './trace.mjs';
 
 const ENVELOPE_PATH = process.env.BLOCKS_EXECUTION_FILE || '/run/blocks/execution.json';
 const FUNCTION_ENTRY = process.env.BLOCKS_FUNCTION_ENTRY || '/function/index.js';
@@ -28,6 +30,7 @@ const writer = new ProtocolWriter();
 const _exit = process.exit.bind(process);
 const _setTimeout = setTimeout;
 const _clearTimeout = clearTimeout;
+const _fetch = typeof globalThis.fetch === 'function' ? globalThis.fetch : null;
 
 let finished = false;
 
@@ -122,7 +125,12 @@ function describe(err) {
  */
 const pendingWaits = [];
 
+/** The outbox behind `ctx.events` (set by buildContext); closed once the answer is written. */
+let outbox = null;
+
 function buildContext(envelope) {
+  outbox = createEventBuffer({ runId: envelope.run.id, attempt: envelope.run.attempt, allowed: envelope.events.allowed });
+
   const log = Object.freeze({
     debug: (msg, data) => writer.log('debug', msg, data),
     info:  (msg, data) => writer.log('info', msg, data),
@@ -136,6 +144,7 @@ function buildContext(envelope) {
     env: envelope.env,
     run: envelope.run,
     log,
+    events: outbox.events,
     waitUntil(promise) {
       pendingWaits.push(Promise.resolve(promise));
     },
@@ -191,6 +200,14 @@ function patchConsole(writerFor = () => writer) {
   for (const [k, v] of Object.entries(patched)) console[k] = v;
 }
 
+/** The run's traceparent goes on fetch() calls to the Blocks hosts the runner listed, and only those. */
+function installTraceFetch(trace) {
+  if (!_fetch) return;
+  Object.defineProperty(globalThis, 'fetch', {
+    value: withTraceparent(_fetch, () => trace), writable: true, configurable: true,
+  });
+}
+
 // ------------------------------------------------------------------- main ----
 
 async function main() {
@@ -218,6 +235,7 @@ async function main() {
   writer.useRedaction(envelope.maskedValues);
 
   const ctx = buildContext(envelope);
+  installTraceFetch(envelope.trace);
   process.title = `blocks-fn ${envelope.run.id}`;
   patchConsole();
 
@@ -284,6 +302,7 @@ async function main() {
     }
   } catch (err) {
     if (timer) _clearTimeout(timer);
+    outbox.close(); // a failed run sends nothing
     const d = describe(err);
     return finish(EXIT.USER_ERROR, {
       code: err?.__timeout ? CODE.TIMED_OUT : (err?.__code ?? CODE.USER_RUNTIME_ERROR),
@@ -294,7 +313,9 @@ async function main() {
   if (timer) _clearTimeout(timer);
 
   // --- return the result ------------------------------------------------------
-  const problem = writer.result(value);
+  // The list is closed with the answer: ctx.events.add, also from ctx.waitUntil work, now throws.
+  outbox.close();
+  const problem = writer.result(value, outbox.take());
   if (problem === CODE.RESULT_TOO_LARGE) {
     return finish(EXIT.USER_ERROR, {
       code: CODE.RESULT_TOO_LARGE,

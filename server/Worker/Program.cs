@@ -1,4 +1,5 @@
 ﻿using Blocks.Extension.DependencyInjection;
+using DataAccess.InternalService;
 using Blocks.Genesis;
 using Blocks.Secrets;
 using DomainService.Shared;
@@ -48,7 +49,6 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddHttpClient();
 
             services.Configure<VerioSystemSettings>(services.BuildServiceProvider().GetRequiredService<IConfiguration>().GetSection("VerioSystemSettings"));
-            services.AddSingleton<IConsumer<SendEmailEvent>, SendEmailConsumer>();
             services.AddSingleton<IConsumer<SendMail>, SendConsumer>();
             services.AddHostedService<PeriodicPingBackgroundService>();
 
@@ -76,16 +76,19 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             // proxy's configured headers and query values; without it any proxy that stores its
             // upstream credential as a configuration variable fails at forward time.
             services.AddBlocksSecrets();
+            services.AddLogicDataAccess();
             services.AddProxyServices();
             services.AddSingleton<Workflow.DomainService.Utils.NodeQueueLanes>(_ => new Workflow.DomainService.Utils.NodeQueueLanes());
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             services.AddSingleton<IConsumer<WorkflowImportEvent>, WorkflowImportConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
             services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
+            // The event trigger: starts the functions that subscribe to a FunctionEvent (ctx.events.add('FunctionEvent', ...)).
+            services.AddSingleton<IConsumer<Functions.DomainService.Events.FunctionEvent>, Functions.DomainService.Consumers.FunctionEventConsumer>();
             services.AddSingleton<IConsumer<PublishScheduleCommand>, SchedulerTriggerConsumer>();
             services.AddApplicationServices();
+            // IScheduleService only (WorkflowService needs it). Hangfire and the schedule registry run in Scheduler.Worker.
             services.AddSchedulerServices();
-            services.AddSchedulerWorkerServices();
             services.AddFunctionsServices(hostContext.Configuration);
             services.AddFunctionsWorkerServices();
             services.AddSingleton<Workflow.DomainService.Nodes.INodeExecutor, Functions.DomainService.Nodes.ActionFunctionNode>();
@@ -95,6 +98,6 @@ IHostBuilder CreateHostBuilder(string[] args) =>
 
             // Before Genesis sets up tracing, so it runs ahead of Genesis's exporter (see TraceTagSanitizer).
             Common.InternalService.Tracing.TraceTagSanitizer.AddFirst(services);
-            ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetMessageConfiguration(secret.MessageConnectionString));
+            ApplicationConfigurations.ConfigureWorker(services, LogicConstants.GetWorkerMessageConfiguration(secret.MessageConnectionString));
         });
 

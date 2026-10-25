@@ -33,6 +33,38 @@ namespace Functions.DomainService.Queue
         public static readonly TimeSpan OutputActionMarkerTtl = TimeSpan.FromHours(48);
 
         /// <summary>
+        /// The "this event has been dispatched" marker, keyed on the event id (<c>{runId}-{attempt}-{n}</c>, made by
+        /// the sandbox's runtime and checked by the runner to start with the run's own id). SET NX before the send,
+        /// then the outcome is written onto it: the same rule as <see cref="OutputActionMarker"/>.
+        /// </summary>
+        public static string EventSentMarker(string eventId) => $"function:event-sent:{eventId}";
+
+        /// <summary>Long enough for any redelivery of the job (the working streams are trimmed at 12 h).</summary>
+        public static readonly TimeSpan EventSentMarkerTtl = TimeSpan.FromDays(7);
+
+        /// <summary>
+        /// What a run started by a function event needs to know later: the event's name and the depth of its chain
+        /// (<c>{"eventId","name","depth"}</c>). Written before the run record exists; read by the dispatcher (the depth
+        /// of the events this run sends) and when the run fails for good (the dead-letter entry). Kept longer than a
+        /// run's payload (<see cref="FunctionQueueKeys.RunTtl"/>) so it is there as long as the run can still act.
+        /// </summary>
+        public static string EventRunInfo(string runId) => $"function:event-run:{runId}";
+
+        public static readonly TimeSpan EventRunInfoTtl = TimeSpan.FromHours(24);
+
+        /// <summary>
+        /// Held while one Worker starts the run of an event for a function, so a duplicate delivery of the same event
+        /// at the same moment starts no second run. A short lock; the run record (found by the event id) is what
+        /// answers later duplicates.
+        /// </summary>
+        public static string EventStartLock(string eventId, string functionId) => $"function:event-start:{eventId}:{functionId}";
+
+        public static readonly TimeSpan EventStartLockTtl = TimeSpan.FromSeconds(60);
+
+        /// <summary>Events sent by one tenant in one minute (<paramref name="minute"/> = unix time / 60).</summary>
+        public static string EventRate(string tenantId, long minute) => $"function:events-rate:{tenantId}:{minute}";
+
+        /// <summary>
         /// Written after a result's logs have been copied to Mongo for one attempt, so a
         /// redelivered result entry does not insert every log line a second time.
         /// </summary>

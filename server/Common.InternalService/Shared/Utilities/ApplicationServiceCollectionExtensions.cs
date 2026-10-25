@@ -2,7 +2,7 @@
 using Common.InternalService.Monitor;
 using Common.InternalService.Secret.Services;
 using Common.InternalService.Storage;
-using CloudConfiguration.DomainService.Shared.Services;
+using Blocks.Extension.DependencyInjection;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,7 +18,8 @@ namespace Common.InternalService.Shared.Utilities
             #endregion
 
             #region Storage
-            serviceCollection.AddSingleton<IConfigurationRepository, ConfigurationRepository>();
+            // Storage configurations are read through the driver (KeyValueStores + SecretStore); blocks-os owns the API.
+            serviceCollection.AddBlocksStorageConfiguration();
 
             serviceCollection.AddSingleton<IFileManagementService, FileManagementService>();
             serviceCollection.AddSingleton<ICertificateStorageService, CertificateStorageService>();
@@ -28,11 +29,6 @@ namespace Common.InternalService.Shared.Utilities
             serviceCollection.AddSingleton<IContentAccessRepository, ContentAccessRepository>();
             serviceCollection.AddSingleton<IContentAccessResolver, ContentAccessResolver>();
             serviceCollection.AddSingleton<IStorageServiceFactory, StorageServiceFactory>();
-
-            serviceCollection.AddTransient<AzureBlobStorageService>();
-            serviceCollection.AddTransient<AwsS3StorageService>();
-            serviceCollection.AddTransient<AwsS3CompatibleStorageService>();
-            serviceCollection.AddTransient<SftpStorageService>();
 
             serviceCollection.AddTransient<IValidator<GetPreSignedUrlForUploadRequest>, GetPreSignedUrlForUploadRequestValidator>();
             #endregion

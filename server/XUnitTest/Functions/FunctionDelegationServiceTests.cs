@@ -1,13 +1,13 @@
 using System.Security.Claims;
 using Blocks.Genesis;
 using FluentAssertions;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
@@ -106,6 +106,36 @@ namespace XUnitTest.Functions
 
             grant.Should().Be(Grant);
             _store.Verify(s => s.CreateAsync(It.IsAny<BlocksContext>(), "9", "stamp-held", FunctionQueueKeys.DelegationGrantTtl), Times.Once);
+        }
+
+        [Fact]
+        public async Task A_function_step_in_an_impersonated_workflow_keeps_the_held_grants_impersonation()
+        {
+            // The worker's context came from the message: impersonated, but no session id.
+            Holding(HeldRecord() with { ImpersonationSessionId = "session-9", OriginalTenantId = "root-tenant" });
+
+            var grant = await Service().CreateGrantAsync(Tenant, Caller(impersonated: true), AuthMode.Token);
+
+            grant.Should().Be(Grant);
+            _store.Verify(
+                s => s.CreateAsync(
+                    It.Is<BlocksContext>(c => c.Impersonated
+                        && c.ImpersonationSessionId == "session-9"
+                        && c.OriginalTenantId == "root-tenant"
+                        && c.TenantId == Tenant && c.UserId == "user-1" && c.OrganizationId == "org-1"),
+                    "9", "stamp-held", FunctionQueueKeys.DelegationGrantTtl),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task A_function_step_with_a_plain_held_grant_passes_the_caller_unchanged()
+        {
+            Holding(HeldRecord());
+            var caller = Caller();
+
+            await Service().CreateGrantAsync(Tenant, caller, AuthMode.Token);
+
+            _store.Verify(s => s.CreateAsync(caller, "9", "stamp-held", FunctionQueueKeys.DelegationGrantTtl), Times.Once);
         }
 
         [Fact]

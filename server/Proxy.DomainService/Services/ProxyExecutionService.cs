@@ -3,6 +3,7 @@ using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Repositories;
 using Proxy.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Proxy.DomainService.Services
 {
@@ -232,7 +233,7 @@ namespace Proxy.DomainService.Services
                 };
             }
 
-            var proxy = await _proxyRepository.GetAsync(tenantId, proxyId);
+            var proxy = await _proxyRepository.GetForViewAsync(tenantId, proxyId);
             if (proxy is null && !await _executionRepository.AnyForProxyAsync(tenantId, proxyId))
             {
                 _logger.LogInformation(

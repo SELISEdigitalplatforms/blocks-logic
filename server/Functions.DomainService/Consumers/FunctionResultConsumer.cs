@@ -1,7 +1,6 @@
 using System.Globalization;
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
+using DataAccess.InternalService.Notifications;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -9,6 +8,7 @@ using Functions.DomainService.Utils;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Consumers
 {
@@ -52,6 +52,9 @@ namespace Functions.DomainService.Consumers
         private readonly IFunctionRepository _functionRepository;
         private readonly IFunctionRunGrantRevoker _runGrants;
         private readonly ILogger<FunctionResultConsumer> _logger;
+        private readonly FunctionOwnerNotifier? _notifier;
+        private readonly IFunctionRunEventsRepository? _runEvents;
+        private readonly IFunctionEventDeadLetters? _eventDeadLetters;
 
         public FunctionResultConsumer(
             ICacheClient cache,
@@ -62,9 +65,15 @@ namespace Functions.DomainService.Consumers
             IFunctionRepository functionRepository,
             IFunctionRunGrantRevoker runGrants,
             ILogger<FunctionResultConsumer> logger,
-            System.Diagnostics.ActivitySource? traces = null)
+            System.Diagnostics.ActivitySource? traces = null,
+            IBuiltInNotificationSender? builtInNotifications = null,
+            IFunctionRunEventsRepository? runEvents = null,
+            IFunctionEventDeadLetters? eventDeadLetters = null)
         {
+            _runEvents = runEvents;
+            _eventDeadLetters = eventDeadLetters;
             _traces = traces;
+            _notifier = builtInNotifications is null ? null : new FunctionOwnerNotifier(functionRepository, builtInNotifications);
             ArgumentNullException.ThrowIfNull(cache);
             _db = cache.CacheDatabase();
             _runRepository = runRepository;
@@ -255,6 +264,12 @@ namespace Functions.DomainService.Consumers
             {
                 return ResultOutcome.Rejected($"logsKey '{logsKey}' does not belong to run {runId}");
             }
+            // The run's events (function events). Only the key is checked here; the output consumer reads and sends them.
+            var eventsKey = entry.Get(FunctionQueueKeys.ResultEventsKeyField);
+            if (!string.IsNullOrEmpty(eventsKey) && eventsKey != FunctionQueueKeys.Events(runId))
+            {
+                return ResultOutcome.Rejected($"eventsKey '{eventsKey}' does not belong to run {runId}");
+            }
 
             // Where this result's time goes, logged once it is published (StepTimer). "queued" is
             // how long the entry sat on the stream before this Worker picked it up.
@@ -349,7 +364,7 @@ namespace Functions.DomainService.Consumers
 
             // Everything below is safe to repeat, and is repeated on a redelivery: that is what
             // finishes the job when a Worker died between writing the result and acknowledging it.
-            var retryPending = await FollowUpAsync(tenantId, run, cancellationToken);
+            var retryPending = await FollowUpAsync(tenantId, run, FunctionEventsHandoff.From(entry), cancellationToken);
             timer.Mark("followup");
 
             await _db.PublishAsync(
@@ -369,6 +384,20 @@ namespace Functions.DomainService.Consumers
                 await _runGrants.RevokeAsync(runId);
             }
 
+            // The run failed for good (no retry pending), and this delivery wrote that outcome: tell the owner.
+            // Cancelled is the owner's own action and is not reported. Best effort: never throws.
+            if (applied && !retryPending && _notifier is not null && IsFailureWorthReporting(run.Status))
+            {
+                await _notifier.RunFailedAsync(tenantId, run.FunctionId, runId);
+            }
+
+            // A run an event started failed for good: its event is dead-lettered (the retry policy has already run its
+            // course — no retry is pending). Never throws.
+            if (applied && !retryPending && _eventDeadLetters is not null && IsFailureWorthReporting(run.Status))
+            {
+                await _eventDeadLetters.RunFailedAsync(tenantId, run);
+            }
+
             // After the publish, so the caller already has the answer: where this call's time went,
             // for the run's Timing group. Best effort — a run is never failed over its timings.
             if (applied)
@@ -376,7 +405,7 @@ namespace Functions.DomainService.Consumers
                 try
                 {
                     var timings = StepTimer.ParseCompact(entry.Get(FunctionQueueKeys.ResultTimingsField));
-                    timings.Add(new Models.RunTiming { Group = "result", Step = "queued", Ms = Math.Max(0, queuedMs) });
+                    timings.Add(new RunTiming { Group = "result", Step = "queued", Ms = Math.Max(0, queuedMs) });
                     timings.AddRange(timer.ToTimings("result"));
                     await _runRepository.SetTimingsAsync(tenantId, runId, attempt, timings, CancellationToken.None);
                 }
@@ -390,6 +419,9 @@ namespace Functions.DomainService.Consumers
                 ? ResultOutcome.Applied
                 : ResultOutcome.Ignored($"run {runId} already holds the outcome of attempt {attempt}");
         }
+
+        private static bool IsFailureWorthReporting(RunStatus status) =>
+            status is RunStatus.Failed or RunStatus.TimedOut or RunStatus.ResourceExceeded;
 
         /// <summary>
         /// Whether the record is still open to this attempt's result — mirrors the repository's
@@ -413,18 +445,25 @@ namespace Functions.DomainService.Consumers
         }
 
         /// <returns>True when another attempt of the run is scheduled (or already was).</returns>
-        private async Task<bool> FollowUpAsync(string tenantId, FunctionRunEntity run, CancellationToken cancellationToken)
+        private async Task<bool> FollowUpAsync(
+            string tenantId, FunctionRunEntity run, FunctionEventsHandoff events, CancellationToken cancellationToken)
         {
             if (run.Status == RunStatus.Succeeded && run.OutputResults.Count == 0)
             {
                 var (actions, _) = await FunctionOutputConfig.ResolveAsync(
                     _versionRepository, _functionRepository, tenantId, run, cancellationToken);
-                if (!FunctionOutputConfig.HasEnabledActions(actions)) return false;
+
+                // A run with events but no output actions goes through the same hand-off: the events are sent there.
+                if (!FunctionOutputConfig.HasEnabledActions(actions)
+                    && !await HasEventsToSendAsync(tenantId, run, events, cancellationToken))
+                {
+                    return false;
+                }
 
                 if (await _runRepository.TryBeginOutputProcessingAsync(tenantId, run.ItemId, run.Attempt, cancellationToken))
                 {
                     run.Status = RunStatus.OutputProcessing;
-                    await EnqueueOutputJobAsync(tenantId, run);
+                    await EnqueueOutputJobAsync(tenantId, run, events);
                 }
                 return false;
             }
@@ -434,7 +473,7 @@ namespace Functions.DomainService.Consumers
                 // Handed off already — but possibly by a Worker that died before the job reached
                 // the stream. Adding it again is harmless: the output consumer drops a job whose
                 // run is no longer OUTPUT_PROCESSING, and never sends an action twice.
-                await EnqueueOutputJobAsync(tenantId, run);
+                await EnqueueOutputJobAsync(tenantId, run, events);
                 return false;
             }
 
@@ -442,15 +481,47 @@ namespace Functions.DomainService.Consumers
                 && await ScheduleRetryIfEligibleAsync(tenantId, run, cancellationToken);
         }
 
-        private Task EnqueueOutputJobAsync(string tenantId, FunctionRunEntity run) =>
-            _db.StreamAddAsync(FunctionWorkerQueueKeys.OutputsStream,
-            [
-                new NameValueEntry("runId", run.ItemId),
-                new NameValueEntry("tenantId", tenantId),
-                new NameValueEntry("functionId", run.FunctionId),
-                new NameValueEntry("attempt", run.Attempt),
-                new NameValueEntry("enqueuedAt", DateTimeOffset.UtcNow.ToString("O")),
-            ]);
+        /// <summary>
+        /// True when the run has events that no one has dealt with yet. Once the Worker has written the run's events
+        /// document it has finished with them, so a redelivered result does not hand the run off a second time.
+        /// </summary>
+        private async Task<bool> HasEventsToSendAsync(
+            string tenantId, FunctionRunEntity run, FunctionEventsHandoff events, CancellationToken cancellationToken) =>
+            !events.IsEmpty
+            && _runEvents is not null
+            && !await _runEvents.ExistsAsync(tenantId, run.ItemId, run.Attempt, cancellationToken);
+
+        private Task EnqueueOutputJobAsync(string tenantId, FunctionRunEntity run, FunctionEventsHandoff events)
+        {
+            var job = new List<NameValueEntry>
+            {
+                new("runId", run.ItemId),
+                new("tenantId", tenantId),
+                new("functionId", run.FunctionId),
+                new("attempt", run.Attempt),
+                new("enqueuedAt", DateTimeOffset.UtcNow.ToString("O")),
+            };
+
+            // The events ride along only when the run has some, so a job without them is exactly what it was.
+            if (!events.IsEmpty)
+            {
+                if (!string.IsNullOrEmpty(events.EventsKey))
+                {
+                    job.Add(new NameValueEntry(FunctionQueueKeys.ResultEventsKeyField, events.EventsKey));
+                    job.Add(new NameValueEntry(FunctionQueueKeys.ResultEventCountField, events.Count));
+                }
+                if (!string.IsNullOrEmpty(events.Rejected))
+                {
+                    job.Add(new NameValueEntry(FunctionQueueKeys.ResultEventsRejectedField, events.Rejected));
+                }
+                if (!string.IsNullOrEmpty(events.TraceParent))
+                {
+                    job.Add(new NameValueEntry(FunctionQueueKeys.TraceParentField, events.TraceParent));
+                }
+            }
+
+            return _db.StreamAddAsync(FunctionWorkerQueueKeys.OutputsStream, [.. job]);
+        }
 
         private async Task CopyLogsAsync(
             string tenantId, string functionId, string runId, int attempt, string? logsKey, CancellationToken cancellationToken)

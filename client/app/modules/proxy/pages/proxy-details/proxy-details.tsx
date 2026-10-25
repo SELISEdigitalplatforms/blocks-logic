@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
-import { EllipsisVertical, Loader2, Pause, Pen, Play, Trash2 } from "lucide-react";
+import { AlertTriangle, Download, EllipsisVertical, Loader2, Pause, Pen, Play, Trash2 } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { Button } from "@/components/ui-kits/button/button";
@@ -24,9 +24,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/t
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getProxyClientUrl } from "../../constants";
-import { useGetProxyById, useGetProxyOverview, useToggleProxy } from "../../hooks";
+import { useGetProxyById, useGetProxyOverview, useProxyExport, useToggleProxy } from "../../hooks";
 import { Proxy, ProxyKeyValue, ProxyResilience, ProxyRoute, ResponseFieldNode } from "../../types";
-import { describeProxyAccess, describeResilience, pathsToTree } from "../../utils";
+import {
+  describeProxyAccess,
+  describeResilience,
+  pathsToTree,
+} from "../../utils";
 import { ProxyMethodBadge } from "../../components/proxy-method-badge";
 import { ProxyMethodChips } from "../../components/proxy-method-chips";
 import { ProxyStatusBadge } from "../../components/proxy-status-badge";
@@ -34,6 +38,7 @@ import { ProxyLogsTab } from "../../components/proxy-logs-tab";
 import { ProxyTestTab } from "../../components/proxy-test-tab";
 import { ProxyHistoryTab } from "../../components/proxy-history-tab";
 import { DeleteProxyDialog } from "../../components/delete-proxy-dialog";
+import { VariablesButton } from "../../components/variables-button";
 
 const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
   `${count} ${count === 1 ? singular : plural}`;
@@ -384,6 +389,43 @@ const ConfigurationStepCard = ({
   </div>
 );
 
+/**
+ * "Needs secret": names the proxy uses that are not linked and match no single secret here — usually
+ * right after an import. The server computes it on every read; adding the secret is the whole fix.
+ */
+const NeedsSecretBanner = ({ missing, duplicates }: { missing: string[]; duplicates: string[] }) => {
+  const absent = missing.filter((name) => !duplicates.includes(name));
+  return (
+    <div
+      role="alert"
+      data-testid="proxy-needs-secret"
+      className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+    >
+      <div className="flex min-w-0 items-start gap-2">
+        <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0 space-y-1">
+          {absent.length ? (
+            <p>
+              <span className="font-semibold">Needs secret:</span>{" "}
+              <span className="font-mono">{absent.join(", ")}</span>. Calls that use it fail until
+              you add a secret with this exact name in Blocks OS Secrets. No change to the proxy is
+              needed.
+            </p>
+          ) : null}
+          {duplicates.length ? (
+            <p>
+              More than one secret has the name{" "}
+              <span className="font-mono">{duplicates.join(", ")}</span>. Keep one secret per name so
+              the right one is used.
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <VariablesButton className="h-8 shrink-0" />
+    </div>
+  );
+};
+
 const proxyDetailTabs = [
   { value: "overview", label: "Overview" },
   { value: "test", label: "Test" },
@@ -405,6 +447,7 @@ export const ProxyDetails = () => {
     enabled: Boolean(proxy),
   });
   const toggleProxy = useToggleProxy();
+  const exportProxy = useProxyExport();
   const toggleLabel = proxy?.enabled ? "Pause" : "Resume";
   const pendingToggleLabel = proxy?.enabled ? "Pausing..." : "Resuming...";
 
@@ -449,6 +492,8 @@ export const ProxyDetails = () => {
       });
     showSuccessToast({ description: enabled ? "Proxy resumed." : "Proxy paused." });
   };
+
+  const handleExport = () => exportProxy.handleExport(proxy);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -500,6 +545,14 @@ export const ProxyDetails = () => {
                   <span>Edit</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  className="cursor-pointer"
+                  disabled={exportProxy.isPending}
+                  onClick={handleExport}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  <span>Export</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   className="cursor-pointer text-destructive focus:text-destructive"
                   disabled={toggleProxy.isPending}
                   onClick={() => setIsDeleteOpen(true)}
@@ -539,6 +592,21 @@ export const ProxyDetails = () => {
             <Button
               type="button"
               variant="outline"
+              disabled={exportProxy.isPending}
+              aria-label="Export"
+              title="Download this proxy as a file to import into another environment"
+              onClick={handleExport}
+            >
+              {exportProxy.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Export
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
               className="gap-2 text-destructive hover:text-destructive"
               disabled={toggleProxy.isPending}
               aria-label="Delete"
@@ -550,6 +618,10 @@ export const ProxyDetails = () => {
             </Button>
           </div>
         </div>
+
+        {proxy.missingSecrets?.length ? (
+          <NeedsSecretBanner missing={proxy.missingSecrets} duplicates={proxy.duplicateSecrets ?? []} />
+        ) : null}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 !mt-0">
           <div>

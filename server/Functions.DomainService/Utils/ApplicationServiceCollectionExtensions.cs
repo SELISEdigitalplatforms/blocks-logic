@@ -1,7 +1,9 @@
+using Blocks.Extension.DependencyInjection;
 using Blocks.Secrets;
 using FluentValidation;
 using Common.InternalService.Access;
 using Functions.DomainService.Consumers;
+using Functions.DomainService.Events;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -49,19 +51,23 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionRunRepository, FunctionRunRepository>();
             services.AddSingleton<IFunctionRunLogRepository, FunctionRunLogRepository>();
             services.AddSingleton<IFunctionBuildRepository, FunctionBuildRepository>();
+            // Function events: what a function may send, and what happened to a run's events (logic-owned collections).
+            services.AddSingleton<IFunctionEventSettingsRepository, FunctionEventSettingsRepository>();
+            services.AddSingleton<IFunctionRunEventsRepository, FunctionRunEventsRepository>();
+            services.AddSingleton<IFunctionEventAllowList, FunctionEventAllowList>();
+            services.AddSingleton<IFunctionEventSettingsService, FunctionEventSettingsService>();
+            // The event trigger: the name and depth a run's event had, and the dead-letter stream of events no function ran.
+            services.AddSingleton<IFunctionEventRunStore, FunctionEventRunStore>();
+            services.AddSingleton<IFunctionEventDeadLetters, FunctionEventDeadLetters>();
 
             // The artifact store, on the tenant's own storage. It takes the tenant per call and enters
             // that tenant's context itself, so one instance serves every tenant. The storage stack it
             // uses is registered by the Api (RegisterCommonInternalServices) but not by the Worker, so
-            // it is TryAdd-ed here — harmless where the host already has it. The store resolves these
+            // it is added here — idempotent where the host already has it. The store resolves these
             // on use, never in its constructor (see FunctionArtifactStore).
-            services.TryAddSingleton<CloudConfiguration.DomainService.Shared.Services.IConfigurationRepository,
-                CloudConfiguration.DomainService.Shared.Services.ConfigurationRepository>();
+            services.AddBlocksStorageConfiguration();
             services.TryAddSingleton<Common.InternalService.Storage.IStorageServiceFactory,
                 Common.InternalService.Storage.StorageServiceFactory>();
-            services.TryAddTransient<Common.InternalService.Storage.AzureBlobStorageService>();
-            services.TryAddTransient<Common.InternalService.Storage.AwsS3StorageService>();
-            services.TryAddTransient<Common.InternalService.Storage.AwsS3CompatibleStorageService>();
             services.AddSingleton<Storage.IFunctionArtifactStore, Storage.FunctionArtifactStore>();
             services.AddSingleton<IFunctionAuditRepository, FunctionAuditRepository>();
 
@@ -75,7 +81,10 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionAdmissionService, FunctionAdmissionService>();
             services.AddSingleton<IFunctionAuthorizationService, FunctionAuthorizationService>();
             services.AddSingleton<IFunctionBuildService, FunctionBuildService>();
+            services.AddSingleton<IFunctionSecretCatalog, FunctionSecretCatalog>();
             services.AddSingleton<IFunctionService, FunctionService>();
+            // Export / import, one function per file (2026-10-18). Functions-only.
+            services.AddSingleton<IFunctionTransferService, FunctionTransferService>();
             services.AddSingleton<IFunctionVersionRetentionService, FunctionVersionRetentionService>();
             services.AddSingleton<IFunctionDeploymentService, FunctionDeploymentService>();
             services.AddSingleton<IFunctionRunService, FunctionRunService>();
@@ -107,6 +116,7 @@ namespace Functions.DomainService.Utils
             services.AddValidator<SaveFunctionRequestDto, SaveFunctionRequestValidator>();
             services.AddValidator<TestFunctionRequestDto, TestFunctionRequestValidator>();
             services.AddValidator<DeployFunctionRequestDto, DeployFunctionRequestValidator>();
+            services.AddValidator<SaveEventSettingsRequestDto, SaveEventSettingsRequestValidator>();
 
             return services;
         }
@@ -118,6 +128,8 @@ namespace Functions.DomainService.Utils
             // Output actions, decoupled from result processing so a slow endpoint never holds a
             // result entry long enough to be reclaimed and delivered twice.
             services.AddHostedService<FunctionOutputActionConsumer>();
+            // Sends a succeeded run's events over the Genesis bus, from the output consumer, after its output actions.
+            services.AddSingleton<IFunctionEventDispatcher, FunctionEventDispatcher>();
             services.AddHostedService<FunctionBuildResultConsumer>();
             // Closes runs that will never hear back (payload expired or lost, runner died,
             // output job lost), per tenant, with conditional writes only.

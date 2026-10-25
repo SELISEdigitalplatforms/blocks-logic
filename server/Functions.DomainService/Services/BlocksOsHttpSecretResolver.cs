@@ -107,5 +107,88 @@ namespace Functions.DomainService.Services
             await Task.WhenAll(tasks);
             return result;
         }
+
+        /// <summary>
+        /// Exact-name lookup for an output action's <c>{{secretName.&lt;name&gt;}}</c> (2026-10-18):
+        /// <c>GET /api/Secrets/gets?Search=</c>, every page, rows filtered to the exact (case-sensitive) name —
+        /// blocks-os search matches name and description in any case. Metadata only, never cached. Throws when
+        /// blocks-os cannot be asked, so the action fails as "could not prepare", not as "no such secret".
+        /// </summary>
+        public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> FindIdsByNameAsync(
+            IReadOnlyCollection<string> names, string tenantId, CancellationToken cancellationToken = default)
+        {
+            var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+            if (names.Count == 0) return result;
+
+            var baseUrl = _configuration["Functions:BlocksOsBaseUrl"];
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                throw new InvalidOperationException("Functions:BlocksOsBaseUrl is not configured");
+            }
+
+            var token = await _delegatedTokenProvider.GetTokenAsync(cancellationToken);
+            var client = _httpClientFactory.CreateClient(nameof(BlocksOsHttpSecretResolver));
+            client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
+            if (!string.IsNullOrEmpty(token))
+            {
+                client.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            }
+
+            foreach (var name in names.Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal))
+            {
+                var ids = new List<string>();
+                for (var page = 1; page <= Utils.FunctionSecretNameLookup.MaxPages; page++)
+                {
+                    var url = $"/api/Secrets/gets?Search={Uri.EscapeDataString(name)}&PageNumber={page}" +
+                              $"&PageSize={Utils.FunctionSecretNameLookup.PageSize}";
+                    using var response = await client.GetAsync(url, cancellationToken);
+                    response.EnsureSuccessStatusCode();
+                    using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    using var document = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+                    var rows = 0;
+                    long total = 0;
+                    foreach (var property in document.RootElement.EnumerateObject())
+                    {
+                        if (property.NameEquals("totalCount") || property.NameEquals("TotalCount"))
+                        {
+                            property.Value.TryGetInt64(out total);
+                        }
+                        else if ((property.NameEquals("data") || property.NameEquals("Data"))
+                                 && property.Value.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (var row in property.Value.EnumerateArray())
+                            {
+                                rows++;
+                                var rowName = Read(row, "name");
+                                var rowId = Read(row, "secretId");
+                                if (string.Equals(rowName, name, StringComparison.Ordinal) && !string.IsNullOrEmpty(rowId))
+                                {
+                                    ids.Add(rowId);
+                                }
+                            }
+                        }
+                    }
+
+                    if (rows < Utils.FunctionSecretNameLookup.PageSize || (long)page * Utils.FunctionSecretNameLookup.PageSize >= total) break;
+                }
+                result[name] = ids.Distinct(StringComparer.Ordinal).ToList();
+            }
+            return result;
+
+            static string? Read(System.Text.Json.JsonElement row, string camel)
+            {
+                foreach (var p in row.EnumerateObject())
+                {
+                    if (string.Equals(p.Name, camel, StringComparison.OrdinalIgnoreCase)
+                        && p.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        return p.Value.GetString();
+                    }
+                }
+                return null;
+            }
+        }
     }
 }

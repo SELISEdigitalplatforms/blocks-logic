@@ -71,5 +71,15 @@ namespace Proxy.DomainService.Dtos
         public DateTime LastUpdatedDate { get; set; }
 
         public string? LastUpdatedBy { get; set; }
+
+        /// <summary>
+        /// "Needs secret" (2026-10-18, computed on read, never stored): secret names this proxy uses that have no saved
+        /// id AND no single secret of that exact name here &mdash; none, or more than one. A call using one fails (or,
+        /// with more than one, takes the newest) until it is fixed in Blocks Secrets. Empty when the store cannot be read.
+        /// </summary>
+        public List<string> MissingSecrets { get; set; } = new();
+
+        /// <summary>The names in <see cref="MissingSecrets"/> that match more than one secret.</summary>
+        public List<string> DuplicateSecrets { get; set; } = new();
     }
 }

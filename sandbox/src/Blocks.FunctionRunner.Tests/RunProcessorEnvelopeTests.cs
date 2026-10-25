@@ -18,6 +18,8 @@ namespace Blocks.FunctionRunner.Tests
     /// sandbox and image resolver faked, because the lease and concurrency Lua are part of the
     /// path and a fake Redis would only re-implement them.
     /// </summary>
+    // Shares the results stream that EventRunQueueTests deletes; must not run alongside it.
+    [Collection("redis-key-prefix")]
     public sealed class RunProcessorEnvelopeTests : IAsyncLifetime
     {
         private ConnectionMultiplexer? _redis;
@@ -53,7 +55,7 @@ namespace Blocks.FunctionRunner.Tests
                 await _db.KeyDeleteAsync(
                 [
                     RedisKeys.Run(_runId), RedisKeys.Lease(_runId), RedisKeys.Concurrency(_functionId),
-                    RedisKeys.Result(_runId), RedisKeys.Logs(_runId),
+                    RedisKeys.Result(_runId), RedisKeys.Logs(_runId), RedisKeys.StreamOut(_runId), RedisKeys.Events(_runId),
                 ]);
             }
             if (_redis is not null) await _redis.DisposeAsync();
@@ -83,6 +85,26 @@ namespace Blocks.FunctionRunner.Tests
             }
         }
 
+        /// <summary>A sandbox that streams these pieces through <c>onChunk</c> while it runs, then finishes.</summary>
+        private sealed class StreamingSandbox(params string[] pieces) : ISandbox
+        {
+            public Task<SandboxResult> RunAsync(
+                string runId, string image, string envelopeHostPath, RunLimits limits, CancellationToken cancellationToken) =>
+                RunAsync(runId, image, envelopeHostPath, limits, null, cancellationToken);
+
+            public Task<SandboxResult> RunAsync(
+                string runId, string image, string envelopeHostPath, RunLimits limits, Action<string>? onChunk,
+                CancellationToken cancellationToken)
+            {
+                foreach (var piece in pieces) onChunk?.Invoke(piece);
+                var answered = Finished();
+                return Task.FromResult(answered with
+                {
+                    Output = new SandboxOutputParser().Parse("{\"t\":\"result\",\"ok\":true,\"result\":\"Hello\"}\n"),
+                });
+            }
+        }
+
         private sealed class ResolvesAnything : IImageResolver
         {
             public Task<string?> EnsureAsync(
@@ -99,13 +121,14 @@ namespace Blocks.FunctionRunner.Tests
             public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
         }
 
-        private RunProcessor Processor(ISandbox sandbox, Action<string, int>? handoff = null)
+        private RunProcessor Processor(ISandbox sandbox, Action<string, int>? handoff = null, string[]? traceHosts = null)
         {
             var options = Microsoft.Extensions.Options.Options.Create(new RunnerOptions
             {
                 RunnerId = "test-runner",
                 RunsDir = _runsDir,
                 MaxActiveSandboxes = 4,
+                TraceHosts = traceHosts ?? [],
             });
             var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
 
@@ -270,6 +293,140 @@ namespace Blocks.FunctionRunner.Tests
             sandbox.Calls.Should().Be(0);
             Directory.Exists(RunDir).Should().BeFalse();
             Field(await ResultEntryAsync(), "errorCode").Should().Be(ErrorCodes.RuntimeStartFailed);
+        }
+    
+
+        [SkippableFact]
+        public async Task A_single_runs_streamed_answer_reaches_the_run_stream_then_its_end()
+        {
+            Skip.If(Unavailable, "no Redis available");
+
+            var disposition = await Processor(new StreamingSandbox("Hel", "lo"))
+                .ProcessAsync(await QueueAsync(), CancellationToken.None);
+
+            disposition.Should().Be(RunProcessor.Disposition.Complete);
+            var entries = await _db!.StreamRangeAsync(RedisKeys.StreamOut(_runId), "-", "+");
+            entries.Take(2).Select(e => (string?)e[RedisKeys.StreamDataField]).Should().Equal("Hel", "lo");
+            entries.Should().HaveCount(3);
+            ((string?)entries[2][RedisKeys.StreamEndField]).Should().Be(RunStatuses.Succeeded);
+            (await _db.KeyTimeToLiveAsync(RedisKeys.StreamOut(_runId))).Should().NotBeNull("it expires");
+        }
+
+        [SkippableFact]
+        public async Task A_single_run_that_streams_nothing_leaves_no_stream()
+        {
+            Skip.If(Unavailable, "no Redis available");
+
+            await Processor(new StreamingSandbox()).ProcessAsync(await QueueAsync(), CancellationToken.None);
+
+            (await _db!.KeyExistsAsync(RedisKeys.StreamOut(_runId))).Should().BeFalse();
+        }
+
+        // ---- function events ---------------------------------------------------------
+
+        private const string EventsEnvelope =
+            """{"run":{"id":"r"},"events":{"allowed":["SendMail","FunctionEvent"]},"input":{}}""";
+
+        private static string EventsLine(params string[] events) =>
+            $$"""{"t":"result","ok":true,"value":1,"events":[{{string.Join(",", events)}}]}""" + "\n";
+
+        private string SendMail(int n) =>
+            $$$"""{"id":"{{{_runId}}}-3-{{{n}}}","type":"SendMail","payload":{"to":"a@b.c"}}""";
+
+        private static FakeSandbox Replying(string stdout, bool failed = false) => new(_ => Finished() with
+        {
+            Output = new SandboxOutputParser().Parse(stdout),
+            ExitCode = failed ? 10 : 0,
+        });
+
+        [SkippableFact]
+        public async Task A_successful_runs_events_are_stored_under_the_events_key_and_counted_on_the_entry()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var events = new[] { SendMail(1), SendMail(2) };
+
+            await Processor(Replying(EventsLine(events))).ProcessAsync(await QueueAsync(EventsEnvelope), CancellationToken.None);
+
+            var stored = (string?)await _db!.StringGetAsync(RedisKeys.Events(_runId));
+            stored.Should().Be($"[{string.Join(",", events)}]");
+            (await _db.KeyTimeToLiveAsync(RedisKeys.Events(_runId))).Should().NotBeNull("it expires like the result");
+            var entry = await ResultEntryAsync();
+            Field(entry, RedisKeys.ResultEventsKeyField).Should().Be(RedisKeys.Events(_runId));
+            Field(entry, RedisKeys.ResultEventCountField).Should().Be("2");
+            Field(entry, RedisKeys.ResultEventsRejectedField).Should().BeNull();
+            Field(entry, "status").Should().Be(RunStatuses.Succeeded);
+        }
+
+        [SkippableFact]
+        public async Task A_run_without_events_writes_no_events_key_or_fields()
+        {
+            Skip.If(Unavailable, "no Redis available");
+
+            await Processor(Replying("""{"t":"result","ok":true,"value":1}""" + "\n"))
+                .ProcessAsync(await QueueAsync(EventsEnvelope), CancellationToken.None);
+
+            (await _db!.KeyExistsAsync(RedisKeys.Events(_runId))).Should().BeFalse();
+            var entry = await ResultEntryAsync();
+            Field(entry, RedisKeys.ResultEventsKeyField).Should().BeNull();
+            Field(entry, RedisKeys.ResultEventCountField).Should().BeNull();
+        }
+
+        [SkippableFact]
+        public async Task Events_of_a_type_the_envelope_does_not_allow_are_dropped_and_the_result_stands()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            const string onlyEvents = """{"run":{"id":"r"},"events":{"allowed":["FunctionEvent"]},"input":{}}""";
+
+            await Processor(Replying(EventsLine(SendMail(1)))).ProcessAsync(await QueueAsync(onlyEvents), CancellationToken.None);
+
+            (await _db!.KeyExistsAsync(RedisKeys.Events(_runId))).Should().BeFalse();
+            var entry = await ResultEntryAsync();
+            Field(entry, "status").Should().Be(RunStatuses.Succeeded);
+            Field(entry, RedisKeys.ResultEventsRejectedField).Should().StartWith("EVENTS_REJECTED: ");
+            Field(entry, RedisKeys.ResultEventsKeyField).Should().BeNull();
+            (await _db.KeyExistsAsync(RedisKeys.Result(_runId))).Should().BeTrue();
+        }
+
+        [SkippableFact]
+        public async Task A_forged_id_of_another_run_drops_the_events()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            const string forged = """{"id":"someone-else-1-1","type":"SendMail","payload":{}}""";
+
+            await Processor(Replying(EventsLine(forged))).ProcessAsync(await QueueAsync(EventsEnvelope), CancellationToken.None);
+
+            (await _db!.KeyExistsAsync(RedisKeys.Events(_runId))).Should().BeFalse();
+            Field(await ResultEntryAsync(), RedisKeys.ResultEventsRejectedField).Should().Contain("does not belong to this run");
+        }
+
+        [SkippableFact]
+        public async Task A_failed_run_stores_no_events_even_if_its_line_carried_them()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var failed = $$"""{"t":"result","ok":false,"code":"USER_RUNTIME_ERROR","message":"x","events":[{{SendMail(1)}}]}""" + "\n";
+
+            await Processor(Replying(failed, failed: true)).ProcessAsync(await QueueAsync(EventsEnvelope), CancellationToken.None);
+
+            (await _db!.KeyExistsAsync(RedisKeys.Events(_runId))).Should().BeFalse();
+            Field(await ResultEntryAsync(), RedisKeys.ResultEventsKeyField).Should().BeNull();
+        }
+
+        [SkippableFact]
+        public async Task The_sandbox_gets_a_runner_made_trace_and_the_events_object_as_the_control_plane_wrote_it()
+        {
+            Skip.If(Unavailable, "no Redis available");
+            var sandbox = new FakeSandbox(_ => Finished());
+            const string queued =
+                """{"run":{"id":"r"},"events":{"allowed":["SendMail"]},"trace":{"traceparent":"00-forged","hosts":["evil.example"]},"input":{}}""";
+
+            using var span = new System.Diagnostics.Activity("Function::Run").Start();
+            await Processor(sandbox, traceHosts: ["api.blocks.test"]).ProcessAsync(await QueueAsync(queued), CancellationToken.None);
+
+            using var doc = System.Text.Json.JsonDocument.Parse(sandbox.EnvelopeContentSeen!);
+            var trace = doc.RootElement.GetProperty("trace");
+            trace.GetProperty("traceparent").GetString().Should().Be(span.Id);
+            trace.GetProperty("hosts").EnumerateArray().Select(h => h.GetString()).Should().Equal("api.blocks.test");
+            doc.RootElement.GetProperty("events").GetRawText().Should().Be("""{"allowed":["SendMail"]}""");
         }
     }
 }

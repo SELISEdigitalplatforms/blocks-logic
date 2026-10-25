@@ -1,9 +1,7 @@
 using Blocks.Genesis;
+using DataAccess.InternalService.Notifications;
 using FluentAssertions;
 using Functions.DomainService.Consumers;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
@@ -11,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
 using static Functions.DomainService.Consumers.FunctionResultConsumer;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
@@ -30,6 +29,9 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionImageRecoveryService> _images = new();
         private readonly Mock<IFunctionRepository> _functions = new();
         private readonly Mock<IFunctionRunGrantRevoker> _grants = new();
+        private readonly Mock<IBuiltInNotificationSender> _builtIn = new();
+        private readonly Mock<IFunctionRunEventsRepository> _runEvents = new();
+        private readonly Mock<global::Functions.DomainService.Services.IFunctionEventDeadLetters> _eventDead = new();
         private readonly (IDatabase Database, FakeRedisDatabase Fake) _redis = FakeRedisDatabase.Create();
 
         private readonly FunctionVersionEntity _version = new() { ItemId = "v-1", FunctionId = "fn-1" };
@@ -56,6 +58,8 @@ namespace XUnitTest.Functions
                 .ReturnsAsync(true);
             _versions.Setup(v => v.GetByIdAsync(Tenant, "v-1", It.IsAny<CancellationToken>())).ReturnsAsync(_version);
             _redis.Fake.On("SortedSetAddAsync", _ => true);
+            _functions.Setup(f => f.GetByIdAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionEntity { ItemId = "fn-1", CreatedBy = "owner-1" });
         }
 
         private static FunctionRunEntity NewRecord() => new()
@@ -74,6 +78,7 @@ namespace XUnitTest.Functions
             ItemId = r.ItemId, TenantId = r.TenantId, FunctionId = r.FunctionId, VersionId = r.VersionId,
             Status = r.Status, ErrorCode = r.ErrorCode, Attempt = r.Attempt, MaxAttempts = r.MaxAttempts,
             Result = r.Result, OutputResults = [.. r.OutputResults],
+            InvokedBy = r.InvokedBy, InvokedById = r.InvokedById, ErrorMessage = r.ErrorMessage,
         };
 
         private FunctionResultConsumer Consumer()
@@ -82,7 +87,8 @@ namespace XUnitTest.Functions
             cache.Setup(c => c.CacheDatabase()).Returns(_redis.Database);
             return new FunctionResultConsumer(
                 cache.Object, _runs.Object, _logs.Object, _versions.Object, _images.Object, _functions.Object,
-                _grants.Object, NullLogger<FunctionResultConsumer>.Instance);
+                _grants.Object, NullLogger<FunctionResultConsumer>.Instance, builtInNotifications: _builtIn.Object,
+                runEvents: _runEvents.Object, eventDeadLetters: _eventDead.Object);
         }
 
         private static ResultStreamEntry Entry(params (string Key, string Value)[] overrides)
@@ -158,6 +164,90 @@ namespace XUnitTest.Functions
             OutputJobs().Should().BeEmpty();
         }
 
+        // ---- function events: a run with events goes through the same hand-off ----------------------
+
+        private static (string Key, string Value)[] WithEvents(int count = 2) =>
+        [
+            (FunctionQueueKeys.ResultEventsKeyField, FunctionQueueKeys.Events(RunId)),
+            (FunctionQueueKeys.ResultEventCountField, count.ToString()),
+            (FunctionQueueKeys.TraceParentField, "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"),
+        ];
+
+        private static Dictionary<string, string> JobFields(object?[] job) =>
+            ((NameValueEntry[])job[1]!).ToDictionary(f => f.Name.ToString(), f => f.Value.ToString());
+
+        [Fact]
+        public async Task A_success_with_events_but_no_output_actions_is_handed_off_with_the_events_fields()
+        {
+            _version.OutputActions = [];
+
+            var outcome = await Consumer().ProcessAsync(Entry(WithEvents()), CancellationToken.None);
+
+            outcome.Disposition.Should().Be(ResultDisposition.Applied);
+            _runs.Verify(r => r.TryBeginOutputProcessingAsync(Tenant, RunId, 1, It.IsAny<CancellationToken>()), Times.Once);
+            var fields = JobFields(OutputJobs().Should().ContainSingle().Subject);
+            fields["runId"].Should().Be(RunId);
+            fields[FunctionQueueKeys.ResultEventsKeyField].Should().Be(FunctionQueueKeys.Events(RunId));
+            fields[FunctionQueueKeys.ResultEventCountField].Should().Be("2");
+            fields[FunctionQueueKeys.TraceParentField].Should().StartWith("00-0af7651916cd43dd8448eb211c80319c");
+            fields.Should().NotContainKey(FunctionQueueKeys.ResultEventsRejectedField);
+        }
+
+        [Fact]
+        public async Task A_success_where_the_runner_dropped_the_events_hands_off_so_the_reason_is_recorded()
+        {
+            _version.OutputActions = [];
+
+            await Consumer().ProcessAsync(
+                Entry((FunctionQueueKeys.ResultEventsRejectedField, "EVENTS_REJECTED: 51 events; the limit is 50")), CancellationToken.None);
+
+            var fields = JobFields(OutputJobs().Should().ContainSingle().Subject);
+            fields[FunctionQueueKeys.ResultEventsRejectedField].Should().Be("EVENTS_REJECTED: 51 events; the limit is 50");
+            fields.Should().NotContainKey(FunctionQueueKeys.ResultEventsKeyField);
+        }
+
+        [Fact]
+        public async Task A_redelivered_result_does_not_hand_a_finished_events_run_off_again()
+        {
+            _version.OutputActions = [];
+            _runEvents.Setup(r => r.ExistsAsync(Tenant, RunId, 1, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+            await Consumer().ProcessAsync(Entry(WithEvents()), CancellationToken.None);
+
+            _runs.Verify(r => r.TryBeginOutputProcessingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+            OutputJobs().Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_failed_run_never_hands_its_events_off()
+        {
+            await Consumer().ProcessAsync(
+                Entry([("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError), .. WithEvents()]), CancellationToken.None);
+
+            OutputJobs().Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_run_with_events_and_actions_carries_the_events_on_the_same_job()
+        {
+            _version.OutputActions = [new OutputAction { Id = "a1", Url = "https://example.test" }];
+
+            await Consumer().ProcessAsync(Entry(WithEvents(1)), CancellationToken.None);
+
+            JobFields(OutputJobs().Should().ContainSingle().Subject)[FunctionQueueKeys.ResultEventCountField].Should().Be("1");
+        }
+
+        [Fact]
+        public async Task A_job_for_a_run_without_events_has_no_events_fields()
+        {
+            _version.OutputActions = [new OutputAction { Id = "a1", Url = "https://example.test" }];
+
+            await Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            JobFields(OutputJobs().Should().ContainSingle().Subject).Keys.Should().NotContain(
+                [FunctionQueueKeys.ResultEventsKeyField, FunctionQueueKeys.ResultEventCountField, FunctionQueueKeys.TraceParentField]);
+        }
+
         [Fact]
         public async Task A_retryable_failure_schedules_the_next_attempt_without_moving_an_existing_one()
         {
@@ -178,6 +268,159 @@ namespace XUnitTest.Functions
                 CancellationToken.None);
 
             _redis.Fake.Calls("SortedSetAddAsync").Should().BeEmpty();
+        }
+
+        // ---- built-in notification: logic-function-run-failed --------------------------------
+
+        private void VerifyOwnerTold(Times times) =>
+            _builtIn.Verify(b => b.SendAsync(
+                Tenant, BuiltInNotificationNames.FunctionRunFailed,
+                It.Is<IReadOnlyCollection<string>?>(u => u != null && u.Count == 1 && u.Contains("owner-1")),
+                It.Is<BuiltInNotificationPayload>(p => p.IsSuccess == false && p.Ids!["runId"] == RunId && p.Ids["functionId"] == "fn-1"),
+                "fn-1", It.IsAny<CancellationToken>()), times);
+
+        [Fact]
+        public async Task A_run_that_failed_for_good_tells_the_function_owner_once()
+        {
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError)),
+                CancellationToken.None);
+
+            VerifyOwnerTold(Times.Once());
+        }
+
+        [Fact]
+        public async Task A_retryable_failure_on_its_last_attempt_tells_the_owner()
+        {
+            _record.Attempt = 3;
+
+            await Consumer().ProcessAsync(
+                Entry(("attempt", "3"), ("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.SandboxStartFailed)),
+                CancellationToken.None);
+
+            VerifyOwnerTold(Times.Once());
+        }
+
+        [Fact]
+        public async Task A_failure_with_a_retry_pending_tells_nobody_yet()
+        {
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.SandboxStartFailed)),
+                CancellationToken.None);
+
+            _builtIn.Verify(b => b.SendAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>?>(),
+                It.IsAny<BuiltInNotificationPayload>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_successful_run_tells_nobody()
+        {
+            await Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            _builtIn.Verify(b => b.SendAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>?>(),
+                It.IsAny<BuiltInNotificationPayload>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        // ---- function events: a run an event started that fails for good dead-letters its event ----
+
+        [Fact]
+        public async Task An_event_run_that_failed_on_its_last_attempt_is_handed_to_the_event_dead_letters_once()
+        {
+            _record.InvokedBy = InvokedByType.Event;
+            _record.InvokedById = "evt-1";
+            _record.Attempt = 3;
+
+            await Consumer().ProcessAsync(
+                Entry(("attempt", "3"), ("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError)),
+                CancellationToken.None);
+
+            _eventDead.Verify(d => d.RunFailedAsync(Tenant, It.Is<FunctionRunEntity>(r => r.ItemId == RunId && r.InvokedById == "evt-1")), Times.Once);
+        }
+
+        [Fact]
+        public async Task An_event_run_with_a_retry_pending_is_not_dead_lettered_yet()
+        {
+            _record.InvokedBy = InvokedByType.Event;
+
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.SandboxStartFailed)),
+                CancellationToken.None);
+
+            _eventDead.Verify(d => d.RunFailedAsync(It.IsAny<string>(), It.IsAny<FunctionRunEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task EVENT_EXPIRED_is_terminal_never_retried_and_dead_letters_the_event()
+        {
+            _record.InvokedBy = InvokedByType.Event;
+            _record.InvokedById = "evt-1";
+
+            var outcome = await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.EventExpired),
+                    ("errorMessage", "EVENT_EXPIRED: the event run waited more than 300 s")),
+                CancellationToken.None);
+
+            outcome.Disposition.Should().Be(ResultDisposition.Applied);
+            _runs.Verify(r => r.ApplyResultAsync(
+                Tenant, RunId, 1, RunStatus.Failed, RunErrorCode.Undeliverable, It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<long?>(),
+                It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<RunSandboxReport?>(), It.IsAny<CancellationToken>()), Times.Once);
+            _redis.Fake.Calls("SortedSetAddAsync").Should().BeEmpty("no retry is scheduled");
+            _eventDead.Verify(d => d.RunFailedAsync(Tenant, It.IsAny<FunctionRunEntity>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task A_run_an_event_started_that_succeeds_is_not_dead_lettered()
+        {
+            _record.InvokedBy = InvokedByType.Event;
+
+            await Consumer().ProcessAsync(Entry(), CancellationToken.None);
+
+            _eventDead.Verify(d => d.RunFailedAsync(It.IsAny<string>(), It.IsAny<FunctionRunEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_duplicate_delivery_of_an_event_runs_failure_dead_letters_nothing_again()
+        {
+            _record.InvokedBy = InvokedByType.Event;
+            _record.Status = RunStatus.Failed;
+            _record.ErrorCode = RunErrorCode.UserRuntimeError;
+
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError)),
+                CancellationToken.None);
+
+            _eventDead.Verify(d => d.RunFailedAsync(It.IsAny<string>(), It.IsAny<FunctionRunEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_duplicate_delivery_of_a_failure_tells_nobody_again()
+        {
+            _record.Status = RunStatus.Failed;
+            _record.ErrorCode = RunErrorCode.UserRuntimeError;
+
+            await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError)),
+                CancellationToken.None);
+
+            VerifyOwnerTold(Times.Never());
+        }
+
+        [Fact]
+        public async Task A_notifier_that_throws_does_not_fail_the_result()
+        {
+            _builtIn.Setup(b => b.SendAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>?>(),
+                    It.IsAny<BuiltInNotificationPayload>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("boom"));
+
+            var outcome = await Consumer().ProcessAsync(
+                Entry(("status", FunctionQueueKeys.Wire.Failed), ("errorCode", FunctionQueueKeys.Wire.UserRuntimeError)),
+                CancellationToken.None);
+
+            outcome.Disposition.Should().Be(ResultDisposition.Applied);
         }
 
         // ---- redelivery and attempts ------------------------------------------------------
@@ -360,6 +603,7 @@ namespace XUnitTest.Functions
         [InlineData("resultKey", "function:result:someone-else")]
         [InlineData("resultKey", "blocks-secret-logic")]
         [InlineData("logsKey", "function:logs:someone-else")]
+        [InlineData("eventsKey", "function:events:someone-else")]
         public async Task Keys_that_are_not_the_runs_own_are_never_read(string field, string key)
         {
             var outcome = await Consumer().ProcessAsync(Entry((field, key)), CancellationToken.None);
@@ -368,6 +612,16 @@ namespace XUnitTest.Functions
             _redis.Fake.Calls("StringGetAsync").Should().BeEmpty();
             _redis.Fake.Calls("ListRangeAsync").Should().BeEmpty();
             VerifyNothingWritten();
+        }
+
+        [Fact]
+        public async Task The_events_fields_of_a_run_that_has_them_do_not_break_the_result()
+        {
+            var outcome = await Consumer().ProcessAsync(Entry(
+                (FunctionQueueKeys.ResultEventsKeyField, FunctionQueueKeys.Events(RunId)),
+                (FunctionQueueKeys.ResultEventCountField, "2")), CancellationToken.None);
+
+            outcome.Disposition.Should().NotBe(ResultDisposition.Rejected);
         }
 
         [Theory]

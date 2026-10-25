@@ -31,6 +31,7 @@ export const useWorkflow = () => {
   const onConnect = useWorkflowStore((state) => state.onConnect);
   const addNode = useWorkflowStore((state) => state.addNode);
   const updateNode = useWorkflowStore((state) => state.updateNode);
+  const updateNodeParameters = useWorkflowStore((state) => state.updateNodeParameters);
   const deleteNode = useWorkflowStore((state) => state.deleteNode);
   const duplicateNode = useWorkflowStore((state) => state.duplicateNode);
   const copyNode = useWorkflowStore((state) => state.copyNode);
@@ -48,6 +49,7 @@ export const useWorkflow = () => {
   const openNodeLibraryPanel = useWorkflowStore((state) => state.openNodeLibraryPanel);
   const closeNodeLibraryPanel = useWorkflowStore((state) => state.closeNodeLibraryPanel);
   const setWorkflow = useWorkflowStore((state) => state.setWorkflow);
+  const markSaved = useWorkflowStore((state) => state.markSaved);
   const setEditorMode = useWorkflowStore((state) => state.setEditorMode);
   const setExecutionMode = useWorkflowStore((state) => state.setExecutionMode);
   const resetWorkflow = useWorkflowStore((state) => state.resetWorkflow);
@@ -85,16 +87,16 @@ export const useWorkflow = () => {
   );
 
   const getNodeNextSource = useCallback(
-    (nodeId: string, handleSpecSource: string[]) => {
+    (nodeId: string, sourceKeys: string[]) => {
       const outgoingEdges = edges.filter((edge) => edge.source === nodeId);
 
-      for (const source of handleSpecSource) {
+      for (const source of sourceKeys) {
         if (!outgoingEdges.some((edge) => edge.sourceHandle === source)) {
           return source;
         }
       }
 
-      return handleSpecSource[0] ?? "source";
+      return sourceKeys[0] ?? "source";
     },
     [edges],
   );
@@ -219,6 +221,7 @@ export const useWorkflow = () => {
     // Basic operations
     addNode,
     updateNode,
+    updateNodeParameters,
     deleteNode,
     duplicateNode,
     copyNode,
@@ -243,6 +246,7 @@ export const useWorkflow = () => {
 
     // Workflow operations
     setWorkflow,
+    markSaved,
     setEditorMode,
     setExecutionMode,
     setLastSuccessfulExecutionData,

@@ -2,11 +2,11 @@ using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Models;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
+using DataAccess.InternalService.Notifications;
 
 namespace Functions.DomainService.Services
 {
@@ -77,6 +77,8 @@ namespace Functions.DomainService.Services
         private readonly IValidator<SaveFunctionRequestDto> _saveValidator;
         private readonly ILogger<FunctionService> _logger;
         private readonly IConfiguration _configuration;
+        private readonly IFunctionSecretCatalog? _secretCatalog;
+        private readonly FunctionOwnerNotifier? _notifier;
 
         public FunctionService(
             IFunctionRepository repository,
@@ -89,9 +91,13 @@ namespace Functions.DomainService.Services
             IValidator<UpdateFunctionRequestDto> updateValidator,
             IValidator<SaveFunctionRequestDto> saveValidator,
             ILogger<FunctionService> logger,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IFunctionSecretCatalog? secretCatalog = null,
+            IBuiltInNotificationSender? builtInNotifications = null)
         {
+            _notifier = builtInNotifications is null ? null : new FunctionOwnerNotifier(repository, builtInNotifications);
             _configuration = configuration;
+            _secretCatalog = secretCatalog;
             _repository = repository;
             _versionRepository = versionRepository;
             _runRepository = runRepository;
@@ -262,6 +268,12 @@ namespace Functions.DomainService.Services
                 tenantId, functionId, FunctionsConstants.AuditActions.Deleted, actorId, actorEmail,
                 new { Forced = force }, cancellationToken);
 
+            // After the tombstone and the audit row. The owner is told when somebody else deleted the function.
+            if (_notifier is not null)
+            {
+                await _notifier.ChangedByOtherAsync(tenantId, function, actorId, "deleted");
+            }
+
             // Only the fast path. Should it fail, the Worker's backstop sweep finds the tombstone.
             await _deletionQueue.EnqueueAsync(tenantId, functionId, cancellationToken);
             return true;
@@ -281,6 +293,10 @@ namespace Functions.DomainService.Services
             var runs24h = await _runRepository.CountSinceByFunctionAsync(
                 tenantId, functionIds, DateTime.UtcNow.AddHours(-24), cancellationToken);
 
+            // "Needs secret" for the list: one exact-name lookup per distinct unbound name on the page, never cached.
+            var unbound = await UnboundNamesAsync(
+                items.SelectMany(f => FunctionSecretRefs.NamesIn(f.Variables, f.OutputActions)).ToList(), cancellationToken);
+
             var summaries = new List<FunctionSummaryDto>(items.Count);
             foreach (var function in items)
             {
@@ -289,8 +305,14 @@ namespace Functions.DomainService.Services
                 // unset default and never showed "unpublished changes" for anything.
                 function.IsDirty = IsDirty(function, activeVersion);
                 runs24h.TryGetValue(function.ItemId, out var recentRuns);
-                summaries.Add(FunctionSummaryDto.From(
-                    function, activeVersion?.Number, recentRuns));
+                var summary = FunctionSummaryDto.From(function, activeVersion?.Number, recentRuns);
+                if (unbound is not null)
+                {
+                    summary.UnboundSecrets = FunctionSecretRefs.NamesIn(function.Variables, function.OutputActions)
+                        .Where(n => unbound.ContainsKey(n)).ToList();
+                    summary.HasUnboundSecrets = summary.UnboundSecrets.Count > 0;
+                }
+                summaries.Add(summary);
             }
 
             return (summaries, totalCount);
@@ -299,7 +321,9 @@ namespace Functions.DomainService.Services
         public async Task<FunctionDetailDto> GetAsync(
             string tenantId, string functionId, CancellationToken cancellationToken = default)
         {
-            var function = await GetEntityAsync(tenantId, functionId, cancellationToken);
+            // The detail goes back to the caller: View column (property) rules clear what they may not see.
+            var function = await _repository.GetByIdForViewAsync(tenantId, functionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
             return await BuildDetailAsync(tenantId, function, cancellationToken);
         }
 
@@ -338,7 +362,7 @@ namespace Functions.DomainService.Services
         public async Task<FunctionSource> GetVersionSourceAsync(
             string tenantId, string functionId, string versionId, CancellationToken cancellationToken = default)
         {
-            var version = await _versionRepository.GetByIdAsync(tenantId, versionId, cancellationToken);
+            var version = await _versionRepository.GetByIdForViewAsync(tenantId, versionId, cancellationToken);
             if (version is null || version.FunctionId != functionId)
             {
                 throw new FunctionNotFoundException($"function '{functionId}' has no version '{versionId}'");
@@ -354,7 +378,48 @@ namespace Functions.DomainService.Services
 
             var dto = FunctionDetailDto.From(function);
             dto.ActiveVersionNumber = activeVersion?.Number;
+
+            var names = FunctionSecretRefs.NamesIn(function.Variables, function.OutputActions);
+            if (names.Count > 0)
+            {
+                var unbound = await UnboundNamesAsync(names, cancellationToken);
+                if (unbound is null)
+                {
+                    dto.SecretsUnchecked = true;
+                }
+                else
+                {
+                    dto.MissingSecrets = names.Where(n => unbound.TryGetValue(n, out var c) && c == 0).ToList();
+                    dto.DuplicateSecrets = names.Where(n => unbound.TryGetValue(n, out var c) && c > 1).ToList();
+                }
+            }
             return dto;
+        }
+
+        /// <summary>
+        /// Name → match count for every <c>{{secretName.X}}</c> name that does <b>not</b> match exactly one secret (an
+        /// empty map when all are bound). Null when the catalog is not available or could not be read: the warning is
+        /// then left out rather than shown wrongly, and a read never fails over it. Never cached.
+        /// </summary>
+        private async Task<Dictionary<string, int>?> UnboundNamesAsync(
+            IReadOnlyCollection<string> names, CancellationToken cancellationToken)
+        {
+            var distinct = names.Distinct(StringComparer.Ordinal).ToList();
+            if (distinct.Count == 0) return new Dictionary<string, int>(StringComparer.Ordinal);
+            if (_secretCatalog is null) return null;
+            try
+            {
+                var found = await _secretCatalog.IdsByNameAsync(distinct, cancellationToken);
+                return distinct
+                    .Select(n => (Name: n, Count: found.TryGetValue(n, out var ids) ? ids.Count : 0))
+                    .Where(x => x.Count != 1)
+                    .ToDictionary(x => x.Name, x => x.Count, StringComparer.Ordinal);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning("Could not check secret names for functions ({Type})", ex.GetType().Name);
+                return null;
+            }
         }
 
         private async Task<FunctionVersionEntity?> GetActiveVersionAsync(
@@ -392,7 +457,7 @@ namespace Functions.DomainService.Services
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
             trigger.HttpMethods = verbs.Count == 0 ? null : verbs;
-            trigger.ResponseMode = TriggerConfig.IsSync(trigger.ResponseMode) ? TriggerConfig.ResponseModes.Sync : null;
+            trigger.ResponseMode = FunctionResponseModes.Waits(trigger.ResponseMode) ? trigger.ResponseMode : null;
             return trigger;
         }
 

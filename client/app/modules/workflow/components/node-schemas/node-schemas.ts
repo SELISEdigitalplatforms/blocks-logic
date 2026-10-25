@@ -12,8 +12,11 @@ import { NodeSchemaActionDataActionV1 } from "./node-schema-action-dataAction-v1
 import { NodeSchemaActionFunction } from "./node-schema-action-function";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
 import { NodeSchemaActionProxy } from "./node-schema-action-proxy";
+import { NodeSchemaLogicSwitchV2 } from "./node-schema-logic-switch-v2";
+import { NodeSchemaTransformSplitOutV2 } from "./node-schema-transform-splitOut-v2";
+import { NodeSchemaTransformMergeV2 } from "./node-schema-transform-merge-v2";
 
-export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
+const V1_SCHEMAS: Record<string, NodeSchemaDefinition> = {
   triggerwebhookv1: NodeSchemaTriggerWebhookV1,
   triggeremailv1: NodeSchemaTriggerEmailV1,
   triggerdataGatewayv1: NodeSchemaTriggerDataGatewayV1,
@@ -27,4 +30,19 @@ export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   actionfunctionv1: NodeSchemaActionFunction,
   actionproxyv1: NodeSchemaActionProxy,
   logicifv1: NodeSchemaLogicIfV1,
+};
+
+/**
+ * Keyed by `${category}${type}${version}`. v2 only means the node owns its handle, so every v2 key points
+ * at the same schema object as its v1 key.
+ */
+export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
+  ...V1_SCHEMAS,
+  ...Object.fromEntries(
+    Object.entries(V1_SCHEMAS).map(([key, schema]) => [`${key.slice(0, -2)}v2`, schema]),
+  ),
+  // New types start at v2 (they own their handle from the start) and have no v1.
+  logicswitchv2: NodeSchemaLogicSwitchV2,
+  transformsplitOutv2: NodeSchemaTransformSplitOutV2,
+  transformmergev2: NodeSchemaTransformMergeV2,
 };

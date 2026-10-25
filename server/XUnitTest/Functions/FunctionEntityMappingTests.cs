@@ -1,9 +1,7 @@
 using FluentAssertions;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

@@ -9,6 +9,8 @@ using FluentValidation.Results;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using System.Linq.Expressions;
+using Blocks.Genesis.Entities.Logic;
+using Blocks.Genesis.Entities.Os;
 
 namespace XUnitTest.Notifications
 {

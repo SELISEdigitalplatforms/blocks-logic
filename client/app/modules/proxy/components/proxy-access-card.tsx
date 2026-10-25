@@ -68,6 +68,7 @@ export const AccessRulePicker = ({
   rule,
   options,
   loading,
+  showValue = true,
   onChange,
 }: {
   label: string;
@@ -76,6 +77,8 @@ export const AccessRulePicker = ({
   rule: ProxyAccessRule;
   options: AccessOption[];
   loading: boolean;
+  /** Show each option's key beside its label in the popover. */
+  showValue?: boolean;
   onChange: (rule: ProxyAccessRule) => void;
 }) => {
   const [open, setOpen] = useState(false);
@@ -199,7 +202,7 @@ export const AccessRulePicker = ({
                             )}
                           />
                           <span className="flex-1 truncate">{option.label}</span>
-                          {option.label !== option.value ? (
+                          {showValue && option.label !== option.value ? (
                             <span className="ml-2 truncate font-mono text-[10px] text-muted-foreground">
                               {option.value}
                             </span>
@@ -319,6 +322,7 @@ export const ProxyAccessCard = ({ control }: Props) => {
             <AccessRulePicker
               label="Permissions"
               noun="permission"
+              showValue={false}
               addLabel="Add permission"
               rule={access.permissions}
               options={permissionsQuery.data ?? []}

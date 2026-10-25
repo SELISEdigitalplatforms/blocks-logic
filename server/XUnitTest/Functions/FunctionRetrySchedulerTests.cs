@@ -1,14 +1,13 @@
 using Blocks.Genesis;
 using FluentAssertions;
 using Functions.DomainService.Consumers;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
@@ -118,6 +117,19 @@ namespace XUnitTest.Functions
             await Scheduler().SweepOnceAsync(CancellationToken.None);
 
             _redis.Fake.Calls("StreamAddAsync").Should().ContainSingle(a => a[0]!.ToString() == FunctionQueueKeys.RunsStream);
+        }
+
+        [Fact]
+        public async Task A_retry_of_a_run_an_event_started_goes_back_to_the_event_queue()
+        {
+            _runs.Setup(r => r.GetByIdAsync("t1", "run-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionRunEntity { ItemId = "run-1", Attempt = 1, Status = RunStatus.Failed, InvokedBy = InvokedByType.Event });
+
+            await Scheduler().SweepOnceAsync(CancellationToken.None);
+
+            _redis.Fake.Calls("StreamAddAsync").Should().ContainSingle(a => a[0]!.ToString() == FunctionQueueKeys.EventRunsStream);
+            _redis.Fake.Calls("StreamAddAsync").Should().NotContain(a => a[0]!.ToString() == FunctionQueueKeys.RunsStream);
+            _redis.Fake.Calls("Publish").Select(c => c[0]!.ToString()).Should().ContainSingle().Which.Should().Be(FunctionQueueKeys.EventRunsNudgeChannel);
         }
 
         [Fact]

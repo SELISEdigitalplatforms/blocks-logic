@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {

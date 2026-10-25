@@ -2,6 +2,7 @@ using System.Text.Json;
 using MongoDB.Bson;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Import
 {
@@ -322,6 +323,7 @@ namespace Workflow.DomainService.Import
             return BsonJsonConverter.ToBsonArrayOrNull(doc.RootElement);
         }
 
+        // An absent or non-object handle imports as null; the client fills it from the node's template on open.
         private static Handle? ParseHandle(JsonElement node)
         {
             if (!node.TryGetProperty("handle", out var handle) || handle.ValueKind != JsonValueKind.Object)
@@ -331,25 +333,62 @@ namespace Workflow.DomainService.Import
 
             return new Handle
             {
-                Sources = ReadStringList(handle, "source", "Sources"),
-                Targets = ReadStringList(handle, "target", "Targets"),
+                Sources = ReadHandleEntries(handle, "sources", "Sources", "source"),
+                Targets = ReadHandleEntries(handle, "targets", "Targets", "target"),
             };
         }
 
-        private static List<string> ReadStringList(JsonElement element, params string[] names)
+        // Entry by entry: {key, label} objects keep their key and label (label defaults to ""), a plain string
+        // "x" becomes {key: "x", label: ""}, and anything else (empty key, number, null) is dropped.
+        private static List<Dictionary<string, string>> ReadHandleEntries(JsonElement handle, params string[] names)
         {
+            var entries = new List<Dictionary<string, string>>();
             foreach (var name in names)
             {
-                if (element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array)
+                if (!handle.TryGetProperty(name, out var list) || list.ValueKind != JsonValueKind.Array)
                 {
-                    return value.EnumerateArray()
-                        .Where(item => item.ValueKind == JsonValueKind.String)
-                        .Select(item => item.GetString() ?? string.Empty)
-                        .ToList();
+                    continue;
                 }
+
+                foreach (var item in list.EnumerateArray())
+                {
+                    if (ReadHandleEntry(item) is { } entry)
+                    {
+                        entries.Add(entry);
+                    }
+                }
+
+                return entries;
             }
 
-            return new List<string>();
+            return entries;
+        }
+
+        private static Dictionary<string, string>? ReadHandleEntry(JsonElement item)
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                var key = item.GetString();
+                return string.IsNullOrEmpty(key) ? null : HandleEntry(key, string.Empty);
+            }
+
+            if (item.ValueKind != JsonValueKind.Object
+                || !item.TryGetProperty("key", out var keyValue)
+                || keyValue.ValueKind != JsonValueKind.String
+                || string.IsNullOrEmpty(keyValue.GetString()))
+            {
+                return null;
+            }
+
+            var label = item.TryGetProperty("label", out var labelValue) && labelValue.ValueKind == JsonValueKind.String
+                ? labelValue.GetString()!
+                : string.Empty;
+            return HandleEntry(keyValue.GetString()!, label);
+        }
+
+        private static Dictionary<string, string> HandleEntry(string key, string label)
+        {
+            return new Dictionary<string, string> { ["key"] = key, ["label"] = label };
         }
 
         private static bool IsValidImportNode(JsonElement node)

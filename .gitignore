@@ -212,3 +212,5 @@ results/
 QWEN.md
 .clinerules
 .windsurfrules
+
+/server/Directory.Build.local.props

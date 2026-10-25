@@ -10,6 +10,7 @@ using Proxy.DomainService.Services;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Logging;
 using Workflow.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.ActionProxy
 {

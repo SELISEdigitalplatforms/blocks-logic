@@ -1,17 +1,19 @@
 import { useState } from "react";
-import { Loader2, Plus, RotateCcw } from "lucide-react";
+import { FileUp, Loader2, Plus, RotateCcw } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
-import { Pagination } from "@/components/ui-kits/pagination/pagination";
+import { PAGE_SIZE_OPTIONS, Pagination } from "@/components/ui-kits/pagination/pagination";
 import { Button } from "@/components/ui-kits/button/button";
 import { FunctionsTable } from "../../components/functions-table";
 import { FunctionsFilterToolBar } from "../../components/functions-filter-toolbar";
 import { FunctionCreateDialog } from "../../components/function-create-dialog";
+import { FunctionImportDialog } from "../../components/function-import-dialog";
 import { useGetFunctions } from "../../hooks/use-functions";
 import { useFunctionsFilterQueryParams } from "../../hooks/use-functions-filter-query-params";
 import { FunctionSort } from "../../types/function.types";
 
 export const FunctionsPage = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const { queryParams, setQueryParams } = useFunctionsFilterQueryParams();
   const { data, isLoading, isFetching, isError, refetch } = useGetFunctions({
     searchKey: queryParams.search || undefined,
@@ -39,12 +41,24 @@ export const FunctionsPage = () => {
             Deploy code and call it over HTTP or from a workflow — it runs in an isolated sandbox.
           </p>
         </div>
-        {showCreateButton && (
-          <Button size="sm" className="shrink-0 gap-1.5" onClick={() => setIsCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            New function
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Import is always offered: an empty environment is exactly where a file is brought in. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setIsImportOpen(true)}
+          >
+            <FileUp className="h-4 w-4" />
+            Import
           </Button>
-        )}
+          {showCreateButton && (
+            <Button size="sm" className="gap-1.5" onClick={() => setIsCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New function
+            </Button>
+          )}
+        </div>
       </div>
 
       {isError ? (
@@ -77,14 +91,14 @@ export const FunctionsPage = () => {
               onCreateFunction={() => setIsCreateOpen(true)}
             />
 
-            {/* One page of results needs no pager — matches the runs tab, which guards the same way. */}
-            {!!data?.totalCount && data.totalCount > Number(queryParams.pageSize) && (
+            {/* The pager hides itself when there is one page and no page size worth choosing. */}
+            {!!data?.totalCount && (
               <div className="mt-5 flex justify-end">
                 <Pagination
                   totalCount={data?.totalCount || 0}
                   page={queryParams.page}
                   pageSize={queryParams.pageSize}
-                  pageSizeOptions={[5, 10, 20]}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
                   onChange={(page) => setQueryParams((params) => ({ ...params, page }))}
                   onPageSizeChange={(pageSize) =>
                     setQueryParams((params) => ({ ...params, pageSize, page: 0 }))
@@ -97,6 +111,7 @@ export const FunctionsPage = () => {
       )}
 
       <FunctionCreateDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
+      <FunctionImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} />
     </section>
   );
 };

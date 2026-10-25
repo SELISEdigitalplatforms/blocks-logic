@@ -183,7 +183,7 @@ namespace Blocks.FunctionRunner.Sandbox
         /// The same per-run ceiling the single-run path reads stdout under (twice the log ceiling
         /// plus the result ceiling), applied to each call's own lines.
         /// </summary>
-        internal const long CallOutputCeilingBytes = (2 * Ceilings.LogBytes) + Ceilings.ResultBytes;
+        internal const long CallOutputCeilingBytes = (2 * Ceilings.LogBytes) + Ceilings.ResultBytes + Ceilings.EventsLineBytes;
 
         private static readonly TimeSpan ExitDrain = TimeSpan.FromSeconds(2);
 
@@ -1052,7 +1052,7 @@ namespace Blocks.FunctionRunner.Sandbox
         /// The longest single line kept: a result line carries up to the 5 MB result ceiling plus
         /// a little framing. Anything longer is replaced by <see cref="ReusableSandbox.OverflowLine"/>.
         /// </summary>
-        internal const int MaxLineChars = (int)Ceilings.ResultBytes + (64 * 1024);
+        internal const int MaxLineChars = (int)Ceilings.ResultBytes + Ceilings.EventsLineBytes + (64 * 1024);
 
         private readonly IDockerClient _docker;
         private readonly string _image;

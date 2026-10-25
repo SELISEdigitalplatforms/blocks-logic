@@ -66,7 +66,7 @@ export function DraggableProperty({
         e.dataTransfer.setData("text/plain", expression);
         e.dataTransfer.effectAllowed = "copy";
       }}
-      className={`group flex items-center gap-2 rounded px-2 py-1 text-xs touch-none select-none disabled:cursor-default disabled:opacity-100 ${isDraggable ? "cursor-pointer hover:bg-surface-hover" : ""} `}
+      className={`group flex shrink-0 items-center gap-2 rounded px-2 py-1 text-xs touch-none select-none disabled:cursor-default disabled:opacity-100 ${isDraggable ? "cursor-pointer hover:bg-surface-hover" : ""} `}
       style={{ marginLeft: `${depth * 1}rem` }}
       title={isDraggable ? `Drag to use: ${expression}` : undefined}
     >
@@ -116,7 +116,7 @@ export function DraggableArrayIndex({
         e.dataTransfer.setData("text/plain", expression);
         e.dataTransfer.effectAllowed = "copy";
       }}
-      className={`group flex items-center gap-2 rounded px-2 py-1 text-xs touch-none select-none disabled:cursor-default disabled:opacity-100 ${isDraggable ? "cursor-pointer hover:bg-surface-hover" : ""} `}
+      className={`group flex shrink-0 items-center gap-2 rounded px-2 py-1 text-xs touch-none select-none disabled:cursor-default disabled:opacity-100 ${isDraggable ? "cursor-pointer hover:bg-surface-hover" : ""} `}
       style={{ marginLeft: `${depth * 1}rem` }}
       title={isDraggable ? `Drag to use: ${expression}` : undefined}
     >

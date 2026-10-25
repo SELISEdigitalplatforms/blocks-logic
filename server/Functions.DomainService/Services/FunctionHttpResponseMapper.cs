@@ -1,8 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {

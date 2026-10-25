@@ -1,3 +1,5 @@
+using Blocks.Genesis.Entities.Logic;
+
 
 namespace DomainService.Shared
 {

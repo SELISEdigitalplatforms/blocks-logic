@@ -1,3 +1,5 @@
+using DataAccess.InternalService;
+using Blocks.Genesis.DataAccess.Rules;
 using System.Text.Json;
 using System.Diagnostics.CodeAnalysis;
 using Blocks.Genesis;
@@ -10,6 +12,7 @@ using MongoDB.Bson;
 using Newtonsoft.Json;
 using Scheduler.DomainService.Dtos.Requests;
 using Scheduler.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
 {
@@ -215,7 +218,7 @@ namespace Workflow.DomainService.Services
                 Type = n.Type,
                 Version = n.Version,
                 Position = new Position { X = n.Position.X, Y = n.Position.Y },
-                Handle = n.Handle == null ? null : new Handle { Sources = new List<string>(n.Handle.Sources), Targets = new List<string>(n.Handle.Targets) },
+                Handle = n.Handle == null ? null : new Handle { Sources = n.Handle.Sources.Select(e => new Dictionary<string, string>(e)).ToList(), Targets = n.Handle.Targets.Select(e => new Dictionary<string, string>(e)).ToList() },
                 Parameters = new BsonDocument(n.Parameters),
                 Settings = new BsonDocument(n.Settings),
                 PinData = n.PinData == null ? null : new BsonArray(n.PinData),
@@ -263,6 +266,11 @@ namespace Workflow.DomainService.Services
             catch (InvalidOperationException ex) when (ex.InnerException is KeyNotFoundException)
             {
                 return CreateTenantNotFoundError(tenantId, "inserting workflow", ex.StackTrace ?? "");
+            }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, ItemId = null, Errors = ex.ToErrors() };
             }
             catch (Exception ex)
             {
@@ -318,6 +326,11 @@ namespace Workflow.DomainService.Services
                     Errors = null
                 };
             }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, ItemId = null, Errors = ex.ToErrors() };
+            }
             catch (Exception e)
             {
                 _logger.LogError(e, "Failed to duplicate workflow");
@@ -367,7 +380,7 @@ namespace Workflow.DomainService.Services
             WorkflowEntity workflow;
             try
             {
-                workflow = await _workflowRepository.GetWorkflowAsync(tenantId, dto.WorkflowId);
+                workflow = await _workflowRepository.GetWorkflowForViewAsync(tenantId, dto.WorkflowId);
             }
             catch (InvalidOperationException ex) when (ex.InnerException is KeyNotFoundException)
             {
@@ -406,7 +419,7 @@ namespace Workflow.DomainService.Services
             if (workflow.IsPublished && !string.IsNullOrEmpty(workflow.PublishedVersionId))
             {
                 _logger.LogInformation("Fetching published version for workflow with Id: {WorkflowId}, PublishedVersionId: {PublishedVersionId}", dto.WorkflowId, workflow.PublishedVersionId);
-                publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, workflow.PublishedVersionId);
+                publishedVersion = await _workflowVersionRepository.GetWorkflowVersionForViewAsync(tenantId, workflow.PublishedVersionId);
             }
             else
             {
@@ -641,6 +654,11 @@ namespace Workflow.DomainService.Services
                     Errors = null
                 };
             }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, ItemId = null, Errors = ex.ToErrors() };
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Workflow publish failed");
@@ -813,6 +831,11 @@ namespace Workflow.DomainService.Services
                 };
 
             }
+            catch (DataValidationException ex)
+            {
+                // A rule on the schema refused the save: the caller gets its messages, not a generic failure.
+                return new BaseMutationResponse { IsSuccess = false, ItemId = null, Errors = ex.ToErrors() };
+            }
             catch (Exception ex)
             {
                 _logger.LogError("Error unpublishing workflow: {StackTrace}", ex.StackTrace);
@@ -828,7 +851,7 @@ namespace Workflow.DomainService.Services
         public async Task<GetWorkflowByVersionResponseDto> GetWorkflowByVersionAsync(string tenantId, GetWorkflowByVersionRequestDto dto)
         {
             var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, dto.WorkflowId);
-            var version = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, dto.VersionId);
+            var version = await _workflowVersionRepository.GetWorkflowVersionForViewAsync(tenantId, dto.VersionId);
             if (version == null)
             {
                 return new GetWorkflowByVersionResponseDto

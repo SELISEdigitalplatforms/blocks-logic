@@ -93,11 +93,69 @@
             </para>
             </summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.#ctor(Functions.DomainService.Services.IFunctionService,Functions.DomainService.Services.IFunctionDeploymentService,Functions.DomainService.Services.IFunctionInvocationService,Functions.DomainService.Services.IFunctionRunService,Functions.DomainService.Services.IFunctionBuildService,Functions.DomainService.Services.IFunctionAuditService,Common.InternalService.Access.IEndpointAccessAuthorizer,Functions.DomainService.Services.IFunctionPollTokenService,Microsoft.Extensions.Logging.ILogger{BlocksTemplate.Api.Controllers.FunctionsController})">
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.#ctor(Functions.DomainService.Services.IFunctionService,Functions.DomainService.Services.IFunctionDeploymentService,Functions.DomainService.Services.IFunctionInvocationService,Functions.DomainService.Services.IFunctionRunService,Functions.DomainService.Services.IFunctionBuildService,Functions.DomainService.Services.IFunctionAuditService,Common.InternalService.Access.IEndpointAccessAuthorizer,Functions.DomainService.Services.IFunctionPollTokenService,Microsoft.Extensions.Logging.ILogger{BlocksTemplate.Api.Controllers.FunctionsController},Functions.DomainService.Services.IFunctionTransferService)">
             <summary>
             The management services, plus the shared access authorizer that resolves the tenant on
             the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.Invoke(System.String,System.String)"/> route — the same one the proxy gateway uses — and the
             poll-token service behind the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.GetEventCatalog(Functions.DomainService.Services.IFunctionEventSettingsService)">
+            <summary>The events a function can be allowed to send, each with its payload template.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.GetEventSettings(System.String,Functions.DomainService.Services.IFunctionEventSettingsService)">
+            <summary>The events of the function's draft; empty when none were saved.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.SaveEventSettings(Functions.DomainService.Dtos.Requests.SaveEventSettingsRequestDto,Functions.DomainService.Services.IFunctionEventSettingsService)">
+            <summary>Saves the draft's events. A deploy copies them to the new version.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.GetQueueStatus(System.String,Functions.DomainService.Services.IFunctionEventSettingsService)">
+            <summary>
+            Runs of the function that still wait to start: <c>httpQueued</c> (HTTP, workflow, replay) and <c>eventQueued</c>
+            (started by a function event), and <c>oldestEventQueuedAt</c>. Another tenant's function is a 404.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRunEvents(System.String,Functions.DomainService.Services.IFunctionEventSettingsService)">
+            <summary>What happened to the events of a run (its newest attempt that has any). Never a payload.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Export(System.String)">
+            <summary>
+            Downloads one function as a <c>blocks.function.export</c> file: source, settings, output actions and
+            variables, with every secret reference written as the secret's name. Nothing environment-specific (runs,
+            builds, versions, status, counters, authors, access lists) is in it.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.ImportPreview(Functions.DomainService.Dtos.FunctionImportPreviewRequestDto)">
+            <summary>
+            Checks an export file against this environment and says what an import would do — <c>new</c>, <c>same</c>,
+            <c>changed</c> (with field and file diffs) or <c>blocked</c> — plus missing / duplicate secret names. Writes nothing.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.Import(Functions.DomainService.Dtos.FunctionImportApplyRequestDto)">
+            <summary>
+            Imports an export file: inserts it with the file's id, updates an existing function by the chosen
+            resolution (409 when it changed after the preview), or does nothing when it already matches — then builds
+            and deploys it. Install scripts always arrive off.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Controllers.FunctionsController.ImportHardBodyLimitBytes">
+            <summary>
+            Kestrel's cap for an import request: a little above the service's own 3 MB file ceiling, so the service —
+            with its own message — is what refuses an oversized file, and a runaway upload still stops here.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.StreamRun(BlocksTemplate.Api.Controllers.RunIdRequestDto,Functions.DomainService.Services.IFunctionStreamReader)">
+            <summary>
+            A run's streamed answer as Server-Sent Events, for the Studio (F-5): every piece from the
+            first, as a <c>data:</c> event, then <c>event: done</c> or <c>event: error</c> — the same
+            shape a public caller gets. Lets the editor show a Test run's answer while it runs.
+            <para>
+            The stream's Redis key is per run only, so the run is looked up in the caller's tenant
+            first: another tenant's run id is a 404, like <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.GetRun(System.String)"/>. A finished run that
+            streamed nothing (or whose stream has expired) answers an empty event stream at once
+            rather than waiting for pieces that will never come. A live run that never streams is
+            closed by the reader's own time limit, or by the caller once the run ends.
+            </para>
             </summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.MapInvokeRefusalsAsync(System.Func{System.Threading.Tasks.Task{Functions.DomainService.Dtos.Responses.InvokeResultDto}})">
@@ -262,7 +320,7 @@
             encoding and no output formatter in between.
             </summary>
         </member>
-        <member name="T:BlocksTemplate.Api.Controllers.FunctionStreamResult">
+        <member name="T:BlocksTemplate.Api.Controllers.FunctionSseAnswerResult">
             <summary>
             A streamed answer (F-5): 200, then each piece the moment the runner relays it — as plain
             chunked text, or as Server-Sent Events when the caller accepts <c>text/event-stream</c>
@@ -270,9 +328,21 @@
             with the run's status). A plain-text stream whose run fails after it started has no way to
             say so but to stop short: the connection is aborted, so the client sees an incomplete body
             rather than a clean end. The run id is in <c>x-blocks-run-id</c> for looking it up.
+            </summary>
+            <summary>
+            The public route's answer to an SSE caller of a sync function: exactly two events.
+            <list type="bullet">
+            <item><c>event: run</c> <c>{ runId }</c> — at once; the run is queued.</item>
+            <item><c>event: done</c> <c>{ runId, status, result }</c> — the full response: what the
+            handler returned (JSON as JSON), or, for a handler that streams, every piece joined.</item>
+            <item>or <c>event: error</c> <c>{ runId, status, errorCode, message }</c> — the run failed,
+            or (<c>STILL_RUNNING</c>, with a <c>pollToken</c>) it did not finish in the wait.</item>
+            </list>
+            <c>: keep-alive</c> comments (not events) hold the connection open past ingress idle
+            timeouts while the run works. A caller that leaves does not stop the run.
             </summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.FunctionStreamResult.#ctor(System.String,System.Boolean)">
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionSseAnswerResult.#ctor(System.String,System.String,System.Int32,System.Func{System.Threading.CancellationToken,System.Threading.Tasks.Task{System.String}},System.Nullable{System.TimeSpan})">
             <summary>
             A streamed answer (F-5): 200, then each piece the moment the runner relays it — as plain
             chunked text, or as Server-Sent Events when the caller accepts <c>text/event-stream</c>
@@ -281,6 +351,30 @@
             say so but to stop short: the connection is aborted, so the client sees an incomplete body
             rather than a clean end. The run id is in <c>x-blocks-run-id</c> for looking it up.
             </summary>
+            <summary>
+            The public route's answer to an SSE caller of a sync function: exactly two events.
+            <list type="bullet">
+            <item><c>event: run</c> <c>{ runId }</c> — at once; the run is queued.</item>
+            <item><c>event: done</c> <c>{ runId, status, result }</c> — the full response: what the
+            handler returned (JSON as JSON), or, for a handler that streams, every piece joined.</item>
+            <item>or <c>event: error</c> <c>{ runId, status, errorCode, message }</c> — the run failed,
+            or (<c>STILL_RUNNING</c>, with a <c>pollToken</c>) it did not finish in the wait.</item>
+            </list>
+            <c>: keep-alive</c> comments (not events) hold the connection open past ingress idle
+            timeouts while the run works. A caller that leaves does not stop the run.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Controllers.FunctionSseAnswerResult.MaxStreamChars">
+            <summary>Above the runtime's whole stream budget (3 MB encoded); more is never sent.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionSseAnswerResult.StreamedAnswerAsync(Functions.DomainService.Services.IFunctionStreamReader,System.Threading.CancellationToken)">
+            <summary>The pieces of a streamed answer joined into one result, then its end as the last event.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionSseAnswerResult.ResultValue(System.String)">
+            <summary>The stored result as JSON when it is JSON (it always is for a returned value), else as a string.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.FunctionSseAnswerResult.Event(System.String,System.Object)">
+            <summary>One SSE event; JSON has no raw newlines, so one <c>data:</c> line is enough.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionStreamResult.SseData(System.String)">
             <summary>One SSE event: every line of the piece as its own <c>data:</c> line.</summary>
@@ -445,28 +539,13 @@
         </member>
         <member name="T:BlocksTemplate.Api.Controllers.StorageController">
             <summary>
-            Storage-provider configuration plus the pre-signed URL flow for uploads and downloads, routed as
-            <c>/api/Storage/{action}</c>. File bytes never pass through this API — callers get a URL and talk
-            to the provider directly.
+            The pre-signed URL flow for uploads and downloads, routed as <c>/api/Storage/{action}</c>. File bytes
+            never pass through this API — callers get a URL and talk to the provider directly. Storage-provider
+            configuration lives in blocks-os (<c>/Storage/Save|Gets|Get|Delete</c>); logic only reads it.
             </summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.#ctor(CloudConfiguration.DomainService.Shared.Services.IConfigurationService,StorageDriver.IStorageDriverService)">
-            <summary>Takes the configuration service and the storage driver.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Save(CloudConfiguration.DomainService.Storage.RequestModel.SaveStorageConfigurationRequest)">
-            <summary><c>POST</c> — creates or updates a storage-provider configuration.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Gets(CloudConfiguration.DomainService.Storage.RequestModel.GetStorageConfigurationsRequest)">
-            <summary>
-            <c>GET</c> — every storage configuration for the tenant. The request object is accepted for
-            signature symmetry and is deliberately unused.
-            </summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Get(CloudConfiguration.DomainService.Storage.RequestModel.GetStorageConfigurationRequest)">
-            <summary><c>GET</c> — one storage configuration.</summary>
-        </member>
-        <member name="M:BlocksTemplate.Api.Controllers.StorageController.Delete(CloudConfiguration.DomainService.Storage.RequestModel.DeleteStorageConfigurationRequest)">
-            <summary><c>DELETE</c> — removes a storage configuration.</summary>
+        <member name="M:BlocksTemplate.Api.Controllers.StorageController.#ctor(StorageDriver.IStorageDriverService)">
+            <summary>Takes the storage driver.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.GetPreSignedUrlForUpload(DomainService.Storage.GetPreSignedUrlForUploadRequest)">
             <summary><c>POST</c> — a pre-signed URL the client uploads to directly.</summary>
@@ -486,6 +565,12 @@
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.StorageController.DeleteFile(DomainService.Storage.DeleteFileRequest)">
             <summary><c>DELETE</c> via <c>POST</c> — removes a file from the provider.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.DataValidationExceptionFilter">
+            <summary>
+            A save refused by a system schema's validation rules (ILogicDataAccess PrepareWriteAsync / CheckUpdateAsync)
+            is the caller's mistake, not a server error: 400 with one message per property, the field's path as key.
+            </summary>
         </member>
         <member name="T:BlocksTemplate.Api.FunctionExceptionFilter">
             <summary>
@@ -619,6 +704,64 @@
         <member name="M:BlocksTemplate.Api.Security.CspReportEndpoint.ResetForTests">
             <summary>Test hook: start every test from an empty budget.</summary>
         </member>
+        <member name="T:BlocksTemplate.Api.Security.INotifierSendPermission">
+            <summary>Reads the caller's bearer token for the notifier send permission.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.INotifierSendPermission.CheckAsync(Microsoft.AspNetCore.Http.HttpContext)">
+            <summary>What the token of <paramref name="httpContext"/> says about <see cref="F:BlocksTemplate.Api.Security.NotifierSendPermission.Resource"/>.</summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.NotifierSendPermission">
+            <summary>
+            The token path of the notifier send actions. The permission is resolved by Genesis's own <c>Protected</c>
+            policy (the one behind every <c>[ProtectedEndPoint]</c>): a <c>Permissions</c> row for the resource in the
+            caller's tenant and organization whose roles match the caller's, or the resource in the token's permission
+            claims. The send actions carry no <c>[ProtectedEndPoint]</c> (the secret path must stay open), so the
+            resource name goes in through the <c>HttpContext.Items</c> key that policy reads.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.NotifierSendPermission.Resource">
+            <summary>The permission a token needs to send a notification.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.NotifierSendPermission.ProtectedPolicy">
+            <summary>Genesis's permission policy (<c>ProtectedEndPointAttribute.Policy</c>).</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.NotifierSendPermission.ResourceItemKey">
+            <summary>
+            The <c>HttpContext.Items</c> key the Genesis permission handler reads the resource from
+            (<c>BlocksConstants.ProtectedResourceName</c>, internal in Genesis).
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.NotifierSendPermission.#ctor(Microsoft.AspNetCore.Authorization.IAuthorizationService,Blocks.Genesis.ITenants,Microsoft.Extensions.Logging.ILogger{BlocksTemplate.Api.Security.NotifierSendPermission})">
+            <summary>Takes the authorization service, the tenant list (to find a cookie token) and a logger.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.NotifierSendPermission.CheckAsync(Microsoft.AspNetCore.Http.HttpContext)">
+            <inheritdoc />
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute">
+            <summary>
+            Makes Genesis validate a bearer token on an action that must stay open without one. Genesis parses the token
+            only on endpoints with authorization metadata; this attribute adds it with a policy that every caller meets,
+            so a call without a token still reaches the action (which then checks the secret or the permission itself).
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute.PolicyName">
+            <summary>The policy name; registered by <see cref="M:BlocksTemplate.Api.Security.NotifierSendAuthorization.AddNotifierSendPolicy(Microsoft.Extensions.DependencyInjection.IServiceCollection)"/>.</summary>
+        </member>
+        <member name="P:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute.Policy">
+            <inheritdoc />
+        </member>
+        <member name="P:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute.Roles">
+            <inheritdoc />
+        </member>
+        <member name="P:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute.AuthenticationSchemes">
+            <inheritdoc />
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.NotifierSendAuthorization">
+            <summary>Service registration for the notifier send token path.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.NotifierSendAuthorization.AddNotifierSendPolicy(Microsoft.Extensions.DependencyInjection.IServiceCollection)">
+            <summary>Registers <see cref="T:BlocksTemplate.Api.Security.INotifierSendPermission"/> and the open policy of <see cref="T:BlocksTemplate.Api.Security.NotifierOptionalTokenAttribute"/>.</summary>
+        </member>
         <member name="T:BlocksTemplate.Api.Security.CspMode">
             <summary>How the CSP header is sent. Set by <c>Csp:Mode</c> (env var <c>Csp__Mode</c>).</summary>
         </member>
@@ -652,19 +795,21 @@
         <member name="T:Api.Controllers.NotifierController">
             <summary>
             Delivery and read-state for user notifications, routed as <c>/api/Notifier/{action}</c>.
-            The two send actions are anonymous because internal services call them; everything that reads or
-            mutates a user's own notifications requires a bearer token.
+            The two send actions stay open without a bearer token because internal services call them with the
+            <c>Secret</c> sender header; a caller without it needs a valid token with
+            <c>blocks-logic::notifier::send</c> (<see cref="T:DomainService.Notification.INotifierSendGuard"/>, <see cref="T:BlocksTemplate.Api.Security.INotifierSendPermission"/>).
+            Everything that reads or mutates a user's own notifications requires a bearer token.
             </summary>
         </member>
-        <member name="M:Api.Controllers.NotifierController.#ctor(DomainService.Notification.INotificationService,Microsoft.Extensions.Logging.ILogger{Api.Controllers.NotifierController})">
-            <summary>Takes the notification service and a logger.</summary>
+        <member name="M:Api.Controllers.NotifierController.#ctor(DomainService.Notification.INotificationService,DomainService.Notification.INotifierSendGuard,BlocksTemplate.Api.Security.INotifierSendPermission,Microsoft.Extensions.Logging.ILogger{Api.Controllers.NotifierController})">
+            <summary>Takes the notification service, the send guard, the send permission check and a logger.</summary>
         </member>
-        <member name="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest)">
+        <member name="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest,System.String)">
             <summary><c>POST</c> — delivers a notification through the configured channels.</summary>
         </member>
-        <member name="M:Api.Controllers.NotifierController.SendSecretNotification(DomainService.Shared.NotifyRequest)">
+        <member name="M:Api.Controllers.NotifierController.SendSecretNotification(DomainService.Shared.NotifyRequest,System.String)">
             <summary>
-            <c>POST</c> — the secrets-pipeline variant of <see cref="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest)"/>, hidden from the API explorer.
+            <c>POST</c> — the secrets-pipeline variant of <see cref="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest,System.String)"/>, hidden from the API explorer.
             Same service call; kept separate so its traffic is distinguishable in logs.
             </summary>
         </member>
@@ -771,6 +916,13 @@
             authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
             </summary>
         </member>
+        <member name="F:Utilities.Api.Controllers.ProxiesController.ImportHardBodyLimitBytes">
+            <summary>
+            Kestrel backstop on an import body. The real cap is on the proxy config inside it (256 KB canonical,
+            <see cref="F:Proxy.DomainService.Utils.ProxyTransferCodec.MaxConfigBytes"/>, answered with the Blocks error body); this one only stops a
+            client streaming far past it. Room is left for an indented file plus the merge choices.
+            </summary>
+        </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.List(Proxy.DomainService.Dtos.ProxyGetAllRequestDto)">
             <summary>
             <c>GET /api/Proxies</c> — the console list page: the tenant's proxies newest-created first,
@@ -850,6 +1002,28 @@
             </para>
             </summary>
         </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Export(System.String)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/export</c> — one proxy as a JSON file (<c>proxy-{slug}.json</c>) that imports
+            into another environment as the same proxy: same id, same slug, same config. Secrets travel by name only;
+            a literal credential is written as <c>***</c>. No tenant, audit, version, stats or secret id goes in.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.PreviewImport(Proxy.DomainService.Dtos.ProxyExportFile)">
+            <summary>
+            <c>POST /api/Proxies/import/preview</c> — what importing an export file would do here: <c>new</c>,
+            <c>same</c>, <c>changed</c> (with the field-level diff) or <c>blocked</c> (with the reason), plus secret
+            names that are missing or ambiguous here. Writes nothing.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.ApplyImport(Proxy.DomainService.Dtos.ProxyImportApplyRequestDto)">
+            <summary>
+            <c>POST /api/Proxies/import/apply</c> — imports the file: inserts a new proxy with the file's id and slug, or
+            resolves a difference (<c>takeIncoming</c> / <c>keepMine</c> / <c>merge</c> per field). Every preview check
+            runs again here. 409 <c>PROXY_IMPORT_BLOCKED</c> when blocked, 409 <c>PROXY_VERSION_CONFLICT</c> when the
+            proxy changed since the preview. Replaying the same file changes nothing.
+            </summary>
+        </member>
         <member name="M:Utilities.Api.Controllers.ProxiesController.ListExecutions(System.String,Proxy.DomainService.Dtos.ProxyGetExecutionsRequestDto)">
             <summary>
             <c>GET /api/Proxies/{proxyId}/executions</c> — SPEC3 §3.1, the <em>Request logs</em> list for one
@@ -886,7 +1060,7 @@
             (<see cref="F:Proxy.DomainService.Entities.ProxyExecutionOutcome.Forbidden"/>), like a probe of an undeclared route. Blocks then
             rebuilds the request against the stored upstream, attaches ONLY the configured headers / query
             params, calls the third party server-side, relays the response, and records one
-            <see cref="T:Proxy.DomainService.Entities.ProxyExecutionEntity"/> per attempt.
+            <see cref="T:Blocks.Genesis.Entities.Logic.ProxyExecutionEntity"/> per attempt.
             <para>
             Unlike the control-plane actions above, this route is <b>pinned absolutely</b> (<c>~/</c>) instead of
             being derived from <c>[controller]</c>. The path is a published contract that third-party clients

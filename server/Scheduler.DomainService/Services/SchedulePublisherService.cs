@@ -2,11 +2,10 @@ using System.Security.Cryptography;
 using System.Text;
 using Blocks.Genesis;
 using Microsoft.Extensions.Logging;
-using Scheduler.DomainService.Entities;
-using Scheduler.DomainService.Enums;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Repositories;
 using Scheduler.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Scheduler.DomainService.Services
 {
@@ -54,23 +53,32 @@ namespace Scheduler.DomainService.Services
 
             var today = DateTime.UtcNow;
 
-            if (ShouldPublishSchedule(schedule, today))
+            if (!ShouldPublishSchedule(schedule, today))
             {
-                if (schedule.TriggerType == ScheduleTriggerType.Webhook)
-                {
-                    await PublishToWebhookAsync(schedule);
-                    return;
-                }
-
-                await PublishScheduledTask(schedule, tenantId);
+                _logger.LogInformation(
+                    "Schedule with taskId: {ScheduleTaskId} skipped: {CurrentDate} is outside its date window (start {StartDate}, end {EndDate}).",
+                    scheduleTaskId, today, schedule.StartDate, schedule.EndDate);
+                return;
             }
+
+            if (schedule.TriggerType == ScheduleTriggerType.Webhook)
+            {
+                await PublishToWebhookAsync(schedule);
+                return;
+            }
+
+            await PublishScheduledTask(schedule, tenantId);
         }
 
-        private bool ShouldPublishSchedule(Schedule schedule, DateTime today)
+        private static bool ShouldPublishSchedule(Schedule schedule, DateTime currentDate)
         {
-            var startDate = schedule.StartDate ?? DateTime.UtcNow;
-            return today >= startDate &&
-                   (schedule.EndDate is null || today <= schedule.EndDate.Value);
+            var isWithinStartDate = schedule.StartDate is null ||
+                                    currentDate >= schedule.StartDate.Value;
+
+            var isWithinEndDate = schedule.EndDate is null ||
+                                  currentDate <= schedule.EndDate.Value;
+
+            return isWithinStartDate && isWithinEndDate;
         }
 
         private async Task PublishToWebhookAsync(Schedule schedule)

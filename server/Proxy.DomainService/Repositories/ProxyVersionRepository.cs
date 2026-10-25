@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using Blocks.Genesis;
+using DataAccess.InternalService;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Proxy.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Proxy.DomainService.Repositories
 {
@@ -24,11 +26,17 @@ namespace Proxy.DomainService.Repositories
         private readonly ILogger<ProxyVersionRepository> _logger;
         private readonly ConcurrentDictionary<string, byte> _indexedTenants = new(StringComparer.Ordinal);
 
-        public ProxyVersionRepository(IDbContextProvider dbContextProvider, ILogger<ProxyVersionRepository> logger)
+        private readonly ILogicDataAccess _dataAccess;
+
+        public ProxyVersionRepository(IDbContextProvider dbContextProvider, ILogger<ProxyVersionRepository> logger, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
             _logger = logger;
+            _dataAccess = dataAccess;
         }
+
+        private Task<ReadScope<ProxyVersionEntity>> ReadAsync(string tenantId, FilterDefinition<ProxyVersionEntity> filter, string callSite) =>
+            _dataAccess.ReadAsync(LogicSchemas.ProxyVersionEntity, filter, $"ProxyVersionRepository.{callSite}", tenantId);
 
         private IMongoCollection<ProxyVersionEntity> GetCollection(string tenantId)
         {
@@ -85,6 +93,9 @@ namespace Proxy.DomainService.Repositories
 
         public async Task InsertAsync(ProxyVersionEntity version)
         {
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.ProxyVersionEntity, "ProxyVersionRepository.Insert", version.TenantId))
+                throw new UnauthorizedAccessException("Proxy version create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.ProxyVersionEntity, version, isInsert: true, "ProxyVersionRepository.Insert", version.TenantId);
             var collection = GetCollection(version.TenantId);
             await EnsureIndexesAsync(version.TenantId, collection);
             await collection.InsertOneAsync(version);
@@ -95,7 +106,8 @@ namespace Proxy.DomainService.Repositories
             var collection = GetCollection(tenantId);
             var filter = Builders<ProxyVersionEntity>.Filter.Eq(v => v.TenantId, tenantId)
                          & Builders<ProxyVersionEntity>.Filter.Eq(v => v.ItemId, versionId);
-            return await collection.Find(filter).FirstOrDefaultAsync();
+            var scope = await ReadAsync(tenantId, filter, "Get");
+            return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null;
         }
 
         public async Task<List<ProxyVersionEntity>> GetForProxyAsync(
@@ -104,12 +116,29 @@ namespace Proxy.DomainService.Repositories
             var collection = GetCollection(tenantId);
             var filter = Builders<ProxyVersionEntity>.Filter.Eq(v => v.TenantId, tenantId)
                          & Builders<ProxyVersionEntity>.Filter.Eq(v => v.ProxyId, proxyId);
-            return await collection
-                .Find(filter)
+            var scope = await ReadAsync(tenantId, filter, "GetForProxy");
+            if (!scope.Granted) return [];
+            return await scope.Apply(collection)
                 .SortByDescending(v => v.VersionNumber)
                 .Skip(pageNumber * pageSize)
                 .Limit(pageSize)
                 .ToListAsync();
+        }
+
+        public async Task<List<ProxyVersionEntity>> GetForProxyForViewAsync(
+            string tenantId, string proxyId, int pageSize, int pageNumber)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = Builders<ProxyVersionEntity>.Filter.Eq(v => v.TenantId, tenantId)
+                         & Builders<ProxyVersionEntity>.Filter.Eq(v => v.ProxyId, proxyId);
+            // Masked: View column (property) rules clear what the caller may not see. Never save these back.
+            var scope = await ReadAsync(tenantId, filter, "GetForProxyForView");
+            if (!scope.Granted) return [];
+            return scope.ForView(await scope.Apply(collection)
+                .SortByDescending(v => v.VersionNumber)
+                .Skip(pageNumber * pageSize)
+                .Limit(pageSize)
+                .ToListAsync());
         }
 
         public async Task<long> CountForProxyAsync(string tenantId, string proxyId)
@@ -117,7 +146,8 @@ namespace Proxy.DomainService.Repositories
             var collection = GetCollection(tenantId);
             var filter = Builders<ProxyVersionEntity>.Filter.Eq(v => v.TenantId, tenantId)
                          & Builders<ProxyVersionEntity>.Filter.Eq(v => v.ProxyId, proxyId);
-            return await collection.CountDocumentsAsync(filter);
+            var scope = await ReadAsync(tenantId, filter, "CountForProxy");
+            return scope.Granted ? await collection.CountDocumentsAsync(scope.Filter) : 0;
         }
     }
 }

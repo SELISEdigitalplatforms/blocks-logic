@@ -13,7 +13,7 @@ type LayoutWithTestProps = {
 };
 
 export const LayoutWithTest = ({ schema, guide }: LayoutWithTestProps) => {
-  const { selectedNode, updateNode } = useWorkflow();
+  const { selectedNode, updateNode, updateNodeParameters } = useWorkflow();
   const [activeTab, setActiveTab] = useState("parameters");
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   if (!selectedNode || !schema) return null;
@@ -42,7 +42,7 @@ export const LayoutWithTest = ({ schema, guide }: LayoutWithTestProps) => {
                 fields={schema.parameters}
                 data={selectedNode.parameters || {}}
                 onChange={(changes) => {
-                  updateNode(selectedNode.id, { parameters: changes });
+                  updateNodeParameters(selectedNode.id, changes);
                 }}
               />
             </TabsContent>

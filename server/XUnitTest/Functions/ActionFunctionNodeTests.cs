@@ -4,11 +4,11 @@ using Workflow.DomainService.Nodes;
 using FluentAssertions;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Entities;
 using Functions.DomainService.Nodes;
 using Functions.DomainService.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
@@ -43,7 +43,13 @@ namespace XUnitTest.Functions
             public Task<InvokeResultDto> TestAsync(string tenantId, string functionId, TestFunctionRequestDto request, CancellationToken cancellationToken = default)
                 => throw new NotSupportedException();
 
+            public Task<InvokeResultDto> AwaitSseAnswerAsync(string tenantId, string runId, int waitSeconds, CancellationToken cancellationToken = default)
+                => throw new NotSupportedException();
+
             public Task<InvokeResultDto> ReplayAsync(string tenantId, FunctionRunEntity originalRun, CancellationToken cancellationToken = default)
+                => throw new NotSupportedException();
+
+            public Task<InvokeResultDto> InvokeFromEventAsync(string tenantId, string functionId, FunctionEventInvocation @event, BlocksContext? callerContext, CancellationToken cancellationToken = default)
                 => throw new NotSupportedException();
         }
 

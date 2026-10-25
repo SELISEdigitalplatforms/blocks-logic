@@ -1,9 +1,7 @@
 using FluentValidation;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Entities;
 using Blocks.Genesis;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
@@ -11,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {
@@ -55,6 +54,7 @@ namespace Functions.DomainService.Services
         private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionDeploymentService> _logger;
         private readonly Storage.IFunctionArtifactStore? _artifacts;
+        private readonly IFunctionEventSettingsRepository? _eventSettings;
 
         /// <summary>Warm sandboxes asked for per deploy when <c>Functions:PrewarmCount</c> is not set.</summary>
         internal const int DefaultPrewarmCount = 1;
@@ -80,9 +80,11 @@ namespace Functions.DomainService.Services
             ICacheClient cache,
             IConfiguration configuration,
             ILogger<FunctionDeploymentService> logger,
-            Storage.IFunctionArtifactStore? artifacts = null)
+            Storage.IFunctionArtifactStore? artifacts = null,
+            IFunctionEventSettingsRepository? eventSettings = null)
         {
             _artifacts = artifacts;
+            _eventSettings = eventSettings;
             _functionRepository = functionRepository;
             _versionRepository = versionRepository;
             _buildService = buildService;
@@ -192,6 +194,13 @@ namespace Functions.DomainService.Services
             if (created is null)
             {
                 throw new FunctionValidationException("could not deploy: too many concurrent deployments of this function");
+            }
+
+            // The events this version may send are a copy of the draft's, taken now, so the version's list never changes
+            // at run time. Before the pointer moves: a copy that fails fails the deploy, and no run uses the version.
+            if (_eventSettings is not null)
+            {
+                await _eventSettings.CopyDraftToVersionAsync(tenantId, function.ItemId, created.ItemId, cancellationToken);
             }
 
             // Pinned here rather than when the image was built: a build is not a promise that

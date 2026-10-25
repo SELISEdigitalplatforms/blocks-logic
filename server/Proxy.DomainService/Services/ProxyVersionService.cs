@@ -3,6 +3,7 @@ using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Repositories;
 using Proxy.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Proxy.DomainService.Services
 {
@@ -59,7 +60,7 @@ namespace Proxy.DomainService.Services
                 }
             }
 
-            var versions = await _proxyVersionRepository.GetForProxyAsync(tenantId, proxyId, pageSize, pageNumber);
+            var versions = await _proxyVersionRepository.GetForProxyForViewAsync(tenantId, proxyId, pageSize, pageNumber);
             var data = versions.Select(ToDto).ToList();
 
             _logger.LogInformation(

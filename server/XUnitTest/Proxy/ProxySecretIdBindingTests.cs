@@ -6,6 +6,7 @@ using Proxy.DomainService.Entities;
 using Proxy.DomainService.Repositories;
 using Proxy.DomainService.Services;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Proxy
 {
@@ -25,6 +26,7 @@ namespace XUnitTest.Proxy
         {
             TestBlocksContext.Set(Tenant, "user-1");
             _proxies.Setup(r => r.SaveConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>())).ReturnsAsync(true);
+            _proxies.Setup(r => r.SaveEditedConfigAsync(It.IsAny<ProxyDetailEntity>(), It.IsAny<int>())).ReturnsAsync(true);
             _service = new ProxyService(
                 _proxies.Object, _versions.Object, Mock.Of<IProxyExecutionRepository>(),
                 TimeProvider.System, Mock.Of<ILogger<ProxyService>>(), _resolver.Object);
@@ -124,7 +126,7 @@ namespace XUnitTest.Proxy
             result.HttpStatus.Should().Be(200);
             existing.SecretIds.Should().ContainKey("openai-key").WhoseValue.Should().Be("sec-1");
             existing.CurrentVersion.Should().Be(3);
-            _proxies.Verify(r => r.SaveConfigAsync(existing, It.IsAny<int>()), Times.Once);
+            _proxies.Verify(r => r.SaveEditedConfigAsync(existing, It.IsAny<int>()), Times.Once);
             _versions.Verify(r => r.InsertAsync(It.IsAny<ProxyVersionEntity>()), Times.Never);
         }
     }

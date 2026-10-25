@@ -35,6 +35,8 @@ namespace Proxy.DomainService
             services.AddSingleton<IProxyTestService, ProxyTestService>();
             services.AddSingleton<IProxyExecutionService, ProxyExecutionService>();
             services.AddSingleton<IProxyRateLimiter, ProxyRateLimiter>();
+            // One proxy per file, export / import across environments (2026-10-18).
+            services.AddSingleton<IProxyTransferService, ProxyTransferService>();
 
             // repositories
             services.AddSingleton<IProxyRepository, ProxyRepository>();

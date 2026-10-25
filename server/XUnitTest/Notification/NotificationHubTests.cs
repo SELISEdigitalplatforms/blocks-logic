@@ -7,6 +7,8 @@ using FluentAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
+using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Notification
 {
@@ -18,19 +20,25 @@ namespace XUnitTest.Notification
     public class NotificationHubTests : IDisposable
     {
         private const string ConnectionId = "conn-1";
+        private const string OtherUsersWarning = "named other user ids";
 
         private readonly Mock<INotificationService> _service = new();
         private readonly Mock<HubCallerContext> _callerContext = new();
+        private readonly Mock<IGroupManager> _groups = new();
+        private readonly CapturingLogger<NotificationHub> _logger = new();
         private readonly NotificationHub _sut;
 
         public NotificationHubTests()
         {
             _callerContext.SetupGet(c => c.ConnectionId).Returns(ConnectionId);
-            _callerContext.SetupGet(c => c.User).Returns(new ClaimsPrincipal(new ClaimsIdentity()));
+            _callerContext.SetupGet(c => c.User).Returns(Caller("user-1"));
+            _groups.Setup(g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                   .Returns(Task.CompletedTask);
 
-            _sut = new NotificationHub(_service.Object, Mock.Of<ILogger<NotificationHub>>())
+            _sut = new NotificationHub(_service.Object, _logger)
             {
                 Context = _callerContext.Object,
+                Groups = _groups.Object,
             };
         }
 
@@ -39,6 +47,16 @@ namespace XUnitTest.Notification
             _sut.Dispose();
             BlocksContext.ClearContext();
             GC.SuppressFinalize(this);
+        }
+
+        private static ClaimsPrincipal Caller(string? userId, string? tenantId = null, string? originalTenantId = null, bool impersonated = false)
+        {
+            var claims = new List<Claim>();
+            if (userId is not null) claims.Add(new Claim("user_id", userId));
+            if (tenantId is not null) claims.Add(new Claim("tenant_id", tenantId));
+            if (originalTenantId is not null) claims.Add(new Claim("original_tenant_id", originalTenantId));
+            if (impersonated) claims.Add(new Claim("impersonated", "true"));
+            return new ClaimsPrincipal(new ClaimsIdentity(claims));
         }
 
         private static string Command(params (string Context, string Action, string Value)[] filters) =>
@@ -58,6 +76,60 @@ namespace XUnitTest.Notification
         {
             await _sut.OnConnectedAsync();
 
+            _service.Verify(s => s.CreateConnectionAsync(ConnectionId), Times.Once);
+        }
+
+        [Fact]
+        public async Task OnConnectedAsync_AddsTheConnectionToTheGroupOfTheTokenTenant()
+        {
+            _callerContext.SetupGet(c => c.User).Returns(Caller("user-1", "tenant-a"));
+
+            await _sut.OnConnectedAsync();
+
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:tenant-a", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task OnConnectedAsync_AddsAnImpersonatedConnectionToTheProjectAndTheRootGroup()
+        {
+            _callerContext.SetupGet(c => c.User).Returns(Caller("user-1", "project-p", originalTenantId: "root", impersonated: true));
+
+            await _sut.OnConnectedAsync();
+
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:project-p", It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:root", It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:project-p:user:user-1", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task OnConnectedAsync_IgnoresTheOriginalTenantWhenNotImpersonated()
+        {
+            _callerContext.SetupGet(c => c.User).Returns(Caller("user-1", "tenant-a", originalTenantId: "root"));
+
+            await _sut.OnConnectedAsync();
+
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:tenant-a", It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task OnConnectedAsync_JoinsOneGroupWhenTheOriginalTenantIsTheTokenTenant()
+        {
+            _callerContext.SetupGet(c => c.User).Returns(Caller("user-1", "root", originalTenantId: "root", impersonated: true));
+
+            await _sut.OnConnectedAsync();
+
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:root", It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(ConnectionId, "tenant:root:user:user-1", It.IsAny<CancellationToken>()), Times.Once);
+            _groups.Verify(g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        }
+
+        [Fact]
+        public async Task OnConnectedAsync_AddsNoGroupWhenTheTenantClaimIsMissing()
+        {
+            await _sut.OnConnectedAsync();
+
+            _groups.Verify(g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
             _service.Verify(s => s.CreateConnectionAsync(ConnectionId), Times.Once);
         }
 
@@ -129,12 +201,50 @@ namespace XUnitTest.Notification
         [Fact]
         public async Task Subscribe_RethrowsWhenTheCommandIsAJsonNull()
         {
-            // Documents current behaviour: a null command deserialises to a null payload and
-            // is dereferenced without a guard.
             var act = () => _sut.Subscribe("null");
 
-            await act.Should().ThrowAsync<NullReferenceException>();
+            await act.Should().ThrowAsync<ArgumentException>();
             _service.Verify(s => s.AddSubscriptionAsync(It.IsAny<Subscription>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Subscribe_ReplacesTheUserIdsOfTheClientWithTheCallerAndWarns()
+        {
+            _callerContext.SetupGet(c => c.User).Returns(Caller("caller-1"));
+            Subscription? captured = null;
+            _service.Setup(s => s.AddSubscriptionAsync(It.IsAny<Subscription>()))
+                    .Callback<Subscription>(s => captured = s)
+                    .ReturnsAsync(new BaseResponse { IsSuccess = true });
+
+            await _sut.Subscribe(Command(("orders", "created", "1")));
+
+            captured!.Payload.UserIds.Should().Equal("caller-1");
+            _logger.All.Should().Contain(OtherUsersWarning);
+        }
+
+        [Fact]
+        public async Task Subscribe_DoesNotWarnWhenTheClientNamesOnlyTheCaller()
+        {
+            _service.Setup(s => s.AddSubscriptionAsync(It.IsAny<Subscription>()))
+                    .ReturnsAsync(new BaseResponse { IsSuccess = true });
+
+            await _sut.Subscribe(Command(("orders", "created", "1")));
+
+            _logger.All.Should().NotContain(OtherUsersWarning);
+        }
+
+        [Fact]
+        public async Task Subscribe_UsesNoUserIdWhenTheCallerHasNoUserClaim()
+        {
+            _callerContext.SetupGet(c => c.User).Returns(Caller(null));
+            Subscription? captured = null;
+            _service.Setup(s => s.AddSubscriptionAsync(It.IsAny<Subscription>()))
+                    .Callback<Subscription>(s => captured = s)
+                    .ReturnsAsync(new BaseResponse { IsSuccess = true });
+
+            await _sut.Subscribe(Command(("orders", "created", "1")));
+
+            captured!.Payload.UserIds.Should().BeEmpty();
         }
 
         [Fact]
@@ -162,6 +272,30 @@ namespace XUnitTest.Notification
             captured!.Payload.ConnectionId.Should().Be(ConnectionId);
             captured.Payload.UserIds.Should().Equal("user-1");
             captured.Payload.SubscriptionFilters.Should().ContainSingle();
+        }
+
+        [Fact]
+        public async Task Unsubscribe_ReplacesTheUserIdsOfTheClientWithTheCallerAndWarns()
+        {
+            _callerContext.SetupGet(c => c.User).Returns(Caller("caller-1"));
+            Subscription? captured = null;
+            _service.Setup(s => s.RemoveSubscriptionAsync(It.IsAny<Subscription>()))
+                    .Callback<Subscription>(s => captured = s)
+                    .ReturnsAsync(new BaseResponse { IsSuccess = true });
+
+            await _sut.Unsubscribe(Command(("orders", "created", "1")));
+
+            captured!.Payload.UserIds.Should().Equal("caller-1");
+            _logger.All.Should().Contain(OtherUsersWarning);
+        }
+
+        [Fact]
+        public async Task Unsubscribe_RethrowsAndUnsubscribesNothingWhenTheCommandIsAJsonNull()
+        {
+            var act = () => _sut.Unsubscribe("null");
+
+            await act.Should().ThrowAsync<ArgumentException>();
+            _service.Verify(s => s.RemoveSubscriptionAsync(It.IsAny<Subscription>()), Times.Never);
         }
 
         [Fact]
@@ -215,6 +349,8 @@ namespace XUnitTest.Notification
         [Fact]
         public async Task OnConnectedAsync_FallsBackToAnEmptyTenantWhenTheCallerHasNoClaims()
         {
+            _callerContext.SetupGet(c => c.User).Returns(new ClaimsPrincipal(new ClaimsIdentity()));
+
             BlocksContext? seen = null;
             _service.Setup(s => s.CreateConnectionAsync(It.IsAny<string>()))
                     .Callback(() => seen = BlocksContext.GetContext())

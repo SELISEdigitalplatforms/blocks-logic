@@ -1,6 +1,7 @@
 using MongoDB.Bson;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes
 {
@@ -23,6 +24,14 @@ namespace Workflow.DomainService.Nodes
         public required BsonDocument Parameters { get; set; }
         public required IReadOnlyList<WorkflowItemExecutionEntity> InputItems { get; set; }
         public required int IterationCount { get; init; }
+
+        /// <summary>
+        /// The input items grouped by the edge's target handle ("" for a blank handle), in snapshot edge order,
+        /// each group in run order then item order. Filled for Merge only; empty for every other node, whose
+        /// input stays <see cref="InputItems"/> exactly as before.
+        /// </summary>
+        public IReadOnlyDictionary<string, IReadOnlyList<WorkflowItemExecutionEntity>> InputItemsByHandle { get; init; } =
+            new Dictionary<string, IReadOnlyList<WorkflowItemExecutionEntity>>();
 
         /// <summary>
         /// Whether any edge targets this node. This is the only way a node can tell "nothing is wired to me"

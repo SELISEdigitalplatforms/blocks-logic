@@ -75,6 +75,19 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>Run jobs, written by the control plane, consumed by runners.</summary>
         public static string RunsStream => _prefix + "functions:runs";
 
+        /// <summary>
+        /// Runs started by a function event: the same entry format as <see cref="RunsStream"/>, read by the
+        /// same runners with the same group, but from a queue of their own. Events are not real time: a runner
+        /// takes one event run after every <c>RunSourceSelector.HttpPerEvent</c> run from <see cref="RunsStream"/>
+        /// while both wait, and all free slots when the runs stream is empty. An entry that waited longer than
+        /// <c>RUNNER__EventRunMaxWaitSeconds</c> is not started: its run fails as <see cref="ErrorCodes.EventExpired"/>.
+        /// Mirrors <c>FunctionQueueKeys.EventRunsStream</c> in blocks-logic.
+        /// </summary>
+        public static string EventRunsStream => _prefix + "functions:event-runs";
+
+        /// <inheritdoc cref="RunsNudgeChannel" />
+        public static string EventRunsNudgeChannel => _prefix + "functions:event-runs:nudge";
+
         /// <summary>Run results, written by runners, consumed by the logic Worker.</summary>
         public static string ResultsStream => _prefix + "functions:results";
 
@@ -212,6 +225,22 @@ namespace Blocks.FunctionRunner.Contracts
 
         /// <summary>The serialized result of a run. TTL 24 h.</summary>
         public static string Result(string runId) => $"{_prefix}function:result:{runId}";
+
+        /// <summary>
+        /// The events a succeeded run added with <c>ctx.events.add</c>: one JSON array of
+        /// <c>{id, type, payload}</c>, already validated by the runner. TTL = <see cref="ResultTtl"/>.
+        /// Mirrors <c>FunctionQueueKeys.Events</c> in blocks-logic.
+        /// </summary>
+        public static string Events(string runId) => $"{_prefix}function:events:{runId}";
+
+        /// <summary>Results-stream fields for the events (mirrored in <c>FunctionQueueKeys</c>): key, count, and why they were dropped.</summary>
+        public const string ResultEventsKeyField = "eventsKey";
+
+        /// <inheritdoc cref="ResultEventsKeyField" />
+        public const string ResultEventCountField = "eventCount";
+
+        /// <inheritdoc cref="ResultEventsKeyField" />
+        public const string ResultEventsRejectedField = "eventsRejected";
 
         /// <summary>NDJSON log lines for a run, as a list. TTL 24 h.</summary>
         public static string Logs(string runId) => $"{_prefix}function:logs:{runId}";

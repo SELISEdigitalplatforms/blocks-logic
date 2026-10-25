@@ -8,8 +8,10 @@ using Moq;
 using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Services;
+using Proxy.DomainService.Utils;
 using Utilities.Api.Controllers;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Proxy
 {
@@ -23,6 +25,7 @@ namespace XUnitTest.Proxy
         private readonly Mock<IEndpointAccessAuthorizer> _accessAuthorizer = new();
         private readonly Mock<IProxyOpenApiImportService> _openApiImport = new();
         private readonly Mock<IProxyRateLimiter> _rateLimiter = new();
+        private readonly Mock<IProxyTransferService> _transfer = new();
         private readonly ProxiesController _controller;
 
         public ProxiesControllerTests()
@@ -31,7 +34,7 @@ namespace XUnitTest.Proxy
             _controller = new ProxiesController(
                 _proxyService.Object, _versionService.Object, _testService.Object, _executionService.Object,
                 _gatewayService.Object, _accessAuthorizer.Object, _rateLimiter.Object, _openApiImport.Object,
-                NullLogger<ProxiesController>.Instance);
+                _transfer.Object, NullLogger<ProxiesController>.Instance);
         }
 
         public void Dispose()
@@ -601,5 +604,46 @@ namespace XUnitTest.Proxy
             seen.CallerImpersonated.Should().BeTrue();
             seen.CallerImpersonationSessionId.Should().Be("imp-42");
         }
-    }
+    
+        [Fact]
+        public async Task Export_ReturnsTheFileAsAnAttachmentNamedAfterTheSlug()
+        {
+            var proxy = new Blocks.Genesis.Entities.Logic.ProxyDetailEntity
+            {
+                ItemId = "0123456789abcdef0123456789abcdef", TenantId = "tenant-abc", Name = "Stripe",
+                Slug = "stripe", Upstream = "https://api.stripe.com",
+            };
+            var file = ProxyTransferCodec.BuildFile(proxy, DateTime.UtcNow);
+            _transfer.Setup(t => t.ExportAsync("tenant-abc", proxy.ItemId))
+                .ReturnsAsync(ProxyTransferResponse<ProxyExportFile>.Ok(file));
+
+            var result = await _controller.Export(proxy.ItemId);
+
+            var download = result.Should().BeOfType<FileContentResult>().Subject;
+            download.FileDownloadName.Should().Be("proxy-stripe.json");
+            download.ContentType.Should().Be("application/json");
+            System.Text.Encoding.UTF8.GetString(download.FileContents).Should().Contain("\"contentHash\"");
+        }
+
+        [Fact]
+        public async Task Export_UnknownProxy_Is404()
+        {
+            _transfer.Setup(t => t.ExportAsync("tenant-abc", "nope"))
+                .ReturnsAsync(ProxyTransferResponse<ProxyExportFile>.Fail(404, ProxyErrorCodes.NotFound, "not found"));
+
+            StatusOf(await _controller.Export("nope")).Should().Be(404);
+        }
+
+        [Fact]
+        public async Task ImportEndpoints_ReturnTheServiceStatus()
+        {
+            _transfer.Setup(t => t.PreviewAsync("tenant-abc", It.IsAny<ProxyExportFile?>()))
+                .ReturnsAsync(ProxyTransferResponse<ProxyImportResultDto>.Fail(400, ProxyErrorCodes.Validation, "bad"));
+            _transfer.Setup(t => t.ApplyAsync("tenant-abc", It.IsAny<ProxyImportApplyRequestDto>()))
+                .ReturnsAsync(ProxyTransferResponse<ProxyImportResultDto>.Fail(409, ProxyErrorCodes.ImportBlocked, "blocked"));
+
+            StatusOf(await _controller.PreviewImport(new ProxyExportFile())).Should().Be(400);
+            StatusOf(await _controller.ApplyImport(null)).Should().Be(409);
+        }
+}
 }

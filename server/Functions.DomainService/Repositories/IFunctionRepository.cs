@@ -1,5 +1,4 @@
-using Functions.DomainService.Entities;
-using Functions.DomainService.Models;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
@@ -16,7 +15,16 @@ namespace Functions.DomainService.Repositories
             string tenantId, string? searchKey, string? status, string? sortBy,
             int pageNumber, int pageSize, CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// The functions among <paramref name="functionIds"/> that are not deleted and whose status is Live, without their
+        /// source. The event trigger uses it to keep only the subscribers that can run now.
+        /// </summary>
+        Task<IReadOnlyList<FunctionEntity>> GetLiveByIdsAsync(
+            string tenantId, IReadOnlyCollection<string> functionIds, CancellationToken cancellationToken = default);
+
         Task<FunctionEntity?> GetByIdAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<FunctionEntity?> GetByIdForViewAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
 
         Task CreateAsync(string tenantId, FunctionEntity function, CancellationToken cancellationToken = default);
 
@@ -32,6 +40,18 @@ namespace Functions.DomainService.Repositories
         /// <summary>Saves the editor's working copy: source plus configuration, nothing else.</summary>
         Task UpdateSourceAndConfigAsync(
             string tenantId, string functionId, FunctionSource source, string sourceHash,
+            FunctionLimits limits, RetryPolicy retry, TriggerConfig trigger,
+            List<OutputAction> outputActions, List<VariableBinding> variables, string? actorId,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Import only: writes name, description, source and configuration in one update that applies only while the
+        /// document's <c>LastUpdatedDate</c> is still <paramref name="expectedLastUpdatedDate"/> (what the preview showed).
+        /// False when it moved, the function is gone, or the data access policy hides it — nothing is written then.
+        /// </summary>
+        Task<bool> UpdateImportedAsync(
+            string tenantId, string functionId, DateTime expectedLastUpdatedDate,
+            string name, string? description, FunctionSource source, string sourceHash,
             FunctionLimits limits, RetryPolicy retry, TriggerConfig trigger,
             List<OutputAction> outputActions, List<VariableBinding> variables, string? actorId,
             CancellationToken cancellationToken = default);

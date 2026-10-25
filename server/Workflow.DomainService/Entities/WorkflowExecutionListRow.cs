@@ -1,5 +1,5 @@
 using MongoDB.Bson.Serialization.Attributes;
-using Workflow.DomainService.Enums;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Entities
 {

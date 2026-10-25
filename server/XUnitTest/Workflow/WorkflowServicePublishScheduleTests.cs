@@ -10,6 +10,7 @@ using MongoDB.Bson;
 using Scheduler.DomainService.Dtos.Requests;
 using Scheduler.DomainService.Services;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {
@@ -104,6 +105,32 @@ namespace XUnitTest.Workflow
             trigger.Parameters.Contains("scheduleItemId").Should().BeTrue();
             trigger.Parameters["scheduleItemId"].ToString().Should().Be("sched-1");
             trigger.Parameters["cronExpression"].ToString().Should().Be("0 9 * * *");
+        }
+
+        [Fact]
+        public async Task PublishNewVersion_DeepCopiesTriggerNodeHandles()
+        {
+            var workflow = CreateWorkflowWithScheduleTrigger();
+            var live = workflow.Nodes.Single(n => n.Id == "node-1");
+            live.Handle = new Handle
+            {
+                Sources = [new() { ["key"] = "source", ["label"] = "" }],
+                Targets = [],
+            };
+            SetupPublish(workflow);
+
+            await _service.PublishNewVersionAsync("tenant-wf", new WorkflowPublishNewVersionRequestDto
+            {
+                WorkflowId = "wf-1",
+                Name = "v1",
+            });
+
+            var published = workflow.PublishedMeta!.TriggerNodes.Single(n => n.Id == "node-1").Handle!;
+            published.Should().NotBeSameAs(live.Handle);
+            published.Sources.Should().NotBeSameAs(live.Handle.Sources);
+            published.Sources[0].Should().NotBeSameAs(live.Handle.Sources[0]);
+            published.Sources[0]["label"] = "changed";
+            live.Handle.Sources[0]["label"].Should().Be("");
         }
 
         [Fact]

@@ -6,6 +6,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Notifications
 {
@@ -79,7 +80,7 @@ namespace XUnitTest.Notifications
             return cursor.Object;
         }
 
-        private NotificationRepository Build() => new(_provider.Object, _secret.Object, _logger.Object);
+        private NotificationRepository Build() => new(_provider.Object, _secret.Object, _logger.Object, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
 
         private static OfflineNotification Notification(string id, string? forUser = null, params string[] readBy) => new()
         {
@@ -105,10 +106,38 @@ namespace XUnitTest.Notifications
         public async Task DataAccess_ResolvesTheRootDatabaseWhileImpersonating()
         {
             SetContext(impersonated: true);
+            Collection<OfflineNotification>(NotificationCollection);
+            var sut = Build();
+
+            await sut.GetItemsAsync<OfflineNotification>(c => true);
+
+            _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Once);
+            _provider.Verify(p => p.GetDatabase(It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task DataAccess_KeepsHubConnectionsInTheRootDatabaseWhileImpersonating()
+        {
+            // An impersonating root tenant user lives in root, and the Blocks services send with the root key.
+            SetContext(impersonated: true);
             Collection<NotificationConnection>("NotificationConnections");
             var sut = Build();
 
             await sut.GetItemsAsync<NotificationConnection>(c => true);
+
+            _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Once);
+            _provider.Verify(p => p.GetDatabase(It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task DataAccess_KeepsHubSubscriptionsInTheRootDatabaseWhileImpersonating()
+        {
+            // An impersonating root tenant user lives in root, and the Blocks services send with the root key.
+            SetContext(impersonated: true);
+            Collection<NotificationSubscription>("NotificationSubscriptions");
+            var sut = Build();
+
+            await sut.GetItemsAsync<NotificationSubscription>(c => true);
 
             _provider.Verify(p => p.GetDatabase("conn", "BlocksRootDb", It.IsAny<bool>()), Times.Once);
             _provider.Verify(p => p.GetDatabase(It.IsAny<string>()), Times.Never);

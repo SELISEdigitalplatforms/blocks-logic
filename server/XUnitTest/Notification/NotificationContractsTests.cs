@@ -2,10 +2,11 @@ using DomainService.Entities;
 using DomainService.Notification;
 using DomainService.Shared;
 using FluentAssertions;
-using FirebaseConfiguration = DomainService.Configuration.FirebaseConfiguration;
 using GetConfigurationsRequest = DomainService.Configuration.GetConfigurationsRequest;
 using GetConfigurationsResponse = DomainService.Configuration.GetConfigurationsResponse;
 using SaveConfigurationRequest = DomainService.Configuration.SaveConfigurationRequest;
+using Blocks.Genesis.Entities.Logic;
+using Blocks.Genesis.Entities.Os;
 
 namespace XUnitTest.Notification
 {

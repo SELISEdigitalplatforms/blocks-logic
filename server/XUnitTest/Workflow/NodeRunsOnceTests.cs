@@ -3,9 +3,9 @@ using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using Workflow.DomainService.Entities;
-using Workflow.DomainService.Enums;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

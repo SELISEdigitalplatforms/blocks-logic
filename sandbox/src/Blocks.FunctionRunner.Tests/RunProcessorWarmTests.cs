@@ -17,6 +17,8 @@ namespace Blocks.FunctionRunner.Tests
     /// fields and three more. Against a real Redis like the other RunProcessor tests (set
     /// TEST_REDIS; skipped without one), with sandboxes faked.
     /// </summary>
+    // Shares the results stream that EventRunQueueTests deletes; must not run alongside it.
+    [Collection("redis-key-prefix")]
     public sealed class RunProcessorWarmTests : IAsyncLifetime
     {
         private ConnectionMultiplexer? _redis;

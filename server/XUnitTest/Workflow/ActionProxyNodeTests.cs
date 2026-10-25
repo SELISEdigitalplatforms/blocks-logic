@@ -8,6 +8,7 @@ using Workflow.DomainService.Entities;
 using Workflow.DomainService.Nodes;
 using Workflow.DomainService.Nodes.ActionProxy;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {
@@ -203,7 +204,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            result.IsSuccess.Should().BeTrue("a failed item is kept as an error item and the step still succeeds (C-9 reversed in 166b9d1e; kept by the user 2026-10-18)");
             ItemError(result).Should().Contain("cannot contain");
             _sent.Should().BeEmpty();
         }
@@ -217,7 +218,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(parameters));
 
-            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            result.IsSuccess.Should().BeTrue("a failed item is kept as an error item and the step still succeeds (C-9 reversed in 166b9d1e; kept by the user 2026-10-18)");
             ItemError(result).Should().Contain("not valid");
             _sent.Should().BeEmpty();
         }
@@ -227,7 +228,7 @@ namespace XUnitTest.Workflow
         {
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders/{id}")));
 
-            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            result.IsSuccess.Should().BeTrue("a failed item is kept as an error item and the step still succeeds (C-9 reversed in 166b9d1e; kept by the user 2026-10-18)");
             ItemError(result).Should().Contain("id");
             _sent.Should().BeEmpty();
         }
@@ -436,7 +437,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            result.IsSuccess.Should().BeTrue("a failed item is kept as an error item and the step still succeeds (C-9 reversed in 166b9d1e; kept by the user 2026-10-18)");
             ItemError(result).Should().Contain("text/html");
         }
 
@@ -453,7 +454,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(routePath: "orders")));
 
-            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            result.IsSuccess.Should().BeTrue("a failed item is kept as an error item and the step still succeeds (C-9 reversed in 166b9d1e; kept by the user 2026-10-18)");
             ItemError(result).Should().Contain("does not declare the endpoint GET orders");
             ItemError(result).Should().Contain("re-select the endpoint");
         }
@@ -470,7 +471,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters(method: "DELETE")));
 
-            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            result.IsSuccess.Should().BeTrue("a failed item is kept as an error item and the step still succeeds (C-9 reversed in 166b9d1e; kept by the user 2026-10-18)");
             ItemError(result).Should().Contain("does not allow DELETE");
             ItemError(result).Should().Contain("GET, POST");
         }
@@ -488,7 +489,7 @@ namespace XUnitTest.Workflow
 
             var result = await Node().RunAsync(Context(Parameters()));
 
-            result.IsSuccess.Should().BeFalse("a failed item fails the step, so the run ends Failed (C-9, 2026-10-08); the error item is kept");
+            result.IsSuccess.Should().BeTrue("a failed item is kept as an error item and the step still succeeds (C-9 reversed in 166b9d1e; kept by the user 2026-10-18)");
             ItemError(result).Should().Contain("503");
             ItemError(result).Should().Contain("Could not connect to the upstream endpoint");
         }

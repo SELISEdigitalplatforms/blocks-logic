@@ -3,11 +3,10 @@ using Blocks.Genesis;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Scheduler.DomainService.Entities;
-using Scheduler.DomainService.Enums;
 using Scheduler.DomainService.Models;
 using Scheduler.DomainService.Repositories;
 using Scheduler.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Scheduler
 {
@@ -122,6 +121,36 @@ namespace XUnitTest.Scheduler
 
             signature.Should().Be(expected);
             signature.Should().MatchRegex("^[0-9a-f]{64}$");
+        }
+
+        // ---------- Date window ----------
+
+        public static TheoryData<int?, int?, bool> DateWindowCases => new()
+        {
+            // startOffsetDays, endOffsetDays (null = not set), shouldFire
+            { null, null, true },   // no dates: live from creation, never ends
+            { null, 1, true },
+            { -1, null, true },
+            { -1, 1, true },
+            { 1, null, false },     // not started yet
+            { null, -1, false },    // already ended
+            { 1, 2, false },
+            { -2, -1, false },
+        };
+
+        [Theory]
+        [MemberData(nameof(DateWindowCases))]
+        public async Task Publish_RespectsOptionalDateWindow(int? startOffsetDays, int? endOffsetDays, bool shouldFire)
+        {
+            var schedule = WebhookSchedule();
+            schedule.StartDate = startOffsetDays is null ? null : DateTime.UtcNow.AddDays(startOffsetDays.Value);
+            schedule.EndDate = endOffsetDays is null ? null : DateTime.UtcNow.AddDays(endOffsetDays.Value);
+            SetupSchedule(schedule);
+
+            CreateService(HttpStatusCode.OK);
+            await _service.Publish(schedule.ItemId, "tenant-1");
+
+            _sent.Should().HaveCount(shouldFire ? 1 : 0);
         }
 
         // ---------- Webhook delivery ----------

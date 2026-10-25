@@ -1,12 +1,12 @@
 using FluentAssertions;
 using Functions.DomainService.Storage;
 using Blocks.Genesis;
-using CloudConfiguration.DomainService.Shared.Services;
-using CloudConfiguration.DomainService.Storage.Entities;
 using Common.InternalService.Storage;
+using DomainService.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using StorageConfiguration = Blocks.Genesis.Entities.Data.StorageConfiguration;
 
 namespace XUnitTest.Functions
 {
@@ -118,7 +118,7 @@ namespace XUnitTest.Functions
 
         private const string Tenant = "tenant-1";
 
-        private readonly Mock<IConfigurationRepository> _configurations = new(MockBehavior.Strict);
+        private readonly Mock<IStorageConfigurationProvider> _configurations = new(MockBehavior.Strict);
         private readonly Mock<IStorageServiceFactory> _factory = new(MockBehavior.Strict);
         private readonly Mock<IStorageService> _storage = new(MockBehavior.Strict);
 
@@ -132,8 +132,8 @@ namespace XUnitTest.Functions
         private void TenantStorageIs(string? strategy)
         {
             _configurations
-                .Setup(c => c.GetStorageConfigurationByNameAsync(FunctionArtifactStore.StorageConfigurationName))
-                .ReturnsAsync(strategy is null ? null! : new StorageConfiguration { Name = "Default", StorageStrategy = strategy });
+                .Setup(c => c.GetByNameAsync(FunctionArtifactStore.StorageConfigurationName, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(strategy is null ? null : new StorageConfiguration { Name = "Default", StorageStrategy = strategy });
             _factory.Setup(f => f.GetStorageService(It.IsAny<StorageConfiguration>())).Returns(_storage.Object);
         }
 
@@ -178,7 +178,7 @@ namespace XUnitTest.Functions
 
             provider.GetRequiredService<IFunctionArtifactStore>().Should().BeOfType<FunctionArtifactStore>();
             services.Should().Contain(d => d.ServiceType == typeof(IStorageServiceFactory));
-            services.Should().Contain(d => d.ServiceType == typeof(IConfigurationRepository));
+            services.Should().Contain(d => d.ServiceType == typeof(IStorageConfigurationProvider));
         }
 
         [Theory]
@@ -293,7 +293,7 @@ namespace XUnitTest.Functions
 
                 string? seen = null;
                 _configurations
-                    .Setup(c => c.GetStorageConfigurationByNameAsync(FunctionArtifactStore.StorageConfigurationName))
+                    .Setup(c => c.GetByNameAsync(FunctionArtifactStore.StorageConfigurationName, It.IsAny<CancellationToken>()))
                     .Callback(() => seen = BlocksContext.GetContext()?.TenantId)
                     .ReturnsAsync(new StorageConfiguration { Name = "Default", StorageStrategy = "azure" });
                 _factory.Setup(f => f.GetStorageService(It.IsAny<StorageConfiguration>())).Returns(_storage.Object);

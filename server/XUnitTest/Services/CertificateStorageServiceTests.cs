@@ -1,10 +1,10 @@
-using CloudConfiguration.DomainService.Shared.Services;
-using CloudConfiguration.DomainService.Storage.Entities;
 using Common.InternalService.Storage;
+using DomainService.Configuration;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Moq;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Data;
 
 namespace XUnitTest.Services
 {
@@ -15,13 +15,13 @@ namespace XUnitTest.Services
     /// </summary>
     public class CertificateStorageServiceTests : IDisposable
     {
-        private readonly Mock<IConfigurationRepository> _configurationRepository = new();
+        private readonly Mock<IStorageConfigurationProvider> _storageConfigurations = new();
         private readonly CertificateStorageService _service;
 
         public CertificateStorageServiceTests()
         {
             TestBlocksContext.Set("tenant-123");
-            _service = new CertificateStorageService(_configurationRepository.Object);
+            _service = new CertificateStorageService(_storageConfigurations.Object);
         }
 
         public void Dispose()
@@ -38,16 +38,16 @@ namespace XUnitTest.Services
 
         private void WithStorageConfiguration(string connectionString)
         {
-            _configurationRepository
-                .Setup(r => r.GetStorageConfigurationByNameAsync("Default"))
+            _storageConfigurations
+                .Setup(r => r.GetByNameAsync("Default", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new StorageConfiguration { Name = "Default", ConnectionString = connectionString });
         }
 
         private void WithNoStorageConfiguration()
         {
-            _configurationRepository
-                .Setup(r => r.GetStorageConfigurationByNameAsync(It.IsAny<string>()))
-                .ReturnsAsync((StorageConfiguration)null!);
+            _storageConfigurations
+                .Setup(r => r.GetByNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((StorageConfiguration?)null);
         }
 
         // Blob naming
@@ -190,7 +190,7 @@ namespace XUnitTest.Services
             await _service.UploadPublicCertificateAsync(
                 new UploadCertificateRequest { Certificate = CertificateFile(), IsThirdParty = true });
 
-            _configurationRepository.Verify(r => r.GetStorageConfigurationByNameAsync("Default"), Times.Once);
+            _storageConfigurations.Verify(r => r.GetByNameAsync("Default", It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 }

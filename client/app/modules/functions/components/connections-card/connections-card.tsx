@@ -398,8 +398,8 @@ const ConnectionDialogBody = ({
   };
 
   return (
-    <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-      <DialogHeader>
+    <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto">
+      <DialogHeader className="pr-6">
         <DialogTitle>{preset.label}</DialogTitle>
         <DialogDescription>{preset.description}</DialogDescription>
       </DialogHeader>
@@ -408,12 +408,12 @@ const ConnectionDialogBody = ({
         <span className="text-xs font-semibold uppercase tracking-wide text-low-emphasis">
           Package
         </span>
-        <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-          <code className="font-mono text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-md border px-3 py-2">
+          <code className="min-w-0 font-mono text-xs [overflow-wrap:anywhere]">
             {preset.packageName}@{listed ?? "latest"}
           </code>
           {update ? (
-            <span className="flex items-center gap-2">
+            <span className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-medium-emphasis">{update.to} is the latest</span>
               <Button type="button" size="sm" variant="outline" onClick={onUpdate}>
                 Update to {update.to}

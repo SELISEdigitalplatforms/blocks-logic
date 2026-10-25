@@ -1,6 +1,7 @@
 using FluentAssertions;
 using MongoDB.Bson;
 using Workflow.DomainService.Nodes;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

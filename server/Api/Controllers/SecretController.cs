@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using Common.InternalService.Secret;
 using Common.InternalService.Secret.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -33,8 +34,8 @@ namespace BlocksTemplate.Api.Controllers
         /// tenant and caller identity come from the ambient <c>BlocksContext</c> (this is an
         /// <c>[Authorize]</c> route).
         /// </summary>
-        [Authorize]
         [HttpGet]
+        [ProtectedEndPoint("blocks-os::secret::gets")]
         public async Task<IActionResult> GetAll([FromQuery] GetSecretsRequest request)
         {
             var result = await _secretCatalogService.GetAllAsync(request, HttpContext.RequestAborted);

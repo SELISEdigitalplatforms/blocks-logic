@@ -12,6 +12,7 @@ using Workflow.DomainService.Nodes.ActionDataV1;
 using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 using Workflow.DomainService.Services;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {
@@ -27,6 +28,7 @@ namespace XUnitTest.Workflow
         public void Dispose()
         {
             TestBlocksContext.Clear();
+            DelegatedTokenContext.Clear();
             GC.SuppressFinalize(this);
         }
 
@@ -115,7 +117,7 @@ namespace XUnitTest.Workflow
         private static BsonDocument HttpParams(string authenticationType, bool useBlocksAuthorization = false, BsonDocument? headers = null) => new()
         {
             { "httpMethod", "GET" },
-            { "url", "https://author-chosen.example/x" },
+            { "url", "https://api.seliseblocks.com/x" },
             { "authenticationType", authenticationType },
             { "useBlocksAuthorization", useBlocksAuthorization },
             { "haveHeaders", headers != null },
@@ -126,7 +128,8 @@ namespace XUnitTest.Workflow
         {
             var handler = new CaptureHandler("""{"ok":true}""");
             var node = new ActionHttpRequestV1Node(Factory(handler), Auth(delegatedToken),
-                Mock.Of<IClientCredentialTokenService>(), NullLogger<ActionHttpRequestV1Node>.Instance);
+                Mock.Of<IClientCredentialTokenService>(), NullLogger<ActionHttpRequestV1Node>.Instance,
+                TestOutboundGuard.ResolvingTo());
             return (await node.RunAsync(Context(parameters)), handler);
         }
 
@@ -152,6 +155,20 @@ namespace XUnitTest.Workflow
             var (result, handler) = await RunHttp(HttpParams("blocksAuthentication"), null);
 
             ShouldBeNoTokenErrorItem(result);
+            handler.Requests.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task Http_grant_held_but_token_refused_says_to_start_again_not_to_use_client_credential()
+        {
+            SetCallerContextWithRawToken();
+            DelegatedTokenContext.Set("dg_" + new string('c', 64));
+
+            var (result, handler) = await RunHttp(HttpParams("blocksAuthentication"), null);
+
+            var output = result.OutputItems.Should().ContainSingle().Subject.Data.Output.AsBsonDocument;
+            output["error"].AsBoolean.Should().BeTrue();
+            output["message"].AsString.Should().Be(NoDelegatedTokenException.RefusedMessage);
             handler.Requests.Should().BeEmpty();
         }
 
@@ -204,13 +221,14 @@ namespace XUnitTest.Workflow
         {
             var handler = new CaptureHandler("""{"data":{"getTasks":{"items":[{"ItemId":"1"}],"totalCount":1}}}""");
             var node = new ActionDataV1Node(Factory(handler), Mock.Of<IClientCredentialTokenService>(),
-                Auth(delegatedToken), new ConfigurationBuilder().Build(), NullLogger<ActionDataV1Node>.Instance);
+                Auth(delegatedToken), new ConfigurationBuilder().Build(), NullLogger<ActionDataV1Node>.Instance,
+                TestOutboundGuard.ResolvingTo());
             var parameters = new BsonDocument
             {
                 { "CollectionName", "Tasks" },
                 { "SchemaName", "Task" },
                 { "ActionType", "getData" },
-                { "ApiBaseUrl", "https://api.example.com" },
+                { "ApiBaseUrl", "https://api.seliseblocks.com" },
                 { "AuthenticationType", authenticationType },
             };
             return (await node.RunAsync(Context(parameters)), handler);

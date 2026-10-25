@@ -112,6 +112,16 @@ describe("WorkflowList", () => {
     expect(screen.getByText("Unpublished")).toBeTruthy();
   });
 
+  it("renders every workflow it is given (pagination is server-side)", () => {
+    const workflows = Array.from({ length: 20 }, (_, i) => wf(String(i + 1)));
+    wrap(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      <WorkflowList workflow={workflows as any} isLoading={false} />,
+    );
+    expect(screen.getByText("Flow 1")).toBeTruthy();
+    expect(screen.getByText("Flow 20")).toBeTruthy();
+  });
+
   it("navigates when a row is clicked", () => {
     wrap(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

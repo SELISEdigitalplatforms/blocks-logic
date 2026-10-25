@@ -15,6 +15,12 @@ namespace XUnitTest.Notification
             Clients.Setup(c => c.Clients(It.IsAny<IReadOnlyList<string>>()))
                    .Callback<IReadOnlyList<string>>(ids => AddressedConnectionIds = ids)
                    .Returns(SelectedProxy.Object);
+            Clients.Setup(c => c.Group(It.IsAny<string>()))
+                   .Callback<string>(name => AddressedGroup = name)
+                   .Returns(GroupProxy.Object);
+            Clients.Setup(c => c.Groups(It.IsAny<IReadOnlyList<string>>()))
+                   .Callback<IReadOnlyList<string>>(names => AddressedGroups = names)
+                   .Returns(GroupsProxy.Object);
             HubContext.Setup(h => h.Clients).Returns(Clients.Object);
         }
 
@@ -25,6 +31,16 @@ namespace XUnitTest.Notification
         public Mock<IClientProxy> AllProxy { get; } = new();
 
         public Mock<IClientProxy> SelectedProxy { get; } = new();
+
+        public Mock<IClientProxy> GroupProxy { get; } = new();
+
+        public Mock<IClientProxy> GroupsProxy { get; } = new();
+
+        // The group names handed to IHubClients.Groups on the last call.
+        public IReadOnlyList<string>? AddressedGroups { get; private set; }
+
+        // The group name handed to IHubClients.Group on the last call.
+        public string? AddressedGroup { get; private set; }
 
         // The connection ids handed to IHubClients.Clients on the last call.
         public IReadOnlyList<string>? AddressedConnectionIds { get; private set; }

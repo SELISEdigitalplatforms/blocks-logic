@@ -7,4 +7,8 @@
 		<PackageReference Include="SeliseBlocks.Genesis.OS" />
 		<PackageReference Include="FluentValidation" />
 	</ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DataAccess.InternalService\DataAccess.InternalService.csproj" />
+  </ItemGroup>
 </Project>

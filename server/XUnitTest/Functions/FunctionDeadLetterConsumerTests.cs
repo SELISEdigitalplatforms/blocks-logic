@@ -1,12 +1,14 @@
 using Blocks.Genesis;
+using DataAccess.InternalService.Notifications;
 using FluentAssertions;
 using Functions.DomainService.Consumers;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
+using Functions.DomainService.Services;
 using Functions.DomainService.Repositories;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
@@ -21,6 +23,9 @@ namespace XUnitTest.Functions
         private readonly Mock<IDatabase> _database = new(MockBehavior.Loose);
         private readonly Mock<IFunctionRunRepository> _runs = new(MockBehavior.Loose);
         private readonly Mock<IFunctionBuildRepository> _builds = new(MockBehavior.Loose);
+        private readonly Mock<IFunctionRepository> _functions = new(MockBehavior.Loose);
+        private readonly Mock<IBuiltInNotificationSender> _builtIn = new(MockBehavior.Loose);
+        private readonly Mock<IFunctionEventDeadLetters> _eventDead = new(MockBehavior.Loose);
 
         public FunctionDeadLetterConsumerTests()
         {
@@ -32,6 +37,12 @@ namespace XUnitTest.Functions
                     It.IsAny<string>(), It.IsAny<string>(), It.IsAny<RunErrorCode>(),
                     It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
+            _runs.Setup(r => r.GetByIdAsync("tenant-1", "run-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionRunEntity { ItemId = "run-1", FunctionId = "fn-1" });
+            _builds.Setup(b => b.GetByIdAsync("tenant-1", "build-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionBuildEntity { ItemId = "build-1", FunctionId = "fn-1" });
+            _functions.Setup(f => f.GetByIdAsync("tenant-1", "fn-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionEntity { ItemId = "fn-1", CreatedBy = "owner-1" });
             _builds
                 .Setup(b => b.FailIfNotTerminalAsync(
                     It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
@@ -44,7 +55,8 @@ namespace XUnitTest.Functions
             var cache = new Mock<ICacheClient>();
             cache.Setup(c => c.CacheDatabase()).Returns(_database.Object);
             return new FunctionDeadLetterConsumer(
-                cache.Object, _runs.Object, _builds.Object, NullLogger<FunctionDeadLetterConsumer>.Instance);
+                cache.Object, _runs.Object, _builds.Object, NullLogger<FunctionDeadLetterConsumer>.Instance,
+                _functions.Object, _builtIn.Object, _eventDead.Object);
         }
 
         private static ResultStreamEntry Entry(string id, params (string Key, string Value)[] fields) =>
@@ -65,6 +77,86 @@ namespace XUnitTest.Functions
                 ("buildId", "build-1"),
                 ("functionId", "fn-1"),
                 ("tenantId", "tenant-1"));
+
+        [Fact]
+        public async Task A_dead_lettered_run_tells_the_function_owner()
+        {
+            await Consumer().ProcessAsync(DeadRun(), CancellationToken.None);
+
+            _builtIn.Verify(b => b.SendAsync(
+                "tenant-1", BuiltInNotificationNames.FunctionRunFailed,
+                It.Is<IReadOnlyCollection<string>?>(u => u != null && u.Contains("owner-1")),
+                It.Is<BuiltInNotificationPayload>(p => p.IsSuccess == false), "fn-1", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task A_dead_lettered_event_run_closes_the_run_and_dead_letters_its_event()
+        {
+            _runs.Setup(r => r.GetByIdAsync("tenant-1", "run-1", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionRunEntity { ItemId = "run-1", FunctionId = "fn-1", InvokedBy = InvokedByType.Event, InvokedById = "evt-1" });
+            var entry = Entry("1700000000002-0",
+                ("deadReason", "no capacity to start it"),
+                ("sourceStream", FunctionQueueKeys.EventRunsStream),
+                ("runId", "run-1"), ("functionId", "fn-1"), ("tenantId", "tenant-1"));
+
+            await Consumer().ProcessAsync(entry, CancellationToken.None);
+
+            _runs.Verify(r => r.FailIfNotTerminalAsync("tenant-1", "run-1", RunErrorCode.Undeliverable, It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+            _eventDead.Verify(d => d.RunFailedAsync("tenant-1", It.Is<FunctionRunEntity>(r => r.InvokedById == "evt-1")), Times.Once);
+        }
+
+        [Fact]
+        public async Task A_dead_letter_that_closed_nothing_dead_letters_no_event()
+        {
+            _runs.Setup(r => r.FailIfNotTerminalAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<RunErrorCode>(),
+                    It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
+
+            await Consumer().ProcessAsync(DeadRun(), CancellationToken.None);
+
+            _eventDead.Verify(d => d.RunFailedAsync(It.IsAny<string>(), It.IsAny<FunctionRunEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_dead_lettered_build_tells_the_function_owner_it_failed()
+        {
+            await Consumer().ProcessAsync(DeadBuild(), CancellationToken.None);
+
+            _builtIn.Verify(b => b.SendAsync(
+                "tenant-1", BuiltInNotificationNames.FunctionBuildFinished,
+                It.Is<IReadOnlyCollection<string>?>(u => u != null && u.Contains("owner-1")),
+                It.Is<BuiltInNotificationPayload>(p => p.IsSuccess == false && p.Ids!["buildId"] == "build-1"),
+                null, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task A_dead_letter_that_closed_nothing_tells_nobody()
+        {
+            _runs.Setup(r => r.FailIfNotTerminalAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<RunErrorCode>(),
+                    It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
+
+            await Consumer().ProcessAsync(DeadRun(), CancellationToken.None);
+
+            _builtIn.Verify(b => b.SendAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>?>(),
+                It.IsAny<BuiltInNotificationPayload>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_notifier_that_throws_does_not_break_a_dead_letter()
+        {
+            _builtIn.Setup(b => b.SendAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>?>(),
+                    It.IsAny<BuiltInNotificationPayload>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("boom"));
+
+            var act = () => Consumer().ProcessAsync(DeadRun(), CancellationToken.None);
+
+            await act.Should().NotThrowAsync();
+        }
 
         [Fact]
         public async Task A_dead_lettered_run_is_closed_as_failed_and_undeliverable()

@@ -2,6 +2,7 @@ using Workflow.DomainService.Logging;
 using System.Text.Json;
 using MongoDB.Bson;
 using System.Diagnostics.CodeAnalysis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.TriggerEmailV1
 {

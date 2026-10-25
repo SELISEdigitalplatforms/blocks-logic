@@ -5,6 +5,7 @@ using MailBoxSyncService.Entities;
 using MailBoxSyncService.Services;
 using MongoDB.Driver;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.MailBoxSyncService
 {
@@ -20,7 +21,7 @@ namespace XUnitTest.MailBoxSyncService
 
         public MailRepositoryTests()
         {
-            _repository = new MailRepository(_mockDbContextProvider.Object, _mockBlocksSecret.Object);
+            _repository = new MailRepository(_mockDbContextProvider.Object, _mockBlocksSecret.Object, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         }
 
         [Fact]

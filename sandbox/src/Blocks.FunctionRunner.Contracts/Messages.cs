@@ -114,6 +114,18 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>True when logs hit the byte or line ceiling and were cut short.</summary>
         public bool Truncated { get; init; }
 
+        /// <summary>Key of the stored events (<see cref="RedisKeys.Events"/>), or null when the run sent none.</summary>
+        public string? EventsKey { get; init; }
+
+        /// <summary>How many events are stored under <see cref="EventsKey"/>.</summary>
+        public int EventCount { get; init; }
+
+        /// <summary>
+        /// <c>EVENTS_REJECTED: &lt;reason&gt;</c> when the run's events were all dropped because the
+        /// list broke a rule; the result stands. Null otherwise.
+        /// </summary>
+        public string? EventsRejected { get; init; }
+
         public int Protocol { get; init; } = RedisKeys.ProtocolVersion;
     }
 
@@ -216,6 +228,15 @@ namespace Blocks.FunctionRunner.Contracts
         [JsonPropertyName("code")] public string? Code { get; init; }
         [JsonPropertyName("message")] public string? ErrorMessage { get; init; }
         [JsonPropertyName("stack")] public string? Stack { get; init; }
+    }
+
+    /// <summary>The event types a function can send today (function events, phase 1).</summary>
+    public static class EventTypes
+    {
+        public const string SendMail = "SendMail";
+        public const string FunctionEvent = "FunctionEvent";
+
+        public static bool IsKnown(string? type) => type is SendMail or FunctionEvent;
     }
 
     /// <summary>Sandbox process exit codes, defined by the bootstrap.</summary>

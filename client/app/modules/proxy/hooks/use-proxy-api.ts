@@ -2,6 +2,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { PROXY_QUERY_KEY } from "../constants";
 import { proxyService } from "../services";
 import {
+  ProxyExportFile,
+  ProxyImportApplyRequest,
   ProxyFormValues,
   ProxyListParams,
   ProxyLogFilter,
@@ -164,3 +166,31 @@ export const useSendProxyTestRequest = () =>
     mutationKey: [...PROXY_QUERY_KEY, "test"],
     mutationFn: (request: ProxyTestRequest) => proxyService.test(request),
   });
+
+/** Fetches one proxy as an export file. Read-only, so nothing is invalidated. */
+export const useExportProxy = () =>
+  useMutation({
+    mutationKey: [...PROXY_QUERY_KEY, "export"],
+    mutationFn: (proxyId: string) => proxyService.exportProxy(proxyId),
+  });
+
+/** What importing a file would do here. Writes nothing, so nothing is invalidated. */
+export const usePreviewProxyImport = () =>
+  useMutation({
+    mutationKey: [...PROXY_QUERY_KEY, "import-preview"],
+    mutationFn: (file: ProxyExportFile) => proxyService.previewImport(file),
+  });
+
+export const useApplyProxyImport = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: [...PROXY_QUERY_KEY, "import-apply"],
+    mutationFn: (request: ProxyImportApplyRequest) => proxyService.applyImport(request),
+    onSuccess: (outcome) => {
+      if (outcome.ok && outcome.result.applied) {
+        return queryClient.invalidateQueries({ queryKey: PROXY_QUERY_KEY });
+      }
+      return undefined;
+    },
+  });
+};

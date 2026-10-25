@@ -50,7 +50,6 @@ namespace CloudConfiguration.DomainService.Shared.Utilities
             };
         }
 
-        public const string StorageQueue = "blocks_storage_listener";
         private const string DefaultProvider = "azure";
         private const string RabbitMqProvider = "rabbitmq";
     }

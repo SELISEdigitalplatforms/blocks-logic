@@ -5,6 +5,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DataAccess.InternalService\DataAccess.InternalService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Cronos" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="Hangfire.AspNetCore" />

@@ -2,8 +2,9 @@ using System.Linq.Expressions;
 using DomainService.Notification;
 using DomainService.Shared;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using Moq;
+using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Notification
 {
@@ -16,13 +17,14 @@ namespace XUnitTest.Notification
     {
         private readonly Mock<INotificationRepository> _repository = new();
         private readonly HubContextDouble _hub = new();
+        private readonly CapturingLogger<FilterSpecificReceiver> _logger = new();
         private readonly FilterSpecificReceiver _sut;
 
         public FilterSpecificReceiverTests()
         {
             _sut = new FilterSpecificReceiver(
                 _repository.Object,
-                Mock.Of<ILogger<FilterSpecificReceiver>>(),
+                _logger,
                 _hub.Object);
         }
 
@@ -56,6 +58,18 @@ namespace XUnitTest.Notification
 
             client.Should().BeSameAs(_hub.SelectedProxy.Object);
             _hub.AddressedConnectionIds.Should().Equal("conn-1", "conn-2");
+            _logger.All.Should().NotContain("nothing delivered live");
+        }
+
+        [Fact]
+        public async Task GetClientAsync_WarnsWhenNoConnectionIsSubscribedToTheFilters()
+        {
+            SetupSubscriptions();
+
+            await _sut.GetClientAsync(new NotifierPayload { SubscriptionFilters = [Filter("orders", "created", "1")] });
+
+            _hub.AddressedConnectionIds.Should().BeEmpty();
+            _logger.All.Should().Contain("nothing delivered live");
         }
 
         [Fact]

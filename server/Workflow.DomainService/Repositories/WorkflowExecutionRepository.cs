@@ -1,11 +1,12 @@
 using Blocks.Genesis;
-using Workflow.DomainService.Enums;
+using DataAccess.InternalService;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Services;
 using Microsoft.Extensions.Configuration;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Diagnostics.CodeAnalysis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Repositories
 {
@@ -40,9 +41,13 @@ namespace Workflow.DomainService.Repositories
                 .Ascending(e => e.StartedAt)
                 .Ascending(e => e.Id);
 
-        public WorkflowExecutionRepository(IDbContextProvider dbContextProvider)
+        private readonly ILogicDataAccess _dataAccess;
+        private const string _itemCollectionName = "WorkflowItemExecutions";
+
+        public WorkflowExecutionRepository(IDbContextProvider dbContextProvider, ILogicDataAccess dataAccess)
         {
             _dbContextProvider = dbContextProvider;
+            _dataAccess = dataAccess;
 
         }
 
@@ -55,10 +60,23 @@ namespace Workflow.DomainService.Repositories
             return _dbContextProvider.GetCollection<WorkflowExecutionEntity>(tenantId, _collectionName);
         }
 
+        private Task<ReadScope<WorkflowExecutionEntity>> ReadAsync(string tenantId, FilterDefinition<WorkflowExecutionEntity> filter, string callSite, bool useProjection = true) =>
+            _dataAccess.ReadAsync(LogicSchemas.WorkflowExecutionEntity, filter, $"WorkflowExecutionRepository.{callSite}", tenantId, useProjection);
+
+        private Task<FilterDefinition<WorkflowExecutionEntity>?> EditAsync(string tenantId, FilterDefinition<WorkflowExecutionEntity> filter, string callSite) =>
+            _dataAccess.EditFilterAsync(LogicSchemas.WorkflowExecutionEntity, filter, $"WorkflowExecutionRepository.{callSite}", tenantId);
+
+        private Task<ReadScope<WorkflowItemExecutionEntity>> ReadItemsAsync(string tenantId, FilterDefinition<WorkflowItemExecutionEntity> filter, string callSite) =>
+            _dataAccess.ReadAsync(LogicSchemas.WorkflowItemExecutionEntity, filter, $"WorkflowExecutionRepository.{callSite}", tenantId);
+
         public async Task<WorkflowExecutionEntity> CreateAsync(WorkflowExecutionEntity execution)
         {
             if (string.IsNullOrEmpty(execution.TenantId))
                 throw new InvalidOperationException("TenantId is required for execution");
+
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.WorkflowExecutionEntity, "WorkflowExecutionRepository.Create", execution.TenantId))
+                throw new UnauthorizedAccessException("Workflow execution create is not allowed by the data access policy.");
+            await _dataAccess.PrepareWriteAsync(LogicSchemas.WorkflowExecutionEntity, execution, isInsert: true, "WorkflowExecutionRepository.Create", execution.TenantId);
 
             var collection = GetCollection(execution.TenantId);
             await EnsureIndexesAsync(execution.TenantId);
@@ -70,7 +88,18 @@ namespace Workflow.DomainService.Repositories
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, id);
-            return await collection.Find(filter).FirstOrDefaultAsync();
+            // The caller writes this entity back through UpdateAsync (whole-doc replace): no projection.
+            var scope = await ReadAsync(tenantId, filter, "GetById", useProjection: false);
+            return scope.Granted ? await scope.Apply(collection).FirstOrDefaultAsync() : null;
+        }
+
+        public async Task<WorkflowExecutionEntity?> GetByIdForViewAsync(string id, string tenantId)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, id);
+            // Masked: View column (property) rules clear what the caller may not see.
+            var scope = await ReadAsync(tenantId, filter, "GetByIdForView");
+            return scope.Granted ? scope.ForView(await scope.Apply(collection).FirstOrDefaultAsync()) : null;
         }
 
         public async Task UpdateAsync(WorkflowExecutionEntity execution)
@@ -79,7 +108,8 @@ namespace Workflow.DomainService.Repositories
                 throw new InvalidOperationException("TenantId is required for execution");
 
             var collection = GetCollection(execution.TenantId);
-            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, execution.Id);
+            var filter = await EditAsync(execution.TenantId, Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, execution.Id), "Update");
+            if (filter is null) return;
             await collection.ReplaceOneAsync(filter, execution);
         }
 
@@ -92,7 +122,8 @@ namespace Workflow.DomainService.Repositories
         public async Task<bool> AtomicCompleteNodeAsync(string executionId, string tenantId, string completedNodeId, List<string> nextNodeIds)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId);
+            var filter = await EditAsync(tenantId, Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId), "AtomicCompleteNode");
+            if (filter is null) return false;
             var update = Builders<WorkflowExecutionEntity>.Update.Pipeline(CompletionPipeline(completedNodeId, nextNodeIds));
             var before = await collection.FindOneAndUpdateAsync(
                 filter,
@@ -179,7 +210,8 @@ namespace Workflow.DomainService.Repositories
         {
             var collection = GetCollection(tenantId);
             // A Failed execution stays Failed: another branch may have failed while this one reached its target.
-            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId) & NotFailed;
+            var filter = await EditAsync(tenantId, Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId) & NotFailed, "AtomicFinalizeExecution");
+            if (filter is null) return false;
             var update = Builders<WorkflowExecutionEntity>.Update
                 .Set(e => e.ActiveNodeIds, new List<string>())
                 .Set(e => e.Status, WorkflowExecutionStatus.Completed)
@@ -204,7 +236,8 @@ namespace Workflow.DomainService.Repositories
         public async Task AtomicAddNodeExecutionAsync(string executionId, string tenantId, NodeExecutionEntity nodeExecution)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId);
+            var filter = await EditAsync(tenantId, Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId), "AtomicAddNodeExecution");
+            if (filter is null) return;
 
             var update = Builders<WorkflowExecutionEntity>.Update
                 .Push(e => e.NodeExecutions, nodeExecution)
@@ -222,11 +255,11 @@ namespace Workflow.DomainService.Repositories
                 .Set(e => e.FinishedAt, null)
                 .Inc(e => e.AttemptNumber, 1);
 
-            var result = await GetCollection(tenantId).UpdateOneAsync(
-                filter.Eq(e => e.Id, executionId)
+            var edit = await EditAsync(tenantId, filter.Eq(e => e.Id, executionId)
                 & filter.Eq(e => e.Status, WorkflowExecutionStatus.Failed)
-                & filter.Eq(e => e.ExecutionMode, WorkflowExecutionMode.Production),
-                update);
+                & filter.Eq(e => e.ExecutionMode, WorkflowExecutionMode.Production), "TryReopenFailedExecution");
+            if (edit is null) return false;
+            var result = await GetCollection(tenantId).UpdateOneAsync(edit, update);
             return result.ModifiedCount > 0;
         }
 
@@ -236,7 +269,9 @@ namespace Workflow.DomainService.Repositories
                 .Push(e => e.NodeExecutions, nodeExecution)
                 .Set(e => e.Status, WorkflowExecutionStatus.Running);
 
-            var result = await GetCollection(tenantId).UpdateOneAsync(FirstRunFilter(executionId, nodeExecution.NodeId) & NotFailed, update);
+            var edit = await EditAsync(tenantId, FirstRunFilter(executionId, nodeExecution.NodeId) & NotFailed, "TryAddFirstNodeExecution");
+            if (edit is null) return false;
+            var result = await GetCollection(tenantId).UpdateOneAsync(edit, update);
             return result.MatchedCount > 0;
         }
 
@@ -246,8 +281,9 @@ namespace Workflow.DomainService.Repositories
                 .Push(e => e.NodeExecutions, nodeExecution)
                 .Set(e => e.Status, WorkflowExecutionStatus.Running);
 
-            var result = await GetCollection(tenantId).UpdateOneAsync(
-                Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId) & NotFailed, update);
+            var edit = await EditAsync(tenantId, Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId) & NotFailed, "TryAddNodeExecution");
+            if (edit is null) return false;
+            var result = await GetCollection(tenantId).UpdateOneAsync(edit, update);
             return result.MatchedCount > 0;
         }
 
@@ -270,10 +306,12 @@ namespace Workflow.DomainService.Repositories
         public async Task AtomicUpdateNodeExecutionCompletedAsync(string executionId, string tenantId, string nodeExecutionId, int outputItemCount, Dictionary<string, int> outputCountsByBranch, BsonDocument? contextUpdates)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionEntity>.Filter.And(
+            var baseFilter = Builders<WorkflowExecutionEntity>.Filter.And(
                 Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId),
                 Builders<WorkflowExecutionEntity>.Filter.ElemMatch(e => e.NodeExecutions, ne => ne.Id == nodeExecutionId)
             );
+            var filter = await EditAsync(tenantId, baseFilter, "AtomicUpdateNodeExecutionCompleted");
+            if (filter is null) return;
 
             var update = Builders<WorkflowExecutionEntity>.Update
                 .Set("NodeExecutions.$.Status", NodeExecutionStatus.Completed)
@@ -300,10 +338,12 @@ namespace Workflow.DomainService.Repositories
         public async Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error, int outputItemCount, Dictionary<string, int> outputCountsByBranch)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionEntity>.Filter.And(
+            var baseFilter = Builders<WorkflowExecutionEntity>.Filter.And(
                 Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.Id, executionId),
                 Builders<WorkflowExecutionEntity>.Filter.ElemMatch(e => e.NodeExecutions, ne => ne.Id == nodeExecutionId)
             );
+            var filter = await EditAsync(tenantId, baseFilter, "AtomicUpdateNodeExecutionFailed");
+            if (filter is null) return;
 
             var update = Builders<WorkflowExecutionEntity>.Update
                 .Set("NodeExecutions.$.Status", NodeExecutionStatus.Failed)
@@ -322,9 +362,11 @@ namespace Workflow.DomainService.Repositories
         {
             var collection = GetCollection(tenantId);
             var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.WorkflowId, workflowId);
-            return await collection.Find(filter)
+            var scope = await ReadAsync(tenantId, filter, "GetByWorkflowId");
+            if (!scope.Granted) return [];
+            return scope.ForView(await scope.Apply(collection)
                 .SortByDescending(e => e.StartedAt)
-                .ToListAsync();
+                .ToListAsync());
         }
 
         public Task<List<WorkflowExecutionListRow>> GetPageAsync(string workflowId, string tenantId, int pageSize)
@@ -363,7 +405,8 @@ namespace Workflow.DomainService.Repositories
         public async Task<long> CountByWorkflowIdAsync(string workflowId, string tenantId)
         {
             await EnsureIndexesAsync(tenantId);
-            return await GetCollection(tenantId).CountDocumentsAsync(WorkflowFilter(workflowId));
+            var scope = await ReadAsync(tenantId, WorkflowFilter(workflowId), "CountByWorkflowId");
+            return scope.Granted ? await GetCollection(tenantId).CountDocumentsAsync(scope.Filter) : 0;
         }
 
         public async Task<List<WorkflowExecutionListRow>> GetListItemsByIdsAsync(
@@ -377,8 +420,11 @@ namespace Workflow.DomainService.Repositories
             await EnsureIndexesAsync(tenantId);
             var builder = Builders<WorkflowExecutionEntity>.Filter;
             var filter = WorkflowFilter(workflowId) & builder.In(e => e.Id, ids);
+            // Own list projection kept (typed row); only the resolver row filter is added.
+            var scope = await ReadAsync(tenantId, filter, "GetListItemsByIds", useProjection: false);
+            if (!scope.Granted) return [];
             return await GetCollection(tenantId)
-                .Find(filter)
+                .Find(scope.Filter)
                 .Project<WorkflowExecutionListRow>(ListProjection)
                 .ToListAsync();
         }
@@ -390,8 +436,10 @@ namespace Workflow.DomainService.Repositories
             int pageSize)
         {
             await EnsureIndexesAsync(tenantId);
+            var scope = await ReadAsync(tenantId, filter, "QueryList", useProjection: false);
+            if (!scope.Granted) return [];
             return await GetCollection(tenantId)
-                .Find(filter)
+                .Find(scope.Filter)
                 .Sort(sort)
                 .Limit(pageSize)
                 .Project<WorkflowExecutionListRow>(ListProjection)
@@ -439,7 +487,11 @@ namespace Workflow.DomainService.Repositories
         public async Task AddItemsAsync(string tenantId, List<WorkflowItemExecutionEntity> items)
         {
             if (!items.Any()) return;
-            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, "WorkflowItemExecutions");
+            if (!await _dataAccess.InsertAllowedAsync(LogicSchemas.WorkflowItemExecutionEntity, "WorkflowExecutionRepository.AddItems", tenantId))
+                throw new UnauthorizedAccessException("Workflow item execution create is not allowed by the data access policy.");
+            foreach (var item in items)
+                await _dataAccess.PrepareWriteAsync(LogicSchemas.WorkflowItemExecutionEntity, item, isInsert: true, "WorkflowExecutionRepository.AddItems", tenantId);
+            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, _itemCollectionName);
             await collection.InsertManyAsync(items);
         }
 
@@ -456,7 +508,7 @@ namespace Workflow.DomainService.Repositories
             // `$or: []`, which Mongo rejects, and the step failed before its own checks ran (PKG-25).
             if (nodeIdBranchPairs is not { Count: > 0 }) return new List<WorkflowItemExecutionEntity>();
 
-            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, "WorkflowItemExecutions");
+            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, _itemCollectionName);
 
             var filter = Builders<WorkflowItemExecutionEntity>.Filter.And(
                 Builders<WorkflowItemExecutionEntity>.Filter.Eq("WorkflowExecutionId", workflowExecutionId),
@@ -470,8 +522,8 @@ namespace Workflow.DomainService.Repositories
                 )
             );
 
-            var items = await collection.Find(filter).ToListAsync();
-            return items;
+            var scope = await ReadItemsAsync(tenantId, filter, "GetItemsByNodeIds");
+            return scope.Granted ? await scope.Apply(collection).ToListAsync() : [];
         }
 
         /// <summary>
@@ -481,36 +533,37 @@ namespace Workflow.DomainService.Repositories
         /// </summary>
         public async Task<List<WorkflowItemExecutionEntity>> GetAllItemsByExecutionIdAsync(string workflowExecutionId, string tenantId)
         {
-            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, "WorkflowItemExecutions");
+            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, _itemCollectionName);
 
             var filter = Builders<WorkflowItemExecutionEntity>.Filter.Eq("WorkflowExecutionId", workflowExecutionId);
 
-            var items = await collection.Find(filter).SortBy(doc => doc.CreatedAt).ToListAsync();
-            return items;
+            var scope = await ReadItemsAsync(tenantId, filter, "GetAllItemsByExecutionId");
+            return scope.Granted ? scope.ForView(await scope.Apply(collection).SortBy(doc => doc.CreatedAt).ToListAsync()) : [];
         }
 
 
         public async Task<List<WorkflowItemExecutionEntity>> GetAllItemsByNodeExecutionIdAsync(string nodeExecutionId, string tenantId)
         {
-            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, "WorkflowItemExecutions");
+            var collection = _dbContextProvider.GetCollection<WorkflowItemExecutionEntity>(tenantId, _itemCollectionName);
 
             var filter = Builders<WorkflowItemExecutionEntity>.Filter.Eq("NodeExecutionId", nodeExecutionId);
 
-            var items = await collection.Find(filter).SortBy(doc => doc.ItemIndex).ToListAsync();
-            return items;
+            var scope = await ReadItemsAsync(tenantId, filter, "GetAllItemsByNodeExecutionId");
+            return scope.Granted ? await scope.Apply(collection).SortBy(doc => doc.ItemIndex).ToListAsync() : [];
         }
 
-        public Task<WorkflowExecutionEntity> GetLastCompletedExecution(string tenantId, string workflowId)
+        public async Task<WorkflowExecutionEntity> GetLastCompletedExecution(string tenantId, string workflowId)
         {
             var collection = _dbContextProvider.GetCollection<WorkflowExecutionEntity>(tenantId, _collectionName);
-            return collection.Find(item =>
+            var scope = await ReadAsync(tenantId, Builders<WorkflowExecutionEntity>.Filter.Where(item =>
                 item.TenantId == tenantId &&
                 item.WorkflowId == workflowId &&
                 item.ExecutionMode == WorkflowExecutionMode.Test &&
-                item.Status == WorkflowExecutionStatus.Completed
-            )
+                item.Status == WorkflowExecutionStatus.Completed), "GetLastCompletedExecution");
+            if (!scope.Granted) return null!;
+            return scope.ForView(await scope.Apply(collection)
             .SortByDescending(item => item.FinishedAt)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync());
         }
     }
 }

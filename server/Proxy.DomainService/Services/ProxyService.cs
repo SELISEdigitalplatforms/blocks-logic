@@ -5,6 +5,7 @@ using Proxy.DomainService.Dtos;
 using Proxy.DomainService.Entities;
 using Proxy.DomainService.Repositories;
 using Proxy.DomainService.Utils;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Proxy.DomainService.Services
 {
@@ -72,6 +73,7 @@ namespace Proxy.DomainService.Services
                 Calls24h = ProxyStatsWindow.Rollup(p.Stats, asOf).Calls,
                 CreatedDate = p.CreatedDate,
                 LastUpdatedDate = p.LastUpdatedDate,
+                HasUnboundSecrets = ProxySecretIdBinder.UnboundNames(p).Count > 0,
             }).ToList();
 
             _logger.LogInformation(
@@ -85,7 +87,7 @@ namespace Proxy.DomainService.Services
             var itemId = request.ItemId ?? string.Empty;
             _logger.LogInformation("Fetching proxy {ItemId} for tenant {TenantId}.", itemId, tenantId);
 
-            var proxy = await _proxyRepository.GetAsync(tenantId, itemId);
+            var proxy = await _proxyRepository.GetForViewAsync(tenantId, itemId);
             if (proxy == null)
             {
                 _logger.LogInformation("Proxy {ItemId} not found for tenant {TenantId}; returning null.", itemId, tenantId);
@@ -118,6 +120,8 @@ namespace Proxy.DomainService.Services
                 LastUpdatedDate = proxy.LastUpdatedDate,
                 LastUpdatedBy = proxy.LastUpdatedBy,
             };
+
+            (dto.MissingSecrets, dto.DuplicateSecrets) = await NeedsSecretAsync(tenantId, proxy);
 
             _logger.LogInformation("Fetched proxy {ItemId} (slug {Slug}) for tenant {TenantId}.", proxy.ItemId, proxy.Slug, tenantId);
             return new ProxyGetResponseDto { Data = dto, Errors = null };
@@ -328,7 +332,7 @@ namespace Proxy.DomainService.Services
                 {
                     proxy.SecretIds = secretIds;
                     // No version bump. If someone saved meanwhile, their save bound the ids already: nothing lost.
-                    if (!await _proxyRepository.SaveConfigAsync(proxy, readVersion))
+                    if (!await _proxyRepository.SaveEditedConfigAsync(proxy, readVersion))
                     {
                         _logger.LogInformation(
                             "Proxy {ItemId} (tenant {TenantId}) changed during a no-op save; ids left to that save.",
@@ -359,7 +363,7 @@ namespace Proxy.DomainService.Services
             proxy.LastUpdatedBy = ProxyVersionFactory.CurrentUserId();
             proxy.CurrentVersion += 1;
 
-            if (!await _proxyRepository.SaveConfigAsync(proxy, readVersion))
+            if (!await _proxyRepository.SaveEditedConfigAsync(proxy, readVersion))
             {
                 return VersionConflict(itemId, tenantId, readVersion, null);
             }
@@ -472,6 +476,29 @@ namespace Proxy.DomainService.Services
                 "Deleted proxy {ItemId} for tenant {TenantId}; wrote final version {Version}.",
                 proxy.ItemId, tenantId, version.VersionNumber);
             return ProxyMutationResponse.Success(proxy.ItemId, 200);
+        }
+
+        /// <summary>
+        /// Names with no saved id that do not resolve to exactly one secret here (2026-10-18). Bound names are not
+        /// looked up: a call reads them by id. Only unbound ones cost a lookup, so a normal proxy costs nothing. A
+        /// secret store failure answers "nothing known" rather than failing the read.
+        /// </summary>
+        private async Task<(List<string> Missing, List<string> Duplicates)> NeedsSecretAsync(
+            string tenantId, ProxyDetailEntity proxy)
+        {
+            var unbound = ProxySecretIdBinder.UnboundNames(proxy);
+            if (unbound.Count == 0 || _variableResolver is null)
+            {
+                return (new List<string>(), new List<string>());
+            }
+
+            var check = await ProxySecretIdBinder.CheckForImportAsync(_variableResolver, tenantId, unbound, null, _logger);
+            if (check.Unavailable)
+            {
+                return (new List<string>(), new List<string>());
+            }
+
+            return (unbound.Where(n => check.Missing.Contains(n) || check.Duplicates.Contains(n)).ToList(), check.Duplicates);
         }
 
         private static bool IsStale(int? expectedVersion, ProxyDetailEntity proxy) =>

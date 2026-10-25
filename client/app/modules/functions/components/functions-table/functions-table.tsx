@@ -164,6 +164,19 @@ export const FunctionsTable = ({
                         unpublished changes
                       </span>
                     )}
+                    {fn.hasUnboundSecrets && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="whitespace-nowrap rounded-full bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-800">
+                            Needs secret
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Add a secret named {(fn.unboundSecrets ?? []).join(", ") || "as in Variables"} in Blocks OS
+                          secrets.
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </div>
                   <code className="w-[260px] truncate font-mono text-sm text-muted-foreground">
                     {buildInvokePath(fn.id)}

@@ -1,4 +1,4 @@
-using Scheduler.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Scheduler.DomainService.Dtos
 {

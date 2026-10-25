@@ -354,7 +354,11 @@ export const ProxyRoutesCard = ({
                 <Label className="text-[11px] text-muted-foreground">Method</Label>
                 <Select
                   value={route.method}
-                  onValueChange={(value) => patch(index, { method: value as ProxyMethod })}
+                  onValueChange={(value) => {
+                    // Native select synchronization can emit an empty value while options mount.
+                    const method = PROXY_METHODS.find((candidate) => candidate === value);
+                    if (method) patch(index, { method });
+                  }}
                 >
                   <SelectTrigger
                     className="mt-1 h-9"

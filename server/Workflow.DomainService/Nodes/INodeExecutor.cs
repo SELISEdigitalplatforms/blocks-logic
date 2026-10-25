@@ -9,7 +9,16 @@ namespace Workflow.DomainService.Nodes
     {
         string NodeType { get; }
         string Version { get; }
+
+        /// <summary>
+        /// Node versions this executor runs; each is a <see cref="NodeExecutorRegistry"/> key. Existing
+        /// executors run "v1" and "v2" alike ("v2" only means the node owns its handle).
+        /// </summary>
+        IReadOnlyCollection<string> Versions => DefaultVersions;
+
         Task<NodeExecutionResult> RunAsync(NodeExecutionContext context);
+
+        private static readonly IReadOnlyCollection<string> DefaultVersions = new[] { "v1", "v2" };
     }
 
 

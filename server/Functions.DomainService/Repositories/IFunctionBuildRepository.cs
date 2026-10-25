@@ -1,10 +1,12 @@
-using Functions.DomainService.Entities;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Repositories
 {
     public interface IFunctionBuildRepository
     {
         Task<FunctionBuildEntity?> GetByIdAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
+        /// <summary>As the caller may see it: properties a View column rule hides are cleared. Never save it back.</summary>
+        Task<FunctionBuildEntity?> GetByIdForViewAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// The build cache lookup (DECISIONS D3): the most recent successful build for this
@@ -59,7 +61,7 @@ namespace Functions.DomainService.Repositories
         Task<bool> ApplyResultAsync(
             string tenantId,
             string buildId,
-            Enums.BuildStatus status,
+            BuildStatus status,
             string? imageDigest,
             string? artifactSha256,
             string? baseImage,

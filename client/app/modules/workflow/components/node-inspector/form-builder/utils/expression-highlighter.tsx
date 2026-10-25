@@ -160,6 +160,7 @@ export const ExpressionHighlighter = ({
   fontClassName = "",
   disableHighlighting = false,
   variablePicker,
+  trailingAction,
 }: {
   children: React.ReactElement<ChildProps>;
   value: string;
@@ -172,6 +173,11 @@ export const ExpressionHighlighter = ({
    * Hidden while the control is disabled or read-only.
    */
   variablePicker?: VariablePickerConfig | null;
+  /**
+   * A caller's own button (e.g. remove row) placed after the key button at the input's right end,
+   * so the two never stack in the same corner. It controls its own visibility.
+   */
+  trailingAction?: React.ReactNode;
 }) => {
   const { nodes } = useWorkflow();
   const backdropRef = useRef<HTMLDivElement | null>(null);
@@ -275,17 +281,28 @@ export const ExpressionHighlighter = ({
     },
   };
 
-  const pickerButton = picker ? (
-    <div
-      className={cn(
-        "absolute right-1 z-20 opacity-0 transition-opacity group-hover/var:opacity-100 group-focus-within/var:opacity-100",
-        isMultiline ? "top-1" : "top-1/2 -translate-y-1/2",
-        pickerOpen && "opacity-100",
-      )}
-    >
-      <SecretPicker target={picker.target} onPick={insertToken} onOpenChange={setPickerOpen} />
-    </div>
-  ) : null;
+  const actions =
+    picker || trailingAction ? (
+      <div
+        className={cn(
+          "absolute right-1 z-20 flex items-center gap-0.5",
+          isMultiline ? "top-1" : "top-1/2 -translate-y-1/2",
+        )}
+      >
+        {picker && (
+          <div
+            className={cn(
+              "opacity-0 transition-opacity group-hover/var:opacity-100 group-focus-within/var:opacity-100",
+              pickerOpen && "opacity-100",
+            )}
+          >
+            <SecretPicker target={picker.target} onPick={insertToken} onOpenChange={setPickerOpen} />
+          </div>
+        )}
+        {picker && trailingAction && <span className="h-4 w-px bg-border" aria-hidden="true" />}
+        {trailingAction}
+      </div>
+    ) : null;
 
   const enhancedChild = React.cloneElement(children, {
     spellCheck: false,
@@ -297,7 +314,7 @@ export const ExpressionHighlighter = ({
     className: cn(
       children.props.className,
       "expression-highlighter-control relative z-10 caret-black dark:caret-white",
-      picker && "pr-9",
+      picker && trailingAction ? "pr-16" : (picker || trailingAction) && "pr-9",
     ),
     // Inline so it beats the control's own utility classes: the text is invisible, the
     // caret is not, and the coloured backdrop shows through.
@@ -325,7 +342,7 @@ export const ExpressionHighlighter = ({
         )}
       </div>
       {enhancedChild}
-      {pickerButton}
+      {actions}
     </div>
   );
 };

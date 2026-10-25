@@ -2,6 +2,7 @@ import type { IProject } from "@seliseblocks/genesis-os";
 import { API_BASES } from "@/constants/endpoint.constant";
 import {
   PUBLIC_GATEWAY_PREFIX,
+  customDomainRoot,
   getProxyPublicHost,
 } from "@/modules/proxy/constants/proxy.constant";
 import type { ProxyMethod } from "@/modules/proxy/types";
@@ -25,9 +26,18 @@ export const FUNCTIONS_ENDPOINTS = {
   GET_RUNS: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetRuns`,
   GET_RUN: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetRun`,
   GET_RUN_LOGS: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetRunLogs`,
+  STREAM_RUN: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/StreamRun`,
   REPLAY_RUN: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/ReplayRun`,
   CANCEL_RUN: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/CancelRun`,
   GET_AUDIT_LOG: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetAuditLog`,
+  EXPORT: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/Export`,
+  IMPORT_PREVIEW: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/ImportPreview`,
+  IMPORT: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/Import`,
+  GET_EVENT_CATALOG: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetEventCatalog`,
+  GET_EVENT_SETTINGS: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetEventSettings`,
+  SAVE_EVENT_SETTINGS: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/SaveEventSettings`,
+  GET_RUN_EVENTS: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetRunEvents`,
+  GET_QUEUE_STATUS: `${API_BASES.WORKFLOW}${FUNCTIONS_SUBPATH}/GetQueueStatus`,
 } as const;
 
 /** The trigger's method as the wire verb the badges and the snippet show. */
@@ -100,3 +110,21 @@ export const snippetBlocksKey = (tenantId?: string | null) => {
   const key = tenantId?.trim() ?? "";
   return /^[A-Za-z0-9_-]+$/.test(key) ? key : "<your x-blocks-key>";
 };
+
+/**
+ * `https://blocksapi.<root domain>` for the project's custom domain (`app.acme.com` → `acme.com`,
+ * stored bare or as a URL), or `null` when the project has no usable one. Unlike
+ * {@link getFunctionClientUrl} it never falls back to the shared host: the snippet shows a
+ * placeholder instead, so a caller is not sent to a host that is not theirs.
+ */
+export const getFunctionBaseUrl = (project?: IProject | null): string | null => {
+  const root = customDomainRoot(project?.customDomain);
+  return root ? `https://blocksapi.${root}` : null;
+};
+
+/** Shown in place of the base URL until the project has a custom domain. */
+export const FUNCTION_BASE_URL_PLACEHOLDER = "https://blocksapi.<your-domain>";
+
+/** The anonymous poll route: `GET {prefix}/fn/runs/{runId}/result` (needs `x-poll-token`). */
+export const getFunctionPollPath = (runId: string) =>
+  `${PUBLIC_GATEWAY_PREFIX}/fn/runs/${runId}/result`;

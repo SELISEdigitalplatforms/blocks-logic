@@ -3,6 +3,7 @@ using MongoDB.Bson;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Nodes;
 using Workflow.DomainService.Nodes.LogicIFV1;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {

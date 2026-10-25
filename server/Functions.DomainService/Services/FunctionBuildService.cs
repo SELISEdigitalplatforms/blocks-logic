@@ -1,12 +1,11 @@
 using System.Text.Json;
 using Blocks.Genesis;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {
@@ -39,6 +38,8 @@ namespace Functions.DomainService.Services
 
         /// <summary>A single build's current state — for the editor's build-progress indicator to poll.</summary>
         Task<FunctionBuildEntity> GetAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
+        /// <summary>The build as the caller may see it: properties a View column rule hides are cleared.</summary>
+        Task<FunctionBuildEntity> GetForViewAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Records a fresh, never-reused build for one test run and stores its source bundle. It is
@@ -98,6 +99,13 @@ namespace Functions.DomainService.Services
             string tenantId, string buildId, CancellationToken cancellationToken = default)
         {
             var build = await _buildRepository.GetByIdAsync(tenantId, buildId, cancellationToken);
+            return build ?? throw new Utils.FunctionNotFoundException($"build '{buildId}' was not found");
+        }
+
+        public async Task<FunctionBuildEntity> GetForViewAsync(
+            string tenantId, string buildId, CancellationToken cancellationToken = default)
+        {
+            var build = await _buildRepository.GetByIdForViewAsync(tenantId, buildId, cancellationToken);
             return build ?? throw new Utils.FunctionNotFoundException($"build '{buildId}' was not found");
         }
 
@@ -241,7 +249,10 @@ namespace Functions.DomainService.Services
             var imageTag =
                 $"{codeHash[..Math.Min(TagHashChars, codeHash.Length)]}-" +
                 $"{manifestHash[..Math.Min(TagHashChars, manifestHash.Length)]}";
-            var imageRef = $"{registry}/fn/{function.ItemId}:{imageTag}";
+            // The tenant is part of the name (2026-10-18): an imported function has the same id in every tenant, and
+            // two tenants sharing a registry must not share a repository. Versions built before keep their old
+            // `{registry}/fn/{functionId}@…` digest and still run from it (FunctionImageRef).
+            var imageRef = Utils.FunctionImageRef.For(registry, tenantId, function.ItemId, imageTag);
 
             var build = new FunctionBuildEntity
             {
@@ -329,7 +340,7 @@ namespace Functions.DomainService.Services
         /// entry (registry packages with integrity hashes only) and installs it exactly with
         /// <c>npm ci</c>; without one it resolves package.json fresh, as before.
         /// </para>
-        internal static Dictionary<string, string> BuildFileMap(Models.FunctionSource source)
+        internal static Dictionary<string, string> BuildFileMap(FunctionSource source)
         {
             var files = new Dictionary<string, string>(StringComparer.Ordinal)
             {

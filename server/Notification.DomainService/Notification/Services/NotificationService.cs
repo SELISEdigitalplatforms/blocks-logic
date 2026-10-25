@@ -1,11 +1,12 @@
 ﻿using Blocks.Genesis;
 using DomainService.Configuration.Services;
-using DomainService.Entities;
 using DomainService.Shared;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using StackExchange.Redis;
+using Blocks.Genesis.Entities.Logic;
+using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Notification
 {
@@ -98,6 +99,13 @@ namespace DomainService.Notification
                     },
                 };
             }
+            if (configuration.IsDisabledByTenant())
+            {
+                // Switched off by the tenant: no push and no stored copy. Success, so senders do not retry.
+                _logger.LogInformation("Notify: configuration {ConfigurationName} is disabled by the tenant; nothing sent", notifyRequest.ConfigurationName);
+                return new BaseResponse { IsSuccess = true };
+            }
+
             await SendNotificationAsync(configuration, notifyRequest);
 
             //TODO

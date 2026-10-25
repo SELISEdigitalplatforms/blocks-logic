@@ -2,8 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Functions.DomainService.Dtos.Requests;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Functions.DomainService.Services
 {

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Blocks.Genesis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Common.InternalService.Access
 {

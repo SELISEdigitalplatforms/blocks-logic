@@ -15,7 +15,7 @@ type LayoutWithIOProps = {
 };
 
 export const LayoutWithIO = ({ schema, guide }: LayoutWithIOProps) => {
-  const { selectedNode, updateNode } = useWorkflow();
+  const { selectedNode, updateNode, updateNodeParameters } = useWorkflow();
   const [activeTab, setActiveTab] = useState<"parameters" | "settings">("parameters");
   const [isInputCollapsed, setIsInputCollapsed] = useState(false);
   const [isOutputCollapsed, setIsOutputCollapsed] = useState(false);
@@ -64,7 +64,7 @@ export const LayoutWithIO = ({ schema, guide }: LayoutWithIOProps) => {
                 fields={schema.parameters}
                 data={selectedNode.parameters || {}}
                 onChange={(changes) => {
-                  updateNode(selectedNode.id, { parameters: changes });
+                  updateNodeParameters(selectedNode.id, changes);
                 }}
               />
             </TabsContent>

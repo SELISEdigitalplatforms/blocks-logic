@@ -96,28 +96,34 @@ jobs:
           test -f "$REPO/server/Api/wwwroot/index.html" \
             || { echo "::error::client build produced no wwwroot/index.html"; exit 1; }
 
-      - name: Publish api + worker
+      - name: Publish api + worker + scheduler-worker
         run: |
           set -euo pipefail
           nice -n 10 ionice -c3 dotnet publish "$REPO/server/Api/Api.csproj" \
             -c Release -o "$REPO/builds/api" --nologo $BUILD_ARGS
           nice -n 10 ionice -c3 dotnet publish "$REPO/server/Worker/Worker.csproj" \
             -c Release -o "$REPO/builds/worker" --nologo $BUILD_ARGS
+          nice -n 10 ionice -c3 dotnet publish "$REPO/server/Scheduler.Worker/Scheduler.Worker.csproj" \
+            -c Release -o "$REPO/builds/scheduler-worker" --nologo $BUILD_ARGS
 
       - name: Restart services
         run: |
           set -euo pipefail
           r0a=$(systemctl show "$SVC-api"    -p NRestarts --value)
           r0w=$(systemctl show "$SVC-worker" -p NRestarts --value)
-          systemctl restart "$SVC-api" "$SVC-worker"
+          r0s=$(systemctl show "$SVC-scheduler-worker" -p NRestarts --value)
+          systemctl restart "$SVC-api" "$SVC-worker" "$SVC-scheduler-worker"
           sleep 10
           r1a=$(systemctl show "$SVC-api"    -p NRestarts --value)
           r1w=$(systemctl show "$SVC-worker" -p NRestarts --value)
+          r1s=$(systemctl show "$SVC-scheduler-worker" -p NRestarts --value)
           systemctl is-active --quiet "$SVC-api"    || { echo "::error::api not active after restart";    exit 1; }
           systemctl is-active --quiet "$SVC-worker" || { echo "::error::worker not active after restart"; exit 1; }
+          systemctl is-active --quiet "$SVC-scheduler-worker" || { echo "::error::scheduler-worker not active after restart"; exit 1; }
           # A bumped restart counter means systemd already had to revive it.
           [ "$r1a" = "$r0a" ] || { echo "::error::api crash-looped ($r0a->$r1a)";    exit 1; }
           [ "$r1w" = "$r0w" ] || { echo "::error::worker crash-looped ($r0w->$r1w)"; exit 1; }
+          [ "$r1s" = "$r0s" ] || { echo "::error::scheduler-worker crash-looped ($r0s->$r1s)"; exit 1; }
 
       - name: Smoke test
         run: |
@@ -142,8 +148,8 @@ jobs:
       - name: Status
         if: always()
         run: |
-          for u in "$SVC-api" "$SVC-worker"; do
-            printf '  %-20s %s (%s) restarts=%s\n' "$u" \
+          for u in "$SVC-api" "$SVC-worker" "$SVC-scheduler-worker"; do
+            printf '  %-32s %s (%s) restarts=%s\n' "$u" \
               "$(systemctl is-active "$u" 2>/dev/null)" \
               "$(systemctl show "$u" -p SubState --value 2>/dev/null)" \
               "$(systemctl show "$u" -p NRestarts --value 2>/dev/null)"

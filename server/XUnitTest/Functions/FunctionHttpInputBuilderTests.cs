@@ -2,9 +2,8 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Functions.DomainService.Dtos.Requests;
-using Functions.DomainService.Enums;
-using Functions.DomainService.Models;
 using Functions.DomainService.Services;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {

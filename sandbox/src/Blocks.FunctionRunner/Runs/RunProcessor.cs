@@ -451,8 +451,27 @@ namespace Blocks.FunctionRunner.Runs
                 // From here a container is created: the start charge is spent. Every return above
                 // gives it back with the reservation (HostReservation).
                 reservation.Current?.ContainerStarted();
-                var result = await _sandbox.RunAsync(job.RunId, image, envelopePath, limits, lease.Token)
-                    .ConfigureAwait(false);
+                // A streamed answer's pieces, relayed as they are read (F-5) — a Test run streams
+                // like a warm call. Null until the first piece.
+                StreamRelay? relay = null;
+                Action<string> onChunk = data =>
+                {
+                    if (lease.LeaseLost) return;
+                    try { (relay ??= new StreamRelay(_db, job.RunId, _logger)).Send(data); }
+                    catch (Exception ex) { _logger.LogWarning("Could not relay a piece of run {RunId}: {Message}", job.RunId, ex.Message); }
+                };
+                SandboxResult result;
+                try
+                {
+                    result = await _sandbox.RunAsync(job.RunId, image, envelopePath, limits, onChunk, lease.Token)
+                        .ConfigureAwait(false);
+                }
+                catch
+                {
+                    // A reader of the stream must get an end, not wait out its own time limit.
+                    if (relay is not null) await relay.EndAsync(RunStatuses.Failed, ErrorCodes.SandboxStartFailed, null).ConfigureAwait(false);
+                    throw;
+                }
 
                 if (lease.LeaseLost)
                 {
@@ -464,6 +483,7 @@ namespace Blocks.FunctionRunner.Runs
 
                 if (result.HostFailure is not null)
                 {
+                    if (relay is not null) await relay.EndAsync(RunStatuses.Failed, ErrorCodes.SandboxStartFailed, null).ConfigureAwait(false);
                     await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, ErrorCodes.SandboxStartFailed,
                         Redact(result.HostFailure, resolvedValues), result.ExitCode, result.DurationMs,
                         null, null, null, null, false,
@@ -486,12 +506,15 @@ namespace Blocks.FunctionRunner.Runs
                 // because every completed run reports its peak here.
                 _budget.Observe(result.PeakMemoryBytes);
 
+                // The stream's end goes out before the result, after its last piece (same connection, in order).
+                if (relay is not null) await relay.EndAsync(status, errorCode, errorMessage).ConfigureAwait(false);
                 await CompleteAsync(
                     job, runKey, startedAt, status, errorCode, errorMessage, result.ExitCode, result.DurationMs,
                     result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                     WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                     result.Output.Truncated,
-                    startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, timings: timings)
+                    startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, timings: timings,
+                    events: CheckEvents(job, fields, status, result.Output))
                     .ConfigureAwait(false);
 
                 return Disposition.Complete;
@@ -601,6 +624,11 @@ namespace Blocks.FunctionRunner.Runs
                     envelope = RunDelegation.Apply(envelope, accessToken);
                     resolvedValues = [.. resolvedValues, accessToken];
                 }
+
+                // Set by the runner, after the screen and never from the queue: the run span's trace id
+                // and the hosts that get it on fetch(). `events` (what the function may add with
+                // ctx.events) travels in the queued envelope and is left exactly as the control plane wrote it.
+                envelope = ExecutionEnvelope.WithTrace(envelope, Tracing.RunTracing.CurrentTraceParent(), _options.EffectiveTraceHosts);
 
                 return new PreparedRun(envelope, resolvedValues, accessToken is not null, null);
             }
@@ -816,7 +844,8 @@ namespace Blocks.FunctionRunner.Runs
                 result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                 WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                 result.Output.Truncated,
-                startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, warm: report, timings: timings)
+                startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, warm: report, timings: timings,
+                events: CheckEvents(job, fields, status, result.Output))
                 .ConfigureAwait(false);
 
             return Disposition.Complete;
@@ -964,7 +993,7 @@ namespace Blocks.FunctionRunner.Runs
             return [.. output.Logs, line];
         }
 
-        private readonly record struct Prepared(
+        internal readonly record struct Prepared(
             string? Envelope, (string Code, string Message)? Failure, IReadOnlyList<string> Values);
 
         /// <summary>The bootstrap's marker and threshold (runtime/protocol.mjs), mirrored.</summary>
@@ -987,7 +1016,8 @@ namespace Blocks.FunctionRunner.Runs
         }
 
         /// <summary>
-        /// Resolves every <c>{{secret.&lt;id&gt;}}</c> in the envelope's <c>env</c> in one lookup
+        /// Resolves every <c>{{secret.&lt;id&gt;}}</c> (and imported <c>{{secretName.&lt;name&gt;}}</c>, bound by exact
+        /// name first) in the envelope's <c>env</c> in one value lookup
         /// and returns the envelope with the values substituted — or the failure to report
         /// instead, in which case the sandbox is never started.
         /// <para>
@@ -998,7 +1028,7 @@ namespace Blocks.FunctionRunner.Runs
         /// retries. Neither message, nor anything logged here, carries a value.
         /// </para>
         /// </summary>
-        private async Task<Prepared> ResolveSecretsAsync(RunJob job, string envelope, CancellationToken token)
+        internal async Task<Prepared> ResolveSecretsAsync(RunJob job, string envelope, CancellationToken token)
         {
             var plan = EnvSecretReferences.Collect(envelope);
             if (plan.IsEmpty) return new Prepared(envelope, null, []);
@@ -1016,10 +1046,42 @@ namespace Blocks.FunctionRunner.Runs
                     "the run's secret references could not be resolved: the run carries no consistent tenant"), []);
             }
 
+            // {{secretName.x}} (an imported reference, 2026-10-18): each name is looked up exactly, now, every run
+            // (never cached), and must match exactly one secret. The bound ids then join the same single value read.
+            var idsByName = new Dictionary<string, string>(StringComparer.Ordinal);
+            var broken = new List<string>();
             SecretLookup lookup;
             try
             {
-                lookup = await _secrets.ResolveAsync(job.TenantId!, plan.Caller, plan.Ids, token).ConfigureAwait(false);
+                if (plan.Names.Count > 0)
+                {
+                    var found = await _secrets.FindIdsByNameAsync(job.TenantId!, plan.Caller, plan.Names, token)
+                        .ConfigureAwait(false);
+                    foreach (var (key, names) in plan.NamesByKey)
+                    {
+                        foreach (var name in names.Distinct(StringComparer.Ordinal))
+                        {
+                            var matches = found.TryGetValue(name, out var list) ? list : [];
+                            if (matches.Count == 1)
+                            {
+                                idsByName[name] = matches[0];
+                                continue;
+                            }
+                            var reason = matches.Count == 0
+                                ? SecretUnresolvedReasons.NoSuchName
+                                : SecretUnresolvedReasons.DuplicateName;
+                            broken.Add($"variable {key} references the secret named '{name}', but {reason}");
+                        }
+                    }
+                }
+
+                // A run refused for a name never reads a single value.
+                lookup = broken.Count > 0
+                    ? new SecretLookup(new Dictionary<string, string>(), new Dictionary<string, string>())
+                    : await _secrets.ResolveAsync(
+                            job.TenantId!, plan.Caller,
+                            plan.Ids.Concat(idsByName.Values).Distinct(StringComparer.Ordinal).ToArray(), token)
+                        .ConfigureAwait(false);
             }
             catch (SecretStoreUnavailableException ex)
             {
@@ -1030,12 +1092,26 @@ namespace Blocks.FunctionRunner.Runs
                     "nothing ran, and the run is retried if its policy allows"), []);
             }
 
-            var broken = new List<string>();
+            // Refused for a name: no value was read, so only the names are reported.
+            var refusedForName = broken.Count > 0;
+            foreach (var (key, names) in plan.NamesByKey)
+            {
+                if (refusedForName) break;
+                foreach (var name in names.Distinct(StringComparer.Ordinal))
+                {
+                    var id = idsByName[name];
+                    if (lookup.Values.ContainsKey(id)) continue;
+                    var reason = lookup.Unresolved.TryGetValue(id, out var r) ? r : SecretUnresolvedReasons.NotFound;
+                    broken.Add($"variable {key} references the secret named '{name}', but {reason}");
+                }
+            }
+
             foreach (var (key, ids) in plan.IdsByKey)
             {
                 foreach (var id in ids.Distinct(StringComparer.Ordinal))
                 {
                     if (lookup.Values.ContainsKey(id)) continue;
+                    if (refusedForName) break;
                     var reason = lookup.Unresolved.TryGetValue(id, out var r) ? r : SecretUnresolvedReasons.NotFound;
                     broken.Add($"variable {key} references secret '{id}', but {reason}");
                 }
@@ -1048,8 +1124,9 @@ namespace Blocks.FunctionRunner.Runs
                 return new Prepared(null, (ErrorCodes.SecretUnresolved, message), []);
             }
 
-            var values = plan.Ids.Select(id => lookup.Values[id]).Distinct(StringComparer.Ordinal).ToArray();
-            return new Prepared(EnvSecretReferences.Apply(envelope, plan, lookup.Values), null, values);
+            var values = plan.Ids.Concat(idsByName.Values).Distinct(StringComparer.Ordinal)
+                .Select(id => lookup.Values[id]).Distinct(StringComparer.Ordinal).ToArray();
+            return new Prepared(EnvSecretReferences.Apply(envelope, plan, lookup.Values, idsByName), null, values);
         }
 
         /// <summary>
@@ -1096,6 +1173,28 @@ namespace Blocks.FunctionRunner.Runs
                     "Run {RunId} starts without ctx.blocks.accessToken: its delegation grant could not be redeemed", job.RunId);
             }
             return accessToken;
+        }
+
+        /// <summary>
+        /// The events of a finished run, checked again out of process (<see cref="SandboxOutputParser.ValidateEvents"/>):
+        /// only a succeeded run sends any, so a failure, timeout or cancel drops them. A violation drops
+        /// all of them and is logged — the run id, the count and the rule, never a payload — while the
+        /// result and status stand. Allowed types come from the queued envelope, never from the sandbox.
+        /// </summary>
+        private EventsCheck CheckEvents(RunJob job, Dictionary<string, string> fields, string status, SandboxOutput output)
+        {
+            if (status != RunStatuses.Succeeded || output.EventsJson is null) return EventsCheck.None;
+
+            var envelope = fields.TryGetValue("envelope", out var queued) ? queued : "{}";
+            var check = SandboxOutputParser.ValidateEvents(
+                output.EventsJson, ExecutionEnvelope.AllowedEventTypes(envelope), $"{job.RunId}-{job.Attempt}-");
+            if (check.Rejected is not null)
+            {
+                _logger.LogWarning(
+                    "Run {RunId} sent events that were dropped ({Bytes} bytes on the line): {Reason}",
+                    job.RunId, output.EventsJson.Length, check.Rejected);
+            }
+            return check;
         }
 
         /// <summary>
@@ -1146,11 +1245,13 @@ namespace Blocks.FunctionRunner.Runs
             string status, string? errorCode, string? errorMessage,
             int? exitCode, long durationMs, long? peakMemory, long? cpuUsageMs,
             string? resultJson, List<string>? logs, bool truncated,
-            long? startupMs = null, long? executionMs = null, long? cpuWindowMs = null, WarmReport? warm = null, HandoverTimings? timings = null)
+            long? startupMs = null, long? executionMs = null, long? cpuWindowMs = null, WarmReport? warm = null, HandoverTimings? timings = null,
+            EventsCheck? events = null)
         {
             var completedAt = DateTimeOffset.UtcNow;
             string? resultKey = null;
             string? logsKey = null;
+            string? eventsKey = null;
 
             // The result, the logs and the status are written together — sent back to back on the
             // one connection, so Redis applies them in this order, and waited for as one round
@@ -1162,6 +1263,14 @@ namespace Blocks.FunctionRunner.Runs
             {
                 resultKey = RedisKeys.Result(job.RunId);
                 writes.Add(_db.StringSetAsync(resultKey, resultJson, RedisKeys.ResultTtl));
+            }
+
+            // The run's events, already checked, as one array. Same TTL as the result; written before
+            // the stream entry like everything else the entry points at.
+            if (events?.Json is not null)
+            {
+                eventsKey = RedisKeys.Events(job.RunId);
+                writes.Add(_db.StringSetAsync(eventsKey, events.Json, RedisKeys.ResultTtl));
             }
 
             if (logs is { Count: > 0 })
@@ -1206,6 +1315,22 @@ namespace Blocks.FunctionRunner.Runs
                 new("attempt", job.Attempt.ToString(CultureInfo.InvariantCulture)),
                 new("protocol", RedisKeys.ProtocolVersion.ToString(CultureInfo.InvariantCulture)),
             };
+
+            // The events fields are appended only when there is something to say, so a run without
+            // events writes exactly the entry it always did.
+            if (eventsKey is not null)
+            {
+                entry =
+                [
+                    .. entry,
+                    new(RedisKeys.ResultEventsKeyField, eventsKey),
+                    new(RedisKeys.ResultEventCountField, events!.Count.ToString(CultureInfo.InvariantCulture)),
+                ];
+            }
+            else if (events?.Rejected is { } rejected)
+            {
+                entry = [.. entry, new(RedisKeys.ResultEventsRejectedField, Truncate(rejected, 512) ?? string.Empty)];
+            }
 
             // A warm run's three extra fields (sandbox/REUSE.md), appended after everything above
             // so the existing fields stay exactly as they were. A single run carries none of them,

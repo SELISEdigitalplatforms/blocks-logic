@@ -11,6 +11,7 @@ using Workflow.DomainService.Logging;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using XUnitTest.TestHelpers;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Workflow
 {
@@ -43,7 +44,8 @@ namespace XUnitTest.Workflow
                 _auth.Object,
                 accessor.Object,
                 Mock.Of<IDelegationGrantFactory>(),
-                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
+                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
+                Mock.Of<IInProcessGrantReleaser>());
         }
 
         public void Dispose() => TestBlocksContext.Clear();

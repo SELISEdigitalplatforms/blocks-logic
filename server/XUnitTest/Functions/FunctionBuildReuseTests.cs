@@ -1,11 +1,10 @@
 using Blocks.Genesis;
 using FluentAssertions;
-using Functions.DomainService.Entities;
-using Functions.DomainService.Enums;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
 using MongoDB.Driver;
 using Moq;
+using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
 {
@@ -29,7 +28,7 @@ namespace XUnitTest.Functions
                 .GetCollection<FunctionBuildEntity>(FunctionsConstants.FunctionBuildsCollection);
             var provider = new Mock<IDbContextProvider>();
             provider.Setup(p => p.GetCollection<FunctionBuildEntity>(It.IsAny<string>(), It.IsAny<string>())).Returns(collection);
-            _repository = new FunctionBuildRepository(provider.Object);
+            _repository = new FunctionBuildRepository(provider.Object, new XUnitTest.TestDoubles.PassThroughLogicDataAccess());
         }
 
         public void Dispose() => _client.DropDatabase(_databaseName);

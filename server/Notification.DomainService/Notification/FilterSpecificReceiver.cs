@@ -1,6 +1,8 @@
-﻿using DomainService.Shared;
+﻿using Blocks.Genesis;
+using DomainService.Shared;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace DomainService.Notification
 {
@@ -22,6 +24,12 @@ namespace DomainService.Notification
         public async Task<IClientProxy> GetClientAsync(NotifierPayload notifierPayload)
         {
             var connectionIds = await GetConnectionIdsByFiltersAsync(notifierPayload.SubscriptionFilters);
+            if (connectionIds.Count == 0)
+            {
+                // The send still succeeds; without this line a notification that reaches no one is invisible.
+                _logger.LogWarning("FilterSpecificReceiver: no subscribed connection for the filters in tenant {TenantId}; nothing delivered live",
+                    BlocksContext.GetContext()?.TenantId);
+            }
             var userIds = await GetUserIdsByConnectionIds(connectionIds);
 
             if (userIds.Count != 0)

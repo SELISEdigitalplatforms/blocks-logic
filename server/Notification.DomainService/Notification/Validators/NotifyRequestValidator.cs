@@ -1,14 +1,16 @@
 using DomainService.Configuration.Services;
-using DomainService.Entities;
 using DomainService.Shared;
 using FluentValidation;
+using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Notification
 {
     public class NotifyRequestValidator : AbstractValidator<NotifyRequest>
     {
         private readonly IConfigurationRepository _configurationRepository;
-        private static NotificationConfiguration? _config;
+        // The config found for THIS request lives in the validation context, never in a shared field:
+        // a static field let two Notify calls at the same time check each other's receiver rules.
+        private const string ConfigKey = "NotificationConfiguration";
 
         public NotifyRequestValidator(IConfigurationRepository configurationRepository)
         {
@@ -23,19 +25,23 @@ namespace DomainService.Notification
             RuleFor(p => p.SubscriptionFilters)
                    .Cascade(CascadeMode.Stop)
                    .NotNull()
-                   .When(p => _config?.NotificationType == NotificationReceiverTypes.FilterSpecificReceiverType);
+                   .When((p, context) => ConfigOf(context)?.NotificationType == NotificationReceiverTypes.FilterSpecificReceiverType);
 
             RuleFor(p => p)
                 .Cascade(CascadeMode.Stop)
                 .Must(UserOrRoleShouldExist)
-                .When(p => _config?.NotificationType == NotificationReceiverTypes.UserSpecificReceiverType).WithMessage("UserIds, Roles, and OrganizationIds cannot all be empty");
+                .When((p, context) => ConfigOf(context)?.NotificationType == NotificationReceiverTypes.UserSpecificReceiverType).WithMessage("UserIds, Roles, and OrganizationIds cannot all be empty");
         }
 
-        private async Task<bool> IsConfigurationExist(string configurationName, CancellationToken cancellationToken)
+        private async Task<bool> IsConfigurationExist(NotifyRequest notifyRequest, string configurationName, ValidationContext<NotifyRequest> context, CancellationToken cancellationToken)
         {
-            _config = await _configurationRepository.GetByNameAsync(configurationName);
-            return _config != null;
+            var config = await _configurationRepository.GetByNameAsync(configurationName);
+            context.RootContextData[ConfigKey] = config;
+            return config != null;
         }
+
+        private static NotificationConfiguration? ConfigOf(ValidationContext<NotifyRequest> context) =>
+            context.RootContextData.TryGetValue(ConfigKey, out var config) ? config as NotificationConfiguration : null;
 
         private bool UserOrRoleShouldExist(NotifyRequest notifyRequest)
         {

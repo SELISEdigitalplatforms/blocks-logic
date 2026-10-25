@@ -6,6 +6,7 @@ using Workflow.DomainService.Utils;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Workflow.DomainService.Logging;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Nodes.ActionAIAgentV1
 {
@@ -13,7 +14,7 @@ namespace Workflow.DomainService.Nodes.ActionAIAgentV1
     public class ActionAIAgentV1Node : NodeExecutorBase<ActionAIAgentV1Parameters>
     {
         public override string NodeType => "agent";
-        public override string Version => "1.0";
+        public override string Version => "v1";
         private readonly HttpClient _httpClient;
 
         public ActionAIAgentV1Node()
