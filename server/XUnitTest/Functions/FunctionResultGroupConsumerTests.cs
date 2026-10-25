@@ -54,5 +54,25 @@ namespace XUnitTest.Functions
 
             order.Should().ContainInOrder("ack", "del");
         }
+
+        [Fact]
+        public async Task A_group_that_went_away_is_created_again_by_the_next_read()
+        {
+            // Redis lost the stream (restart without the data, failover, delete) while the Worker ran: before this,
+            // every read failed with NOGROUP and no result was saved until the Worker was restarted.
+            var missing = new RedisServerException("NOGROUP No such key 'functions:results' or consumer group 'logic-workers'");
+            _database
+                .Setup(d => d.StreamReadGroupAsync(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<RedisValue>(),
+                    It.IsAny<RedisValue?>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<TimeSpan?>(), It.IsAny<CommandFlags>()))
+                .ThrowsAsync(missing);
+
+            var read = await Consumer().ReadNewAsync(10);
+
+            read.Should().BeEmpty();
+            _database.Verify(
+                d => d.StreamCreateConsumerGroupAsync(
+                    FunctionQueueKeys.ResultsStream, FunctionQueueKeys.LogicWorkerGroup, StreamPosition.Beginning, true, CommandFlags.None),
+                Times.Once);
+        }
     }
 }

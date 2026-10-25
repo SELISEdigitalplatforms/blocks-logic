@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useDeployFunction } from "./use-functions";
-import { useGetBuild } from "./use-versions";
+import { useGetBuild, useGetPendingDeploy } from "./use-versions";
 import { IFunctionVersionSummary, isDeployPending } from "../types/version.types";
 
 interface UseDeployOptions {
@@ -15,8 +15,10 @@ interface UseDeployOptions {
  * meanwhile, so what ships is what was built. A failed build is reported once and its id kept, so
  * the build log stays on screen until the next deploy.
  *
- * Leaving the page stops the watching, not the build: the next Deploy finds the finished build
- * and is instant.
+ * Leaving the page stops the watching, not the build. On load the page asks for a deploy still
+ * building (GetPendingDeploy) and watches it again, so a reload keeps "Building…" and Deploy stays
+ * off. When it succeeds it is deployed as above; the Api answers a second deploy of the same build
+ * with the version already made, so two open pages do not make two versions.
  */
 /**
  * A deploy refused because its build already failed carries that build's id in `errors.buildId`
@@ -36,6 +38,9 @@ export const useDeploy = (functionId: string, { onDeployed, onFailed }: UseDeplo
   // The failed build a refused deploy named: known to be over before GetBuild answers.
   const [refusedBuildId, setRefusedBuildId] = useState<string>();
   const { data: build } = useGetBuild(buildId);
+  const { data: pending } = useGetPendingDeploy(functionId);
+  // The pending build is taken over once, and never after this page started a deploy itself.
+  const resumed = useRef(false);
   // The build whose outcome was already handled: the effect re-runs on every render.
   const handled = useRef<string | null>(null);
   // The page's latest callbacks, without making them effect dependencies.
@@ -65,6 +70,7 @@ export const useDeploy = (functionId: string, { onDeployed, onFailed }: UseDeplo
   };
 
   const deploy = async () => {
+    resumed.current = true;
     handled.current = null;
     setRefusedBuildId(undefined);
     setBuildId(undefined);
@@ -74,6 +80,14 @@ export const useDeploy = (functionId: string, { onDeployed, onFailed }: UseDeplo
       fail(error);
     }
   };
+
+  useEffect(() => {
+    const pendingBuildId = pending?.buildId;
+    if (resumed.current || !pendingBuildId) return;
+    resumed.current = true;
+    handled.current = null;
+    setBuildId((current) => current ?? pendingBuildId);
+  }, [pending]);
 
   useEffect(() => {
     if (!buildId || build?.id !== buildId || handled.current === buildId) return;

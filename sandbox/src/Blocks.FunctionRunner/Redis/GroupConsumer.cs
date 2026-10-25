@@ -38,14 +38,21 @@ namespace Blocks.FunctionRunner.Redis
         private readonly string _stream;
         private readonly string _group;
         private readonly string _consumer;
+        private readonly RedisValue _groupStart;
 
-        public GroupConsumer(IDatabase db, ILogger logger, string stream, string group, string consumer)
+        /// <param name="fromStart">
+        /// Where a created group starts: true (work queues) delivers every entry still in the stream — entries are
+        /// deleted when acknowledged, so those are exactly the unfinished ones. False (the advisory warm stream) starts
+        /// at its end, so a new group does not replay old requests.
+        /// </param>
+        public GroupConsumer(IDatabase db, ILogger logger, string stream, string group, string consumer, bool fromStart = true)
         {
             _db = db;
             _logger = logger;
             _stream = stream;
             _group = group;
             _consumer = consumer;
+            _groupStart = fromStart ? StreamPosition.Beginning : StreamPosition.NewMessages;
         }
 
         public string Stream => _stream;
@@ -58,13 +65,29 @@ namespace Blocks.FunctionRunner.Redis
         {
             try
             {
-                await _db.StreamCreateConsumerGroupAsync(_stream, _group, StreamPosition.Beginning, createStream: true)
+                await _db.StreamCreateConsumerGroupAsync(_stream, _group, _groupStart, createStream: true)
                     .ConfigureAwait(false);
                 _logger.LogInformation("Created consumer group {Group} on {Stream}", _group, _stream);
             }
             catch (RedisServerException ex) when (ex.Message.Contains("BUSYGROUP", StringComparison.Ordinal))
             {
                 // Already there.
+            }
+        }
+
+        internal static bool IsMissingGroup(RedisServerException ex) =>
+            ex.Message.StartsWith("NOGROUP", StringComparison.Ordinal);
+
+        private async Task RecreateGroupAsync()
+        {
+            try
+            {
+                await EnsureGroupAsync().ConfigureAwait(false);
+            }
+            catch (RedisException ex)
+            {
+                // Redis is not answering either; the next read tries again.
+                _logger.LogWarning(ex, "Creating group {Group} on {Stream} failed", _group, _stream);
             }
         }
 
@@ -76,6 +99,15 @@ namespace Blocks.FunctionRunner.Redis
                 var entries = await _db.StreamReadGroupAsync(
                     _stream, _group, _consumer, StreamPosition.NewMessages, count).ConfigureAwait(false);
                 return Convert(entries, fresh: true);
+            }
+            catch (RedisServerException ex) when (IsMissingGroup(ex))
+            {
+                // The stream or its group went away while this runner was up: Redis restarted without the data,
+                // failed over, evicted the key, or someone deleted it. The group is made only at start, so every read
+                // failed until the runner was restarted and no work was taken (prod builds stuck Queued, 2026-10-25).
+                _logger.LogWarning(ex, "Group {Group} on {Stream} is gone; creating it again", _group, _stream);
+                await RecreateGroupAsync().ConfigureAwait(false);
+                return [];
             }
             catch (RedisException ex)
             {
