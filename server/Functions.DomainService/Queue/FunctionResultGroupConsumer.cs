@@ -66,6 +66,19 @@ namespace Functions.DomainService.Queue
             }
         }
 
+        private async Task RecreateGroupAsync()
+        {
+            try
+            {
+                await EnsureGroupAsync();
+            }
+            catch (RedisException ex)
+            {
+                // Redis is not answering either; the next read tries again.
+                _logger.LogWarning(ex, "Creating group on {Stream} failed", _stream);
+            }
+        }
+
         public async Task<IReadOnlyList<ResultStreamEntry>> ReadNewAsync(int count)
         {
             try
@@ -73,6 +86,14 @@ namespace Functions.DomainService.Queue
                 var entries = await _db.StreamReadGroupAsync(
                     _stream, FunctionQueueKeys.LogicWorkerGroup, _consumer, StreamPosition.NewMessages, count);
                 return Convert(entries);
+            }
+            catch (RedisServerException ex) when (ex.Message.StartsWith("NOGROUP", StringComparison.Ordinal))
+            {
+                // The stream or its group went away while the Worker was up (Redis restart without the data, failover,
+                // eviction, a delete). The group is made only at start, so without this no result was saved until a restart.
+                _logger.LogWarning(ex, "Group {Group} on {Stream} is gone; creating it again", FunctionQueueKeys.LogicWorkerGroup, _stream);
+                await RecreateGroupAsync();
+                return [];
             }
             catch (RedisException ex)
             {

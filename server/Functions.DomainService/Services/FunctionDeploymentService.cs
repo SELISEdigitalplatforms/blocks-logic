@@ -28,6 +28,9 @@ namespace Functions.DomainService.Services
             string tenantId, DeployFunctionRequestDto request, string? actorId, string? actorEmail,
             CancellationToken cancellationToken = default);
 
+        /// <summary>The build a deploy of the function's current code still waits for; null fields when there is none.</summary>
+        Task<PendingDeployDto> GetPendingAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -135,6 +138,14 @@ namespace Functions.DomainService.Services
                 return new DeployOutcome(null, build.ItemId, build.Status.ToString());
             }
 
+            // A deploy that names its build can be sent twice: the page that clicked Deploy and a page reloaded meanwhile
+            // both watch the build. The second one gets the version the first one made instead of a copy of it.
+            if (!string.IsNullOrEmpty(request.BuildId)
+                && await GetActiveVersionFromAsync(tenantId, function, build, cancellationToken) is { } deployed)
+            {
+                return new DeployOutcome(FunctionVersionSummaryDto.From(deployed));
+            }
+
             // A build is usable if it produced either an artifact or a registry image. Both are
             // accepted so a runner on the old path and one on the new path can deploy side by side
             // during the cutover; neither being present means the build gave us nothing to run.
@@ -235,6 +246,28 @@ namespace Functions.DomainService.Services
             await TryPublishPrewarmAsync(tenantId, created, previousVersionId);
 
             return new DeployOutcome(FunctionVersionSummaryDto.From(created));
+        }
+
+        public async Task<PendingDeployDto> GetPendingAsync(
+            string tenantId, string functionId, CancellationToken cancellationToken = default)
+        {
+            var function = await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken)
+                ?? throw new FunctionNotFoundException($"function '{functionId}' was not found");
+            var build = await _buildService.GetPendingAsync(tenantId, function, cancellationToken);
+            return new PendingDeployDto { BuildId = build?.ItemId, Status = build?.Status.ToString() };
+        }
+
+        /// <summary>The function's active version when it was made from <paramref name="build"/>; else null.</summary>
+        private async Task<FunctionVersionEntity?> GetActiveVersionFromAsync(
+            string tenantId, FunctionEntity function, FunctionBuildEntity build, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(function.ActiveVersionId)) return null;
+            var active = await _versionRepository.GetByIdAsync(tenantId, function.ActiveVersionId, cancellationToken);
+            if (active is null) return null;
+            var sameArtifact = string.Equals(active.ArtifactId, build.ItemId, StringComparison.Ordinal);
+            var sameImage = !string.IsNullOrEmpty(build.ImageDigest)
+                && string.Equals(active.ImageDigest, build.ImageDigest, StringComparison.Ordinal);
+            return sameArtifact || sameImage ? active : null;
         }
 
         /// <summary>

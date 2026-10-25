@@ -101,5 +101,39 @@ namespace Blocks.FunctionRunner.Tests
             (await alive.DeliveryCountAsync(reclaimed)).Should().Be(2,
                 "a redelivery must keep counting, or a poison entry would circle forever");
         }
+
+        [Fact]
+        public async Task A_group_lost_while_running_is_created_again_and_its_waiting_work_is_read()
+        {
+            // Prod 2026-10-25: the group on functions:builds was gone while the runner ran, every read failed with
+            // NOGROUP, and builds stayed Queued until a restart.
+            if (_db is null) return;
+            var consumer = Consumer("a");
+            await consumer.EnsureGroupAsync();
+            await _db.KeyDeleteAsync(_stream);
+            await AddAsync(2); // the Api keeps adding work; XADD makes the stream again, without a group
+
+            var first = await consumer.ReadNewAsync(16, CancellationToken.None);
+            var second = await consumer.ReadNewAsync(16, CancellationToken.None);
+
+            first.Should().BeEmpty("this read finds the group missing and creates it");
+            second.Should().HaveCount(2, "work added while the group was missing is not lost");
+        }
+
+        [Fact]
+        public async Task A_lost_warm_group_comes_back_at_the_end_and_does_not_replay_old_requests()
+        {
+            if (_db is null) return;
+            var consumer = new GroupConsumer(_db, NullLogger.Instance, _stream, "warm:a", "a", fromStart: false);
+            await consumer.EnsureGroupAsync();
+            await _db.KeyDeleteAsync(_stream);
+            await AddAsync(3);
+
+            await consumer.ReadNewAsync(16, CancellationToken.None);
+            await AddAsync(1);
+            var read = await consumer.ReadNewAsync(16, CancellationToken.None);
+
+            read.Should().ContainSingle("pre-warm requests made before the group came back are stale");
+        }
     }
 }

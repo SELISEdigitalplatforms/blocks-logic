@@ -36,6 +36,13 @@ namespace Functions.DomainService.Services
             int? waitSecondsOverride = null,
             bool forceRebuild = false);
 
+        /// <summary>
+        /// The build a deploy of the function's current code is still waiting for: Queued or Building and not stale.
+        /// Null when there is none, so the editor can show "Building…" again after a page reload.
+        /// </summary>
+        Task<FunctionBuildEntity?> GetPendingAsync(
+            string tenantId, FunctionEntity function, CancellationToken cancellationToken = default);
+
         /// <summary>A single build's current state — for the editor's build-progress indicator to poll.</summary>
         Task<FunctionBuildEntity> GetAsync(string tenantId, string buildId, CancellationToken cancellationToken = default);
         /// <summary>The build as the caller may see it: properties a View column rule hides are cleared.</summary>
@@ -100,6 +107,15 @@ namespace Functions.DomainService.Services
         {
             var build = await _buildRepository.GetByIdAsync(tenantId, buildId, cancellationToken);
             return build ?? throw new Utils.FunctionNotFoundException($"build '{buildId}' was not found");
+        }
+
+        public async Task<FunctionBuildEntity?> GetPendingAsync(
+            string tenantId, FunctionEntity function, CancellationToken cancellationToken = default)
+        {
+            var build = await _buildRepository.GetInProgressBySourceHashAsync(
+                tenantId, function.ItemId, function.SourceHash, cancellationToken);
+            // A stale build is retired by the next deploy, so the editor must offer Deploy again, not wait on it.
+            return build is null || IsStale(build) ? null : build;
         }
 
         public async Task<FunctionBuildEntity> GetForViewAsync(

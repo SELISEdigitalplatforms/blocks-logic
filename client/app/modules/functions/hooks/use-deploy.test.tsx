@@ -4,10 +4,12 @@ import { makeHookWrapper } from "@/test-utils/test-providers/render";
 
 const deployFunction = vi.fn();
 const getBuild = vi.fn();
+const getPendingDeploy = vi.fn();
 vi.mock("../services/function.service", () => ({
   functionService: {
     deployFunction: (...args: unknown[]) => deployFunction(...args),
     getBuild: (...args: unknown[]) => getBuild(...args),
+    getPendingDeploy: (...args: unknown[]) => getPendingDeploy(...args),
   },
 }));
 
@@ -26,6 +28,34 @@ describe("useDeploy (F-4: deploy does not hold the request for the build)", () =
   beforeEach(() => {
     deployFunction.mockReset();
     getBuild.mockReset();
+    getPendingDeploy.mockReset();
+    getPendingDeploy.mockResolvedValue({ buildId: null, status: null });
+  });
+
+  it("after a reload, a deploy still building shows as building and is deployed when it finishes", async () => {
+    getPendingDeploy.mockResolvedValue({ buildId: "b9", status: "Queued" });
+    let finishBuild = () => {};
+    const buildDone = new Promise((resolve) => {
+      finishBuild = () => resolve({ id: "b9", status: "Succeeded", createdDate: "" });
+    });
+    getBuild.mockReturnValue(buildDone);
+    deployFunction.mockResolvedValue(version);
+    const { hook, onDeployed } = setup();
+
+    await waitFor(() => expect(hook.result.current.isBuilding).toBe(true));
+    expect(hook.result.current.buildId).toBe("b9");
+
+    finishBuild();
+    await waitFor(() => expect(onDeployed).toHaveBeenCalledWith(version));
+    expect(deployFunction).toHaveBeenCalledWith({ functionId: "fn_1", buildId: "b9" });
+  });
+
+  it("no deploy building on load: Deploy stays available", async () => {
+    const { hook } = setup();
+
+    await waitFor(() => expect(getPendingDeploy).toHaveBeenCalledWith("fn_1"));
+    expect(hook.result.current.isBuilding).toBe(false);
+    expect(getBuild).not.toHaveBeenCalled();
   });
 
   it("a deploy answered with the version is done at once", async () => {
