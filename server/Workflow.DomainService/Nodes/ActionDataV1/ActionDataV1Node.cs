@@ -438,16 +438,11 @@ namespace Workflow.DomainService.Nodes.ActionDataV1
                 return token;
             }
 
-            if (parameters.AuthenticationType == "clientCredential"
-                && !string.IsNullOrWhiteSpace(parameters.ClientId) && !string.IsNullOrWhiteSpace(parameters.ClientSecret))
+            if (parameters.AuthenticationType == "clientCredential" && !string.IsNullOrWhiteSpace(parameters.ClientId))
             {
                 EnsureTokenHostTrusted(target);
-                var clientCredentialEntity = new ClientCredential
-                {
-                    ItemId = parameters.ClientId,
-                    ClientSecret = parameters.ClientSecret
-                };
-                var token = await _clientCredentialTokenService.GetTokenAsync(clientCredentialEntity, tenantId);
+                // The secret is read from IAM's ClientCredentials by id; the node stores only the client id.
+                var token = await _clientCredentialTokenService.GetTokenAsync(parameters.ClientId, tenantId);
                 if (logToken) LogToken(log, token);
                 return token;
             }

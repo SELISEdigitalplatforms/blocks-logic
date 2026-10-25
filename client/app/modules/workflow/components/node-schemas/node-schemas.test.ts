@@ -164,7 +164,7 @@ describe("http request v1", () => {
       expect.arrayContaining(["blocksAuthentication", "clientCredential"]),
     );
     expect(NodeSchemaActionHttpRequestV1.defaults?.parameters?.authenticationType).toBe("");
-    expect(field(NodeSchemaActionHttpRequestV1, "clientCredential_composite").dependsOn).toEqual({
+    expect(field(NodeSchemaActionHttpRequestV1, "clientId").dependsOn).toEqual({
       key: "authenticationType",
       value: "clientCredential",
       operator: "equals",
@@ -186,14 +186,6 @@ describe("http request v1", () => {
     expect((out.parameters as AnyRec).authenticationType).toBe("clientCredential");
   });
 
-  it("client credential onChange splits id and secret", () => {
-    const onChange = field(NodeSchemaActionHttpRequestV1, "clientCredential_composite").onChange;
-    expect(onChange("cc1:::s1", {}, {})).toEqual({
-      clientCredential_composite: "cc1:::s1",
-      clientId: "cc1",
-      clientSecret: "s1",
-    });
-  });
 });
 
 describe("transform set-field v1", () => {
@@ -640,7 +632,7 @@ describe("data action v1", () => {
       "queryModeNotes",
       "rawQueryMode",
       "authenticationType",
-      "clientCredential_composite",
+      "clientId",
       "rawQuery",
       "collectionName_composite",
       "actionType",
@@ -757,22 +749,13 @@ describe("data action v1", () => {
 
   it("client credential options return only active clients", async () => {
     getClientCredentials.mockResolvedValue([
-      { itemId: "cc1", clientSecret: "s1", name: "Active", isActive: true },
-      { itemId: "cc2", clientSecret: "s2", name: "Inactive", isActive: false },
+      { itemId: "cc1", name: "Active", isActive: true },
+      { itemId: "cc2", name: "Inactive", isActive: false },
     ]);
-    const opts = field(NodeSchemaActionDataActionV1, "clientCredential_composite").options;
+    const opts = field(NodeSchemaActionDataActionV1, "clientId").options;
     expect(await opts({}, { tenantId: "pk-1" })).toEqual([
-      { value: "cc1:::s1", label: "Active" },
+      { value: "cc1", label: "Active" },
     ]);
-  });
-
-  it("client credential onChange splits id and secret", () => {
-    const onChange = field(NodeSchemaActionDataActionV1, "clientCredential_composite").onChange;
-    expect(onChange("cc1:::s1", {}, {})).toEqual({
-      clientCredential_composite: "cc1:::s1",
-      clientId: "cc1",
-      clientSecret: "s1",
-    });
   });
 
   it("offers no authentication, Blocks Authentication, and keeps the credential dropdown on Client Credential", () => {
@@ -781,7 +764,7 @@ describe("data action v1", () => {
     expect(values).toEqual(
       expect.arrayContaining(["", "clientCredential", "blocksAuthentication"]),
     );
-    expect(field(NodeSchemaActionDataActionV1, "clientCredential_composite").dependsOn).toEqual({
+    expect(field(NodeSchemaActionDataActionV1, "clientId").dependsOn).toEqual({
       key: "authenticationType",
       value: "clientCredential",
       operator: "equals",

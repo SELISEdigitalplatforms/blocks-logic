@@ -92,6 +92,7 @@ namespace Workflow.DomainService
             services.AddSingleton<IExecutionLogRetentionProvider, LmtExecutionLogRetentionProvider>();
             services.AddSingleton<IExecutionLogService, ExecutionLogService>();
 
+            services.AddSingleton<IClientCredentialRepository, ClientCredentialRepository>();
             services.AddSingleton<IClientCredentialTokenService, ClientCredentialTokenService>();
 
             services.RegisterAllNotificationApplicationServices();
