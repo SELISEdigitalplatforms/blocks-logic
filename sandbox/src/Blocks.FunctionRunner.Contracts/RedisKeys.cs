@@ -306,6 +306,13 @@ namespace Blocks.FunctionRunner.Contracts
         /// <summary>Source bundle for a build. TTL 1 h.</summary>
         public static string Source(string buildId) => $"{_prefix}function:source:{buildId}";
 
+        /// <summary>
+        /// The newest deploy build of one function, set by the control plane when it queues a build
+        /// (RUNNER-FLOW step 1.1, newest wins). A runner whose build is not this one stops it at once.
+        /// Mirrors <c>FunctionQueueKeys.BuildLatest</c>.
+        /// </summary>
+        public static string BuildLatest(string tenantId, string functionId) => $"{_prefix}function:build-latest:{tenantId}:{functionId}";
+
         /// <summary>Set of image references that image GC must not prune.</summary>
         public static string ImagesKeep => _prefix + "functions:images:keep";
 

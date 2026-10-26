@@ -260,7 +260,7 @@ namespace XUnitTest.Functions
                 functions.Object, versions.Object, builds.Object, new Mock<IFunctionVersionRetentionService>().Object,
                 new Mock<IFunctionImagePinService>().Object, new Mock<IFunctionAuditService>().Object, validator.Object,
                 cache.Object, new ConfigurationBuilder().Build(), NullLogger<FunctionDeploymentService>.Instance,
-                null, _settings.Object);
+                _settings.Object);
 
             await service.DeployAsync(Tenant, new DeployFunctionRequestDto { FunctionId = "fn-1" }, "user-1", "u@x");
 

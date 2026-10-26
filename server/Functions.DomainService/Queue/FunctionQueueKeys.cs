@@ -270,6 +270,16 @@ namespace Functions.DomainService.Queue
         public static string Source(string buildId) => $"{_prefix}function:source:{buildId}";
 
         /// <summary>
+        /// The newest deploy build of one function (RUNNER-FLOW step 1.1, newest wins): set when a
+        /// build is queued, so a runner still on an older build of the same function stops it at once.
+        /// Mirrors <c>RedisKeys.BuildLatest</c> in the runner.
+        /// </summary>
+        public static string BuildLatest(string tenantId, string functionId) => $"{_prefix}function:build-latest:{tenantId}:{functionId}";
+
+        /// <summary>How long <see cref="BuildLatest"/> lives: longer than any build may queue and run.</summary>
+        public static readonly TimeSpan BuildLatestTtl = TimeSpan.FromHours(2);
+
+        /// <summary>
         /// The run id of the test currently in flight for a function, so a new test can supersede
         /// it. Expires with <see cref="RunTtl"/>; a stale value is harmless, because cancelling a
         /// run that has already finished is ignored.

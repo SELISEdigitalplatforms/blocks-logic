@@ -5,6 +5,10 @@ namespace Blocks.FunctionRunner.Protocol
     /// <summary>How a finished sandbox is turned into a status and error code.</summary>
     public static class RunOutcome
     {
+        /// <summary>The message of a run the runner's deadline ended — the same words the runtime uses when it catches the timeout itself.</summary>
+        internal static readonly string TimedOutMessage =
+            $"the function exceeded its {Ceilings.TimeoutSeconds * 1000} ms time limit";
+
         /// <summary>
         /// Maps the container's post-mortem and its parsed output onto the wire status.
         /// <para>
@@ -39,10 +43,12 @@ namespace Blocks.FunctionRunner.Protocol
                 return (RunStatuses.Cancelled, null, "the run was cancelled");
             }
 
+            // The runner's own deadline fired: the code ran past its time limit and did not stop
+            // within the grace, so the sandbox was killed. Still a timeout, never a crash: the kill
+            // is the consequence, the time limit is the cause (RUNNER-FLOW step 5.4).
             if (timedOut)
             {
-                return (RunStatuses.TimedOut, ErrorCodes.TimedOut,
-                    "the function exceeded its time limit and was terminated");
+                return (RunStatuses.TimedOut, ErrorCodes.TimedOut, TimedOutMessage);
             }
 
             // The sandbox's own verdict, when it produced one.

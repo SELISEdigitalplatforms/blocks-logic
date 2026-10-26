@@ -89,26 +89,17 @@ namespace Blocks.FunctionRunner.Tests
                 Task.FromResult<string?>(reference);
         }
 
-        private sealed class RoomyHost : IHostSignals
-        {
-            public double Cores => 8;
 
-            public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
-
-            public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
-        }
-
-        private RunConsumerService Service(int maxParallelRuns, int deferralBudgetSeconds = 600)
+        private RunConsumerService Service(int maxParallelRuns, int runMaxWaitSeconds = 1800)
         {
             var options = Microsoft.Extensions.Options.Options.Create(new RunnerOptions
             {
                 RunnerId = $"test-par-{Guid.NewGuid():N}",
                 RunsDir = _runsDir,
-                MaxActiveSandboxes = 8,
                 MaxParallelRuns = maxParallelRuns,
-                DeferralBudgetSeconds = deferralBudgetSeconds,
+                RunMaxWaitSeconds = runMaxWaitSeconds,
             });
-            var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
+            var budget = new HostRoom(options, new RoomyHost(), NullLogger<HostRoom>.Instance);
             var processor = new RunProcessor(_db!, new SlowSandbox(), new ResolvesAnything(), budget,
                 new FakeRunSecretResolver(), new FakeRunAccessTokenResolver(), options, NullLogger<RunProcessor>.Instance)
             {
@@ -261,32 +252,35 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [SkippableFact]
-        public async Task A_run_deferred_past_its_budget_is_given_up_with_the_reason()
+        public async Task A_run_queued_more_than_30_minutes_ago_fails_unstarted_as_no_room()
         {
             Skip.If(Unavailable, "no Redis available");
-            var held = await FillFunctionSlotsAsync("fn_par_0");
-            await QueueAsync();
-            using var service = Service(maxParallelRuns: 0, deferralBudgetSeconds: 1);
+            var id = _runIds[0];
+            await _db!.HashSetAsync(RedisKeys.Run(id), [new("envelope", "{}"), new("status", RunStatuses.Queued)]);
+            await _db.KeyExpireAsync(RedisKeys.Run(id), TimeSpan.FromMinutes(5));
+            var queuedAt = DateTimeOffset.UtcNow.AddMinutes(-31).ToUnixTimeMilliseconds();
+            await _db.StreamAddAsync(RedisKeys.RunsStream,
+            [
+                new("runId", id), new("functionId", "fn_par_0"), new("tenantId", "t_par_0"),
+                new("image", "img@sha256:abc"), new("attempt", 1), new("protocol", RedisKeys.RunProtocolVersion),
+                new(RedisKeys.RunFirstQueuedField, queuedAt),
+            ]);
+            using var service = Service(maxParallelRuns: 0);
             await service.StartAsync(CancellationToken.None);
             try
             {
                 var watch = Stopwatch.StartNew();
-                StreamEntry? dead = null;
-                while (dead is null && watch.Elapsed < TimeSpan.FromSeconds(10))
-                {
-                    await Task.Delay(100);
-                    dead = (await _db!.StreamRangeAsync(RedisKeys.DeadStream, "-", "+"))
-                        .Cast<StreamEntry?>()
-                        .FirstOrDefault(e => e!.Value.Values.Any(v => v.Name == "runId" && v.Value == _runIds[0]));
-                }
-                dead.Should().NotBeNull();
-                dead!.Value.Values.First(v => v.Name == "deadReason").Value.ToString().Should().Contain("no capacity");
+                while ((await StatusOfAsync(id)) is null && watch.Elapsed < TimeSpan.FromSeconds(5)) await Task.Delay(50);
+
+                var entry = (await _db.StreamRangeAsync(RedisKeys.ResultsStream, "-", "+"))
+                    .Last(e => e.Values.Any(v => v.Name == "runId" && v.Value == id));
+                entry.Values.First(v => v.Name == "status").Value.ToString().Should().Be(RunStatuses.Failed);
+                entry.Values.First(v => v.Name == "errorCode").Value.ToString().Should().Be(ErrorCodes.Undeliverable);
+                entry.Values.First(v => v.Name == "errorMessage").Value.ToString().Should().Contain("no room within 30 min");
             }
             finally
             {
-                foreach (var slot in held) await slot.DisposeAsync();
                 await service.StopAsync(CancellationToken.None);
-                await _db!.KeyDeleteAsync([RedisKeys.Concurrency("fn_par_0"), RedisKeys.DeadStream]);
             }
         }
     }

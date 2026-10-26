@@ -765,7 +765,8 @@ namespace Functions.DomainService.Services
                 throw new FunctionValidationException(admission.Message ?? "the request was not admitted");
             }
 
-            var limits = (version?.Limits ?? function.Limits).Clamp();
+            // The function's own concurrency reaches the runner (its cap on runs and warm sandboxes).
+            var limits = (version?.Limits ?? function.Limits).ClampKeepingConcurrency();
             var run = new FunctionRunEntity
             {
                 ItemId = Guid.NewGuid().ToString(),

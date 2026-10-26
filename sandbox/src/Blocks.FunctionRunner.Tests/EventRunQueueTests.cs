@@ -93,14 +93,6 @@ namespace Blocks.FunctionRunner.Tests
                 Task.FromResult<string?>(reference);
         }
 
-        private sealed class RoomyHost : IHostSignals
-        {
-            public double Cores => 8;
-
-            public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
-
-            public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
-        }
 
         private (RunConsumerService Service, CountingSandbox Sandbox) Service(int maxParallelRuns, int eventMaxWaitSeconds = 300)
         {
@@ -108,14 +100,12 @@ namespace Blocks.FunctionRunner.Tests
             {
                 RunnerId = $"test-ev-{Guid.NewGuid():N}",
                 RunsDir = _runsDir,
-                MaxActiveSandboxes = 8,
                 MaxParallelRuns = maxParallelRuns,
                 EventRunMaxWaitSeconds = eventMaxWaitSeconds,
                 // Instant fake runs: the start-rate gate must not defer them, or the claim order is not what runs.
-                StartsPerSecondPerCore = 100,
             });
             var sandbox = new CountingSandbox();
-            var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
+            var budget = new HostRoom(options, new RoomyHost(), NullLogger<HostRoom>.Instance);
             var processor = new RunProcessor(_db!, sandbox, new ResolvesAnything(), budget,
                 new FakeRunSecretResolver(), new FakeRunAccessTokenResolver(), options, NullLogger<RunProcessor>.Instance)
             {

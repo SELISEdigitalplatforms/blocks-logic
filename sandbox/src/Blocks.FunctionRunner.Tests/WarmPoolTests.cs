@@ -18,7 +18,7 @@ namespace Blocks.FunctionRunner.Tests
         private static readonly WarmKey Key = new("tenant_a", "fn_1", "v1", "img@sha256:aa");
         private readonly ManualTime _time = new();
         private readonly RunnerOptions _options;
-        private readonly HostBudget _budget;
+        private readonly HostRoom _budget;
         private readonly ScriptedFactory _factory;
         private readonly WarmPool _pool;
 
@@ -28,8 +28,6 @@ namespace Blocks.FunctionRunner.Tests
         {
             _options = new RunnerOptions
             {
-                MaxActiveSandboxes = 50,
-                StartCostCpuMs = 0,
                 WarmMaxCalls = 1000,
                 WarmMaxAgeSeconds = 3600,
                 WarmIdleSeconds = 600,
@@ -37,7 +35,7 @@ namespace Blocks.FunctionRunner.Tests
             };
             configure?.Invoke(_options);
             var options = Microsoft.Extensions.Options.Options.Create(_options);
-            _budget = new HostBudget(options, new CalmHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance, _time);
+            _budget = new HostRoom(options, new CalmHost(), NullLogger<HostRoom>.Instance, _time);
             _factory = new ScriptedFactory(_options);
             _pool = new WarmPool(_factory, _budget, options, NullLogger<WarmPool>.Instance, _time);
         }
@@ -82,8 +80,6 @@ namespace Blocks.FunctionRunner.Tests
             second.Start!.Output.ErrorMessage.Should().Contain("SyntaxError", "the same answer as the real start");
             second.Start.StartupMs.Should().Be(0, "no sandbox was made for it");
             _factory.Created.Should().ContainSingle("no new start");
-            (await _pool.PrewarmAsync(Key, RunLimits.Default, 1, CancellationToken.None)).Should().Be(0);
-            _factory.Created.Should().ContainSingle("nor a pre-warm");
 
             // Another version — the fix, deployed — is not held.
             _factory.Configure = null;
@@ -192,19 +188,16 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [Fact]
-        public async Task A_dirty_call_destroys_the_sandbox_and_frees_its_memory()
+        public async Task A_dirty_call_destroys_the_sandbox()
         {
             _factory.Configure = c => c.OnCall = id =>
                 [Lines.Started(id), Lines.Result(id, "1"), Lines.Idle(id, clean: false, ["Timeout"])];
             var handle = await AcquireAsync();
-            _budget.CommittedMemoryBytes.Should().BePositive();
 
             (await ServeAsync(handle, "run_1")).Should().Be("dirty:Timeout");
 
             _factory.Created[0].Disposed.Should().BeTrue();
             _pool.Counts.Should().Be((0, 0, 0));
-            _budget.CommittedMemoryBytes.Should().Be(0);
-            _budget.Warm.Should().Be(0);
         }
 
         [Fact]
@@ -315,7 +308,7 @@ namespace Blocks.FunctionRunner.Tests
             (await _pool.AcquireAsync(Key, RunLimits.Default, CancellationToken.None)).Status
                 .Should().Be(WarmAcquireStatus.NoReuseSupport);
             _factory.Created.Should().ContainSingle("the answer is cached per image");
-            _budget.CommittedMemoryBytes.Should().Be(0);
+            _budget.Read().ColdStarts.Should().Be(0);
         }
 
         [Fact]
@@ -337,11 +330,14 @@ namespace Blocks.FunctionRunner.Tests
         [Fact]
         public async Task No_memory_means_no_new_sandbox_after_evicting_other_idle_ones()
         {
-            var host = new CalmHost { TotalMemoryBytes = (2048L + 128) * 1024 * 1024 };
-            var options = Microsoft.Extensions.Options.Options.Create(new RunnerOptions { StartCostCpuMs = 0, MaxActiveSandboxes = 10 });
-            var budget = new HostBudget(options, host, new SandboxFootprint(), NullLogger<HostBudget>.Instance, _time);
+            WarmPool? live = null;
+            // Room for one sandbox above the 2 GB reserve, read live: each sandbox alive takes its RAM.
+            var host = new LiveMemoryHost(() => ((2048L + 128) * 1024 * 1024) - ((live?.Counts.Total ?? 0) * Ceilings.MemoryBytes));
+            var options = Microsoft.Extensions.Options.Options.Create(new RunnerOptions());
+            var budget = new HostRoom(options, host, NullLogger<HostRoom>.Instance, _time);
             var factory = new ScriptedFactory(options.Value);
             await using var pool = new WarmPool(factory, budget, options, NullLogger<WarmPool>.Instance, _time);
+            live = pool;
 
             var other = (await pool.AcquireAsync(Key with { FunctionId = "fn_other" }, RunLimits.Default, default)).Handle!;
             await pool.ReleaseAsync(other, await CallAsync(other, "run_0"));
@@ -357,39 +353,73 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [Fact]
-        public async Task The_start_rate_limit_applies_to_warm_starts()
+        public async Task A_warm_start_needs_a_cold_start_place_which_frees_itself_after_the_boost_window()
         {
-            var options = Microsoft.Extensions.Options.Options.Create(new RunnerOptions
+            // Three places held by starts that are never given back (the leak the old counters had).
+            var held = Enumerable.Range(0, HostRoom.MaxColdStarts)
+                .Select(i => _budget.TryStartCold(Ceilings.MemoryBytes, out _)).ToList();
+            held.Should().OnlyContain(h => h != null);
+
+            (await _pool.AcquireAsync(Key, RunLimits.Default, default)).Status.Should().Be(WarmAcquireStatus.NoCapacity);
+
+            // Past the start boost's window (5 s) they no longer count, released or not: no restart needed.
+            _time.Advance(TimeSpan.FromSeconds(6));
+            (await _pool.AcquireAsync(Key, RunLimits.Default, default)).Status.Should().Be(WarmAcquireStatus.Acquired);
+        }
+
+        [Fact]
+        public async Task A_function_keeps_at_most_three_sandboxes_by_default_across_its_versions()
+        {
+            (await _pool.WarmUpAsync(Key, 10)).Should().Be(3, "the default concurrency is 3 (RUNNER-FLOW step 5.6)");
+
+            (await _pool.AcquireAsync(Key with { VersionId = "v2" }, RunLimits.Default, default, allowIdle: false)).Status
+                .Should().Be(WarmAcquireStatus.NoCapacity, "the cap is per function, not per version");
+        }
+
+        [Fact]
+        public async Task A_function_set_to_more_may_keep_that_many()
+        {
+            var five = RunLimits.Clamp(null, null, null, null, null, 5);
+            var handles = new List<WarmHandle>();
+            for (var i = 0; i < 6; i++)
             {
-                StartCostCpuMs = 800, StartsPerSecondPerCore = 1, MaxActiveSandboxes = 10,
-            });
-            var budget = new HostBudget(options, new CalmHost { Cores = 1 }, new SandboxFootprint(), NullLogger<HostBudget>.Instance, _time);
-            await using var pool = new WarmPool(new ScriptedFactory(options.Value), budget, options, NullLogger<WarmPool>.Instance, _time);
+                var acquired = await _pool.AcquireAsync(Key, five, default, allowIdle: false);
+                if (acquired.Handle is not null) handles.Add(acquired.Handle);
+                _time.Advance(TimeSpan.FromSeconds(6));   // each start's place frees itself
+            }
 
-            (await pool.AcquireAsync(Key, RunLimits.Default, default)).Status.Should().Be(WarmAcquireStatus.Acquired);
-            (await pool.AcquireAsync(Key, RunLimits.Default, default)).Status.Should().Be(WarmAcquireStatus.NoCapacity);
-
-            _time.Advance(TimeSpan.FromSeconds(1));
-            (await pool.AcquireAsync(Key, RunLimits.Default, default)).Status.Should().Be(WarmAcquireStatus.Acquired);
+            handles.Should().HaveCount(5);
         }
 
         [Fact]
-        public async Task Prewarm_starts_paused_sandboxes_whose_first_call_counts_as_reused()
+        public async Task Draining_and_dead_sandboxes_do_not_hold_a_place_under_the_cap()
         {
-            (await _pool.PrewarmAsync(Key, RunLimits.Default, 2, default)).Should().Be(2);
-            _pool.Counts.Should().Be((2, 0, 2));
-            _factory.Created.Should().OnlyContain(c => c.Paused);
+            await _pool.WarmUpAsync(Key, 3);
+            await _pool.DrainAsync(Key.TenantId, Key.FunctionId, Key.VersionId);
+            await _pool.WarmUpAsync(Key with { VersionId = "v2" }, 3);
+            // One of the new version's sandboxes is found dead by the clean-up.
+            (await _pool.RemoveDeadAsync(_factory.Created[^1].Name)).Should().BeTrue();
 
-            var handle = await AcquireAsync();
-            handle.Reused.Should().BeTrue();
-            handle.StartupMs.Should().BeNull();
+            var fresh = await _pool.AcquireAsync(Key with { VersionId = "v2" }, RunLimits.Default, default, allowIdle: false);
+
+            fresh.Status.Should().Be(WarmAcquireStatus.Acquired, "only the live ones count");
         }
 
         [Fact]
-        public async Task Prewarm_stops_at_the_version_cap()
+        public async Task The_clean_up_keeps_one_idle_sandbox_per_function_for_600_s_and_removes_extras_after_60_s()
         {
-            await using var t = With(o => o.WarmMaxPerVersion = 3);
-            (await t._pool.PrewarmAsync(Key, RunLimits.Default, 10, default)).Should().Be(3);
+            await _pool.WarmUpAsync(Key, 3);
+            _time.Advance(TimeSpan.FromSeconds(30));
+            var newest = await AcquireAsync();
+            await ServeAsync(newest, "run_1");
+
+            _time.Advance(TimeSpan.FromSeconds(61));
+            (await _pool.SweepAsync()).Should().Be(2, "the two extras were idle more than 60 s");
+            _pool.Counts.Total.Should().Be(1);
+            newest.Sandbox.IsDead.Should().BeFalse("the most recently used one is the one kept");
+
+            _time.Advance(TimeSpan.FromSeconds(540));
+            (await _pool.SweepAsync()).Should().Be(1, "the kept one goes after 600 s idle");
         }
 
         [Fact]
@@ -424,7 +454,7 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [Fact]
-        public async Task Shutdown_destroys_everything_and_frees_all_memory()
+        public async Task Shutdown_destroys_everything()
         {
             var a = await AcquireAsync();
             await ServeAsync(a, "run_1");
@@ -433,7 +463,6 @@ namespace Blocks.FunctionRunner.Tests
             await _pool.DisposeAsync();
 
             _factory.Created.Should().OnlyContain(c => c.Disposed);
-            _budget.CommittedMemoryBytes.Should().Be(0);
             _pool.Counts.Total.Should().Be(0);
             (await _pool.AcquireAsync(Key, RunLimits.Default, default)).Status.Should().Be(WarmAcquireStatus.NoCapacity);
         }
@@ -450,12 +479,14 @@ namespace Blocks.FunctionRunner.Tests
         [Fact]
         public async Task Concurrent_callers_never_share_a_sandbox()
         {
-            await _pool.PrewarmAsync(Key, RunLimits.Default, 3, default);
+            await _pool.WarmUpAsync(Key, 3);
 
-            var handles = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => AcquireAsync()));
+            var handles = await Task.WhenAll(Enumerable.Range(0, 3).Select(_ => AcquireAsync()));
 
-            handles.Select(h => h.Sandbox).Distinct().Should().HaveCount(8);
-            handles.Count(h => h.Reused).Should().Be(3);
+            handles.Select(h => h.Sandbox).Distinct().Should().HaveCount(3);
+            handles.Should().OnlyContain(h => h.Reused);
+            (await _pool.AcquireAsync(Key, RunLimits.Default, default)).Status.Should().Be(WarmAcquireStatus.NoCapacity,
+                "a fourth call at the same time waits in the queue for one of the three");
         }
     }
 }

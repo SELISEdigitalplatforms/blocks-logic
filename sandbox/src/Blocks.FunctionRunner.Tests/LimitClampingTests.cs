@@ -25,11 +25,11 @@ namespace Blocks.FunctionRunner.Tests
             limits.PidLimit.Should().Be(Ceilings.PidLimit);
             limits.TmpfsBytes.Should().Be(Ceilings.TmpfsBytes);
             limits.TimeoutSeconds.Should().Be(Ceilings.TimeoutSeconds);
-            limits.FunctionConcurrency.Should().Be(Ceilings.MaxFunctionConcurrency);
+            limits.FunctionConcurrency.Should().Be(3, "a function that sets nothing gets 3 (RUNNER-FLOW step 5.6)");
         }
 
         /// <summary>
-        /// The whole point: a request cannot move any dimension, in either direction.
+        /// The whole point: a request cannot move any sandbox dimension, in either direction.
         /// <para>
         /// Greedy, modest, absent and nonsensical all produce the same sandbox. A tenant cannot
         /// widen one, and cannot narrow one either — so a slot on a host means the same thing
@@ -51,7 +51,23 @@ namespace Blocks.FunctionRunner.Tests
         {
             var limits = RunLimits.Clamp(cpu, memory, pids, tmpfs, timeout, concurrency);
 
-            limits.Should().BeEquivalentTo(RunLimits.Default);
+            limits.Should().BeEquivalentTo(RunLimits.Default, o => o.Excluding(l => l.FunctionConcurrency));
+        }
+
+        /// <summary>
+        /// The function's concurrency is the one setting its owner controls, and it must reach the
+        /// runner: until 2026-10-26 Clamp dropped it and every function ran at 10.
+        /// </summary>
+        [Theory]
+        [InlineData(null, 3)]
+        [InlineData(5, 5)]
+        [InlineData(10, 10)]
+        [InlineData(500, 10)]
+        [InlineData(0, 1)]
+        [InlineData(-1, 1)]
+        public void A_functions_concurrency_is_honoured_within_one_to_ten(int? requested, int expected)
+        {
+            RunLimits.Clamp(null, null, null, null, null, requested).FunctionConcurrency.Should().Be(expected);
         }
 
         [Fact]

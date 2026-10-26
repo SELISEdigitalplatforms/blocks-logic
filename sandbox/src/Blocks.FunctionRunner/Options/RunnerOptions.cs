@@ -183,16 +183,14 @@ namespace Blocks.FunctionRunner.Options
         public string BaseImage { get; set; } = "127.0.0.1:5000/blocks/functions-node:24-v1";
 
         /// <summary>
-        /// Pins how many sandboxes run at once. Null — the default — means the number is
-        /// discovered from the host instead; see <see cref="Admission.HostBudget"/>. Set it only
-        /// to override that on a host where the measurement is known to be wrong, because a
-        /// pinned value stops the controller from following the machine in either direction.
-        /// <para>Overflow queues either way; nothing is ever rejected for volume.</para>
+        /// Cores kept for the runner, Docker and builds, as <c>RUNNER__ReservedCores</c> (1 to 2).
+        /// Not set: by machine size — up to 4 cores 1, 5–8 cores 1.5, more than 8 cores 2
+        /// (RUNNER-FLOW step 0). Everything else is for sandboxes, read live on every check.
         /// </summary>
-        [Range(1, 1000)]
-        public int? MaxActiveSandboxes { get; set; }
+        [Range(1.0, 2.0)]
+        public double? ReservedCores { get; set; }
 
-        /// <summary>Host memory withheld from admission arithmetic, in MB.</summary>
+        /// <summary>RAM kept for the runner, Docker and builds, in MB (RUNNER-FLOW step 0: 2 GB). Every room check leaves this much free.</summary>
         [Range(0, 65536)]
         public int ReservedHostMemoryMb { get; set; } = 2048;
 
@@ -208,10 +206,9 @@ namespace Blocks.FunctionRunner.Options
         public int ClaimIdleMs => LeaseMs * 3;
 
         /// <summary>
-        /// How many deployed runs this host works on at once. 0 (the default) follows the host
-        /// budget's capacity as it moves; admission still decides, per run, whether it may start.
-        /// 1 is the old behaviour — one run at a time, the next claimed only when it is over — kept
-        /// as a switch to fall back to without a redeploy.
+        /// An optional cap on deployed runs this host works on at once, as <c>RUNNER__MaxParallelRuns</c>.
+        /// 0 (the default) means no cap: the live room check alone decides when the next run is
+        /// read. Counted from the run tasks alive right now, so it cannot leak. 1 runs one at a time.
         /// </summary>
         [Range(0, 256)]
         public int MaxParallelRuns { get; set; }
@@ -225,15 +222,17 @@ namespace Blocks.FunctionRunner.Options
         public int MaxConcurrentImageWork { get; set; }
 
         /// <summary>
-        /// How long a run may keep being deferred (host full, function or tenant at its limit, secret
-        /// store down) before it is given up as undeliverable. A deferred run is put back at the end
-        /// of the queue at once with a short back-off — it used to be left pending until the
-        /// abandoned-entry sweep (90 s), and each sweep counted as a delivery, so a run deferred three
-        /// times was failed although nothing was wrong (FN-1, 2026-10-06).
-        /// <c>RUNNER__DeferralBudgetSeconds</c>.
+        /// How long a run may wait in <c>functions:runs</c> before the runner gives up on it, as
+        /// <c>RUNNER__RunMaxWaitSeconds</c>: older than this when read, it is not started and fails as
+        /// "no room within 30 min" (RUNNER-FLOW step 4.1). Measured from when the run was first queued,
+        /// so going back to the queue does not reset it. Replaces the deferral budget (600 s), whose
+        /// "no capacity" dead-letter fired while the machine was idle (2026-10-26).
         /// </summary>
         [Range(30, 21600)]
-        public int DeferralBudgetSeconds { get; set; } = 600;
+        public int RunMaxWaitSeconds { get; set; } = DefaultRunMaxWaitSeconds;
+
+        /// <summary>Default of <see cref="RunMaxWaitSeconds"/> and <see cref="EventRunMaxWaitSeconds"/>: 30 minutes.</summary>
+        internal const int DefaultRunMaxWaitSeconds = 1800;
 
         /// <summary>
         /// How long a run started by a function event may wait in <c>functions:event-runs</c> before the
@@ -244,15 +243,18 @@ namespace Blocks.FunctionRunner.Options
         [Range(10, 86400)]
         public int EventRunMaxWaitSeconds { get; set; } = DefaultEventRunMaxWaitSeconds;
 
-        /// <summary>Default of <see cref="EventRunMaxWaitSeconds"/>: 5 minutes.</summary>
-        internal const int DefaultEventRunMaxWaitSeconds = 300;
+        /// <summary>Default of <see cref="EventRunMaxWaitSeconds"/>: 30 minutes, the same as a normal run (RUNNER-FLOW step 10).</summary>
+        internal const int DefaultEventRunMaxWaitSeconds = DefaultRunMaxWaitSeconds;
 
         /// <summary>Delivery attempts before an entry is moved to functions:dead.</summary>
         [Range(1, 20)]
         public int MaxAttempts { get; set; } = 3;
 
-        /// <summary>Grace added to the run timeout before the container is killed outright.</summary>
-        [Range(0, 30)]
+        /// <summary>
+        /// Grace after the run timeout before a sandbox whose code does not stop is killed outright,
+        /// at most 5 s (RUNNER-FLOW step 5.4). The run is reported as Timed out either way.
+        /// </summary>
+        [Range(0, 5)]
         public int KillGraceSeconds { get; set; } = 2;
 
         /// <summary>
@@ -272,18 +274,6 @@ namespace Blocks.FunctionRunner.Options
         /// </summary>
         [Range(1, 300)]
         public int StartupAllowanceSeconds { get; set; } = 30;
-
-        /// <summary>
-        /// How full this host may be before a <em>test</em> run is made to wait, as
-        /// <c>RUNNER__TestDeferAbovePercent</c>. 100 turns the rule off.
-        /// <para>
-        /// A test is a developer convenience; a deployed function is somebody's traffic. When the
-        /// host is busy the test can wait a few seconds and nobody minds — and nothing is refused,
-        /// it simply stays on the queue, which is how everything else here handles load.
-        /// </para>
-        /// </summary>
-        [Range(10, 100)]
-        public int TestDeferAbovePercent { get; set; } = 70;
 
         /// <summary>
         /// Keep an installed dependency tree so a build whose <c>package.json</c> has not changed
@@ -309,8 +299,29 @@ namespace Blocks.FunctionRunner.Options
         public int MaxCachedDependencyTrees { get; set; } = 50;
 
         // ---- builds ------------------------------------------------------------------
+
+        /// <summary>
+        /// The hard build limit, as <c>RUNNER__BuildTimeoutSeconds</c>: past it the build is killed and
+        /// fails (RUNNER-FLOW step 1.7: 15 min). Another build host takes a build whose runner died
+        /// after this plus 30 s, and the clean-up removes a build container older than this.
+        /// </summary>
         [Range(30, 1800)]
-        public int BuildTimeoutSeconds { get; set; } = 300;
+        public int BuildTimeoutSeconds { get; set; } = 900;
+
+        /// <summary>
+        /// The soft build limit, as <c>RUNNER__BuildSlowWarningSeconds</c>: past it a "slow build"
+        /// warning goes into the build log and this host's log; the build goes on (step 1.7: 5 min).
+        /// </summary>
+        [Range(10, 1800)]
+        public int BuildSlowWarningSeconds { get; set; } = 300;
+
+        /// <summary>
+        /// Builds this host runs at the same time, as <c>RUNNER__MaxParallelBuilds</c> (step 1.3: 3).
+        /// Counted from the build tasks alive right now, never a separate number. Each also needs
+        /// its RAM free (the live room check).
+        /// </summary>
+        [Range(1, 16)]
+        public int MaxParallelBuilds { get; set; } = 3;
 
         /// <summary>
         /// A ceiling on the CPU a build may use, as <c>RUNNER__BuildCpus</c>.
@@ -404,12 +415,21 @@ namespace Blocks.FunctionRunner.Options
         public bool SandboxReuse { get; set; }
 
         /// <summary>
-        /// How long a warm sandbox may sit idle (paused) before it is destroyed, as
-        /// <c>RUNNER__WarmIdleSeconds</c>. An idle sandbox costs memory and nothing else — paused,
+        /// How long the one kept warm sandbox of a function may sit idle (paused) before it is
+        /// destroyed, as <c>RUNNER__WarmIdleSeconds</c>. An idle sandbox costs memory and nothing else — paused,
         /// it gets no CPU — so this is the memory a quiet function is allowed to keep.
         /// </summary>
         [Range(5, 86_400)]
         public int WarmIdleSeconds { get; set; } = 600;
+
+        /// <summary>
+        /// How long the <em>other</em> idle sandboxes of a function may sit idle, as
+        /// <c>RUNNER__WarmExtraIdleSeconds</c>: one per function is kept for
+        /// <see cref="WarmIdleSeconds"/> (600 s), every extra one is removed after this (60 s,
+        /// RUNNER-FLOW step 6.1). A burst leaves several behind; only one is worth its RAM for long.
+        /// </summary>
+        [Range(5, 86_400)]
+        public int WarmExtraIdleSeconds { get; set; } = 60;
 
         /// <summary>
         /// Calls one sandbox serves before it is recycled, as <c>RUNNER__WarmMaxCalls</c>. A bound
@@ -437,26 +457,12 @@ namespace Blocks.FunctionRunner.Options
         public int WarmMemoryHighWaterPercent { get; set; } = 90;
 
         /// <summary>
-        /// Most warm sandboxes one function version may have on this host, as
-        /// <c>RUNNER__WarmMaxPerVersion</c>. Zero (the default) uses the function's own concurrency
-        /// limit, which is the most that could ever be busy at once anyway.
+        /// Most warm sandboxes one function may have on this host, as <c>RUNNER__WarmMaxPerVersion</c>.
+        /// Zero (the default) uses the function's own concurrency setting — 3 by default, up to 10
+        /// (RUNNER-FLOW step 5.6) — which is the most that could ever be busy at once anyway.
         /// </summary>
         [Range(0, 1000)]
         public int WarmMaxPerVersion { get; set; }
-
-        /// <summary>
-        /// CPU the host spends starting one sandbox, outside the sandbox's own quota, as
-        /// <c>RUNNER__StartCostCpuMs</c>.
-        /// <para>
-        /// Docker, containerd and gVisor setting up a container cost ~0.7–1.0 CPU-seconds on this
-        /// host (measured, sandbox/REUSE.md) — about eight seconds of a sandbox's whole 0.1-CPU
-        /// quota, paid by nobody's cgroup. Admission charges it on every start, single or warm,
-        /// and plans its initial slot count around it. Zero turns the charge, and the start rate
-        /// limit derived from it, off.
-        /// </para>
-        /// </summary>
-        [Range(0, 10_000)]
-        public int StartCostCpuMs { get; set; } = 800;
 
         /// <summary>
         /// CPU a warm sandbox gets while it starts — Node, the runtime and the function's own
@@ -464,9 +470,8 @@ namespace Blocks.FunctionRunner.Options
         /// The work is the same ~0.9 CPU-seconds either way, done in ~1 s instead of ~9.5 s at the
         /// 100m limit (measured 2026-10-06 on a real function under gVisor: 0.1 CPU 9.2–9.9 s,
         /// 1 CPU 0.92–1.0 s, 2 CPU 0.74–0.83 s). No call ever runs boosted: a sandbox whose drop
-        /// cannot be confirmed is destroyed. Starts stay admitted by the host budget
-        /// (<see cref="StartCostCpuMs"/>, <see cref="StartsPerSecondPerCore"/>), so a host without
-        /// room queues the start like any other. <c>RUNNER__StartBoostMillicores</c>; 0 turns it off.
+        /// cannot be confirmed is destroyed. A start needs this much free sandbox CPU (the live room
+        /// check, <see cref="Admission.HostRoom"/>), so a host without room queues the start like any other. <c>RUNNER__StartBoostMillicores</c>; 0 turns it off.
         /// Decided 2026-10-06 (start-up only; every call stays at the run limit).
         /// </summary>
         [Range(0, 8000)]
@@ -499,15 +504,6 @@ namespace Blocks.FunctionRunner.Options
         /// </summary>
         [Range(0, 3600)]
         public int FailedLoadHoldSeconds { get; set; } = 30;
-
-        /// <summary>
-        /// Container starts per second per core this host may make, as
-        /// <c>RUNNER__StartsPerSecondPerCore</c>. Together with <see cref="StartCostCpuMs"/> this
-        /// is the CPU admission sets aside for starting sandboxes; a start over the rate waits on
-        /// the queue like any other work that cannot run yet.
-        /// </summary>
-        [Range(0.01, 100.0)]
-        public double StartsPerSecondPerCore { get; set; } = 1.0;
 
         /// <summary>
         /// How long after a call's answer leftover work may still finish before the call counts as

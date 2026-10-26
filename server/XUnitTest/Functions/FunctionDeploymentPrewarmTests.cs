@@ -16,9 +16,9 @@ using Blocks.Genesis.Entities.Logic;
 namespace XUnitTest.Functions
 {
     /// <summary>
-    /// Deploy's pre-warm request (sandbox/REUSE.md, "Pre-warm"): one entry on
-    /// <c>functions:warm</c> when a version that opted into reuse goes Live, naming the version it
-    /// replaced for draining — and never a reason for a deploy to fail.
+    /// Deploy's drain request (RUNNER-FLOW step 2): one entry on <c>functions:warm</c> when a version
+    /// replaces another, naming the old one for draining — never a pre-warm, and never a reason for a
+    /// deploy to fail.
     /// </summary>
     public class FunctionDeploymentPrewarmTests
     {
@@ -50,8 +50,6 @@ namespace XUnitTest.Functions
                 .ReturnsAsync(new ValidationResult());
         }
 
-        private global::Functions.DomainService.Storage.IFunctionArtifactStore? _artifactStore;
-
         private FunctionDeploymentService Service(params (string Key, string Value)[] settings)
         {
             var cache = new Mock<ICacheClient>();
@@ -66,26 +64,7 @@ namespace XUnitTest.Functions
                 new Mock<IFunctionImagePinService>().Object,
                 new Mock<IFunctionAuditService>().Object,
                 _validator.Object, cache.Object, configuration,
-                NullLogger<FunctionDeploymentService>.Instance, _artifactStore);
-        }
-
-        [Fact]
-        public async Task A_prewarm_of_an_artifact_built_version_carries_the_artifact_url_and_hash()
-        {
-            _function.Trigger.ReuseSandbox = true;
-            _builds.Setup(b => b.EnsureImageAsync(Tenant, It.IsAny<FunctionEntity>(), It.IsAny<CancellationToken>(), It.IsAny<int?>(), It.IsAny<bool>()))
-                .ReturnsAsync(new FunctionBuildEntity { ItemId = "b-art", Status = BuildStatus.Succeeded, ArtifactSha256 = "abc123" });
-            var store = new Mock<global::Functions.DomainService.Storage.IFunctionArtifactStore>();
-            store.Setup(s => s.CreateDownloadUrlAsync(Tenant, "b-art", It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync("https://blob/b-art.tar?sig=1");
-            _artifactStore = store.Object;
-
-            await DeployAsync(Service());
-
-            var entry = WarmEntries().Should().ContainSingle().Subject;
-            Field(entry, "image").Should().Be("blocks-fn-artifact/b-art:local");
-            Field(entry, FunctionQueueKeys.RunArtifactUrlField).Should().Be("https://blob/b-art.tar?sig=1");
-            Field(entry, FunctionQueueKeys.RunArtifactSha256Field).Should().Be("abc123");
+                NullLogger<FunctionDeploymentService>.Instance);
         }
 
         private Task<DeployOutcome> DeployAsync(FunctionDeploymentService service) =>
@@ -98,73 +77,33 @@ namespace XUnitTest.Functions
             ((NameValueEntry[])call[1]!).Single(e => e.Name == name).Value.ToString();
 
         [Fact]
-        public async Task A_version_that_opted_in_is_prewarmed_and_the_one_it_replaced_drained()
+        public async Task A_deploy_asks_the_runners_to_drain_the_version_it_replaced_and_prewarms_nothing()
         {
-            _function.Trigger.ReuseSandbox = true;
-
             await DeployAsync(Service());
 
             var entry = WarmEntries().Should().ContainSingle().Subject;
             Field(entry, "tenantId").Should().Be(Tenant);
             Field(entry, "functionId").Should().Be("fn-1");
             Field(entry, "versionId").Should().Be(_created!.ItemId);
-            Field(entry, "image").Should().Be("registry/fn@sha256:new");
-            Field(entry, "count").Should().Be("1");
             Field(entry, "drainVersionId").Should().Be("v-old");
+            ((NameValueEntry[])entry[1]!).Select(e => e.Name.ToString()).Should().NotContain(["count", "image"],
+                "no pre-warm: the first call warms the new version (RUNNER-FLOW step 2)");
         }
 
         [Fact]
-        public async Task The_count_comes_from_configuration()
+        public async Task A_first_deploy_has_nothing_to_drain_and_sends_nothing()
         {
-            _function.Trigger.ReuseSandbox = true;
-
-            await DeployAsync(Service(("Functions:PrewarmCount", "3")));
-
-            Field(WarmEntries().Single(), "count").Should().Be("3");
-        }
-
-        [Fact]
-        public async Task A_first_deploy_has_nothing_to_drain()
-        {
-            _function.Trigger.ReuseSandbox = true;
             _function.ActiveVersionId = null;
             _function.Status = FunctionStatus.Draft;
 
             await DeployAsync(Service());
 
-            Field(WarmEntries().Single(), "drainVersionId").Should().BeEmpty();
-        }
-
-        [Fact]
-        public async Task Every_deploy_prewarms_even_without_the_old_per_function_switch()
-        {
-            // Reuse is always on (2026-10-06): the stored ReuseSandbox flag is ignored.
-            _function.Trigger.ReuseSandbox = false;
-
-            await DeployAsync(Service());
-
-            var entry = WarmEntries().Should().ContainSingle().Subject;
-            Field(entry, "count").Should().Be("1");
-            Field(entry, "drainVersionId").Should().Be("v-old");
-        }
-
-        [Fact]
-        public async Task A_prewarm_count_of_zero_starts_nothing_but_still_drains()
-        {
-            _function.Trigger.ReuseSandbox = true;
-
-            await DeployAsync(Service(("Functions:PrewarmCount", "0")));
-
-            var entry = WarmEntries().Single();
-            Field(entry, "count").Should().Be("0");
-            Field(entry, "drainVersionId").Should().Be("v-old");
+            WarmEntries().Should().BeEmpty();
         }
 
         [Fact]
         public async Task The_warm_stream_is_trimmed_on_every_write()
         {
-            _function.Trigger.ReuseSandbox = true;
-
             await DeployAsync(Service());
 
             // StreamAddAsync(key, fields, messageId, maxLength, useApproximateMaxLength, …)
@@ -175,7 +114,6 @@ namespace XUnitTest.Functions
         [Fact]
         public async Task A_publish_failure_never_fails_the_deploy()
         {
-            _function.Trigger.ReuseSandbox = true;
             _redis.Fake.On("StreamAddAsync", _ => throw new RedisConnectionException(ConnectionFailureType.SocketFailure, "down"));
 
             var result = await DeployAsync(Service());

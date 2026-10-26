@@ -67,12 +67,6 @@ namespace Blocks.FunctionRunner.Tests
                 Task.FromResult<string?>(reference);
         }
 
-        private sealed class RoomyHost : IHostSignals
-        {
-            public double Cores => 8;
-            public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
-            public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
-        }
 
         private static RunProcessor Processor(IRunSecretResolver resolver)
         {
@@ -80,9 +74,8 @@ namespace Blocks.FunctionRunner.Tests
             {
                 RunnerId = "test-runner",
                 RunsDir = Path.GetTempPath(),
-                MaxActiveSandboxes = 4,
             });
-            var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
+            var budget = new HostRoom(options, new RoomyHost(), NullLogger<HostRoom>.Instance);
             return new RunProcessor(null!, new NeverRuns(), new ResolvesAnything(), budget, resolver,
                 new FakeRunAccessTokenResolver(), options, NullLogger<RunProcessor>.Instance);
         }

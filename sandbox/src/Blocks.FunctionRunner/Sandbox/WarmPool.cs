@@ -54,7 +54,7 @@ namespace Blocks.FunctionRunner.Sandbox
         /// <summary>A sandbox is the caller's for one call.</summary>
         Acquired,
 
-        /// <summary>No room: memory, the start rate, or the version's cap. The run is deferred.</summary>
+        /// <summary>No room: CPU or RAM for a start, three starts in flight, or the function's cap. The run goes back to the queue.</summary>
         NoCapacity,
 
         /// <summary>The image has no reuse runtime; serve the run the single-run way.</summary>
@@ -151,21 +151,24 @@ namespace Blocks.FunctionRunner.Sandbox
     /// The rules, in the order they bite: a sandbox serves one key only; one call at a time; after
     /// a call it goes back paused only if the runtime called the call clean and none of the limits
     /// — calls, age, memory — is reached; anything else destroys it with the reason recorded on the
-    /// run. Idle sandboxes are destroyed after <see cref="RunnerOptions.WarmIdleSeconds"/>.
+    /// run. Idle sandboxes are removed by <see cref="SweepAsync"/> (RUNNER-FLOW step 6). Nothing is
+    /// started ahead of a call: the first call of a version warms it (step 2), and nothing is warmed
+    /// again after a restart (step 0.7). No RAM is booked: a removed sandbox's RAM is free at once.
     /// </para>
     /// <para>
     /// Locking: one lock over the bookkeeping, never held across a Docker call. A sandbox is
     /// claimed (marked busy) under the lock before anything slow happens to it, so two callers can
     /// never both get it, and the sweep never touches a busy one. A start reserves its place in the
-    /// version's count under the same lock as the count is checked, so concurrent starts cannot
-    /// overshoot the cap. Every path that cannot finish — an exception included — ends in
-    /// <see cref="DestroyAsync"/>, so no entry, memory reservation or container is left behind.
+    /// function's count under the same lock as the count is checked, so concurrent starts cannot
+    /// overshoot the cap. The count is of the live sandboxes themselves, never a separate number.
+    /// Every path that cannot finish — an exception included — ends in <see cref="DestroyAsync"/>,
+    /// so no entry or container is left behind.
     /// </para>
     /// </summary>
     public sealed class WarmPool : IAsyncDisposable
     {
         private readonly IReusableSandboxFactory _factory;
-        private readonly HostBudget _budget;
+        private readonly HostRoom _room;
         private readonly RunnerOptions _options;
         private readonly ILogger<WarmPool> _logger;
         private readonly TimeProvider _time;
@@ -194,33 +197,17 @@ namespace Blocks.FunctionRunner.Sandbox
 
         public WarmPool(
             IReusableSandboxFactory factory,
-            HostBudget budget,
+            HostRoom room,
             IOptions<RunnerOptions> options,
             ILogger<WarmPool> logger,
-            TimeProvider? time = null,
-            WarmKeyJournal? journal = null)
+            TimeProvider? time = null)
         {
             ArgumentNullException.ThrowIfNull(options);
             _factory = factory;
-            _budget = budget;
+            _room = room;
             _options = options.Value;
             _logger = logger;
             _time = time ?? TimeProvider.System;
-            _journal = journal;
-        }
-
-        private readonly WarmKeyJournal? _journal;
-
-        /// <summary>The versions with a sandbox here, for <see cref="WarmKeyJournal"/>. Taken under the lock.</summary>
-        private List<WarmKey> LiveKeysLocked() => [.. _entries.Keys];
-
-        /// <summary>
-        /// Records the versions kept warm — not while shutting down, when the pool empties itself
-        /// and the list must survive for the restart.
-        /// </summary>
-        private void Remember(List<WarmKey>? keys)
-        {
-            if (keys is not null) _journal?.Save(keys);
         }
 
         /// <summary>One sandbox and its bookkeeping. Mutated only under the pool's lock.</summary>
@@ -230,15 +217,17 @@ namespace Blocks.FunctionRunner.Sandbox
             public required ReusableSandbox Sandbox { get; init; }
             public required RunLimits Limits { get; init; }
             public required long CreatedTicks { get; init; }
-            public IDisposable? Memory { get; set; }
             public long LastUsedTicks { get; set; }
             public int Calls { get; set; }
             public bool Busy { get; set; }
+
+            /// <summary>When it was last lent to a call (or created for one) — for the hung-call clean-up.</summary>
+            public long LentTicks { get; set; }
             public bool Draining { get; set; }
             public bool Removed { get; set; }
         }
 
-        /// <summary>Warm sandboxes alive: total, serving a call, waiting (paused, or starting for a pre-warm).</summary>
+        /// <summary>Warm sandboxes alive: total, serving a call (or starting), idle (paused). For the heartbeat only.</summary>
         public (int Total, int Busy, int Idle) Counts
         {
             get
@@ -248,6 +237,18 @@ namespace Blocks.FunctionRunner.Sandbox
                     var all = _entries.Values.SelectMany(e => e).ToList();
                     var busy = all.Count(e => e.Busy);
                     return (all.Count, busy, all.Count - busy);
+                }
+            }
+        }
+
+        /// <summary>True when some sandbox is idle (paused, ready for a call) — the run loop's test for "the next run may be a warm call".</summary>
+        public bool HasIdle
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _entries.Values.Any(list => list.Any(e => !e.Busy && !e.Draining && !e.Removed && !e.Sandbox.IsDead));
                 }
             }
         }
@@ -314,6 +315,45 @@ namespace Blocks.FunctionRunner.Sandbox
             }
         }
 
+        /// <summary>
+        /// Removes every sandbox lent to a call (or starting for one) for longer than
+        /// <paramref name="limit"/> — no call may last that long, so it is hung (RUNNER-FLOW step 9.2).
+        /// The call holding it ends as a crash and reports; the sandbox's CPU and RAM are free at once.
+        /// </summary>
+        /// <returns>How many were removed.</returns>
+        public async Task<int> RemoveHungAsync(TimeSpan limit)
+        {
+            List<Entry> hung;
+            lock (_gate)
+            {
+                var now = _time.GetTimestamp();
+                hung = [.. _entries.Values.SelectMany(list => list)
+                    .Where(e => e.Busy && !e.Removed && e.LentTicks != 0 && _time.GetElapsedTime(e.LentTicks, now) >= limit)];
+            }
+            foreach (var entry in hung) await DestroyAsync(entry, "hung").ConfigureAwait(false);
+            return hung.Count;
+        }
+
+        /// <summary>
+        /// The clean-up found this container dead in Docker (exited, not paused): the idle sandbox the
+        /// pool keeps under that name is removed now, so it no longer holds a place under its
+        /// function's cap (RUNNER-FLOW step 5.6). A busy one is left to its call, which ends it.
+        /// </summary>
+        /// <returns>True when an idle sandbox was removed.</returns>
+        public async Task<bool> RemoveDeadAsync(string containerName)
+        {
+            Entry? dead;
+            lock (_gate)
+            {
+                dead = _entries.Values.SelectMany(list => list)
+                    .FirstOrDefault(e => e.Sandbox.Name == containerName && !e.Busy && !e.Removed);
+                if (dead is not null) dead.Busy = true;
+            }
+            if (dead is null) return false;
+            await DestroyAsync(dead, "crash").ConfigureAwait(false);
+            return true;
+        }
+
         /// <summary>Whether a container of this name is one the pool knows about — the reaper's test.</summary>
         public bool IsTracked(string containerName)
         {
@@ -323,9 +363,26 @@ namespace Blocks.FunctionRunner.Sandbox
             }
         }
 
-        /// <summary>The most sandboxes one version may have here.</summary>
-        private int MaxPerVersion(RunLimits limits) =>
+        /// <summary>
+        /// The most sandboxes one function may have here (RUNNER-FLOW step 5.6): its own concurrency
+        /// setting — 3 by default, up to 10 — unless the host pins a number.
+        /// </summary>
+        private int MaxPerFunction(RunLimits limits) =>
             _options.WarmMaxPerVersion > 0 ? _options.WarmMaxPerVersion : Math.Max(1, limits.FunctionConcurrency);
+
+        /// <summary>
+        /// The function's sandboxes that count against its cap: the real ones, alive and serving it.
+        /// A dead one or one being drained (an old version) does not count. Under the lock.
+        /// </summary>
+        private int LiveCountLocked(WarmKey key) =>
+            _entries
+                .Where(kv => kv.Key.TenantId == key.TenantId && kv.Key.FunctionId == key.FunctionId)
+                .Sum(kv => kv.Value.Count(e => !e.Removed && !e.Draining && !e.Sandbox.IsDead))
+            + _starting.Where(kv => kv.Key.TenantId == key.TenantId && kv.Key.FunctionId == key.FunctionId).Sum(kv => kv.Value);
+
+        /// <summary>Idle sandboxes found dead, taken for removal. Under the lock.</summary>
+        private List<Entry> TakeDeadIdleLocked() =>
+            [.. _entries.Values.SelectMany(e => e).Where(e => !e.Busy && !e.Removed && e.Sandbox.IsDead).Select(e => { e.Busy = true; return e; })];
 
         /// <summary>
         /// A sandbox for one call: an idle one of this key — still paused, see
@@ -342,6 +399,11 @@ namespace Blocks.FunctionRunner.Sandbox
             if (!SupportsReuse(key.Image)) return new WarmAcquireResult(WarmAcquireStatus.NoReuseSupport);
             if (HeldLoad(key) is { } held) return new WarmAcquireResult(WarmAcquireStatus.StartFailed, Start: held);
 
+            // Dead ones are removed when found, so they never hold a place under the cap.
+            List<Entry> dead;
+            lock (_gate) { dead = TakeDeadIdleLocked(); }
+            foreach (var entry in dead) await DestroyAsync(entry, "crash").ConfigureAwait(false);
+
             if (allowIdle)
             {
                 lock (_gate)
@@ -356,50 +418,47 @@ namespace Blocks.FunctionRunner.Sandbox
                     if (idle is not null)
                     {
                         idle.Busy = true;
+                        idle.LentTicks = _time.GetTimestamp();
                         return new WarmAcquireResult(WarmAcquireStatus.Acquired, new WarmHandle(idle, reused: true, startupMs: null));
                     }
                 }
             }
 
-            return await StartNewAsync(key, limits, busy: true, token).ConfigureAwait(false);
+            return await StartNewAsync(key, limits, token).ConfigureAwait(false);
         }
 
-        /// <summary>Starts one sandbox for <paramref name="key"/>, busy (for a caller) or idle (pre-warm).</summary>
-        private async Task<WarmAcquireResult> StartNewAsync(WarmKey key, RunLimits limits, bool busy, CancellationToken token)
+        /// <summary>Starts one sandbox for <paramref name="key"/>, for the caller (the first call warms it).</summary>
+        private async Task<WarmAcquireResult> StartNewAsync(WarmKey key, RunLimits limits, CancellationToken token)
         {
-            List<WarmKey>? added = null;
-            // --- a place under the version's cap, taken under the lock that counts --------
+            // --- a place under the function's cap, taken under the lock that counts --------
             lock (_gate)
             {
                 if (_disposed) return new WarmAcquireResult(WarmAcquireStatus.NoCapacity);
-                var count = (_entries.TryGetValue(key, out var existing) ? existing.Count(e => !e.Removed) : 0)
-                    + _starting.GetValueOrDefault(key);
-                if (count >= MaxPerVersion(limits)) return new WarmAcquireResult(WarmAcquireStatus.NoCapacity);
+                if (LiveCountLocked(key) >= MaxPerFunction(limits)) return new WarmAcquireResult(WarmAcquireStatus.NoCapacity);
                 _starting[key] = _starting.GetValueOrDefault(key) + 1;
             }
 
             Entry? entry = null;
+            ColdStart? start = null;
             try
             {
-                // Memory for as long as it lives, plus the start charge. Only when memory is what
-                // is short is an idle sandbox of some other version worth giving up for this one:
-                // evicting cannot refill the start bucket.
-                var memory = _budget.TryReserveWarm(limits.MemoryBytes, out var refusal);
-                if (memory is null && refusal == AdmissionRefusal.Memory && await EvictIdleAsync(except: key).ConfigureAwait(false))
+                // A start's room, read live (RUNNER-FLOW step 0): the boost CPU, the sandbox's RAM,
+                // and a cold-start place. Nothing is booked for the sandbox's life — once it is gone
+                // its RAM is free at once. Only when RAM is what is short is an idle sandbox of some
+                // other version worth giving up for this one.
+                start = _room.TryStartCold(limits.MemoryBytes, out var refusal);
+                if (start is null && refusal == RoomRefusal.Memory && await EvictIdleAsync(except: key).ConfigureAwait(false))
                 {
-                    memory = _budget.TryReserveWarm(limits.MemoryBytes, out _);
+                    start = _room.TryStartCold(limits.MemoryBytes, out _);
                 }
-                if (memory is null) return new WarmAcquireResult(WarmAcquireStatus.NoCapacity);
-
-                // The container is created right below: the start charge is spent from here on.
-                memory.ContainerStarted();
+                if (start is null) return new WarmAcquireResult(WarmAcquireStatus.NoCapacity);
 
                 var now = _time.GetTimestamp();
                 lock (_gate)
                 {
                     if (_disposed)
                     {
-                        memory.Dispose();
+                        start.Dispose();
                         return new WarmAcquireResult(WarmAcquireStatus.NoCapacity);
                     }
 
@@ -410,15 +469,13 @@ namespace Blocks.FunctionRunner.Sandbox
                         Limits = limits,
                         CreatedTicks = now,
                         LastUsedTicks = now,
-                        Memory = memory,
-                        // A starting sandbox is never offered to anyone: busy until it is ready, and
-                        // for a pre-warm, until it is paused.
+                        // A starting sandbox is never offered to anyone: busy until its caller is done.
                         Busy = true,
+                        LentTicks = now,
                     };
                     if (!_entries.TryGetValue(key, out var list))
                     {
                         _entries[key] = list = [];
-                        added = LiveKeysLocked();
                     }
                     list.Add(entry);
                 }
@@ -432,8 +489,6 @@ namespace Blocks.FunctionRunner.Sandbox
                 }
             }
 
-            Remember(added);
-
             WarmStartResult started;
             try
             {
@@ -441,6 +496,7 @@ namespace Blocks.FunctionRunner.Sandbox
             }
             catch (Exception ex)
             {
+                start.Dispose();
                 // StartAsync turns host failures into results; this is the backstop for anything
                 // that still escapes. Whatever it was, the entry, its memory and its container go.
                 await DestroyAsync(entry, null).ConfigureAwait(false);
@@ -452,6 +508,9 @@ namespace Blocks.FunctionRunner.Sandbox
                     HostFailure = $"the warm sandbox could not be started: {ex.Message}",
                 });
             }
+
+            // Ready (or failed): the start is over, so is its place among the cold starts.
+            start.Dispose();
 
             if (started.Status != WarmStartStatus.Ready)
             {
@@ -468,50 +527,21 @@ namespace Blocks.FunctionRunner.Sandbox
                 return new WarmAcquireResult(WarmAcquireStatus.StartFailed, Start: started);
             }
 
-            if (busy)
+            // Shut down (or drained) while it was starting: the entry is gone or going, and a
+            // handle to it would be a sandbox no pool keeps. A drained one still serves this
+            // caller — it was started for them — and is destroyed when the call ends.
+            bool gone;
+            lock (_gate) { gone = entry.Removed || _disposed; }
+            if (gone)
             {
-                // Shut down (or drained) while it was starting: the entry is gone or going, and a
-                // handle to it would be a sandbox no pool keeps. A drained one still serves this
-                // caller — it was started for them — and is destroyed when the call ends.
-                bool gone;
-                lock (_gate) { gone = entry.Removed || _disposed; }
-                if (gone)
-                {
-                    await DestroyAsync(entry, "shutdown").ConfigureAwait(false);
-                    return new WarmAcquireResult(WarmAcquireStatus.NoCapacity);
-                }
-            }
-            else
-            {
-                if (!await entry.Sandbox.PauseAsync().ConfigureAwait(false))
-                {
-                    await DestroyAsync(entry, "protocol").ConfigureAwait(false);
-                    return new WarmAcquireResult(WarmAcquireStatus.StartFailed, Start: started);
-                }
-
-                var keep = false;
-                lock (_gate)
-                {
-                    // Drained or shut down while it was starting: it is no longer wanted.
-                    if (!entry.Removed && !entry.Draining && !_disposed)
-                    {
-                        entry.Busy = false;
-                        entry.LastUsedTicks = _time.GetTimestamp();
-                        keep = true;
-                    }
-                }
-                if (!keep)
-                {
-                    await DestroyAsync(entry, "drain").ConfigureAwait(false);
-                    return new WarmAcquireResult(WarmAcquireStatus.NoCapacity);
-                }
+                await DestroyAsync(entry, "shutdown").ConfigureAwait(false);
+                return new WarmAcquireResult(WarmAcquireStatus.NoCapacity);
             }
 
-            // Started for a caller: its first call carries this start as its startup. Started as a
-            // pre-warm: whoever gets it later finds it already running, so no startup at all.
+            // Started for a caller: its first call carries this start as its startup.
             return new WarmAcquireResult(
                 WarmAcquireStatus.Acquired,
-                new WarmHandle(entry, reused: false, startupMs: busy ? started.StartupMs : null),
+                new WarmHandle(entry, reused: false, startupMs: started.StartupMs),
                 started);
         }
 
@@ -617,36 +647,6 @@ namespace Blocks.FunctionRunner.Sandbox
         }
 
         /// <summary>
-        /// Starts up to <paramref name="count"/> idle sandboxes for <paramref name="key"/>, best
-        /// effort: stops at the version's cap, or as soon as the host budget says no.
-        /// </summary>
-        /// <returns>How many were started.</returns>
-        public async Task<int> PrewarmAsync(WarmKey key, RunLimits limits, int count, CancellationToken token)
-        {
-            ArgumentNullException.ThrowIfNull(key);
-            ArgumentNullException.ThrowIfNull(limits);
-
-            var started = 0;
-            for (var i = 0; i < count && !token.IsCancellationRequested; i++)
-            {
-                if (!SupportsReuse(key.Image) || HeldLoad(key) is not null) break;
-                var result = await StartNewAsync(key, limits, busy: false, token).ConfigureAwait(false);
-                if (result.Status != WarmAcquireStatus.Acquired)
-                {
-                    if (result.Status == WarmAcquireStatus.StartFailed)
-                    {
-                        _logger.LogWarning(
-                            "Pre-warming function {FunctionId} version {VersionId} failed ({Status})",
-                            key.FunctionId, key.VersionId, result.Start?.Status);
-                    }
-                    break;
-                }
-                started++;
-            }
-            return started;
-        }
-
-        /// <summary>
         /// Retires a version: idle sandboxes go now, busy (and starting) ones as soon as their
         /// call or start ends.
         /// </summary>
@@ -676,27 +676,35 @@ namespace Blocks.FunctionRunner.Sandbox
         }
 
         /// <summary>
-        /// Destroys idle sandboxes past the idle timeout or the maximum age. Called periodically.
+        /// The warm clean-up (RUNNER-FLOW step 6), on its own timer: per function, the most recently
+        /// used idle sandbox is kept up to <see cref="RunnerOptions.WarmIdleSeconds"/> (600 s) idle and
+        /// every other idle one up to <see cref="RunnerOptions.WarmExtraIdleSeconds"/> (60 s); older than
+        /// <see cref="RunnerOptions.WarmMaxAgeSeconds"/> (1 h) or dead → removed. Busy ones are left alone.
         /// </summary>
         /// <returns>How many were destroyed.</returns>
         public async Task<int> SweepAsync()
         {
-            var idleLimit = TimeSpan.FromSeconds(_options.WarmIdleSeconds);
-            var ageLimit = TimeSpan.FromSeconds(_options.WarmMaxAgeSeconds);
             List<(Entry Entry, string Reason)> expired = [];
 
             lock (_gate)
             {
-                foreach (var entry in _entries.Values.SelectMany(e => e))
+                var byFunction = _entries.Values.SelectMany(e => e)
+                    .Where(e => !e.Busy && !e.Removed)
+                    .GroupBy(e => (e.Key.TenantId, e.Key.FunctionId));
+                foreach (var function in byFunction)
                 {
-                    if (entry.Busy || entry.Removed) continue;
-                    var reason =
-                        _time.GetElapsedTime(entry.CreatedTicks) >= ageLimit ? "maxAge" :
-                        _time.GetElapsedTime(entry.LastUsedTicks) >= idleLimit ? "idle" :
-                        entry.Sandbox.IsDead ? "crash" : null;
-                    if (reason is null) continue;
-                    entry.Busy = true;
-                    expired.Add((entry, reason));
+                    var kept = false;
+                    foreach (var entry in function.OrderByDescending(e => e.LastUsedTicks))
+                    {
+                        var reason = ExpiryReason(entry, keepLonger: !kept);
+                        if (reason is null)
+                        {
+                            kept = true;
+                            continue;
+                        }
+                        entry.Busy = true;
+                        expired.Add((entry, reason));
+                    }
                 }
             }
 
@@ -704,10 +712,20 @@ namespace Blocks.FunctionRunner.Sandbox
             return expired.Count;
         }
 
+        /// <summary>Why an idle sandbox goes now, or null to keep it. Under the lock.</summary>
+        private string? ExpiryReason(Entry entry, bool keepLonger)
+        {
+            if (entry.Sandbox.IsDead) return "crash";
+            if (_time.GetElapsedTime(entry.CreatedTicks) >= TimeSpan.FromSeconds(_options.WarmMaxAgeSeconds)) return "maxAge";
+            var idleLimit = TimeSpan.FromSeconds(keepLonger ? _options.WarmIdleSeconds : _options.WarmExtraIdleSeconds);
+            return _time.GetElapsedTime(entry.LastUsedTicks) >= idleLimit ? "idle" : null;
+        }
+
         /// <summary>
-        /// Frees memory by destroying the least recently used idle sandbox, of any key but
-        /// <paramref name="except"/>. Used when a start — warm or single — is refused for memory:
-        /// a paused sandbox nobody is calling is worth less than a run that is waiting.
+        /// Frees RAM by destroying the oldest idle sandbox (least recently used), of any key but
+        /// <paramref name="except"/>. Used when a start — warm or single — or a build is refused for
+        /// RAM (RUNNER-FLOW step 6.3): a paused sandbox nobody is calling is worth less than a run
+        /// or a build that is waiting.
         /// </summary>
         /// <returns>False when there was no idle sandbox to give up.</returns>
         public async Task<bool> EvictIdleAsync(WarmKey? except = null)
@@ -729,10 +747,9 @@ namespace Blocks.FunctionRunner.Sandbox
             return true;
         }
 
-        /// <summary>Removes the entry, kills and removes its container, and frees its memory.</summary>
+        /// <summary>Removes the entry, and kills and removes its container.</summary>
         private async Task DestroyAsync(Entry entry, string? reason)
         {
-            List<WarmKey>? remaining = null;
             lock (_gate)
             {
                 if (entry.Removed) return;
@@ -740,14 +757,9 @@ namespace Blocks.FunctionRunner.Sandbox
                 if (_entries.TryGetValue(entry.Key, out var list))
                 {
                     list.Remove(entry);
-                    if (list.Count == 0)
-                    {
-                        _entries.Remove(entry.Key);
-                        if (!_disposed) remaining = LiveKeysLocked();
-                    }
+                    if (list.Count == 0) _entries.Remove(entry.Key);
                 }
             }
-            Remember(remaining);
 
             if (reason is not null)
             {
@@ -756,14 +768,7 @@ namespace Blocks.FunctionRunner.Sandbox
                     entry.Sandbox.Name, entry.Key.FunctionId, entry.Calls, reason);
             }
 
-            try
-            {
-                await entry.Sandbox.DisposeAsync().ConfigureAwait(false);
-            }
-            finally
-            {
-                entry.Memory?.Dispose();
-            }
+            await entry.Sandbox.DisposeAsync().ConfigureAwait(false);
         }
 
         /// <summary>Destroys every sandbox. Calls in flight finish on their own and are then destroyed.</summary>
