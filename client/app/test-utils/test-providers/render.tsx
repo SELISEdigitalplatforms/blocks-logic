@@ -22,11 +22,11 @@ const Seeder: React.FC<{
 }> = ({ seed, children }) => {
   const store = useWorkflowStoreApi();
   // A lazy state initializer runs once, on the first render, before children render.
-  React.useState(() => {
+  const [seeded] = React.useState(() => {
     seed?.(store);
     return true;
   });
-  return <>{children}</>;
+  return seeded ? <>{children}</> : null;
 };
 
 /**

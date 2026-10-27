@@ -124,23 +124,23 @@ export const FileUploader = forwardRef<
         onValueChange(newValues);
 
         if (rejectedFiles.length > 0) {
-          for (let i = 0; i < rejectedFiles.length; i++) {
-            if (rejectedFiles[i].errors[0]?.code === "file-too-large") {
+          for (const rejectedFile of rejectedFiles) {
+            if (rejectedFile.errors[0]?.code === "file-too-large") {
               showErrorToast({
                 errors: `File is too large. Max size is ${maxSize / 1024 / 1024}MB`
               });
               break;
             }
-            if (rejectedFiles[i].errors[0]?.code === "file-invalid-type") {
+            if (rejectedFile.errors[0]?.code === "file-invalid-type") {
               showErrorToast({
                 errors: "Invalid file type"
               });
               break;
             }
-            if (rejectedFiles[i].errors[0]?.message) {
-              toast.error(rejectedFiles[i].errors[0].message);
+            if (rejectedFile.errors[0]?.message) {
+              toast.error(rejectedFile.errors[0].message);
               showErrorToast({
-                errors: rejectedFiles[i].errors[0].message
+                errors: rejectedFile.errors[0].message
               });
               break;
             }
@@ -153,16 +153,17 @@ export const FileUploader = forwardRef<
 
     // Recompute the "limit of files reached" flag whenever value/maxFiles change,
     // during render (React's "adjust state when a prop changes" pattern) instead of
-    // in an effect. A null value keeps the previous flag, as before.
-    const [lofSource, setLofSource] = useState<{ value: File[] | null; maxFiles: number } | null>(
-      null,
+    // in an effect. A null value keeps the previous flag, as before. The initial NaN
+    // never equals maxFiles, so the first render always computes the flag.
+    const [lofSource, setLofSource] = useState<{ value: File[] | null | undefined; maxFiles: number }>(
+      { value: undefined, maxFiles: Number.NaN },
     );
-    if (lofSource === null || lofSource.value !== value || lofSource.maxFiles !== maxFiles) {
+    if (lofSource.value !== value || lofSource.maxFiles !== maxFiles) {
       setLofSource({ value, maxFiles });
       if (value) setIsLOF(value.length === maxFiles);
     }
 
-    const opts = dropzoneOptions ? dropzoneOptions : { accept, maxFiles, maxSize, multiple };
+    const opts = dropzoneOptions || { accept, maxFiles, maxSize, multiple };
 
     const dropzoneState = useDropzone({
       ...opts,

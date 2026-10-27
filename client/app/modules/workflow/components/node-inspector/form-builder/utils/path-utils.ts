@@ -26,6 +26,6 @@ const setValueByKeys = (
 ): Record<string, unknown> => {
   const [key, ...rest] = keys;
   if (rest.length === 0) return { ...data, [key]: value };
-  const child = { ...(data[key] || {}) } as Record<string, unknown>;
+  const child = { ...(data[key] as Record<string, unknown> | undefined) };
   return { ...data, [key]: setValueByKeys(child, rest, value) };
 };

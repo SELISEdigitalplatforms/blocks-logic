@@ -41,7 +41,7 @@ const hasOwnSegments = (current: unknown, segments: string[]): boolean => {
   const [segment, ...rest] = segments;
   return (
     isRecord(current) &&
-    Object.prototype.hasOwnProperty.call(current, segment) &&
+    Object.hasOwn(current, segment) &&
     hasOwnSegments(current[segment], rest)
   );
 };

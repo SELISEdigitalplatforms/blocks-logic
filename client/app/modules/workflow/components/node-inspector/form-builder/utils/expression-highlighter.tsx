@@ -157,7 +157,7 @@ type Control = HTMLInputElement | HTMLTextAreaElement;
 const forwardToChildRef = (childRef: React.Ref<Control> | undefined, node: Control | null) => {
   if (typeof childRef === "function") childRef(node);
   else if (childRef && typeof childRef === "object")
-    (childRef as React.MutableRefObject<Control | null>).current = node;
+    (childRef as React.RefObject<Control | null>).current = node;
 };
 
 export const ExpressionHighlighter = ({
