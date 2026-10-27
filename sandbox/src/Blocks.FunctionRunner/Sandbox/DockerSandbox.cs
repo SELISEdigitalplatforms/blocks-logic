@@ -197,8 +197,10 @@ namespace Blocks.FunctionRunner.Sandbox
                 // budget. Folding the first into the two-second grace meant a function with many
                 // dependencies was killed as TIMED_OUT with its handler still inside its limit.
                 var startedAtWall = DateTimeOffset.UtcNow;
-                var deadlineSeconds =
-                    _options.StartupAllowanceSeconds + limits.TimeoutSeconds + _options.KillGraceSeconds;
+                // Never past the hard limit (90 s), whatever the allowance and grace add up to.
+                var deadlineSeconds = Math.Min(
+                    Ceilings.HardLimitSeconds,
+                    _options.StartupAllowanceSeconds + limits.TimeoutSeconds + _options.KillGraceSeconds);
                 var deadline = TimeSpan.FromSeconds(deadlineSeconds);
                 using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 deadlineCts.CancelAfter(deadline);

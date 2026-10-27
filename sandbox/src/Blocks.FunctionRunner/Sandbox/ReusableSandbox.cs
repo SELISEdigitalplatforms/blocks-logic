@@ -469,6 +469,9 @@ namespace Blocks.FunctionRunner.Sandbox
                 && fatalMessage?.Contains("reuse.mjs", StringComparison.Ordinal) == true;
         }
 
+        /// <summary>Replaces one call's deadline, so tests can see a deadline kill without waiting 30 s. Null in production.</summary>
+        internal TimeSpan? CallDeadlineOverride { get; set; }
+
         /// <summary>
         /// Serves one call: writes its envelope line, then reads until that call's <c>idle</c>.
         /// A <c>fatal</c>, an exit, a protocol violation, the output ceiling or the deadline ends
@@ -515,8 +518,10 @@ namespace Blocks.FunctionRunner.Sandbox
             var allowanceLeftMs = firstCall
                 ? Math.Max(0, (_options.StartupAllowanceSeconds * 1000L) - startupMs!.Value)
                 : 0;
-            var budget = TimeSpan.FromMilliseconds(
-                allowanceLeftMs + ((limits.TimeoutSeconds + _options.KillGraceSeconds) * 1000L));
+            // Never past the hard limit (90 s): a first call's start-up counts towards it too.
+            var budget = CallDeadlineOverride ?? TimeSpan.FromMilliseconds(Math.Min(
+                (Ceilings.HardLimitSeconds * 1000L) - (firstCall ? startupMs!.Value : 0),
+                allowanceLeftMs + ((limits.TimeoutSeconds + _options.KillGraceSeconds) * 1000L)));
 
             var call = Stopwatch.StartNew();
             long? handoverMs = null;

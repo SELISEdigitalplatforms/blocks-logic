@@ -44,11 +44,13 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [Fact]
-        public void A_hard_timeout_is_reported_as_timed_out()
+        public void A_sandbox_killed_after_the_grace_is_timed_out_not_a_crash()
         {
-            var (status, code, _) = RunOutcome.Map(false, 137, timedOut: true, cancelled: false, Empty());
+            // Exit 137 (SIGKILL) with no result line would otherwise read as a memory kill.
+            var (status, code, message) = RunOutcome.Map(false, 137, timedOut: true, cancelled: false, Empty());
             status.Should().Be(RunStatuses.TimedOut);
             code.Should().Be(ErrorCodes.TimedOut);
+            message.Should().Be("the function exceeded its 30000 ms time limit");
         }
 
         [Fact]

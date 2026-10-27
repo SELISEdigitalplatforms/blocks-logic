@@ -185,8 +185,9 @@ namespace Functions.DomainService.Services
             };
             function.SourceHash = FunctionHashing.SourceHash(function.Source);
             // Stored as the platform profile, not as sent. The values are fixed, so keeping a
-            // caller's numbers would make the saved document disagree with what actually runs.
-            function.Limits = (request.Limits ?? new FunctionLimits()).Clamp();
+            // caller's numbers would make the saved document disagree with what actually runs —
+            // except concurrency, which the owner sets (1–10, default 3).
+            function.Limits = request.Limits.ClampKeepingConcurrency();
             function.Retry = RetryPolicy.Fixed;
             function.Trigger = NormalizeForStorage(request.Trigger);
             function.OutputActions = request.OutputActions;

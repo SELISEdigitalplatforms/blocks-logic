@@ -96,14 +96,6 @@ namespace Blocks.FunctionRunner.Tests
                 Task.FromResult<string?>(reference);
         }
 
-        private sealed class RoomyHost : IHostSignals
-        {
-            public double Cores => 8;
-
-            public long TotalMemoryBytes => 64L * 1024 * 1024 * 1024;
-
-            public HostSignalSample Sample() => new(0, 0, 0, 64L * 1024 * 1024 * 1024);
-        }
 
         private RunProcessor Processor(ISandbox sandbox, IRunAccessTokenResolver tokens, IRunSecretResolver? secrets = null)
         {
@@ -111,9 +103,8 @@ namespace Blocks.FunctionRunner.Tests
             {
                 RunnerId = "test-runner",
                 RunsDir = _runsDir,
-                MaxActiveSandboxes = 4,
             });
-            var budget = new HostBudget(options, new RoomyHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
+            var budget = new HostRoom(options, new RoomyHost(), NullLogger<HostRoom>.Instance);
 
             return new RunProcessor(_db!, sandbox, new ResolvesAnything(), budget,
                 secrets ?? new FakeRunSecretResolver(new Dictionary<string, string> { ["sec_1"] = "sk_live_SECRET_55" }),
@@ -431,9 +422,8 @@ namespace Blocks.FunctionRunner.Tests
         public async Task A_tenant_at_its_share_defers_and_leaves_no_function_slot_behind()
         {
             Skip.If(Unavailable, "no Redis available");
-            var options = new RunnerOptions { RunnerId = "test-runner", RunsDir = _runsDir, MaxActiveSandboxes = 4 };
-            var budget = new HostBudget(Microsoft.Extensions.Options.Options.Create(options), new RoomyHost(),
-                new SandboxFootprint(), NullLogger<HostBudget>.Instance);
+            var options = new RunnerOptions { RunnerId = "test-runner", RunsDir = _runsDir };
+            var budget = new HostRoom(Microsoft.Extensions.Options.Options.Create(options), new RoomyHost(), NullLogger<HostRoom>.Instance);
             var share = options.TenantSlotLimit(budget.Capacity);
             var held = new List<FunctionConcurrency>();
             for (var i = 0; i < share; i++)

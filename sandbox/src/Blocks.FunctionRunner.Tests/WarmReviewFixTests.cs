@@ -20,14 +20,13 @@ namespace Blocks.FunctionRunner.Tests
     {
         private static readonly WarmKey Key = new("tenant_a", "fn_1", "v1", "img@sha256:aa");
 
-        private static (WarmPool Pool, ScriptedFactory Factory, HostBudget Budget) Pool(
-            Action<RunnerOptions>? configure = null, CalmHost? host = null, ManualTime? time = null)
+        private static (WarmPool Pool, ScriptedFactory Factory, HostRoom Budget) Pool(
+            Action<RunnerOptions>? configure = null, IHostSignals? host = null, ManualTime? time = null)
         {
-            var options = new RunnerOptions { MaxActiveSandboxes = 50, StartCostCpuMs = 0 };
+            var options = new RunnerOptions();
             configure?.Invoke(options);
             var wrapped = Microsoft.Extensions.Options.Options.Create(options);
-            var budget = new HostBudget(wrapped, host ?? new CalmHost(), new SandboxFootprint(),
-                NullLogger<HostBudget>.Instance, time ?? new ManualTime());
+            var budget = new HostRoom(wrapped, host ?? new CalmHost(), NullLogger<HostRoom>.Instance, time ?? new ManualTime());
             var factory = new ScriptedFactory(options);
             return (new WarmPool(factory, budget, wrapped, NullLogger<WarmPool>.Instance, time), factory, budget);
         }
@@ -99,7 +98,7 @@ namespace Blocks.FunctionRunner.Tests
         // ---- 3: a start that throws leaks nothing ---------------------------------------------
 
         [Fact]
-        public async Task A_start_that_throws_leaves_no_entry_memory_or_container()
+        public async Task A_start_that_throws_leaves_no_entry_start_place_or_container()
         {
             var (pool, factory, budget) = Pool();
             await using var _ = pool;
@@ -110,8 +109,7 @@ namespace Blocks.FunctionRunner.Tests
             result.Status.Should().Be(WarmAcquireStatus.StartFailed);
             result.Start!.Status.Should().Be(WarmStartStatus.HostFailure);
             pool.Counts.Total.Should().Be(0);
-            budget.CommittedMemoryBytes.Should().Be(0);
-            budget.Warm.Should().Be(0);
+            budget.Read().ColdStarts.Should().Be(0, "the failed start gave its place back");
             factory.Created[0].Disposed.Should().BeTrue();
         }
 
@@ -132,73 +130,39 @@ namespace Blocks.FunctionRunner.Tests
         // ---- 4: evict only for memory -------------------------------------------------------
 
         [Fact]
-        public void A_warm_refusal_says_why()
+        public async Task A_start_refused_because_three_are_already_starting_evicts_nothing()
         {
-            var time = new ManualTime();
-            var tight = new HostBudget(
-                Microsoft.Extensions.Options.Options.Create(new RunnerOptions { StartCostCpuMs = 0, MaxActiveSandboxes = 10 }),
-                new CalmHost { TotalMemoryBytes = 2048L * 1024 * 1024 }, new SandboxFootprint(), NullLogger<HostBudget>.Instance, time);
-            tight.TryReserveWarm(Ceilings.MemoryBytes, out var memory).Should().BeNull();
-            memory.Should().Be(AdmissionRefusal.Memory);
-
-            var slow = new HostBudget(
-                Microsoft.Extensions.Options.Options.Create(new RunnerOptions { StartCostCpuMs = 800, StartsPerSecondPerCore = 1, MaxActiveSandboxes = 10 }),
-                new CalmHost { Cores = 1 }, new SandboxFootprint(), NullLogger<HostBudget>.Instance, time);
-            using var first = slow.TryReserveWarm(Ceilings.MemoryBytes, out _);
-            slow.TryReserveWarm(Ceilings.MemoryBytes, out var rate).Should().BeNull();
-            rate.Should().Be(AdmissionRefusal.StartRate);
-        }
-
-        [Fact]
-        public async Task A_start_refused_for_the_start_rate_evicts_nothing()
-        {
-            var time = new ManualTime();
-            var (pool, _, _) = Pool(o => { o.StartCostCpuMs = 800; o.StartsPerSecondPerCore = 1; }, new CalmHost { Cores = 1 }, time);
+            var (pool, _, room) = Pool();
             await using var __ = pool;
-
-            (await pool.PrewarmAsync(Key with { FunctionId = "other" }, RunLimits.Default, 1, default)).Should().Be(1);
+            (await pool.WarmUpAsync(Key with { FunctionId = "other" }, 1)).Should().Be(1);
+            var held = Enumerable.Range(0, HostRoom.MaxColdStarts)
+                .Select(i => room.TryStartCold(Ceilings.MemoryBytes, out _)!).ToList();
 
             (await pool.AcquireAsync(Key, RunLimits.Default, default)).Status.Should().Be(WarmAcquireStatus.NoCapacity);
-            pool.Counts.Total.Should().Be(1, "evicting cannot refill the start bucket, so the idle sandbox stays");
+            pool.Counts.Total.Should().Be(1, "removing an idle sandbox frees RAM, not a start place, so it stays");
+            held.ForEach(h => h.Dispose());
         }
 
-        // ---- 5: a single run can take memory back from idle warm sandboxes -------------------
+        // ---- 5: a single run can take RAM back from idle warm sandboxes ----------------------
 
         [Fact]
         public async Task An_idle_warm_sandbox_can_be_evicted_to_make_room()
         {
-            var host = new CalmHost { TotalMemoryBytes = (2048L + 128) * 1024 * 1024 };
-            var (pool, _, budget) = Pool(host: host);
-            await using var _ = pool;
-            await pool.PrewarmAsync(Key, RunLimits.Default, 1, default);
+            WarmPool? pool = null;
+            // Room for one 128 MB sandbox above the 2 GB reserve, read live: each warm sandbox alive takes its RAM.
+            var host = new LiveMemoryHost(() => ((2048L + 128) * 1024 * 1024) - ((pool?.Counts.Total ?? 0) * Ceilings.MemoryBytes));
+            var (created, _, room) = Pool(host: host);
+            pool = created;
+            await using var disposePool = pool;
+            await pool.WarmUpAsync(Key, 1);
 
-            budget.TryReserve(Ceilings.MemoryBytes, out var refusal).Should().BeNull();
-            refusal.Should().Be(AdmissionRefusal.Memory);
+            room.TryStartCold(Ceilings.MemoryBytes, out var refusal).Should().BeNull();
+            refusal.Should().Be(RoomRefusal.Memory);
 
             (await pool.EvictIdleAsync()).Should().BeTrue();
-            using var single = budget.TryReserve(Ceilings.MemoryBytes);
-            single.Should().NotBeNull();
+            using var single = room.TryStartCold(Ceilings.MemoryBytes, out _);
+            single.Should().NotBeNull("the removed sandbox's RAM is free at once — nothing was booked");
             (await pool.EvictIdleAsync()).Should().BeFalse("nothing idle is left");
-        }
-
-        // ---- 6: a start charge without a start is refunded ----------------------------------
-
-        [Fact]
-        public void A_reservation_that_never_started_a_container_gives_its_start_back()
-        {
-            var budget = new HostBudget(
-                Microsoft.Extensions.Options.Options.Create(new RunnerOptions { StartCostCpuMs = 800, StartsPerSecondPerCore = 1, MaxActiveSandboxes = 10 }),
-                new CalmHost { Cores = 1 }, new SandboxFootprint(), NullLogger<HostBudget>.Instance, new ManualTime());
-
-            // Deferred after admission (tenant slot, function slot, lease): nothing started.
-            budget.TryReserve(Ceilings.MemoryBytes)!.Dispose();
-            using (var started = budget.TryReserve(Ceilings.MemoryBytes))
-            {
-                started.Should().NotBeNull("the deferred run's start came back");
-                started!.ContainerStarted();
-            }
-
-            budget.TryReserve(Ceilings.MemoryBytes).Should().BeNull("a start that happened stays spent");
         }
 
         // ---- 7: a reused sandbox that dies before `started` is not the call's failure --------
@@ -220,7 +184,7 @@ namespace Blocks.FunctionRunner.Tests
         {
             var (pool, factory, _) = Pool();
             await using var _ = pool;
-            await pool.PrewarmAsync(Key, RunLimits.Default, 1, default);
+            await pool.WarmUpAsync(Key, 1);
             factory.Created[0].FailUnpause = true;
             var handle = (await pool.AcquireAsync(Key, RunLimits.Default, default)).Handle!;
 
@@ -236,7 +200,7 @@ namespace Blocks.FunctionRunner.Tests
         {
             var (pool, factory, _) = Pool();
             await using var _ = pool;
-            await pool.PrewarmAsync(Key, RunLimits.Default, 1, default);
+            await pool.WarmUpAsync(Key, 1);
 
             var fresh = (await pool.AcquireAsync(Key, RunLimits.Default, default, allowIdle: false)).Handle!;
 
@@ -247,17 +211,17 @@ namespace Blocks.FunctionRunner.Tests
         // ---- 8: drained or shut down while starting ----------------------------------------
 
         [Fact]
-        public async Task A_prewarm_drained_while_starting_is_not_kept()
+        public async Task A_sandbox_drained_while_starting_serves_its_caller_and_is_then_removed()
         {
             var (pool, factory, budget) = Pool();
             await using var _ = pool;
             factory.Configure = c => c.OnStarting = () => pool.DrainAsync(Key.TenantId, Key.FunctionId, Key.VersionId);
 
-            (await pool.PrewarmAsync(Key, RunLimits.Default, 1, default)).Should().Be(0);
+            (await pool.WarmUpAsync(Key, 1)).Should().Be(1, "it was started for its caller");
 
             pool.Counts.Total.Should().Be(0);
             factory.Created[0].Disposed.Should().BeTrue();
-            budget.CommittedMemoryBytes.Should().Be(0);
+            budget.Read().ColdStarts.Should().Be(0);
         }
 
         [Fact]
@@ -270,7 +234,7 @@ namespace Blocks.FunctionRunner.Tests
 
             factory.Created[0].Disposed.Should().BeTrue();
             pool.Counts.Total.Should().Be(0);
-            budget.CommittedMemoryBytes.Should().Be(0);
+            budget.Read().ColdStarts.Should().Be(0);
         }
 
         // ---- 9: concurrent starts respect the version cap -----------------------------------
@@ -313,7 +277,7 @@ namespace Blocks.FunctionRunner.Tests
         {
             var (pool, factory, _) = Pool();
             await using var _ = pool;
-            await pool.PrewarmAsync(Key, RunLimits.Default, 1, default);
+            await pool.WarmUpAsync(Key, 1);
 
             var handle = (await pool.AcquireAsync(Key, RunLimits.Default, default)).Handle!;
             factory.Created[0].Paused.Should().BeTrue();

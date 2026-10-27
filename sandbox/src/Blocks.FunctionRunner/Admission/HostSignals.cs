@@ -3,76 +3,151 @@ using System.Globalization;
 namespace Blocks.FunctionRunner.Admission
 {
     /// <summary>
-    /// One reading of how hard this host is currently working.
-    /// <para>
-    /// The pressure figures are Linux PSI (<c>/proc/pressure/*</c>), in percent of the last ten
-    /// seconds during which at least one task was stalled waiting for the resource. They are the
-    /// reason this design needs no invented efficiency factor: rather than assuming what fraction
-    /// of a machine is usable, the kernel is asked whether anything is actually waiting.
-    /// </para>
+    /// One live reading of the machine. Nothing in it is remembered from an earlier decision: it is
+    /// what the kernel says right now, so a VM resize or a leaked count can never make it wrong for
+    /// longer than one reading (RUNNER-FLOW step 0).
     /// </summary>
-    /// <param name="CpuStalledPercent">PSI cpu <c>some avg10</c>. 0 means nothing waited for CPU.</param>
-    /// <param name="MemoryStalledPercent">PSI memory <c>some avg10</c>: reclaim is costing time.</param>
-    /// <param name="MemoryFullStalledPercent">PSI memory <c>full avg10</c>: everything stalled at once.</param>
+    /// <param name="Cores">Usable cores: the cgroup quota where one applies, else the online CPUs.</param>
+    /// <param name="TotalMemoryBytes">Memory ceiling: the cgroup limit where one applies, else <c>MemTotal</c>.</param>
     /// <param name="AvailableMemoryBytes">
-    /// <c>MemAvailable</c> — the kernel's own estimate of what can still be allocated without
-    /// swapping. Not "free": it counts reclaimable cache, which is what makes it the right number.
+    /// <c>MemAvailable</c> — what can still be allocated without swapping. Not "free": it counts
+    /// reclaimable cache, which is what makes it the right number.
     /// </param>
-    public readonly record struct HostSignalSample(
-        double CpuStalledPercent,
-        double MemoryStalledPercent,
-        double MemoryFullStalledPercent,
-        long AvailableMemoryBytes);
+    /// <param name="BusyCores">CPU in use on the whole machine, in cores, over the last short window.</param>
+    public readonly record struct HostReading(
+        double Cores,
+        long TotalMemoryBytes,
+        long AvailableMemoryBytes,
+        double BusyCores);
 
-    /// <summary>What the admission controller is allowed to know about its host.</summary>
+    /// <summary>What the room check is allowed to know about its host.</summary>
     public interface IHostSignals
     {
-        /// <summary>Usable cores, from the cgroup quota where one applies.</summary>
-        double Cores { get; }
-
-        /// <summary>Memory ceiling, from the cgroup where one applies.</summary>
-        long TotalMemoryBytes { get; }
-
-        /// <summary>Reads the current pressure. Never throws; unreadable signals read as calm.</summary>
-        HostSignalSample Sample();
+        /// <summary>Reads the machine now. Never throws; an unreadable figure reads as the safe answer.</summary>
+        HostReading Read();
     }
 
     /// <summary>
-    /// <see cref="IHostSignals"/> over <c>/proc</c> and cgroup v2.
+    /// <see cref="IHostSignals"/> over <c>/proc</c> and cgroup v2, read again on every call.
     /// <para>
-    /// Everything here is read rather than configured, and everything degrades to a safe answer:
-    /// an unreadable pressure file reads as "no stall", which on its own would let the controller
-    /// grow — so growth is additionally gated on real demand and bounded by the memory arithmetic,
-    /// which is derived from figures that do not depend on PSI being present.
+    /// CPU in use comes from <c>/proc/stat</c>: the busy share of all CPU time between this reading
+    /// and the previous one. The previous reading is the only thing kept, and only to take the
+    /// difference — it is replaced on every call, so it cannot drift or leak.
     /// </para>
     /// </summary>
     public sealed class ProcHostSignals : IHostSignals
     {
-        private const string CpuPressurePath = "/proc/pressure/cpu";
-        private const string MemoryPressurePath = "/proc/pressure/memory";
+        private const string StatPath = "/proc/stat";
         private const string MemInfoPath = "/proc/meminfo";
         private const string CgroupCpuMaxPath = "/sys/fs/cgroup/cpu.max";
         private const string CgroupMemoryMaxPath = "/sys/fs/cgroup/memory.max";
 
-        public ProcHostSignals()
+        /// <summary>
+        /// The shortest window a CPU figure is taken over. Two checks a few milliseconds apart would
+        /// otherwise divide almost nothing by almost nothing; inside this window the last figure stands.
+        /// </summary>
+        internal static readonly TimeSpan MinCpuWindow = TimeSpan.FromMilliseconds(250);
+
+        private readonly Lock _gate = new();
+        private readonly TimeProvider _time;
+        private CpuTimes? _last;
+        private long _lastTicks;
+        private double _lastBusyFraction;
+
+        public ProcHostSignals() : this(TimeProvider.System)
         {
-            Cores = ReadCores();
-            TotalMemoryBytes = ReadTotalMemory();
         }
 
-        public double Cores { get; }
+        internal ProcHostSignals(TimeProvider time)
+        {
+            _time = time;
+        }
 
-        public long TotalMemoryBytes { get; }
+        public HostReading Read()
+        {
+            var cores = ReadCores();
+            var total = ReadTotalMemory();
+            // Unreadable MemAvailable (no /proc) reads as "all of it": an unknown figure must not
+            // refuse every start for ever. On Linux it is always there.
+            var available = ReadMemInfo("MemAvailable:") ?? total;
+            return new HostReading(cores, total, Math.Min(available, total), BusyFraction() * cores);
+        }
 
-        public HostSignalSample Sample() => new(
-            ReadPressure(CpuPressurePath, "some"),
-            ReadPressure(MemoryPressurePath, "some"),
-            ReadPressure(MemoryPressurePath, "full"),
-            ReadAvailableMemory());
+        /// <summary>The busy share (0–1) of all CPUs since the previous reading.</summary>
+        private double BusyFraction()
+        {
+            var now = ReadCpuTimes();
+            if (now is null) return 0;
+
+            lock (_gate)
+            {
+                var ticks = _time.GetTimestamp();
+                if (_last is not null && _time.GetElapsedTime(_lastTicks, ticks) < MinCpuWindow)
+                {
+                    return _lastBusyFraction;
+                }
+
+                if (_last is { } before)
+                {
+                    _lastBusyFraction = BusyBetween(before, now.Value);
+                }
+                _last = now;
+                _lastTicks = ticks;
+                return _lastBusyFraction;
+            }
+        }
+
+        /// <summary>Total and idle CPU time from the first (all-CPU) line of <c>/proc/stat</c>.</summary>
+        internal readonly record struct CpuTimes(long Total, long Idle);
+
+        /// <summary>The busy share between two readings; 0 when no time passed.</summary>
+        internal static double BusyBetween(CpuTimes before, CpuTimes after)
+        {
+            var total = after.Total - before.Total;
+            var idle = after.Idle - before.Idle;
+            if (total <= 0) return 0;
+            return Math.Clamp((double)(total - idle) / total, 0, 1);
+        }
 
         /// <summary>
-        /// Cores the runner may actually use. A cgroup quota wins over the machine's core count,
-        /// so a containerised runner budgets against its own slice rather than the host's.
+        /// Parses the aggregate <c>cpu</c> line: user nice system idle iowait irq softirq steal …
+        /// Idle is idle + iowait (a CPU waiting on disk can still run a sandbox).
+        /// </summary>
+        internal static CpuTimes? ParseCpuLine(string line)
+        {
+            if (!line.StartsWith("cpu ", StringComparison.Ordinal)) return null;
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 5) return null;
+
+            long total = 0;
+            long idle = 0;
+            // Guest time (fields 9–10) is already inside user/nice, so it is not added twice.
+            for (var i = 1; i < Math.Min(parts.Length, 9); i++)
+            {
+                if (!long.TryParse(parts[i], NumberStyles.None, CultureInfo.InvariantCulture, out var value)) return null;
+                total += value;
+                if (i is 4 or 5) idle += value;
+            }
+            return new CpuTimes(total, idle);
+        }
+
+        private static CpuTimes? ReadCpuTimes()
+        {
+            try
+            {
+                foreach (var line in File.ReadLines(StatPath))
+                {
+                    return ParseCpuLine(line);
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return null;
+        }
+
+        /// <summary>
+        /// Cores the runner may use, read now: a cgroup quota wins over the machine's count, so a
+        /// containerised runner plans against its own slice.
         /// </summary>
         private static double ReadCores()
         {
@@ -91,6 +166,20 @@ namespace Blocks.FunctionRunner.Admission
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
 
+            return OnlineCpus();
+        }
+
+        /// <summary>The per-CPU lines of <c>/proc/stat</c>, so a hot-added CPU counts without a restart.</summary>
+        private static int OnlineCpus()
+        {
+            try
+            {
+                var count = File.ReadLines(StatPath)
+                    .Count(l => l.StartsWith("cpu", StringComparison.Ordinal) && l.Length > 3 && char.IsAsciiDigit(l[3]));
+                if (count > 0) return count;
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
             return Environment.ProcessorCount;
         }
 
@@ -107,74 +196,31 @@ namespace Blocks.FunctionRunner.Admission
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
 
-            return GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+            return ReadMemInfo("MemTotal:") ?? GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
         }
 
-        /// <summary>
-        /// MemAvailable in bytes, or <see cref="long.MaxValue"/> when it cannot be read — an
-        /// unknown figure must not be mistaken for a host that is out of memory, because that
-        /// would wedge admission at one sandbox forever. The static memory bound still applies.
-        /// </summary>
-        private static long ReadAvailableMemory()
+        private static long? ReadMemInfo(string field)
         {
             try
             {
                 foreach (var line in File.ReadLines(MemInfoPath))
                 {
-                    if (!line.StartsWith("MemAvailable:", StringComparison.Ordinal)) continue;
-
-                    var digits = line.AsSpan("MemAvailable:".Length).Trim();
-                    var end = digits.IndexOf(' ');
-                    if (end > 0) digits = digits[..end];
-
-                    if (long.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var kb))
-                    {
-                        return kb * 1024;
-                    }
-                    break;
+                    if (line.StartsWith(field, StringComparison.Ordinal)) return ParseMemInfoKb(line, field);
                 }
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
-
-            return long.MaxValue;
+            return null;
         }
 
-        /// <summary>Parses one PSI line, e.g. <c>some avg10=0.00 avg60=0.01 …</c>.</summary>
-        internal static double ParsePressure(string content, string kind)
+        /// <summary>Parses one <c>/proc/meminfo</c> line, e.g. <c>MemAvailable:  123456 kB</c>, into bytes.</summary>
+        internal static long? ParseMemInfoKb(string line, string field)
         {
-            foreach (var line in content.Split('\n'))
-            {
-                if (!line.StartsWith(kind, StringComparison.Ordinal)) continue;
-
-                const string marker = "avg10=";
-                var at = line.IndexOf(marker, StringComparison.Ordinal);
-                if (at < 0) return 0;
-
-                var rest = line.AsSpan(at + marker.Length);
-                var end = rest.IndexOf(' ');
-                if (end > 0) rest = rest[..end];
-
-                return double.TryParse(rest, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
-                    ? value
-                    : 0;
-            }
-
-            return 0;
-        }
-
-        private static double ReadPressure(string path, string kind)
-        {
-            try
-            {
-                return ParsePressure(File.ReadAllText(path), kind);
-            }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
-
-            // PSI absent (a kernel without CONFIG_PSI). Reads as calm; growth is still bounded by
-            // the memory arithmetic and by demand, so this degrades to capacity-based admission.
-            return 0;
+            if (!line.StartsWith(field, StringComparison.Ordinal)) return null;
+            var digits = line.AsSpan(field.Length).Trim();
+            var end = digits.IndexOf(' ');
+            if (end > 0) digits = digits[..end];
+            return long.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var kb) ? kb * 1024 : null;
         }
     }
 }

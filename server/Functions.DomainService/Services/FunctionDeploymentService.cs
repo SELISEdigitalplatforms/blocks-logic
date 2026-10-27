@@ -56,11 +56,7 @@ namespace Functions.DomainService.Services
         private readonly ICacheClient _cache;
         private readonly IConfiguration _configuration;
         private readonly ILogger<FunctionDeploymentService> _logger;
-        private readonly Storage.IFunctionArtifactStore? _artifacts;
         private readonly IFunctionEventSettingsRepository? _eventSettings;
-
-        /// <summary>Warm sandboxes asked for per deploy when <c>Functions:PrewarmCount</c> is not set.</summary>
-        internal const int DefaultPrewarmCount = 1;
 
         /// <summary>
         /// Upper bound on <see cref="FunctionQueueKeys.WarmStream"/>'s length, applied on every
@@ -68,7 +64,7 @@ namespace Functions.DomainService.Services
         /// reads it through its own consumer group and only acknowledges — never deletes — so that
         /// every host sees every drain. Without it the stream would grow for ever. An entry is
         /// advisory and useful for seconds, so the last ~1000 deploys are far more than any runner
-        /// that is up needs; one that was down misses old pre-warms, which only costs a cold start.
+        /// that is up needs; one that was down misses old drains, and its clean-up removes those idle sandboxes anyway.
         /// </summary>
         internal const int WarmStreamMaxLength = 1000;
 
@@ -83,10 +79,8 @@ namespace Functions.DomainService.Services
             ICacheClient cache,
             IConfiguration configuration,
             ILogger<FunctionDeploymentService> logger,
-            Storage.IFunctionArtifactStore? artifacts = null,
             IFunctionEventSettingsRepository? eventSettings = null)
         {
-            _artifacts = artifacts;
             _eventSettings = eventSettings;
             _functionRepository = functionRepository;
             _versionRepository = versionRepository;
@@ -180,7 +174,7 @@ namespace Functions.DomainService.Services
                     CodeHash = FunctionHashing.CodeHash(function.Source),
                     ManifestHash = FunctionHashing.ManifestHash(function.Source),
                     Source = function.Source,
-                    Limits = function.Limits.Clamp(),
+                    Limits = function.Limits.ClampKeepingConcurrency(),
                     Retry = function.Retry,
                     Trigger = function.Trigger,
                     OutputActions = function.OutputActions,
@@ -243,7 +237,7 @@ namespace Functions.DomainService.Services
             // adds a version, so it is the only moment the cap can be exceeded.
             await _retentionService.PruneAsync(tenantId, function.ItemId, created.ItemId, cancellationToken);
 
-            await TryPublishPrewarmAsync(tenantId, created, previousVersionId);
+            await TryPublishDrainAsync(tenantId, created, previousVersionId);
 
             return new DeployOutcome(FunctionVersionSummaryDto.From(created));
         }
@@ -271,87 +265,43 @@ namespace Functions.DomainService.Services
         }
 
         /// <summary>
-        /// Tells the runners about a version that has just gone Live (sandbox/REUSE.md, "Pre-warm"):
-        /// start warm sandboxes for it when it opted into <c>ReuseSandbox</c>, and drain the idle
-        /// warm sandboxes of the version it replaced.
-        /// <list type="bullet">
-        /// <item>New version reuses → one entry, <c>count</c> = <c>Functions:PrewarmCount</c>
-        /// (default 1; ≤ 0 starts none but still drains), <c>drainVersionId</c> = the previous
-        /// version.</item>
-        /// <item>New version does not reuse, the previous one did → one entry with <c>count=0</c>
-        /// and <c>drainVersionId</c> = the previous version, so turning the switch off does not
-        /// leave its warm sandboxes idling until they age out.</item>
-        /// <item>Neither reuses → nothing at all: a function that never touches the switch deploys
-        /// exactly as before, without even the lookup of its previous version.</item>
-        /// </list>
+        /// Tells the runners that a version has just replaced another (RUNNER-FLOW step 2.2): one entry
+        /// on the warm stream asking every runner to drain the idle warm sandboxes of the previous
+        /// version. Nothing is pre-warmed (step 2.1): the first call of the new version warms it.
         /// <para>
         /// <b>Best effort, never part of the deploy's outcome.</b> The version is already Live when
-        /// this runs; a pre-warm only saves the first caller a cold start, and a missed drain only
-        /// leaves idle sandboxes until their idle timeout. Failing the deploy for either — a Redis or
-        /// Mongo blip after the pointer moved — would report a deploy as failed that in fact
-        /// succeeded, so a failure is logged and swallowed. Not cancellable for the same reason.
+        /// this runs; a missed drain only leaves idle sandboxes until the runners' clean-up removes
+        /// them (60 s / 600 s idle). Failing the deploy for it — a Redis blip after the pointer moved —
+        /// would report a deploy as failed that in fact succeeded, so a failure is logged and
+        /// swallowed. Not cancellable for the same reason.
         /// </para>
         /// </summary>
-        private async Task TryPublishPrewarmAsync(string tenantId, FunctionVersionEntity version, string? previousVersionId)
+        private async Task TryPublishDrainAsync(string tenantId, FunctionVersionEntity version, string? previousVersionId)
         {
-            var drain = string.IsNullOrEmpty(previousVersionId)
-                || string.Equals(previousVersionId, version.ItemId, StringComparison.Ordinal)
-                ? string.Empty
-                : previousVersionId;
+            if (string.IsNullOrEmpty(previousVersionId)
+                || string.Equals(previousVersionId, version.ItemId, StringComparison.Ordinal))
+            {
+                return;
+            }
 
             try
             {
-                // Reuse is always on for deployed functions (2026-10-06), so every deploy pre-warms the
-                // new version and drains the one it replaced.
-                var count = Math.Max(0, _configuration.GetValue("Functions:PrewarmCount", DefaultPrewarmCount));
-                if (count == 0 && drain.Length == 0) return;
-
-                var entry = new List<NameValueEntry>
-                {
-                    new("tenantId", tenantId),
-                    new("functionId", version.FunctionId),
-                    new("versionId", version.ItemId),
-                    new("image", FunctionRunImage.For(version)),
-                    new("count", count),
-                    new("drainVersionId", drain),
-                };
-
-                // An artifact-built version exists on no registry: without the artifact's address a
-                // runner cannot make its image ahead of the first call, and the pre-warm did nothing
-                // (seen 2026-10-06 — the first call after every deploy was cold). Same signed,
-                // read-only URL and hash a run carries. Best effort: no URL → no pre-warm, as before.
-                if (count > 0 && !string.IsNullOrEmpty(version.ArtifactId) && _artifacts is not null)
-                {
-                    try
-                    {
-                        var url = await _artifacts.CreateDownloadUrlAsync(
-                            tenantId, version.ArtifactId!, FunctionInvocationService.ArtifactDownloadWindow,
-                            CancellationToken.None).ConfigureAwait(false);
-                        if (!string.IsNullOrEmpty(url))
-                        {
-                            entry.Add(new NameValueEntry(FunctionQueueKeys.RunArtifactUrlField, url));
-                            entry.Add(new NameValueEntry(
-                                FunctionQueueKeys.RunArtifactSha256Field, version.ArtifactSha256 ?? string.Empty));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning("No artifact URL for pre-warming version {VersionId} ({Type})",
-                            version.ItemId, ex.GetType().Name);
-                    }
-                }
-
                 await _cache.CacheDatabase().StreamAddAsync(
                     FunctionQueueKeys.WarmStream,
-                    [.. entry],
+                    [
+                        new("tenantId", tenantId),
+                        new("functionId", version.FunctionId),
+                        new("versionId", version.ItemId),
+                        new("drainVersionId", previousVersionId),
+                    ],
                     maxLength: WarmStreamMaxLength,
                     useApproximateMaxLength: true).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex,
-                    "Could not publish the pre-warm/drain request for function {FunctionId} version {VersionId}; "
-                    + "the deploy stands and the first call will start a sandbox cold",
+                    "Could not publish the drain request for function {FunctionId} version {VersionId}; "
+                    + "the deploy stands and the old version's idle sandboxes go on their own",
                     version.FunctionId, version.ItemId);
             }
         }

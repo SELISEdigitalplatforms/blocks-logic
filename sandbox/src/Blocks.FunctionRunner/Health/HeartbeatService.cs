@@ -19,7 +19,7 @@ namespace Blocks.FunctionRunner.Health
     public sealed class HeartbeatService : BackgroundService
     {
         private readonly IDatabase _db;
-        private readonly HostBudget _budget;
+        private readonly HostRoom _room;
         private readonly StartupGuard _guard;
         private readonly RunnerOptions _options;
         private readonly ILogger<HeartbeatService> _logger;
@@ -28,7 +28,7 @@ namespace Blocks.FunctionRunner.Health
 
         public HeartbeatService(
             IDatabase db,
-            HostBudget budget,
+            HostRoom room,
             StartupGuard guard,
             IOptions<RunnerOptions> options,
             ILogger<HeartbeatService> logger,
@@ -37,7 +37,7 @@ namespace Blocks.FunctionRunner.Health
         {
             _fleet = fleet;
             _db = db;
-            _budget = budget;
+            _room = room;
             _guard = guard;
             _options = options.Value;
             _logger = logger;
@@ -60,16 +60,26 @@ namespace Blocks.FunctionRunner.Health
                     var readiness = await _guard.CheckAsync(stoppingToken).ConfigureAwait(false);
                     Latest = readiness;
 
-                    // Warm sandboxes are reported apart from `active`: an idle one holds memory
-                    // and no slot, so neither number alone says how full this runner is.
+                    // The real state, readable without logging in to the host (RUNNER-FLOW step 0.5):
+                    // what the room check sees right now, and why it last said no. Display only —
+                    // nothing decides on these numbers.
                     var (warmTotal, warmBusy, warmIdle) = _warm?.Counts ?? (0, 0, 0);
+                    var room = _room.Read();
 
                     await _db.HashSetAsync(key,
                     [
                         new HashEntry("runnerId", _options.RunnerId),
                         new HashEntry("version", version),
-                        new HashEntry("active", _budget.Active.ToString(CultureInfo.InvariantCulture)),
-                        new HashEntry("capacity", _budget.Capacity.ToString(CultureInfo.InvariantCulture)),
+                        // What the fleet's tenant share is a share of (FleetCapacity): sandbox cores / 100m.
+                        new HashEntry("capacity", HostRoom.CapacityOf(room).ToString(CultureInfo.InvariantCulture)),
+                        new HashEntry("cpuCores", Number(room.Cores)),
+                        new HashEntry("cpuReserved", Number(room.ReservedCores)),
+                        new HashEntry("cpuInUse", Number(room.BusyCores)),
+                        new HashEntry("cpuForSandboxes", Number(room.SandboxCores)),
+                        new HashEntry("cpuFreeForSandboxes", Number(room.SandboxCpuFree)),
+                        new HashEntry("ramFreeMb", (room.AvailableMemoryBytes / 1024 / 1024).ToString(CultureInfo.InvariantCulture)),
+                        new HashEntry("coldStarts", room.ColdStarts.ToString(CultureInfo.InvariantCulture)),
+                        new HashEntry("lastRefusal", _room.LastRefusal),
                         new HashEntry("gvisorOk", readiness.GvisorOk ? "true" : "false"),
                         new HashEntry("healthy", readiness.Healthy ? "true" : "false"),
                         new HashEntry("detail", readiness.Summary),
@@ -120,5 +130,7 @@ namespace Blocks.FunctionRunner.Health
                 // Shutting down anyway; the TTL will clear it.
             }
         }
+
+        private static string Number(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
     }
 }

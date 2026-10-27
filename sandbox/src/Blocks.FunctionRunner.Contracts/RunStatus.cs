@@ -116,9 +116,16 @@ namespace Blocks.FunctionRunner.Contracts
 
         /// <summary>
         /// A run started by a function event waited in <see cref="RedisKeys.EventRunsStream"/> longer than
-        /// the runner's <c>EventRunMaxWaitSeconds</c> (default 5 minutes), so it was not started. Nothing ran.
+        /// the runner's <c>EventRunMaxWaitSeconds</c> (default 30 minutes), so it was not started. Nothing ran.
         /// Not retryable: the control plane closes the run and dead-letters the event.
         /// </summary>
         public const string EventExpired = "EVENT_EXPIRED";
+
+        /// <summary>
+        /// A run waited in the queue longer than the runner's <c>RunMaxWaitSeconds</c> (30 minutes) and was
+        /// not started: no runner had room for it in that time (RUNNER-FLOW step 4.1). Nothing ran. The
+        /// control plane's own code for "never ran, not retryable" (mirrors <c>Wire.Undeliverable</c>).
+        /// </summary>
+        public const string Undeliverable = "UNDELIVERABLE";
     }
 }

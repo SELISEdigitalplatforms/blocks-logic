@@ -1,4 +1,3 @@
-using System.Globalization;
 using Blocks.FunctionRunner.Contracts;
 using Blocks.FunctionRunner.Options;
 using Blocks.FunctionRunner.Redis;
@@ -11,92 +10,45 @@ using StackExchange.Redis;
 namespace Blocks.FunctionRunner.Runs
 {
     /// <summary>
-    /// Looks after the warm pool: pre-warm and drain requests from <see cref="RedisKeys.WarmStream"/>,
-    /// and the periodic sweep that retires idle sandboxes. Does nothing at all unless
+    /// Drains old versions from the warm pool: when a new version goes Live the control plane puts
+    /// "drain the old version" on <see cref="RedisKeys.WarmStream"/> (RUNNER-FLOW step 2.2). Nothing
+    /// is pre-warmed: a count or image on an entry from an older control plane is ignored, and the
+    /// first call of a version warms it. The idle clean-up runs on its own timer
+    /// (<see cref="WarmSweepService"/>), so nothing here can hold it up. Does nothing at all unless
     /// <see cref="RunnerOptions.SandboxReuse"/> is on.
     /// <para>
     /// Unlike the runs and builds streams, every runner reads every entry here: each through a
-    /// consumer group of its own (<see cref="RedisKeys.WarmGroup"/>). A pre-warm is a hint any
-    /// host may act on, but a drain is an instruction each host holding the old version must
-    /// see — with one shared group, only whichever runner claimed it would have drained. Entries
+    /// consumer group of its own (<see cref="RedisKeys.WarmGroup"/>). A drain is an instruction each
+    /// host holding the old version must see — with one shared group, only whichever runner claimed
+    /// it would have drained. Entries
     /// are therefore acknowledged and never deleted here (another runner's group still owes
     /// them); the control plane keeps the stream short with MAXLEN when it adds to it.
-    /// </para>
-    /// <para>
-    /// Everything here is best effort. A pre-warm that finds no room starts fewer sandboxes, or
-    /// none; nothing is retried, because the first real run starts one anyway.
     /// </para>
     /// </summary>
     public sealed class WarmConsumerService : BackgroundService
     {
-        /// <summary>How often idle sandboxes are checked against the idle timeout and the maximum age.</summary>
-        internal static readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(15);
-
-        /// <summary>The most sandboxes one entry may ask for; a typo must not fill the host.</summary>
-        internal const int MaxCountPerEntry = 50;
-
         private readonly IDatabase _db;
         private readonly WarmPool _pool;
-        private readonly IImageResolver _images;
         private readonly RunnerOptions _options;
         private readonly ILogger<WarmConsumerService> _logger;
 
         public WarmConsumerService(
             IDatabase db,
             WarmPool pool,
-            IImageResolver images,
             IOptions<RunnerOptions> options,
-            ILogger<WarmConsumerService> logger,
-            WarmKeyJournal? journal = null)
+            ILogger<WarmConsumerService> logger)
         {
             _db = db;
             _pool = pool;
-            _images = images;
             _options = options.Value;
             _logger = logger;
-            _journal = journal;
-        }
-
-        private readonly WarmKeyJournal? _journal;
-
-        /// <summary>
-        /// Warms again, one sandbox each, the versions this host kept warm before it restarted
-        /// (<see cref="WarmKeyJournal"/>) — so a runner restart or deploy does not hand each one's
-        /// next caller a ~10 s cold start. Nothing is built for it: an artifact-built image no longer
-        /// on this host is skipped (its next call brings the artifact), a registry image is pulled as
-        /// a call would pull it, and a version retired meanwhile is drained by its pending warm entry
-        /// like any other. Capacity is the pool's own (host budget), so it never crowds out
-        /// real calls.
-        /// </summary>
-        internal async Task<int> RewarmAsync(CancellationToken token)
-        {
-            if (_journal is null) return 0;
-            var warmed = 0;
-            foreach (var key in _journal.Load())
-            {
-                if (token.IsCancellationRequested) break;
-                try
-                {
-                    // No artifact URL, so never a download or a build.
-                    var image = await _images.EnsureAsync(key.Image, token).ConfigureAwait(false);
-                    if (image is null) continue;
-                    warmed += await _pool.PrewarmAsync(key, RunLimits.Default, 1, token).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogWarning("Could not warm function {FunctionId} version {VersionId} again after the restart ({ExceptionType})",
-                        key.FunctionId, key.VersionId, ex.GetType().Name);
-                }
-            }
-            if (warmed > 0) _logger.LogInformation("Warmed {Count} sandbox(es) again after the restart", warmed);
-            return warmed;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             if (!_options.SandboxReuse || !_options.ProcessRuns)
             {
-                _logger.LogInformation("Sandbox reuse is off on this host; not pre-warming");
+                _logger.LogInformation("Sandbox reuse is off on this host; no warm sandboxes to drain");
                 return;
             }
 
@@ -106,20 +58,10 @@ namespace Blocks.FunctionRunner.Runs
 
             _logger.LogInformation("Consuming {Stream} as {Group}", RedisKeys.WarmStream, group);
 
-            // Beside the loop, not before it: the warm stream (drains included) is read meanwhile.
-            _ = Task.Run(() => RewarmAsync(stoppingToken), CancellationToken.None);
-
-            var nextSweep = DateTimeOffset.UtcNow.Add(SweepInterval);
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    if (DateTimeOffset.UtcNow >= nextSweep)
-                    {
-                        nextSweep = DateTimeOffset.UtcNow.Add(SweepInterval);
-                        await _pool.SweepAsync().ConfigureAwait(false);
-                    }
-
                     var entries = await consumer.ReadNewAsync(count: 10, stoppingToken).ConfigureAwait(false);
                     if (entries.Count == 0)
                     {
@@ -130,7 +72,7 @@ namespace Blocks.FunctionRunner.Runs
                     foreach (var entry in entries)
                     {
                         await HandleThenAcknowledgeAsync(
-                            () => HandleAsync(entry, stoppingToken),
+                            () => HandleAsync(entry),
                             () => _db.StreamAcknowledgeAsync(RedisKeys.WarmStream, group, entry.Id),
                             _logger).ConfigureAwait(false);
                     }
@@ -148,10 +90,10 @@ namespace Blocks.FunctionRunner.Runs
         }
 
         /// <summary>
-        /// Handles one entry and acknowledges it whatever happened. A pre-warm is a best-effort
-        /// hint: one that failed is logged and dropped, never retried — retrying would only grow
-        /// this group's pending list with entries nobody acknowledges, and the version's first run
-        /// starts a sandbox anyway.
+        /// Handles one entry and acknowledges it whatever happened. A drain that failed is logged and
+        /// dropped, never retried — retrying would only grow this group's pending list with entries
+        /// nobody acknowledges, and the old version's sandboxes go anyway: idle ones by the clean-up
+        /// (60 s / 600 s), busy ones when their call ends.
         /// </summary>
         internal static async Task HandleThenAcknowledgeAsync(Func<Task> handle, Func<Task> acknowledge, ILogger logger)
         {
@@ -163,7 +105,7 @@ namespace Blocks.FunctionRunner.Runs
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogWarning(ex, "A pre-warm request failed; dropping it");
+                logger.LogWarning(ex, "A drain request failed; dropping it");
             }
             finally
             {
@@ -188,68 +130,23 @@ namespace Blocks.FunctionRunner.Runs
             }
         }
 
-        /// <summary>One pre-warm entry: drain the old version first (it frees room), then warm the new.</summary>
-        internal async Task HandleAsync(ClaimedEntry entry, CancellationToken token)
+        /// <summary>One entry: drain the old version's warm sandboxes. Anything else on it is ignored.</summary>
+        internal async Task HandleAsync(ClaimedEntry entry)
         {
             ArgumentNullException.ThrowIfNull(entry);
 
             var tenantId = entry.Get("tenantId") ?? string.Empty;
             var functionId = entry.Get("functionId");
-            var versionId = entry.Get("versionId");
-            var image = entry.Get("image");
             var drain = entry.Get("drainVersionId");
+            if (string.IsNullOrWhiteSpace(functionId) || string.IsNullOrWhiteSpace(drain)) return;
 
-            if (!string.IsNullOrWhiteSpace(functionId) && !string.IsNullOrWhiteSpace(drain))
+            var drained = await _pool.DrainAsync(tenantId, functionId, drain).ConfigureAwait(false);
+            if (drained > 0)
             {
-                var drained = await _pool.DrainAsync(tenantId, functionId, drain).ConfigureAwait(false);
-                if (drained > 0)
-                {
-                    _logger.LogInformation(
-                        "Drained {Count} idle warm sandbox(es) of function {FunctionId} version {VersionId}",
-                        drained, functionId, drain);
-                }
+                _logger.LogInformation(
+                    "Drained {Count} idle warm sandbox(es) of function {FunctionId} version {VersionId}",
+                    drained, functionId, drain);
             }
-
-            // Per runner, deliberately: every runner reads every entry (its own group), so a count
-            // of 2 on a fleet of three warms up to six sandboxes — each host that may receive the
-            // version's runs gets its own, and each stays within its own host budget.
-            var count = Math.Clamp(entry.GetInt("count", 1), 0, MaxCountPerEntry);
-            if (count == 0 || string.IsNullOrWhiteSpace(functionId) || string.IsNullOrWhiteSpace(versionId)
-                || string.IsNullOrWhiteSpace(image))
-            {
-                return;
-            }
-
-            // The run entry's image reference, resolved the same way a run resolves it — including
-            // building it from the version's artifact when the entry carries one (an artifact-built
-            // version is on no registry). Without either, this host does not pre-warm it and its
-            // first run builds it as usual.
-            var resolved = await _images.EnsureAsync(
-                image, token,
-                entry.Get(RedisKeys.RunArtifactUrlField),
-                entry.Get(RedisKeys.RunArtifactSha256Field)).ConfigureAwait(false);
-            if (resolved is null)
-            {
-                _logger.LogInformation("Not pre-warming function {FunctionId}: image {Image} is not available here",
-                    functionId, image);
-                return;
-            }
-
-            var limits = RunLimits.Clamp(
-                ReadInt(entry, "cpuMillicores"), ReadLong(entry, "memoryBytes"), ReadInt(entry, "pidLimit"),
-                ReadLong(entry, "tmpfsBytes"), ReadInt(entry, "timeoutSeconds"), ReadInt(entry, "concurrency"));
-
-            var started = await _pool.PrewarmAsync(
-                new WarmKey(tenantId, functionId, versionId, resolved), limits, count, token).ConfigureAwait(false);
-            _logger.LogInformation(
-                "Pre-warmed {Started} of {Count} sandbox(es) for function {FunctionId} version {VersionId}",
-                started, count, functionId, versionId);
         }
-
-        private static int? ReadInt(ClaimedEntry e, string key) =>
-            int.TryParse(e.Get(key), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;
-
-        private static long? ReadLong(ClaimedEntry e, string key) =>
-            long.TryParse(e.Get(key), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;
     }
 }

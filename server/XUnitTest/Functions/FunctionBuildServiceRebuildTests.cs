@@ -103,6 +103,17 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public async Task A_queued_build_becomes_its_functions_newest_so_a_runner_stops_the_older_one()
+        {
+            var build = await Service().EnsureImageAsync(Tenant, Function(), default, waitSecondsOverride: 0);
+
+            // RUNNER-FLOW step 1.1, newest wins: the runner compares its build with this key.
+            var set = _database.Invocations.Single(i => i.Method.Name == "StringSetAsync"
+                && i.Arguments[0].ToString() == FunctionQueueKeys.BuildLatest(Tenant, "fn_1"));
+            set.Arguments[1].ToString().Should().Be(build.ItemId);
+        }
+
+        [Fact]
         public async Task A_rebuild_is_not_even_looked_up_in_the_cache()
         {
             await Service(succeeded: Succeeded())

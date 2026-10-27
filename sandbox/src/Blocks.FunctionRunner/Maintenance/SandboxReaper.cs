@@ -12,7 +12,20 @@ using StackExchange.Redis;
 namespace Blocks.FunctionRunner.Maintenance
 {
     /// <summary>
-    /// Clears state that outlived the runner that created it — containers and run directories.
+    /// The auto clean-up (RUNNER-FLOW step 9): every 15 s, on its own timer, it lists the sandbox
+    /// containers on this host from Docker and removes the ones that are dead, hung or nobody's — so
+    /// the real containers clean themselves and nothing waits for a restart. Removed → its CPU and
+    /// RAM are free at once. A Docker failure is logged and tried again on the next pass; it never
+    /// blocks anything else.
+    /// <list type="bullet">
+    /// <item>A run container busy longer than the hard limit (90 s) → killed and removed, and its
+    /// run's lease released so the run can be retried. So is one whose run holds no lease.</item>
+    /// <item>A warm call (or start) busy longer than 90 s → its sandbox removed.</item>
+    /// <item>A build container older than the hard build limit (15 min) → killed and removed.</item>
+    /// <item>A warm sandbox this runner does not know (left by a crashed runner process) → removed;
+    /// one of ours that Docker shows exited → removed from the pool. Paused ones are left to the
+    /// warm clean-up.</item>
+    /// </list>
     /// <para>
     /// A runner killed mid-execution leaves its container running: the sandbox has no idea its
     /// supervisor is gone, and keeps burning CPU and memory until its own soft deadline. Nothing
@@ -32,7 +45,11 @@ namespace Blocks.FunctionRunner.Maintenance
     /// </summary>
     public sealed class SandboxReaper : BackgroundService
     {
-        private static readonly TimeSpan Interval = TimeSpan.FromMinutes(5);
+        /// <summary>How often the clean-up runs (RUNNER-FLOW step 9.1).</summary>
+        internal static readonly TimeSpan Interval = TimeSpan.FromSeconds(15);
+
+        /// <summary>No run or warm call may be busy longer than this; past it the sandbox is dead or hung.</summary>
+        internal static readonly TimeSpan RunHardLimit = TimeSpan.FromSeconds(Ceilings.HardLimitSeconds);
 
         private readonly IDockerClient _docker;
         private readonly IDatabase _db;
@@ -58,11 +75,19 @@ namespace Blocks.FunctionRunner.Maintenance
                 try
                 {
                     await ReapAsync(stoppingToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning("Sandbox clean-up failed: {Message}; trying again in {Seconds} s", ex.Message, Interval.TotalSeconds);
+                }
+
+                try
+                {
                     await ReapDirectoriesAsync().ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    _logger.LogWarning("Sandbox reaping failed: {Message}", ex.Message);
+                    _logger.LogWarning("Directory clean-up failed: {Message}", ex.Message);
                 }
 
                 try
@@ -97,42 +122,68 @@ namespace Blocks.FunctionRunner.Maintenance
                 var runId = name[SandboxProfile.ContainerPrefix.Length..];
                 if (runId.Length == 0) continue;
 
+                // Busy past the hard limit: no run may last longer, so it is dead or hung — whoever
+                // holds its lease. Its lease is released so the run can be retried.
+                var hung = IsPastHardLimit(container.Created.ToUniversalTime(), DateTime.UtcNow);
                 // A live lease means somebody is supervising this sandbox right now. Leave it.
-                if (await _db.KeyExistsAsync(RedisKeys.Lease(runId)).ConfigureAwait(false)) continue;
+                if (!hung && await _db.KeyExistsAsync(RedisKeys.Lease(runId)).ConfigureAwait(false)) continue;
 
-                _logger.LogWarning(
-                    "Reaping orphaned sandbox {Name} ({Status}); its run holds no lease, so no runner owns it",
-                    name, container.Status);
+                _logger.LogWarning("Removing run sandbox {Name} ({Status}): {Reason}", name, container.Status,
+                    hung ? "busy longer than the hard limit, so dead or hung" : "its run holds no lease, so no runner owns it");
 
-                try
-                {
-                    await _docker.Containers.RemoveContainerAsync(
-                        container.ID,
-                        new ContainerRemoveParameters { Force = true, RemoveVolumes = true },
-                        token).ConfigureAwait(false);
-                    reaped++;
-                }
-                catch (DockerApiException ex)
-                {
-                    _logger.LogWarning("Could not reap {Name}: {Message}", name, ex.Message);
-                }
+                if (!await RemoveAsync(container.ID, name, token).ConfigureAwait(false)) continue;
+                reaped++;
+                if (hung) await ReleaseLeaseAsync(runId).ConfigureAwait(false);
             }
 
-            if (reaped > 0) _logger.LogInformation("Reaped {Count} orphaned sandbox(es)", reaped);
-            return reaped
+            if (reaped > 0) _logger.LogInformation("Removed {Count} dead, hung or orphaned run sandbox(es)", reaped);
+            var hungWarm = _warm is null ? 0 : await _warm.RemoveHungAsync(RunHardLimit).ConfigureAwait(false);
+            return reaped + hungWarm
                 + await ReapBuildSandboxesAsync(token).ConfigureAwait(false)
                 + await ReapWarmSandboxesAsync(token).ConfigureAwait(false);
         }
 
+        /// <summary>True when a run container created at <paramref name="createdUtc"/> has been busy longer than the hard limit.</summary>
+        internal static bool IsPastHardLimit(DateTime createdUtc, DateTime nowUtc) => nowUtc - createdUtc > RunHardLimit;
+
+        /// <summary>Kills and removes one container. A Docker failure is logged; the next pass tries again.</summary>
+        private async Task<bool> RemoveAsync(string id, string name, CancellationToken token)
+        {
+            try
+            {
+                // Forced removal works on a running or paused container too: it is killed first.
+                await _docker.Containers.RemoveContainerAsync(
+                    id, new ContainerRemoveParameters { Force = true, RemoveVolumes = true }, token).ConfigureAwait(false);
+                return true;
+            }
+            catch (DockerContainerNotFoundException)
+            {
+                return true;   // already gone
+            }
+            catch (DockerApiException ex)
+            {
+                _logger.LogError("Could not remove sandbox {Name}: {Message}; trying again next pass", name, ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>Lets another attempt take the run at once instead of waiting out its lease.</summary>
+        private async Task ReleaseLeaseAsync(string runId)
+        {
+            try
+            {
+                await _db.KeyDeleteAsync(RedisKeys.Lease(runId)).ConfigureAwait(false);
+            }
+            catch (RedisException ex)
+            {
+                _logger.LogWarning("Could not release the lease of run {RunId}: {Message}; it expires on its own", runId, ex.Message);
+            }
+        }
+
         /// <summary>
-        /// Clears build sandboxes whose runner is gone.
-        /// <para>
-        /// These cannot use the lease test above, because a build takes no lease — there is no
-        /// per-build key to ask about. Age stands in for it: a build sandbox is killed by its
-        /// own runner at the build timeout, so one that has been alive for several times that
-        /// long has no supervisor left. The multiple is what keeps this safe against a slow but
-        /// legitimate install, which the owning runner is still holding a deadline over.
-        /// </para>
+        /// Clears build sandboxes older than the hard build limit (15 min, RUNNER-FLOW step 9.3). A
+        /// build takes no lease, so age stands in for it: its own runner kills it at the hard limit,
+        /// so one alive past that has no supervisor left.
         /// </summary>
         private async Task<int> ReapBuildSandboxesAsync(CancellationToken token)
         {
@@ -145,7 +196,7 @@ namespace Blocks.FunctionRunner.Maintenance
                 },
             }, token).ConfigureAwait(false);
 
-            var abandoned = TimeSpan.FromSeconds(_options.BuildTimeoutSeconds * 3);
+            var abandoned = TimeSpan.FromSeconds(_options.BuildTimeoutSeconds);
             var reaped = 0;
 
             foreach (var container in containers)
@@ -158,21 +209,10 @@ namespace Blocks.FunctionRunner.Maintenance
                 if (age < abandoned) continue;
 
                 _logger.LogWarning(
-                    "Reaping abandoned build sandbox {Name} ({Status}); it has outlived {Age} and no runner owns it",
+                    "Removing build sandbox {Name} ({Status}): it has outlived the {Age} build limit",
                     name, container.Status, abandoned);
 
-                try
-                {
-                    await _docker.Containers.RemoveContainerAsync(
-                        container.ID,
-                        new ContainerRemoveParameters { Force = true, RemoveVolumes = true },
-                        token).ConfigureAwait(false);
-                    reaped++;
-                }
-                catch (DockerApiException ex)
-                {
-                    _logger.LogWarning("Could not reap {Name}: {Message}", name, ex.Message);
-                }
+                if (await RemoveAsync(container.ID, name, token).ConfigureAwait(false)) reaped++;
             }
 
             if (reaped > 0) _logger.LogInformation("Reaped {Count} abandoned build sandbox(es)", reaped);
@@ -209,30 +249,30 @@ namespace Blocks.FunctionRunner.Maintenance
                 if (name is null) continue;
 
                 var owner = container.Labels is not null && container.Labels.TryGetValue(SandboxProfile.WarmLabel, out var o) ? o : null;
+
+                // Ours, kept by the pool, and Docker says it is no longer running: dead. The pool
+                // removes it (container included), so it stops holding a place under its cap.
+                if (_warm is not null && IsExited(container.State) && _warm.IsTracked(name))
+                {
+                    if (await _warm.RemoveDeadAsync(name).ConfigureAwait(false)) reaped++;
+                    continue;
+                }
+
                 if (!IsOrphanedWarm(name, owner, container.Created.ToUniversalTime(), DateTime.UtcNow, _options, _warm)) continue;
 
                 _logger.LogWarning(
-                    "Reaping orphaned warm sandbox {Name} ({Status}) of runner '{Owner}'; no pool keeps it",
+                    "Removing orphaned warm sandbox {Name} ({Status}) of runner '{Owner}'; no pool keeps it",
                     name, container.Status, owner);
 
-                try
-                {
-                    // Forced removal works on a paused container too: it is killed first.
-                    await _docker.Containers.RemoveContainerAsync(
-                        container.ID,
-                        new ContainerRemoveParameters { Force = true, RemoveVolumes = true },
-                        token).ConfigureAwait(false);
-                    reaped++;
-                }
-                catch (DockerApiException ex)
-                {
-                    _logger.LogWarning("Could not reap {Name}: {Message}", name, ex.Message);
-                }
+                if (await RemoveAsync(container.ID, name, token).ConfigureAwait(false)) reaped++;
             }
 
             if (reaped > 0) _logger.LogInformation("Reaped {Count} orphaned warm sandbox(es)", reaped);
             return reaped;
         }
+
+        /// <summary>Docker's state for a container that has stopped for good (not running, not paused).</summary>
+        internal static bool IsExited(string? state) => state is "exited" or "dead";
 
         /// <summary>The decision <see cref="ReapWarmSandboxesAsync"/> makes about one container.</summary>
         internal static bool IsOrphanedWarm(

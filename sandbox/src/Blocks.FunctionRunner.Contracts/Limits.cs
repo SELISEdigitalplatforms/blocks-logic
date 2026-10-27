@@ -49,6 +49,13 @@ namespace Blocks.FunctionRunner.Contracts
 
         /// <summary>Kept equal to <see cref="TimeoutSeconds"/>: there is one value, not a range.</summary>
         public const int DefaultTimeoutSeconds = TimeoutSeconds;
+
+        /// <summary>
+        /// The most one sandbox may be busy with one run or call, start-up included: past this it is
+        /// killed (RUNNER-FLOW step 5.4), whatever the start allowance and grace add up to. The clean-up
+        /// pass removes any run container busy longer than this as dead or hung (step 9).
+        /// </summary>
+        public const int HardLimitSeconds = 90;
         public const long InputBytes = 1024 * 1024;
         public const long ResultBytes = 5L * 1024 * 1024;
         public const long LogBytes = 1024 * 1024;
@@ -70,24 +77,19 @@ namespace Blocks.FunctionRunner.Contracts
         public const int EventsLineBytes = EventsTotalBytes + (64 * 1024);
 
         /// <summary>
-        /// Per-function concurrent runs: a range of 1–25, defaulting to 2.
+        /// Per-function concurrency: how many of one function's runs may be in sandboxes at once, and
+        /// how many warm sandboxes it may keep on a runner — 1 to 10, default 3 (RUNNER-FLOW step 5.6).
+        /// The one limit the function's owner may set: the control plane sends it on every run and
+        /// <see cref="RunLimits.Clamp"/> keeps it inside this range. Calls beyond it wait in the queue.
         /// <para>
-        /// The ceiling was 5, which quietly capped one function at about 375 runs a minute at the
-        /// 800 ms a typical run takes — a throughput limit dressed up as a safety limit. It is
-        /// neither a memory nor a CPU bound: those are <see cref="HostBudget"/>'s job and it
-        /// enforces them across every function on the host at once, so a higher number here only
-        /// lets one function use capacity that would otherwise sit idle. Runs over the limit queue.
-        /// </para>
-        /// <para>
-        /// It is mirrored by <c>FunctionLimits.Ceiling.MaxConcurrency</c> in the control plane and
-        /// <c>DEFAULT_LIMITS_OPTIONS.maxConcurrency</c> in the client; the three move together.
+        /// Mirrored by the control plane's function limits; the two move together.
         /// </para>
         /// </summary>
         public const int MinFunctionConcurrency = 1;
         public const int MaxFunctionConcurrency = 10;
 
-        /// <summary>Kept equal to <see cref="MaxFunctionConcurrency"/>: one value, not a range.</summary>
-        public const int DefaultFunctionConcurrency = MaxFunctionConcurrency;
+        /// <summary>What a function gets when it sets nothing (RUNNER-FLOW step 5.6).</summary>
+        public const int DefaultFunctionConcurrency = 3;
 
         /// <summary>uid and gid the function process runs as inside the sandbox.</summary>
         public const int SandboxUid = 10001;
@@ -148,14 +150,10 @@ namespace Blocks.FunctionRunner.Contracts
         public static RunLimits Default => Clamp(null, null, null, null, null, null);
 
         /// <summary>
-        /// Returns the platform profile. Every argument is accepted and ignored.
-        /// <para>
-        /// The parameters remain so the wire format, the control plane's copy of it and every
-        /// existing call site keep compiling and behaving — what changed is that none of the values
-        /// are negotiable any more. A sandbox gets <see cref="Ceilings.CpuMillicores"/>,
-        /// <see cref="Ceilings.MemoryBytes"/> and <see cref="Ceilings.TimeoutSeconds"/>, whatever
-        /// arrives.
-        /// </para>
+        /// Returns the platform profile. Every sandbox dimension is fixed and its argument ignored: a
+        /// sandbox gets <see cref="Ceilings.CpuMillicores"/>, <see cref="Ceilings.MemoryBytes"/> and
+        /// <see cref="Ceilings.TimeoutSeconds"/>, whatever arrives. The one exception is the function's
+        /// concurrency, which its owner sets: honoured inside 1–10, 3 when absent (RUNNER-FLOW step 5.6).
         /// </summary>
         public static RunLimits Clamp(
             int? cpuMillicores,
@@ -177,7 +175,9 @@ namespace Blocks.FunctionRunner.Contracts
                 PidLimit = Ceilings.PidLimit,
                 TmpfsBytes = Ceilings.TmpfsBytes,
                 TimeoutSeconds = Ceilings.TimeoutSeconds,
-                FunctionConcurrency = Ceilings.MaxFunctionConcurrency,
+                FunctionConcurrency = functionConcurrency is { } concurrency
+                    ? Math.Clamp(concurrency, Ceilings.MinFunctionConcurrency, Ceilings.MaxFunctionConcurrency)
+                    : Ceilings.DefaultFunctionConcurrency,
             };
         }
     }

@@ -332,6 +332,12 @@ namespace Functions.DomainService.Services
                 entry.Add(new NameValueEntry(FunctionQueueKeys.BuildArtifactUploadField, artifactUploadUrl));
             }
 
+            // Newest wins (RUNNER-FLOW step 1.1): from now this is the function's build, so a runner
+            // still on an older build of it stops that one at once. Set before the entry is queued,
+            // so the new build never reads itself as replaced.
+            await database.StringSetAsync(
+                FunctionQueueKeys.BuildLatest(tenantId, function.ItemId), build.ItemId, FunctionQueueKeys.BuildLatestTtl);
+
             await database.StreamAddAsync(FunctionQueueKeys.BuildsStream, [.. entry]);
 
             _logger.LogInformation(
