@@ -9,6 +9,7 @@ using Mail.DomainService.Shared.Enums;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using XUnitTest.TestHelpers;
 using EmailTemplate = Blocks.Genesis.Entities.Os.EmailTemplate;
 
 namespace XUnitTest.Mail
@@ -27,6 +28,7 @@ namespace XUnitTest.Mail
         private readonly Mock<IMailRepository> _repository = new();
         private readonly Mock<IMailAttachmentResolver> _resolver = new();
         private readonly Mock<IMessageClient> _messageClient = new();
+        private readonly Mock<Blocks.Secrets.ISecretService> _secrets = new(MockBehavior.Strict);
 
         private SendMailService CreateService(params IOutboundMailSender[] senders) =>
             new(NullLogger<SendMailService>.Instance,
@@ -34,7 +36,8 @@ namespace XUnitTest.Mail
                 new OutboundMailSenderRegistry(senders),
                 _resolver.Object,
                 _messageClient.Object,
-                Options.Create(new MailStatusEventOptions()));
+                Options.Create(new MailStatusEventOptions()),
+                MailSecretsTestDoubles.PasswordResolver(_secrets));
 
         private static MailToBeSent AMail(MailServiceProvider provider) => new()
         {

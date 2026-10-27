@@ -4,7 +4,10 @@ using Mail.DomainService.Mails.Strategies;
 using MailBoxSyncService.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using FluentAssertions;
+using Mail.DomainService.Shared.Enums;
 using Moq;
+using XUnitTest.TestHelpers;
 
 namespace XUnitTest.MailBoxSyncService
 {
@@ -118,6 +121,52 @@ namespace XUnitTest.MailBoxSyncService
             logger.Verify(x => x.Log(LogLevel.Error, It.IsAny<EventId>(),
                 It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("dev")),
                 It.IsAny<Exception>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_ACredentialFailure_IsLoggedWithoutTheReference_AndTheNextConfigurationStillSyncs()
+        {
+            // Q3, C4, C7 end to end: the worker logs the exception object it catches, so what the
+            // sync service throws must not carry the reference id (a SecretNotFoundException's
+            // message does).
+            const string reference = "s-ref-worker-42";
+            var mailRepository = new Mock<IMailRepository>();
+            var logger = new CapturingLogger<global::MailBoxSyncService.Worker>();
+            var tenant = CreateTenant();
+            var referenced = new MailServerConfiguration
+            {
+                ItemId = "config-1", Provider = MailServiceProvider.Zoho, IsInbound = true, SenderUserName = "u",
+                AccountPassword = "old-pass", AccountPasswordReference = reference, Host = "imap.zoho.com", Port = 993
+            };
+            var legacy = new MailServerConfiguration
+            {
+                ItemId = "config-2", Provider = MailServiceProvider.Zoho, IsInbound = true, SenderUserName = "u",
+                AccountPassword = "legacy-pass", Host = "imap.zoho.com", Port = 993
+            };
+            mailRepository.Setup(r => r.GetTenantsAsync()).ReturnsAsync(new List<Tenant> { tenant });
+            mailRepository.Setup(r => r.GetImapConfigurationsAsync(tenant)).ReturnsAsync(new List<MailServerConfiguration> { referenced, legacy });
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var inbox = new Mock<IImapFolderWrapper>();
+            inbox.SetupGet(i => i.Count).Returns(0);
+            var client = new Mock<IImapClientWrapper>();
+            client.SetupGet(c => c.Inbox).Returns(inbox.Object);
+            client.Setup(c => c.AuthenticateAsync("u", "legacy-pass")).Callback(() => cts.Cancel()).Returns(Task.CompletedTask);
+            var factory = new Mock<IImapClientFactory>();
+            factory.Setup(f => f.Create()).Returns(client.Object);
+            var syncService = new global::MailBoxSyncService.Services.MailBoxSyncService(
+                mailRepository.Object, Mock.Of<IMessageClient>(), factory.Object,
+                MailSecretsTestDoubles.PasswordResolver(
+                    MailSecretsTestDoubles.Throwing(reference, new Blocks.Secrets.SecretNotFoundException(reference))));
+
+            var worker = new TestWorker(mailRepository.Object, syncService, logger, CreateConfig());
+            await worker.RunAsync(cts.Token);
+
+            client.Verify(c => c.AuthenticateAsync("u", "legacy-pass"), Times.Once);
+            client.Verify(c => c.AuthenticateAsync("u", "old-pass"), Times.Never);
+            logger.Lines.Should().Contain(l => l.Contains("config-1", StringComparison.Ordinal)
+                                               && l.Contains(nameof(global::Mail.DomainService.Mails.MailCredentialException), StringComparison.Ordinal));
+            logger.All.Should().NotContain(reference).And.NotContain("old-pass").And.NotContain("legacy-pass");
         }
 
         private static Tenant CreateTenant()

@@ -8,6 +8,7 @@ using MailBoxSyncService.Services;
 using MailKit.Security;
 using MimeKit;
 using Moq;
+using XUnitTest.TestHelpers;
 using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.MailBoxSyncService
@@ -66,9 +67,12 @@ namespace XUnitTest.MailBoxSyncService
                 return Task.CompletedTask;
             }
 
+            public List<string> Passwords { get; } = [];
+
             public Task AuthenticateAsync(string userName, string password)
             {
                 AuthenticateCalls++;
+                Passwords.Add(password);
                 IsAuthenticated = true;
                 return Task.CompletedTask;
             }
@@ -121,7 +125,8 @@ namespace XUnitTest.MailBoxSyncService
             _service = new global::MailBoxSyncService.Services.MailBoxSyncService(
                 _mockRepository.Object,
                 _mockMessageClient.Object,
-                _imapClientFactory);
+                _imapClientFactory,
+                MailSecretsTestDoubles.PasswordResolver());
         }
 
         [Fact]
@@ -278,7 +283,7 @@ namespace XUnitTest.MailBoxSyncService
 
             var fakeClient = new FakeImapClient(new List<MimeMessage> { message1, message2 });
             var factory = new FakeImapClientFactory(new[] { fakeClient });
-            var service = new global::MailBoxSyncService.Services.MailBoxSyncService(_mockRepository.Object, _mockMessageClient.Object, factory);
+            var service = new global::MailBoxSyncService.Services.MailBoxSyncService(_mockRepository.Object, _mockMessageClient.Object, factory, MailSecretsTestDoubles.PasswordResolver());
 
             _mockRepository.Setup(r => r.ExistsAsync("msg-1", tenantId)).ReturnsAsync(false);
             _mockRepository.Setup(r => r.ExistsAsync("msg-2", tenantId)).ReturnsAsync(true);
@@ -309,7 +314,7 @@ namespace XUnitTest.MailBoxSyncService
 
             var fakeClient = new FakeImapClient(new List<MimeMessage> { message });
             var factory = new FakeImapClientFactory(new[] { fakeClient });
-            var service = new global::MailBoxSyncService.Services.MailBoxSyncService(_mockRepository.Object, _mockMessageClient.Object, factory);
+            var service = new global::MailBoxSyncService.Services.MailBoxSyncService(_mockRepository.Object, _mockMessageClient.Object, factory, MailSecretsTestDoubles.PasswordResolver());
 
             await service.SyncInboxAsync(config, "tenant-123");
 
@@ -334,7 +339,7 @@ namespace XUnitTest.MailBoxSyncService
             first.SetDisconnected();
             var second = new FakeImapClient(new List<MimeMessage>());
             var factory = new FakeImapClientFactory(new[] { first, second });
-            var service = new global::MailBoxSyncService.Services.MailBoxSyncService(_mockRepository.Object, _mockMessageClient.Object, factory);
+            var service = new global::MailBoxSyncService.Services.MailBoxSyncService(_mockRepository.Object, _mockMessageClient.Object, factory, MailSecretsTestDoubles.PasswordResolver());
 
             await service.SyncInboxAsync(config, "tenant-123");
             first.SetDisconnected();
@@ -397,7 +402,7 @@ namespace XUnitTest.MailBoxSyncService
             var longBody = new string('x', global::MailBoxSyncService.Services.MailBoxSyncService.MaxTriggerBodyLength + 500);
             var fakeClient = new FakeImapClient(new List<MimeMessage> { MessageWithId("msg-big", longBody) });
             var service = new global::MailBoxSyncService.Services.MailBoxSyncService(
-                _mockRepository.Object, _mockMessageClient.Object, new FakeImapClientFactory(new[] { fakeClient }));
+                _mockRepository.Object, _mockMessageClient.Object, new FakeImapClientFactory(new[] { fakeClient }), MailSecretsTestDoubles.PasswordResolver());
 
             ConsumerMessage<EmailTriggerEvent>? sent = null;
             _mockMessageClient
@@ -421,7 +426,7 @@ namespace XUnitTest.MailBoxSyncService
         {
             var fakeClient = new FakeImapClient(new List<MimeMessage> { MessageWithId("msg-a"), MessageWithId("msg-b") });
             var service = new global::MailBoxSyncService.Services.MailBoxSyncService(
-                _mockRepository.Object, _mockMessageClient.Object, new FakeImapClientFactory(new[] { fakeClient }));
+                _mockRepository.Object, _mockMessageClient.Object, new FakeImapClientFactory(new[] { fakeClient }), MailSecretsTestDoubles.PasswordResolver());
 
             _mockMessageClient
                 .SetupSequence(m => m.SendToConsumerAsync(It.IsAny<ConsumerMessage<EmailTriggerEvent>>()))
@@ -450,13 +455,196 @@ namespace XUnitTest.MailBoxSyncService
 
             var fakeClient = new FakeImapClient(new List<MimeMessage>());
             var factory = new FakeImapClientFactory(new[] { fakeClient });
-            var service = new global::MailBoxSyncService.Services.MailBoxSyncService(_mockRepository.Object, _mockMessageClient.Object, factory);
+            var service = new global::MailBoxSyncService.Services.MailBoxSyncService(_mockRepository.Object, _mockMessageClient.Object, factory, MailSecretsTestDoubles.PasswordResolver());
 
             await service.SyncInboxAsync(config, "tenant-123", new SaslMechanismOAuth2("support@contoso.com", "token"));
 
             fakeClient.Mechanism.Should().BeOfType<SaslMechanismOAuth2>();
             fakeClient.AuthenticateCalls.Should().Be(0);
             fakeClient.SocketOptions.Should().Be(SecureSocketOptions.SslOnConnect);
+        }
+
+        // ======================= #371: AccountPasswordReference on IMAP connect =======================
+
+        private const string Reference = "s-inbound-1";
+        private const string SecretPassword = "imap-secret-9";
+
+        private static MailServerConfiguration ReferencedConfig(string itemId = "config-1", string accountPassword = "") => new()
+        {
+            ItemId = itemId,
+            Provider = MailServiceProvider.Zoho,
+            IsInbound = true,
+            SenderUserName = "user",
+            AccountPassword = accountPassword,
+            AccountPasswordReference = Reference,
+            Host = "imap.zoho.com",
+            Port = 993,
+            EnableSSL = true
+        };
+
+        private global::MailBoxSyncService.Services.MailBoxSyncService SyncService(
+            FakeImapClientFactory factory,
+            Mock<Blocks.Secrets.ISecretService> secrets,
+            CapturingLogger<global::MailBoxSyncService.Services.MailBoxSyncService>? logger = null) =>
+            new(_mockRepository.Object, _mockMessageClient.Object, factory, MailSecretsTestDoubles.PasswordResolver(secrets), logger);
+
+        [Fact]
+        public async Task ReferencedConfig_ReadsOncePerConnect_AndNotWhileTheCachedClientStaysAuthenticated()
+        {
+            // H7, C10 (E7): first cycle 1 read and a connect; second cycle 0 reads, cached client reused.
+            var seen = new List<BlocksContext?>();
+            var secrets = MailSecretsTestDoubles.Answering(Reference, SecretPassword, seen);
+            var client = new FakeImapClient(new List<MimeMessage>());
+            var factory = new FakeImapClientFactory(new[] { client });
+            var service = SyncService(factory, secrets);
+
+            await service.SyncInboxAsync(ReferencedConfig(), "tenant-123");
+            await service.SyncInboxAsync(ReferencedConfig(), "tenant-123");
+
+            secrets.Reads().Should().Be(1);
+            factory.CreateCalls.Should().Be(1);
+            client.Passwords.Should().Equal(SecretPassword);
+            seen.Single()!.TenantId.Should().Be("tenant-123");
+            seen.Single()!.IsAuthenticated.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task ReferencedConfig_ReadsAgainOnReconnect()
+        {
+            // C10: 1 read per IMAP (re)connect.
+            var secrets = MailSecretsTestDoubles.Answering(Reference, SecretPassword);
+            var first = new FakeImapClient(new List<MimeMessage>());
+            var second = new FakeImapClient(new List<MimeMessage>());
+            var service = SyncService(new FakeImapClientFactory(new[] { first, second }), secrets);
+
+            await service.SyncInboxAsync(ReferencedConfig(), "tenant-123");
+            first.SetDisconnected();
+            await service.SyncInboxAsync(ReferencedConfig(), "tenant-123");
+
+            secrets.Reads().Should().Be(2);
+            second.Passwords.Should().Equal(SecretPassword);
+        }
+
+        [Fact]
+        public async Task ReferencedConfig_ReadsInTheSyncedTenant_AndRestoresTheAmbientContext()
+        {
+            // H6, C5 inbound: the read tenant is the tenant being synced, never the ambient one.
+            var seen = new List<BlocksContext?>();
+            var service = SyncService(
+                new FakeImapClientFactory(new[] { new FakeImapClient(new List<MimeMessage>()) }),
+                MailSecretsTestDoubles.Answering(Reference, SecretPassword, seen));
+            TestBlocksContext.Set("some-other-tenant");
+            try
+            {
+                var ambient = BlocksContext.GetContext();
+
+                await service.SyncInboxAsync(ReferencedConfig(), "tenant-123");
+
+                seen.Single()!.TenantId.Should().Be("tenant-123");
+                BlocksContext.GetContext().Should().BeSameAs(ambient);
+            }
+            finally
+            {
+                TestBlocksContext.Clear();
+            }
+        }
+
+        [Fact]
+        public async Task ReferenceAndStalePassword_UsesOnlyTheReference()
+        {
+            // C3, and the record is not written: the password lives in a local for the connect.
+            var client = new FakeImapClient(new List<MimeMessage>());
+            var service = SyncService(new FakeImapClientFactory(new[] { client }), MailSecretsTestDoubles.Answering(Reference, SecretPassword));
+            var config = ReferencedConfig(accountPassword: "old-pass");
+
+            await service.SyncInboxAsync(config, "tenant-123");
+
+            client.Passwords.Should().Equal(SecretPassword);
+            config.AccountPassword.Should().Be("old-pass");
+        }
+
+        [Fact]
+        public async Task LegacyConfig_AuthenticatesWithTheStoredPassword_AndMakesNoSecretCall()
+        {
+            // H5, C10 inbound.
+            var secrets = new Mock<Blocks.Secrets.ISecretService>(MockBehavior.Strict);
+            var client = new FakeImapClient(new List<MimeMessage>());
+            var service = SyncService(new FakeImapClientFactory(new[] { client }), secrets);
+
+            await service.SyncInboxAsync(PasswordConfig(), "tenant-123");
+
+            client.Passwords.Should().Equal("pass");
+            secrets.Invocations.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task SaslConnect_WithAStrayReference_MakesNoSecretRead()
+        {
+            // H10 inbound: only password auth resolves AccountPasswordReference.
+            var secrets = new Mock<Blocks.Secrets.ISecretService>(MockBehavior.Strict);
+            var client = new FakeImapClient(new List<MimeMessage>());
+            var service = SyncService(new FakeImapClientFactory(new[] { client }), secrets);
+
+            await service.SyncInboxAsync(ReferencedConfig(), "tenant-123", new SaslMechanismOAuth2("support@contoso.com", "token"));
+
+            secrets.Invocations.Should().BeEmpty();
+            client.AuthenticateCalls.Should().Be(0);
+        }
+
+        [Theory]
+        [InlineData(nameof(Blocks.Secrets.SecretNotFoundException), "credential")]
+        [InlineData(nameof(Blocks.Secrets.SecretStateException), "credential")]
+        [InlineData(nameof(Blocks.Secrets.SecretAccessDeniedException), "credential")]
+        [InlineData(nameof(Blocks.Secrets.SecretVaultException), "vault_unavailable")]
+        [InlineData(nameof(Blocks.Secrets.SecretValidationException), "unexpected")]
+        [InlineData(nameof(InvalidOperationException), "unexpected")]
+        public async Task ReadFailure_FailsTheCycleWithACleanException_AndCachesNoClient(string failure, string failureClass)
+        {
+            // C7, C4, Q3: no connection opened, no client cached, and what reaches the worker carries
+            // only the failure class and the type — never the reference id or a password.
+            var logger = new CapturingLogger<global::MailBoxSyncService.Services.MailBoxSyncService>();
+            var secrets = MailSecretsTestDoubles.Throwing(Reference, MailSecretsTestDoubles.SecretFailure(failure, Reference));
+            var factory = new FakeImapClientFactory(Array.Empty<FakeImapClient>());
+            var service = SyncService(factory, secrets, logger);
+
+            var act = () => service.SyncInboxAsync(ReferencedConfig(accountPassword: "old-pass"), "tenant-123");
+
+            var thrown = (await act.Should().ThrowExactlyAsync<MailCredentialException>()).Which;
+            thrown.FailureClass.Should().Be(failureClass);
+            thrown.ExceptionType.Should().Be(failure);
+            thrown.InnerException.Should().BeNull();
+            thrown.ToString().Should().NotContain(Reference).And.NotContain("old-pass");
+            factory.CreateCalls.Should().Be(0);
+            logger.Lines.Should().ContainSingle(l => l.Contains("MAIL FAILED (credential)", StringComparison.Ordinal)
+                                                     && l.Contains($"failureClass={failureClass}", StringComparison.Ordinal)
+                                                     && l.Contains("configId=config-1", StringComparison.Ordinal));
+            logger.All.Should().NotContain(Reference).And.NotContain("old-pass");
+        }
+
+        [Fact]
+        public async Task ReadFailure_LeavesNothingCached_AndOtherConfigurationsStillSync()
+        {
+            // C7: the failed configuration retries its read next cycle; another configuration of
+            // the same tenant connects meanwhile.
+            var secrets = new Mock<Blocks.Secrets.ISecretService>(MockBehavior.Strict);
+            secrets.SetupSequence(s => s.GetValueAsync(Reference, It.IsAny<CancellationToken>()))
+                   .ThrowsAsync(new Blocks.Secrets.SecretVaultException("down", "get", Reference))
+                   .ReturnsAsync(SecretPassword);
+            var legacyClient = new FakeImapClient(new List<MimeMessage>());
+            var recoveredClient = new FakeImapClient(new List<MimeMessage>());
+            var factory = new FakeImapClientFactory(new[] { legacyClient, recoveredClient });
+            var service = SyncService(factory, secrets);
+
+            var failed = () => service.SyncInboxAsync(ReferencedConfig(), "tenant-123");
+            await failed.Should().ThrowAsync<MailCredentialException>();
+            var legacy = PasswordConfig();
+            legacy.ItemId = "config-2";
+            await service.SyncInboxAsync(legacy, "tenant-123");
+            await service.SyncInboxAsync(ReferencedConfig(), "tenant-123");
+
+            legacyClient.Passwords.Should().Equal("pass");
+            recoveredClient.Passwords.Should().Equal(SecretPassword);
+            secrets.Reads().Should().Be(2);
         }
 
         [Theory]

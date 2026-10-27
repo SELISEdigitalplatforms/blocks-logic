@@ -65,8 +65,8 @@ namespace Mail.DomainService.Shared.Utilities
         }
 
         /// <summary>
-        /// The Office 365 token path alone, for a host that needs tokens without the rest of the
-        /// mail services — the inbound IMAP poller. The caller must also call
+        /// The Office 365 token path and the mail password resolver alone, for a host that needs
+        /// them without the rest of the mail services — the inbound IMAP poller. The caller must also call
         /// <c>AddBlocksSecrets()</c>, which supplies the scoped <c>ISecretService</c>.
         /// </summary>
         /// <remarks>
@@ -80,6 +80,11 @@ namespace Mail.DomainService.Shared.Utilities
             services.TryAddSingleton<ISystemClock, SystemClock>();
             services.Configure<Office365TokenCacheOptions>(_ => { });
             services.TryAddSingleton<IOffice365TokenProvider, CachingOffice365TokenProvider>();
+
+            // The mail account password (AccountPasswordReference) is read through the same
+            // per-call scope and tenant context. Here rather than in a method of its own because
+            // every host with a password send or IMAP connect already calls this one.
+            services.TryAddSingleton<IMailPasswordResolver, MailPasswordResolver>();
             return services;
         }
     }

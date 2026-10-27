@@ -1,5 +1,5 @@
 using Blocks.Genesis;
-using Blocks.Secrets;
+using Mail.DomainService.Shared.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Mail.DomainService.Mails.Office365
@@ -57,57 +57,9 @@ namespace Mail.DomainService.Mails.Office365
             return await _acquirer.AcquireAsync(request, secret, cancellationToken).ConfigureAwait(false);
         }
 
-        private async Task<string> ResolveSecretAsync(Office365TokenRequest request, CancellationToken cancellationToken)
-        {
-            var restore = BlocksContext.GetContext();
-
-            try
-            {
-                EnterTenantContext(request.BlocksTenantId, restore);
-
-                using var scope = _scopeFactory.CreateScope();
-                var secrets = scope.ServiceProvider.GetRequiredService<ISecretService>();
-
-                return await secrets.GetValueAsync(request.ClientSecretReference, cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                BlocksContext.SetContext(restore, restore is not null);
-            }
-        }
-
-        /// <summary>
-        /// Puts an authenticated, tenant-scoped context in place for the duration of one resolve.
-        /// </summary>
-        /// <remarks>
-        /// <c>isAuthenticated</c> MUST be true: Blocks.Secrets rejects any context with
-        /// <c>!IsAuthenticated</c> or a blank tenant id before every value read. The context is
-        /// scoped to the configuration's own tenant rather than to whoever triggered the send, so
-        /// a send queued by one tenant can never read another tenant's secret.
-        /// </remarks>
-        private static void EnterTenantContext(string tenantId, BlocksContext? current)
-        {
-            BlocksContext.SetContext(
-                BlocksContext.Create(
-                    tenantId: tenantId,
-                    roles: [],
-                    userId: current?.UserId ?? string.Empty,
-                    isAuthenticated: true,
-                    requestUri: string.Empty,
-                    organizationId: current?.OrganizationId ?? string.Empty,
-                    expireOn: DateTime.MinValue,
-                    email: string.Empty,
-                    permissions: [],
-                    userName: current?.UserName ?? string.Empty,
-                    phoneNumber: string.Empty,
-                    displayName: current?.UserName ?? string.Empty,
-                    oauthToken: string.Empty,
-                    originalTenantId: current?.OriginalTenantId ?? tenantId,
-                    applicationDomain: string.Empty),
-                // changeContext: true so GetContext() returns this async-local context even where an
-                // ambient HttpContext still carries an authenticated identity, keeping the read
-                // scoped to the configuration's tenant and never the caller's.
-                true);
-        }
+        // The authenticated, tenant-scoped read and the restore of the caller's context live in
+        // TenantSecretReader, shared with the mail password and service bus resolvers.
+        private Task<string> ResolveSecretAsync(Office365TokenRequest request, CancellationToken cancellationToken) =>
+            TenantSecretReader.ReadAsync(_scopeFactory, request.BlocksTenantId, request.ClientSecretReference, cancellationToken);
     }
 }

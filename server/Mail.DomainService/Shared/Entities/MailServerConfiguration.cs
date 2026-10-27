@@ -54,6 +54,18 @@ namespace Mail.DomainService.Entities
         public string? ClientSecretReference { get; set; }
 
         public string? MailboxAddress { get; set; }
+
+        /// <summary>
+        /// The Blocks Secrets id of the account password. When set, the password is in the secret
+        /// store and AccountPassword is empty; when null (records saved before this field),
+        /// AccountPassword holds it.
+        /// </summary>
+        /// <remarks>
+        /// A non-empty reference is authoritative: <see cref="AccountPassword"/> is never used then,
+        /// even when it is non-empty. Written by blocks-os only; the element name must match.
+        /// </remarks>
+        [BsonIgnoreIfNull]
+        public string? AccountPasswordReference { get; set; }
     }
 
     public static class MailServerConfigurationExtensions

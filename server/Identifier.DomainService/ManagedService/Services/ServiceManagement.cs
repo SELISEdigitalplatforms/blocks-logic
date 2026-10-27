@@ -22,6 +22,7 @@ namespace DomainService.ManagedService.Services
         private readonly IServiceManagementRepository _serviceManagementRepository;
         private readonly ITenants _tenants;
         private readonly IConfiguration _configuration;
+        private readonly IServiceBusConnectionStringResolver _connectionStringResolver;
 
         [ExcludeFromCodeCoverage]
         public ServiceManagement ( ILogger<ServiceManagement> logger,
@@ -29,8 +30,10 @@ namespace DomainService.ManagedService.Services
                                  IBlocksSecret blocksSecret,
                                  ICacheClient cacheClient,
                                  ITenants tenants,
-                                 IConfiguration configuration )
+                                 IConfiguration configuration,
+                                 IServiceBusConnectionStringResolver connectionStringResolver )
         {
+            _connectionStringResolver = connectionStringResolver;
             _logger = logger;
             _serviceManagementRepository = serviceManagementRepository;
             _tenants = tenants;
@@ -71,6 +74,19 @@ namespace DomainService.ManagedService.Services
 
             foreach (var item in serviceList)
             {
+                // A non-empty reference is authoritative: the value is in Blocks Secrets and the
+                // ciphertext field is not used, even when it is non-empty. The reference never
+                // leaves this method.
+                if (!string.IsNullOrEmpty(item.ServiceBusConnectionStringReference))
+                {
+                    item.ServiceBusConnectionString = await ReadReferencedConnectionStringAsync(item, contextTenantId);
+                    item.ServiceBusConnectionStringReference = null;
+                    item.ServiceType = item.ServiceType ?? "backend";
+                    continue;
+                }
+
+                item.ServiceBusConnectionStringReference = null;
+
                 var plainText = DecryptConnectionString(
                     item.ServiceBusConnectionString,
                     firstSalt
@@ -104,7 +120,34 @@ namespace DomainService.ManagedService.Services
             };
         }
 
-        
+        /// <summary>
+        /// One secret read for one row, in the row's tenant (the context tenant when the row has
+        /// none). Under impersonation that is the project tenant, where blocks-os writes the secret.
+        /// Any failure blanks only this row; the log carries the service id and the exception type,
+        /// never the reference id or the exception message (which carries the reference id).
+        /// </summary>
+        private async Task<string> ReadReferencedConnectionStringAsync ( BlocksManagedService item, string? contextTenantId )
+        {
+            var secretTenantId = string.IsNullOrEmpty(item.TenantId) ? contextTenantId : item.TenantId;
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(secretTenantId))
+                {
+                    throw new InvalidOperationException("No tenant to read the connection string in.");
+                }
+
+                return await _connectionStringResolver.ResolveAsync(secretTenantId, item.ServiceBusConnectionStringReference!);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    "Connection string for service {ServiceId} could not be read from Blocks Secrets ({ExceptionType}); returning it empty",
+                    item.ServiceId, ex.GetType().Name);
+                return string.Empty;
+            }
+        }
+
         private static string ResolveEncryptionTenantId ( )
         {
             var context = BlocksContext.GetContext();

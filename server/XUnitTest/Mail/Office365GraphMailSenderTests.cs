@@ -8,6 +8,12 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Graph.Models;
 using Microsoft.Graph.Models.ODataErrors;
 using Moq;
+using Mail.DomainService.Mails.Strategies;
+using Mail.DomainService.Services;
+using Mail.DomainService.Utilities;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Mail
 {
@@ -373,6 +379,44 @@ namespace XUnitTest.Mail
         }
 
         /// <summary>A sender whose Graph session is a recorder.</summary>
+        // ---------- #371: Graph records and AccountPasswordReference ----------
+
+        [Fact]
+        public async Task AnOAuthRecordSentThroughTheOrchestrator_ResolvesOnlyItsClientSecret_AndNoAccountPassword()
+        {
+            // H10, C10: the Graph path is unchanged; a stray AccountPasswordReference on an OAuth
+            // record costs no Blocks Secrets read.
+            var secrets = new Mock<ISecretService>(MockBehavior.Strict);
+            var mail = AMail();
+            mail.MailServerConfiguration.AccountPasswordReference = "stray-password-ref";
+            mail.EmailTemplate = new Blocks.Genesis.Entities.Os.EmailTemplate { Name = "t", TemplateSubject = "Invoice", TemplateBody = "<p>Invoice</p>" };
+            var attachments = new Mock<IMailAttachmentResolver>();
+            attachments.Setup(a => a.ResolveAsync(It.IsAny<IEnumerable<string>?>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            var service = new SendMailService(
+                NullLogger<SendMailService>.Instance,
+                Mock.Of<IMailRepository>(),
+                new OutboundMailSenderRegistry([new Office365MailSender(Sender(), new Office365SmtpClient(NullLogger<Office365SmtpClient>.Instance), NullLogger<Office365MailSender>.Instance)]),
+                attachments.Object,
+                Mock.Of<Blocks.Genesis.IMessageClient>(),
+                Options.Create(new MailStatusEventOptions { Enabled = false }),
+                MailSecretsTestDoubles.PasswordResolver(secrets));
+
+            var previous = Blocks.Genesis.BlocksContext.GetContext();
+            Blocks.Genesis.BlocksContext.SetContext(Blocks.Genesis.BlocksContext.Create("blocks-tenant", [], "user", true, "", "", DateTime.MaxValue, "", [], "", "", "", "", "", "blocks-tenant"), true);
+            try
+            {
+                (await service.ProcessSendMailAsync(mail)).Should().BeTrue();
+            }
+            finally
+            {
+                Blocks.Genesis.BlocksContext.SetContext(previous!, previous is not null);
+            }
+
+            secrets.Invocations.Should().BeEmpty();
+            _tokens.Verify(t => t.GetTokenAsync(It.Is<Office365TokenRequest>(r => r.ClientSecretReference == "secret-1"), It.IsAny<CancellationToken>()), Times.Once);
+            _session.Created.Should().BeTrue();
+        }
+
         private sealed class TestableGraphSender : Office365GraphMailSender
         {
             private readonly RecordingGraphSession _session;

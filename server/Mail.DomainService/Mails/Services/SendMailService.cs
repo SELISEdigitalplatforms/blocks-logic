@@ -4,6 +4,7 @@ using Mail.DomainService.Dtos;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Mails.Strategies;
 using Mail.DomainService.Services;
+using Mail.DomainService.Shared.Enums;
 using Mail.DomainService.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -26,6 +27,7 @@ namespace Mail.DomainService.Mails
         private readonly IMailAttachmentResolver _attachmentResolver;
         private readonly IMessageClient _messageClient;
         private readonly MailStatusEventOptions _statusEventOptions;
+        private readonly IMailPasswordResolver _passwordResolver;
         private readonly IBuiltInNotificationSender? _builtIn;
 
         public SendMailService(
@@ -35,9 +37,11 @@ namespace Mail.DomainService.Mails
             IMailAttachmentResolver attachmentResolver,
             IMessageClient messageClient,
             IOptions<MailStatusEventOptions> statusEventOptions,
+            IMailPasswordResolver passwordResolver,
             IBuiltInNotificationSender? builtInNotifications = null
         )
         {
+            _passwordResolver = passwordResolver;
             _builtIn = builtInNotifications;
             _logger = logger;
             _mailRepository = mailRepository;
@@ -135,7 +139,42 @@ namespace Mail.DomainService.Mails
                 return false;
             }
 
-            var success = await sender.SendAsync(mailToBeSent, mailBody);
+            // Last, after every check that can fail without it, so a send that fails for another
+            // reason costs no secret read. Once per send attempt; nothing is cached across sends.
+            var configuration = mailToBeSent.MailServerConfiguration;
+            var storedPassword = configuration.AccountPassword;
+            if (configuration.AuthenticationType == MailAuthenticationType.Password)
+            {
+                var resolved = await _passwordResolver.ResolveAsync(configuration, BlocksContext.GetContext()?.TenantId);
+                if (!resolved.Succeeded)
+                {
+                    // Ids, the failure class and the exception type only: never the password, the
+                    // reference id or the exception message (which carries the reference id).
+                    _logger.LogError(
+                        "MAIL FAILED (credential): itemId={ItemId} configId={ConfigId} failureClass={FailureClass} exceptionType={ExceptionType}. The account password could not be read from Blocks Secrets; no SMTP connection was attempted.",
+                        mailToBeSent.ItemId,
+                        configuration.ItemId,
+                        resolved.FailureClass,
+                        resolved.ExceptionType ?? MailLog.None);
+                    await PublishStatusAsync(mailToBeSent.ItemId, mailToBeSent.CorrelationId, mailToBeSent, mailBody.Attachments.Count, FailedToAcceptError);
+                    return false;
+                }
+
+                // In memory only, for this one send; put back below so the plaintext does not
+                // outlive the send on the record.
+                configuration.AccountPassword = resolved.Password!;
+            }
+
+            bool success;
+            try
+            {
+                success = await sender.SendAsync(mailToBeSent, mailBody);
+            }
+            finally
+            {
+                configuration.AccountPassword = storedPassword;
+            }
+
             LogOutcome(success, mailToBeSent, mailBody.Attachments.Count, sender.EmitsOwnFailureDiagnostic);
 
             await PublishStatusAsync(

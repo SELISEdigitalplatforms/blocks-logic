@@ -173,7 +173,10 @@ namespace Mail.DomainService.Mails.Office365
                 return "username is missing";
             }
 
-            if (string.IsNullOrEmpty(configuration.AccountPassword))
+            // A record whose password lives in Blocks Secrets has it: the send resolves the
+            // reference before this check runs, and a reference alone also counts as present.
+            if (string.IsNullOrEmpty(configuration.AccountPassword)
+                && string.IsNullOrEmpty(configuration.AccountPasswordReference))
             {
                 return "password is missing";
             }
