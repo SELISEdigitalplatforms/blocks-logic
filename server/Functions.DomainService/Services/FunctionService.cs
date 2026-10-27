@@ -302,9 +302,9 @@ namespace Functions.DomainService.Services
             foreach (var function in items)
             {
                 var activeVersion = await GetActiveVersionAsync(tenantId, function, cancellationToken);
-                // Derived, exactly as the detail view does it. Without this the list read the
-                // unset default and never showed "unpublished changes" for anything.
-                function.IsDirty = IsDirty(function, activeVersion);
+                // The list projects Source away, so the working copy is compared by its stored
+                // hash rather than re-hashed — hashing the missing source marked every row dirty.
+                function.IsDirty = IsDirtyByStoredHash(function, activeVersion);
                 runs24h.TryGetValue(function.ItemId, out var recentRuns);
                 var summary = FunctionSummaryDto.From(function, activeVersion?.Number, recentRuns);
                 if (unbound is not null)
@@ -439,6 +439,17 @@ namespace Functions.DomainService.Services
 
             return FunctionHashing.CodeHash(function.Source) != activeVersion.CodeHash
                 || FunctionHashing.ManifestHash(function.Source) != activeVersion.ManifestHash;
+        }
+
+        /// <summary>
+        /// <see cref="IsDirty"/> for a function read without its <c>Source</c> (the list): the
+        /// working copy's stored <c>SourceHash</c> against the active version's source. Same
+        /// inputs and normalisation as the code + manifest pair, so the two always agree.
+        /// </summary>
+        internal static bool IsDirtyByStoredHash(FunctionEntity function, FunctionVersionEntity? activeVersion)
+        {
+            if (activeVersion?.Source is null) return true;
+            return FunctionHashing.IsDirty(activeVersion.Source, function.SourceHash);
         }
 
         /// <summary>
