@@ -13,7 +13,7 @@ using Xunit;
 namespace Blocks.FunctionRunner.Tests
 {
     /// <summary>
-    /// Everything around the pool: the pre-warm consumer, the reaper's warm-orphan rule, the
+    /// Everything around the pool: the drain consumer, the reaper's warm-orphan rule, the
     /// reusable sandbox's security profile, and the stdin framing of the envelope.
     /// </summary>
     public sealed class WarmSupportTests
@@ -23,111 +23,49 @@ namespace Blocks.FunctionRunner.Tests
             RunnerId = "runner-a",
             Network = "blocks-fn-egress",
             ResolvConf = "/etc/blocks-runner/resolv.conf",
-            StartCostCpuMs = 0,
-            MaxActiveSandboxes = 20,
         };
-
-        private sealed class Resolves(string? to) : IImageResolver
-        {
-            public List<string> Asked { get; } = [];
-            public List<(string? Url, string? Sha)> Artifacts { get; } = [];
-
-            public Task<string?> EnsureAsync(string reference, CancellationToken token, string? artifactUrl = null, string? artifactSha256 = null)
-            {
-                Asked.Add(reference);
-                Artifacts.Add((artifactUrl, artifactSha256));
-                return Task.FromResult(to);
-            }
-        }
 
         private static (WarmPool Pool, ScriptedFactory Factory) Pool()
         {
             var options = Microsoft.Extensions.Options.Options.Create(Options);
-            var budget = new HostBudget(options, new CalmHost(), new SandboxFootprint(), NullLogger<HostBudget>.Instance);
+            var budget = new HostRoom(options, new CalmHost(), NullLogger<HostRoom>.Instance);
             var factory = new ScriptedFactory(Options);
             return (new WarmPool(factory, budget, options, NullLogger<WarmPool>.Instance), factory);
         }
 
-        private static WarmConsumerService Consumer(WarmPool pool, IImageResolver images) =>
-            new(null!, pool, images, Microsoft.Extensions.Options.Options.Create(Options), NullLogger<WarmConsumerService>.Instance);
+        private static WarmConsumerService Consumer(WarmPool pool) =>
+            new(null!, pool, Microsoft.Extensions.Options.Options.Create(Options), NullLogger<WarmConsumerService>.Instance);
 
         private static ClaimedEntry Entry(params (string Key, string Value)[] fields) =>
             new(RedisValue.Null, fields.ToDictionary(f => f.Key, f => f.Value));
 
-        // ---- pre-warm ----------------------------------------------------------------
+        // ---- drain only, never a pre-warm ------------------------------------------------
 
         [Fact]
-        public async Task A_prewarm_entry_starts_count_paused_sandboxes_of_the_resolved_image()
+        public async Task An_entry_asking_for_a_prewarm_starts_nothing()
         {
+            // An older control plane still sends count and image (RUNNER-FLOW step 2: no pre-warm).
             var (pool, factory) = Pool();
             await using var _ = pool;
-            var images = new Resolves("img@sha256:resolved");
 
-            await Consumer(pool, images).HandleAsync(Entry(
-                ("tenantId", "t1"), ("functionId", "fn"), ("versionId", "v2"), ("image", "img:tag"), ("count", "2")), default);
+            await Consumer(pool).HandleAsync(Entry(
+                ("tenantId", "t1"), ("functionId", "fn"), ("versionId", "v2"), ("image", "img:tag"), ("count", "2")));
 
-            images.Asked.Should().Equal("img:tag");
-            factory.Created.Should().HaveCount(2).And.OnlyContain(c => c.Paused);
-
-            // A run of that version, on the same resolved image, finds them.
-            var handle = (await pool.AcquireAsync(new WarmKey("t1", "fn", "v2", "img@sha256:resolved"), RunLimits.Default, default)).Handle!;
-            handle.Reused.Should().BeTrue();
+            factory.Created.Should().BeEmpty("the first call warms a version, not the deploy");
         }
 
         [Fact]
-        public async Task A_prewarm_of_an_artifact_built_version_builds_its_image_from_the_artifact()
-        {
-            var (pool, factory) = Pool();
-            await using var _ = pool;
-            var images = new Resolves("blocks-fn-artifact/b1:local");
-
-            await Consumer(pool, images).HandleAsync(Entry(
-                ("tenantId", "t1"), ("functionId", "fn"), ("versionId", "v2"), ("image", "blocks-fn-artifact/b1:local"),
-                ("count", "1"), ("artifactUrl", "https://blob/b1.tar?sig=x"), ("artifactSha256", "abc")), default);
-
-            images.Artifacts.Should().ContainSingle().Which.Should().Be(("https://blob/b1.tar?sig=x", "abc"));
-            factory.Created.Should().ContainSingle();
-        }
-
-        [Fact]
-        public async Task A_prewarm_entry_drains_the_previous_version_of_that_function_only()
+        public async Task A_drain_entry_drains_the_previous_version_of_that_function_only()
         {
             var (pool, _) = Pool();
             await using var __ = pool;
-            await pool.PrewarmAsync(new WarmKey("t1", "fn", "v1", "img1"), RunLimits.Default, 2, default);
-            await pool.PrewarmAsync(new WarmKey("t2", "fn", "v1", "img1"), RunLimits.Default, 1, default);
+            await pool.WarmUpAsync(new WarmKey("t1", "fn", "v1", "img1"), 2);
+            await pool.WarmUpAsync(new WarmKey("t2", "fn", "v1", "img1"));
 
-            await Consumer(pool, new Resolves(null)).HandleAsync(Entry(
-                ("tenantId", "t1"), ("functionId", "fn"), ("versionId", "v2"), ("image", "img2"),
-                ("count", "1"), ("drainVersionId", "v1")), default);
+            await Consumer(pool).HandleAsync(Entry(
+                ("tenantId", "t1"), ("functionId", "fn"), ("versionId", "v2"), ("image", "img2"), ("drainVersionId", "v1")));
 
-            pool.Counts.Total.Should().Be(1, "tenant t2's sandbox is another tenant's, and v2's image was not available");
-        }
-
-        [Fact]
-        public async Task A_prewarm_with_nothing_to_start_starts_nothing()
-        {
-            var (pool, factory) = Pool();
-            await using var _ = pool;
-
-            await Consumer(pool, new Resolves("img")).HandleAsync(Entry(("functionId", "fn"), ("count", "3")), default);
-            await Consumer(pool, new Resolves("img")).HandleAsync(Entry(
-                ("functionId", "fn"), ("versionId", "v"), ("image", "img"), ("count", "0")), default);
-
-            factory.Created.Should().BeEmpty();
-        }
-
-        [Fact]
-        public async Task A_prewarm_count_is_capped()
-        {
-            var (pool, factory) = Pool();
-            await using var _ = pool;
-
-            await Consumer(pool, new Resolves("img")).HandleAsync(Entry(
-                ("tenantId", "t"), ("functionId", "fn"), ("versionId", "v"), ("image", "img"), ("count", "100000")), default);
-
-            factory.Created.Count.Should().BeLessThanOrEqualTo(Ceilings.MaxFunctionConcurrency,
-                "the version's own cap still holds");
+            pool.Counts.Total.Should().Be(1, "tenant t2's sandbox is another tenant's");
         }
 
         // ---- reaper --------------------------------------------------------------------

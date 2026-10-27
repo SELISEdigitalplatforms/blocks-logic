@@ -100,14 +100,23 @@ namespace Blocks.FunctionRunner.Builds
             _template = LoadTemplate();
         }
 
+        /// <summary>Why a build cancelled by a newer deploy of its function failed (RUNNER-FLOW step 1.1).</summary>
+        internal const string SupersededReason = "the build was cancelled: a newer deploy of this function replaced it";
+
         /// <summary>
         /// Builds one job and publishes its result. Returns what was published, so a caller that
         /// builds for itself (a test run) can go straight on to use the image.
         /// </summary>
-        public async Task<BuildOutcome> ProcessAsync(BuildJob job, CancellationToken token)
+        /// <param name="superseded">
+        /// Cancelled when a newer deploy of the same function is queued: the build is stopped at once
+        /// (its install container killed) and fails with <see cref="SupersededReason"/>.
+        /// </param>
+        public async Task<BuildOutcome> ProcessAsync(BuildJob job, CancellationToken token, CancellationToken superseded = default)
         {
             ArgumentNullException.ThrowIfNull(job);
             var outcome = new BuildOutcome();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            string? Why(string? reason) => superseded.IsCancellationRequested ? SupersededReason : reason;
 
             var workspace = Path.Combine(_options.BuildsDir, job.BuildId);
             var log = new StringBuilder();
@@ -126,7 +135,13 @@ namespace Blocks.FunctionRunner.Builds
             // The audit block first: its markers extend the packages markers, so stripping the
             // packages block first would leave them half-blanked.
             string PublishableLog() => Tail(StripPackagesBlock(
-                StripPackagesBlock(log.ToString(), auditBegin, auditEnd), beginMarker, endMarker));
+                StripPackagesBlock(log.ToString(), auditBegin, auditEnd), beginMarker, endMarker)) + SlowBuildWarning(watch.Elapsed);
+
+            if (superseded.IsCancellationRequested)
+            {
+                await PublishAsync(job, outcome, "FAILED", null, null, string.Empty, SupersededReason).ConfigureAwait(false);
+                return outcome;
+            }
 
             try
             {
@@ -187,8 +202,10 @@ namespace Blocks.FunctionRunner.Builds
 
                 // One deadline covers the install and the image build together: they are two
                 // halves of the same job and a tenant was promised one time limit, not two.
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+                // Hard limit: killed past it (RUNNER-FLOW step 1.7). A newer deploy stops it too.
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token, superseded);
                 timeout.CancelAfter(TimeSpan.FromSeconds(_options.BuildTimeoutSeconds));
+                using var slow = WarnWhenSlow(job);
 
                 // --- dependencies --------------------------------------------------------
                 // Installing is the expensive half of a build, and the manifest is the only thing
@@ -221,7 +238,7 @@ namespace Blocks.FunctionRunner.Builds
 
                     if (!install.Ok)
                     {
-                        await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), install.Failure)
+                        await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(), Why(install.Failure))
                             .ConfigureAwait(false);
                         return outcome;
                     }
@@ -267,7 +284,7 @@ namespace Blocks.FunctionRunner.Builds
                 if (!built)
                 {
                     await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(),
-                            SyntaxErrorFailure(log.ToString()) ?? "the image build failed")
+                            Why(SyntaxErrorFailure(log.ToString()) ?? "the image build failed"))
                         .ConfigureAwait(false);
                     return outcome;
                 }
@@ -303,9 +320,9 @@ namespace Blocks.FunctionRunner.Builds
                 {
                     await PublishAsync(
                         job, outcome, "FAILED", null, null, PublishableLog(),
-                        job.ArtifactUploadUrl is null
+                        Why(job.ArtifactUploadUrl is null
                             ? "the image could not be pushed"
-                            : "the build artifact could not be uploaded")
+                            : "the build artifact could not be uploaded"))
                         .ConfigureAwait(false);
                     return outcome;
                 }
@@ -335,7 +352,7 @@ namespace Blocks.FunctionRunner.Builds
             catch (OperationCanceledException)
             {
                 await PublishAsync(job, outcome, "FAILED", null, null, PublishableLog(),
-                    $"the build exceeded its {_options.BuildTimeoutSeconds}s time limit").ConfigureAwait(false);
+                    Why($"the build exceeded its {_options.BuildTimeoutSeconds}s time limit")).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -349,6 +366,22 @@ namespace Blocks.FunctionRunner.Builds
 
             return outcome;
         }
+
+        /// <summary>The "slow build" line added to the build log past the soft limit (5 min), or nothing.</summary>
+        private string SlowBuildWarning(TimeSpan elapsed) =>
+            elapsed.TotalSeconds > _options.BuildSlowWarningSeconds
+                ? FormattableString.Invariant(
+                    $"\nwarning: slow build — it took {elapsed.TotalSeconds:0} s, over the {_options.BuildSlowWarningSeconds} s soft limit (hard limit {_options.BuildTimeoutSeconds} s)\n")
+                : string.Empty;
+
+        /// <summary>
+        /// Logs a "slow build" warning on this host once the soft limit passes with the build still
+        /// going. Disposing it (the build ended) stops it.
+        /// </summary>
+        private Timer WarnWhenSlow(BuildJob job) =>
+            new(_ => _logger.LogWarning("Build {BuildId} of function {FunctionId} is slow: still going after {Seconds} s",
+                    job.BuildId, job.FunctionId, _options.BuildSlowWarningSeconds),
+                null, TimeSpan.FromSeconds(_options.BuildSlowWarningSeconds), Timeout.InfiniteTimeSpan);
 
         /// <summary>The two directories one build works in, and the root that holds both.</summary>
         /// <param name="Root">Deleted wholesale when the build ends.</param>

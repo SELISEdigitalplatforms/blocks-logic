@@ -18,16 +18,29 @@ namespace Blocks.FunctionRunner.Runs
     /// is unavailable. Work left unclaimed stays in the stream and is picked up by a healthy
     /// runner, so an unhealthy host degrades the fleet's throughput and nothing else.
     /// </para>
+    /// <para>
+    /// It takes a run only when there is room (RUNNER-FLOW step 3): the live room check says yes →
+    /// read <b>one</b> run → start it → wait until that run has its room decision → check again.
+    /// No room → read nothing, wait, check again; the run stays on the queue for any runner with
+    /// room. Nothing is counted: the check reads the machine every time.
+    /// </para>
     /// </summary>
     public sealed class RunConsumerService : BackgroundService
     {
-        /// <summary>Most new entries read in one turn of the run loop (FN-4).</summary>
-        internal const int MaxReadBatch = 16;
+        /// <summary>How long the loop waits before checking again when there is no room (≤ 5 s, step 3).</summary>
+        internal static readonly TimeSpan NoRoomWait = TimeSpan.FromSeconds(1);
+
+        /// <summary>
+        /// The longest the loop waits for a started run's room decision before it checks again. A run
+        /// whose image is still being built can take minutes to get there; the loop does not wait that long.
+        /// </summary>
+        internal static readonly TimeSpan AdmissionWait = TimeSpan.FromSeconds(5);
 
         private readonly IDatabase _db;
         private readonly RunProcessor _processor;
         private readonly HeartbeatService _heartbeat;
-        private readonly HostBudget _budget;
+        private readonly HostRoom _room;
+        private readonly Sandbox.WarmPool? _warm;
         private readonly RunnerOptions _options;
         private readonly ILogger<RunConsumerService> _logger;
 
@@ -35,14 +48,16 @@ namespace Blocks.FunctionRunner.Runs
             IDatabase db,
             RunProcessor processor,
             HeartbeatService heartbeat,
-            HostBudget budget,
+            HostRoom room,
             IOptions<RunnerOptions> options,
-            ILogger<RunConsumerService> logger)
+            ILogger<RunConsumerService> logger,
+            Sandbox.WarmPool? warm = null)
         {
             _db = db;
             _processor = processor;
             _heartbeat = heartbeat;
-            _budget = budget;
+            _room = room;
+            _warm = warm;
             _options = options.Value;
             _logger = logger;
         }
@@ -64,11 +79,11 @@ namespace Blocks.FunctionRunner.Runs
             await eventConsumer.EnsureGroupAsync().ConfigureAwait(false);
             var selector = new RunSourceSelector();
 
-            // The capacity logged here is the budget's current view, not a configured number:
-            // it moves with the host while this loop runs.
+            var room = _room.Read();
             _logger.LogInformation(
-                "Consuming {Stream} and {EventStream} as {Consumer} (capacity {Capacity}); function run spans: {Tracing}",
-                RedisKeys.RunsStream, RedisKeys.EventRunsStream, _options.RunnerId, _budget.Capacity, _processor.TracingState);
+                "Consuming {Stream} and {EventStream} as {Consumer} ({Cores:0.##} cores, {Reserved:0.##} reserved, {FreeMb} MB RAM free for sandboxes); function run spans: {Tracing}",
+                RedisKeys.RunsStream, RedisKeys.EventRunsStream, _options.RunnerId, room.Cores, room.ReservedCores,
+                room.MemoryFreeBytes / 1024 / 1024, _processor.TracingState);
 
             var idleDelay = TimeSpan.FromMilliseconds(250);
             // Wakes the idle wait below the moment the control plane queues a run.
@@ -77,10 +92,8 @@ namespace Blocks.FunctionRunner.Runs
             var reclaimEvery = TimeSpan.FromSeconds(30);
             var nextReclaim = DateTimeOffset.UtcNow.Add(reclaimEvery);
 
-            // Runs in progress on this host. Each claimed entry is handled on its own task, so a
-            // run that takes 20 s no longer holds up every run queued behind it: the loop used to
-            // await each run before claiming the next, so a host of capacity 10 ran one run at a
-            // time. Only this loop touches the list.
+            // Runs in progress on this host, each on its own task. Only this loop touches the list,
+            // and a finished task leaves it on the next turn — it is what is running now, not a count.
             var running = new List<Task>();
 
             while (!stoppingToken.IsCancellationRequested)
@@ -98,29 +111,25 @@ namespace Blocks.FunctionRunner.Runs
                         continue;
                     }
 
-                    // Claim only what this host has room to work on. An entry claimed beyond that
-                    // would only be deferred, and a deferred entry waits for the reclaim sweep —
-                    // left on the stream, another runner with room takes it at once.
-                    var room = ParallelLimit() - running.Count;
-                    if (room <= 0)
+                    // Read a run only when there is room for it. With no room nothing is read: the
+                    // run stays on the queue, where any runner with room takes it.
+                    if (!HasRoom(running.Count))
                     {
-                        await Task.WhenAny([.. running, Task.Delay(idleDelay, stoppingToken)]).ConfigureAwait(false);
+                        await Task.WhenAny([.. running, Task.Delay(NoRoomWait, stoppingToken)]).ConfigureAwait(false);
                         continue;
                     }
 
-                    // Up to the room this host has, at most MaxReadBatch: one round trip per entry
-                    // capped a runner at ~1/RTT claims per second (~29/s at 34 ms, FN-4). Never more
-                    // than the room, so nothing is claimed only to be deferred.
+                    // One run per turn: check, read one, start it, check again.
                     var entries = await ReadNextAsync(
-                        consumer, eventConsumer, selector, Math.Min(room, MaxReadBatch), stoppingToken,
-                        _options.EventRunMaxWaitSeconds).ConfigureAwait(false);
+                        consumer, eventConsumer, selector, 1, stoppingToken, _options.EventRunMaxWaitSeconds).ConfigureAwait(false);
 
                     // On its own timer: the sweep for entries a dead runner left behind used to run
-                    // only when no new entry arrived, so under steady traffic it never ran.
-                    if (DateTimeOffset.UtcNow >= nextReclaim && room > entries.Count)
+                    // only when no new entry arrived, so under steady traffic it never ran. One entry
+                    // beyond the one just read: the room check already said yes.
+                    if (DateTimeOffset.UtcNow >= nextReclaim)
                     {
                         nextReclaim = DateTimeOffset.UtcNow.Add(reclaimEvery);
-                        entries = await ReclaimAsync(consumer, eventConsumer, entries, room).ConfigureAwait(false);
+                        entries = await ReclaimAsync(consumer, eventConsumer, entries, entries.Count + 1).ConfigureAwait(false);
                     }
 
                     if (entries.Count == 0)
@@ -132,10 +141,15 @@ namespace Blocks.FunctionRunner.Runs
                     foreach (var (source, entry) in entries)
                     {
                         // Not the stop token: a stopping host stops claiming but lets what it has
-                        // started finish (each run has its own deadline, ≤ startup allowance +
-                        // timeout + grace). Cancelling here killed calls half-way and ran them
-                        // again elsewhere ≥ 90 s later — side effects twice (FN-3, 2026-10-06).
-                        running.Add(HandleGuardedAsync(source, entry, CancellationToken.None));
+                        // started finish (each run has its own deadline, ≤ 90 s). Cancelling here
+                        // killed calls half-way and ran them again elsewhere ≥ 90 s later — side
+                        // effects twice (FN-3, 2026-10-06).
+                        var admitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        var task = HandleGuardedAsync(source, entry, admitted, CancellationToken.None);
+                        running.Add(task);
+
+                        // The next check must see this start, so wait for its room decision first.
+                        await Task.WhenAny(admitted.Task, task, Task.Delay(AdmissionWait, stoppingToken)).ConfigureAwait(false);
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -259,17 +273,37 @@ namespace Blocks.FunctionRunner.Runs
             }
         }
 
-        /// <summary>True when an event run waited longer than <paramref name="maxWaitSeconds"/> in its queue.</summary>
-        internal static bool IsEventExpired(long? queuedMs, int maxWaitSeconds) =>
+        /// <summary>True when a run waited longer than <paramref name="maxWaitSeconds"/> in its queue.</summary>
+        internal static bool IsEventExpired(long? queuedMs, int maxWaitSeconds) => IsTooOld(queuedMs, maxWaitSeconds);
+
+        /// <summary>True when a run waited longer than <paramref name="maxWaitSeconds"/> in its queue.</summary>
+        internal static bool IsTooOld(long? queuedMs, int maxWaitSeconds) =>
             queuedMs is { } waited && waited > maxWaitSeconds * 1000L;
 
+        /// <summary>Fails and acknowledges a run that waited past its limit; false when it is young enough to run.</summary>
+        private async Task<bool> FailIfTooOldAsync(GroupConsumer consumer, ClaimedEntry entry, RunJob job, CancellationToken token)
+        {
+            var isEvent = string.Equals(consumer.Stream, RedisKeys.EventRunsStream, StringComparison.Ordinal);
+            var limit = isEvent ? _options.EventRunMaxWaitSeconds : _options.RunMaxWaitSeconds;
+            if (!IsTooOld(job.QueuedMs, limit)) return false;
+
+            var minutes = (limit / 60.0).ToString("0.#", CultureInfo.InvariantCulture);
+            var (code, message) = isEvent
+                ? (ErrorCodes.EventExpired, $"{ErrorCodes.EventExpired}: the event run waited more than {limit} s in the queue and was not started")
+                : (ErrorCodes.Undeliverable, $"no room within {minutes} min: the run waited in the queue and was not started");
+            await _processor.ReportUnexecutedAsync(job, RunStatuses.Failed, code, message, token).ConfigureAwait(false);
+            await consumer.AcknowledgeAsync(entry.Id).ConfigureAwait(false);
+            _logger.LogWarning("Run {RunId} waited {WaitedMs} ms in the queue (limit {Limit} s); not started",
+                job.RunId, job.QueuedMs, limit);
+            return true;
+        }
+
         /// <summary>
-        /// A run that cannot start yet goes back to the end of the queue after a short back-off
-        /// (100 ms doubling to 2 s), and this delivery is acknowledged. Deferrals are counted apart
-        /// from crash re-deliveries (which keep MaxAttempts) and given a time budget from when the
-        /// run was first queued; past it, the run is dead-lettered with the reason, which closes it
-        /// as undeliverable. The back-off is spent inside this run's slot of the parallel loop, so
-        /// a host full of waiting runs claims fewer new ones on its own.
+        /// A run that cannot start yet (tenant or function at its limit, no start room, secret store
+        /// not answering) goes back to the end of the queue after a short back-off (100 ms doubling
+        /// to 2 s), and this delivery is acknowledged. Deferrals are counted apart from crash
+        /// re-deliveries (which keep MaxAttempts) and keep the time the run was first queued, so the
+        /// 30-minute "too old" check (<see cref="IsTooOld"/>) is measured from then.
         /// <para>
         /// Put back before acknowledging: a crash in between leaves two entries for one run, and the
         /// lease plus the "already finished" check make the second a no-op — never a lost run.
@@ -283,13 +317,6 @@ namespace Blocks.FunctionRunner.Runs
             var firstQueued = long.TryParse(entry.Get(RedisKeys.RunFirstQueuedField), NumberStyles.None, CultureInfo.InvariantCulture, out var f)
                 ? f
                 : now - (StreamEntryAgeMs(entry.Id) ?? 0);
-
-            if (now - firstQueued > _options.DeferralBudgetSeconds * 1000L)
-            {
-                await consumer.DeadLetterAsync(entry,
-                    $"no capacity to start it within {_options.DeferralBudgetSeconds} s ({deferrals} deferrals)").ConfigureAwait(false);
-                return;
-            }
 
             await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(2000, 100 << Math.Min(deferrals, 5)))).ConfigureAwait(false);
 
@@ -322,21 +349,30 @@ namespace Blocks.FunctionRunner.Runs
                 : null;
         }
 
-        /// <summary>The cap on runs in progress: the configured one, else the host's current capacity.</summary>
-        private int ParallelLimit() =>
-            _options.MaxParallelRuns > 0 ? _options.MaxParallelRuns : Math.Max(1, _budget.Capacity);
+        /// <summary>
+        /// Whether the next run may be read: the live room check, plus the optional operator cap.
+        /// While this host has an idle warm sandbox the next run may be its call, which needs only
+        /// the run CPU; otherwise it needs a start's room.
+        /// </summary>
+        private bool HasRoom(int running)
+        {
+            if (_options.MaxParallelRuns > 0 && running >= _options.MaxParallelRuns) return false;
+            return _options.SandboxReuse && _warm?.HasIdle == true
+                ? _room.HasRoomForWarmCall()
+                : _room.HasRoomForStart(Ceilings.MemoryBytes);
+        }
 
         /// <summary>
         /// One claimed entry, handled off the loop. Whatever goes wrong stays with this run: it is
         /// logged, the entry is left unacknowledged, and whoever claims it next retries it — the
         /// loop and every other run go on.
         /// </summary>
-        private Task HandleGuardedAsync(GroupConsumer consumer, ClaimedEntry entry, CancellationToken token) =>
+        private Task HandleGuardedAsync(GroupConsumer consumer, ClaimedEntry entry, TaskCompletionSource admitted, CancellationToken token) =>
             Task.Run(async () =>
             {
                 try
                 {
-                    await HandleAsync(consumer, entry, token).ConfigureAwait(false);
+                    await HandleAsync(consumer, entry, () => admitted.TrySetResult(), token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
@@ -346,9 +382,13 @@ namespace Blocks.FunctionRunner.Runs
                 {
                     _logger.LogError(ex, "Run entry {EntryId} hit an unexpected error", entry.Id);
                 }
+                finally
+                {
+                    admitted.TrySetResult();
+                }
             }, CancellationToken.None);
 
-        private async Task HandleAsync(GroupConsumer consumer, ClaimedEntry entry, CancellationToken token)
+        private async Task HandleAsync(GroupConsumer consumer, ClaimedEntry entry, Action admitted, CancellationToken token)
         {
             var runId = entry.Get("runId");
             if (string.IsNullOrWhiteSpace(runId))
@@ -412,23 +452,13 @@ namespace Blocks.FunctionRunner.Runs
                 return;
             }
 
-            // A run started by an event is not real time: past its wait limit it is not started. The run is
-            // failed through the same result path as any other run that never reached a sandbox, and the
-            // control plane closes it as terminal (never retried) and dead-letters the event.
-            if (string.Equals(consumer.Stream, RedisKeys.EventRunsStream, StringComparison.Ordinal)
-                && IsEventExpired(job.QueuedMs, _options.EventRunMaxWaitSeconds))
-            {
-                await _processor.ReportUnexecutedAsync(
-                    job, RunStatuses.Failed, ErrorCodes.EventExpired,
-                    $"{ErrorCodes.EventExpired}: the event run waited more than {_options.EventRunMaxWaitSeconds} s in the queue and was not started",
-                    token).ConfigureAwait(false);
-                await consumer.AcknowledgeAsync(entry.Id).ConfigureAwait(false);
-                _logger.LogWarning(
-                    "Event run {RunId} expired after {WaitedMs} ms in the queue; not started", runId, job.QueuedMs);
-                return;
-            }
+            // Too old (RUNNER-FLOW step 4.1): queued longer than its wait limit (30 min), it is not
+            // started. Failed through the same result path as any other run that never reached a
+            // sandbox; the control plane closes it as terminal (never retried). An event run keeps its
+            // own code, so the control plane also dead-letters its event.
+            if (await FailIfTooOldAsync(consumer, entry, job, token).ConfigureAwait(false)) return;
 
-            var disposition = await GuardAsync(() => _processor.ProcessAsync(job, token), runId, _logger, token)
+            var disposition = await GuardAsync(() => _processor.ProcessAsync(job, token, admitted), runId, _logger, token)
                 .ConfigureAwait(false);
 
             switch (disposition)

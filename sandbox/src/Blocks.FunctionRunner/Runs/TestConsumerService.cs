@@ -34,7 +34,10 @@ namespace Blocks.FunctionRunner.Runs
     /// </summary>
     public sealed class TestConsumerService : BackgroundService
     {
-        /// <summary>How long a built test waits for a sandbox slot before giving up.</summary>
+        /// <summary>
+        /// How long a built test waits for room before giving up (RUNNER-FLOW step 7.3: 2 min —
+        /// someone is watching). It waits while less than 30 % of the sandbox CPU is free.
+        /// </summary>
         internal static readonly TimeSpan AdmissionWait = TimeSpan.FromMinutes(2);
 
         private readonly IDatabase _db;
@@ -237,7 +240,7 @@ namespace Blocks.FunctionRunner.Runs
                 if (DateTimeOffset.UtcNow >= deadline)
                 {
                     await _runs.ReportUnexecutedAsync(run, RunStatuses.Failed, ErrorCodes.SandboxStartFailed,
-                        $"the test was built but no sandbox slot freed up within {AdmissionWait.TotalMinutes:0} minutes; " +
+                        $"the test was built but the host had no room for it within {AdmissionWait.TotalMinutes:0} minutes; " +
                         "nothing ran — test again", token).ConfigureAwait(false);
                     return;
                 }

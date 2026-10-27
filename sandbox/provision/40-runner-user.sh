@@ -150,14 +150,14 @@ RUNNER__QueuePrefix=
 #
 # How long a run started by a function event may wait in the event queue (functions:event-runs)
 # before the runner gives up on it: older entries are not started and their run fails as
-# EVENT_EXPIRED. Events are not real time. Default 300 (5 minutes).
-# RUNNER__EventRunMaxWaitSeconds=300
+# EVENT_EXPIRED. Events are not real time. Default 1800 (30 minutes).
+# RUNNER__EventRunMaxWaitSeconds=1800
+# A normal run queued longer than this is failed unstarted ("no room within 30 min").
+# RUNNER__RunMaxWaitSeconds=1800
 #
-# The most sandbox slots one tenant may hold at once on this host. Unset or 0 derives it as
-# half the host's capacity, rounded up. The host budget on its own is first-come-first-served,
-# so one tenant's burst could hold every slot while every other tenant waited behind it;
-# nothing is rejected either way, a tenant over its share has its entries deferred. Set it to
-# RUNNER__MaxActiveSandboxes or higher to turn the share off.
+# The most sandbox slots one tenant may hold at once. Unset or 0 derives it as half the
+# fleet's capacity (sandbox cores ÷ 100m), rounded up; a tenant over its share waits on the
+# queue. Set it high to turn the share off.
 # RUNNER__MaxSandboxesPerTenant=
 RUNNER__Registry=127.0.0.1:5000
 RUNNER__Network=${FN_NETWORK:-blocks-fn-egress}
@@ -177,9 +177,14 @@ RUNNER__Runtime=runsc
 # RUNNER__PruneRegistry=
 
 # --- Admission ---------------------------------------------------------------
-# The sandbox count is measured from this host, so it is deliberately not written here.
-# See deploy/runner.env.example for how to pin it, and why you probably should not.
-# RUNNER__MaxActiveSandboxes=
+# Nothing is counted: before every start the runner reads the machine now and starts only if
+# there is room. Cores kept for the runner, Docker and builds: unset = 1 (<=4 cores), 1.5 (5-8),
+# 2 (more); 1-2 allowed.
+# RUNNER__ReservedCores=
+# Builds: up to this many at once; a "slow build" warning after the soft limit, killed at the hard one.
+# RUNNER__MaxParallelBuilds=3
+# RUNNER__BuildSlowWarningSeconds=300
+# RUNNER__BuildTimeoutSeconds=900
 RUNNER__ReservedHostMemoryMb=2048
 
 # --- Work this runner consumes -----------------------------------------------
@@ -199,12 +204,11 @@ RUNNER__ReservedHostMemoryMb=2048
 # RUNNER__BuildImage=
 # RUNNER__SandboxReuse=false
 # RUNNER__WarmIdleSeconds=600
+# RUNNER__WarmExtraIdleSeconds=60
 # RUNNER__WarmMaxCalls=1000
 # RUNNER__WarmMaxAgeSeconds=3600
 # RUNNER__WarmMemoryHighWaterPercent=90
 # RUNNER__WarmMaxPerVersion=0
-# RUNNER__StartCostCpuMs=800
-# RUNNER__StartsPerSecondPerCore=1.0
 # RUNNER__CleanGraceMs=200
 # RUNNER__WarmWriteTimeoutMs=5000
 

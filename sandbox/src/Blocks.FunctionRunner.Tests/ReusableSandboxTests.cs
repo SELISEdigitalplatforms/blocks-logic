@@ -280,6 +280,24 @@ namespace Blocks.FunctionRunner.Tests
         }
 
         [Fact]
+        public async Task A_call_whose_code_does_not_stop_is_killed_at_its_deadline_and_reported_timed_out()
+        {
+            // Started, then nothing: the code runs on past its limit and the grace (RUNNER-FLOW step 5.4).
+            var (sandbox, container) = await ReadyAsync(c => c.OnCall = id => [Lines.Started(id)]);
+            sandbox.CallDeadlineOverride = TimeSpan.FromMilliseconds(200);
+
+            var call = await CallAsync(sandbox, "run_1");
+
+            container.Killed.Should().BeTrue();
+            call.Discard.Should().Be("timeout");
+            var (status, code, message) = RunOutcome.Map(
+                call.Result.OomKilled, call.Result.ExitCode, call.Result.TimedOut, false, call.Result.Output);
+            status.Should().Be(RunStatuses.TimedOut, "a kill after the grace is the timeout's consequence, not a crash");
+            code.Should().Be(ErrorCodes.TimedOut);
+            message.Should().Be("the function exceeded its 30000 ms time limit");
+        }
+
+        [Fact]
         public async Task A_sandbox_that_exits_mid_call_is_a_crash()
         {
             ScriptedContainer? container = null;

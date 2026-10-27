@@ -1,4 +1,5 @@
 using Blocks.Genesis.Entities.Logic;
+using Functions.DomainService.Utils;
 
 namespace Functions.DomainService.Dtos.Requests
 {
@@ -33,7 +34,8 @@ namespace Functions.DomainService.Dtos.Requests
         public string? LockJson { get; set; }
         /// <summary>See <see cref="FunctionSource.AllowInstallScripts"/>. Absent = off.</summary>
         public bool AllowInstallScripts { get; set; }
-        public FunctionLimits Limits { get; set; } = new();
+        /// <summary>The function's limits; only its concurrency is kept (1–10), and a new function gets 3.</summary>
+        public FunctionLimits Limits { get; set; } = new() { Concurrency = FunctionConcurrencySetting.Default };
         public RetryPolicy Retry { get; set; } = new();
         public TriggerConfig Trigger { get; set; } = new();
         public List<OutputAction> OutputActions { get; set; } = [];

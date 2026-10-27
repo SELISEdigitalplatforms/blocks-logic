@@ -1,4 +1,5 @@
 using Blocks.Genesis.Entities.Logic;
+using Functions.DomainService.Utils;
 
 namespace Functions.DomainService.Dtos.Responses
 {
@@ -97,7 +98,7 @@ namespace Functions.DomainService.Dtos.Responses
             // Clamped, so an old document's per-day value (or an out-of-range per-minute one) is
             // never handed to the editor: it would send it straight back and the save would be
             // refused (FunctionLimitsValidator). What is shown is also what actually runs.
-            Limits = (function.Limits ?? new FunctionLimits()).Clamp(),
+            Limits = function.Limits.ClampKeepingConcurrency(),
             Retry = function.Retry,
             Trigger = function.Trigger,
             OutputActions = function.OutputActions,

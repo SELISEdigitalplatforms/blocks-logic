@@ -62,11 +62,9 @@ namespace Blocks.FunctionRunner.Utils
             services.AddSingleton<IDatabase>(sp =>
                 sp.GetRequiredService<Blocks.Genesis.ICacheClient>().CacheDatabase());
 
-            // Admission sizes itself from the host: the signals are what it reads, the footprint
-            // is what it has measured runs to cost, and the budget is the loop over the two.
+            // The live room check: it reads the machine on every check and counts nothing.
             services.AddSingleton<IHostSignals, ProcHostSignals>();
-            services.AddSingleton<SandboxFootprint>();
-            services.AddSingleton<HostBudget>();
+            services.AddSingleton<HostRoom>();
             services.AddSingleton<FleetCapacity>();
             // Typed client: Image GC deletes the registry's copy of an image as well as the
             // daemon's, so the two stores cannot drift apart.
@@ -80,7 +78,6 @@ namespace Blocks.FunctionRunner.Utils
             services.AddSingleton<Sandbox.IArtifactImageBuilder, Sandbox.ArtifactImageBuilder>();
             services.AddSingleton<Maintenance.IImageUsageLog, Maintenance.ImageUsageLog>();
             services.AddSingleton<Builds.IDependencyCache, Builds.DependencyCache>();
-            services.AddSingleton<SecretStore.ISecretStoreBreaker, SecretStore.SecretStoreBreaker>();
 
             // Uploading a build artifact. Same reasoning as the download client: a large body
             // deserves a timeout that is not the default short one.
@@ -107,7 +104,6 @@ namespace Blocks.FunctionRunner.Utils
             // Reusable sandboxes (sandbox/REUSE.md). Registered always — it is empty and costs
             // nothing unless RUNNER__SandboxReuse is on and a run asks for reuse.
             services.AddSingleton<IReusableSandboxFactory, DockerReusableSandboxFactory>();
-            services.AddSingleton<WarmKeyJournal>();
             services.AddSingleton<WarmPool>();
             services.AddSingleton<RunProcessor>();
             services.AddSingleton<BuildProcessor>();
@@ -129,9 +125,10 @@ namespace Blocks.FunctionRunner.Utils
             services.AddHostedService<Maintenance.LeftoverEnvelopeCleaner>();
             services.AddHostedService(sp => sp.GetRequiredService<HeartbeatService>());
             services.AddHostedService<RunConsumerService>();
-            // Pre-warm and drain requests, and the idle sweep of the warm pool; idle unless
-            // RUNNER__SandboxReuse is on.
+            // Drain requests for old versions, and the warm clean-up on its own timer; both idle
+            // unless RUNNER__SandboxReuse is on.
             services.AddHostedService<WarmConsumerService>();
+            services.AddHostedService<WarmSweepService>();
             services.AddHostedService<BuildConsumerService>();
             // Test runs: build, run and delete on one host (Runs/TestConsumerService).
             services.AddHostedService<TestConsumerService>();

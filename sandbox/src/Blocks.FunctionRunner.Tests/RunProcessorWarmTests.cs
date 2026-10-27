@@ -108,21 +108,15 @@ namespace Blocks.FunctionRunner.Tests
 
         private readonly ResolvesAnything _resolver = new();
 
-        /// <summary>The footprint of the last processor built, to check what was fed to it.</summary>
-        private SandboxFootprint _footprint = new();
-
-        private (RunProcessor Processor, ScriptedFactory Factory) Processor(ISandbox sandbox, bool reuseOn, CalmHost? host = null)
+        private (RunProcessor Processor, ScriptedFactory Factory) Processor(ISandbox sandbox, bool reuseOn, IHostSignals? host = null)
         {
             var options = Microsoft.Extensions.Options.Options.Create(new RunnerOptions
             {
                 RunnerId = "test-runner",
                 RunsDir = _runsDir,
-                MaxActiveSandboxes = 4,
                 SandboxReuse = reuseOn,
-                StartCostCpuMs = 0,
             });
-            _footprint = new SandboxFootprint();
-            var budget = new HostBudget(options, host ?? new CalmHost(), _footprint, NullLogger<HostBudget>.Instance);
+            var budget = new HostRoom(options, host ?? new CalmHost(), NullLogger<HostRoom>.Instance);
             var factory = new ScriptedFactory(options.Value);
             _pools.Add(new WarmPool(factory, budget, options, NullLogger<WarmPool>.Instance));
 
@@ -479,8 +473,7 @@ namespace Blocks.FunctionRunner.Tests
             {
                 if (n == 0) c.OnCall = _ => { c.End(); return []; };
             };
-            await Pool.PrewarmAsync(
-                new WarmKey("tenant_test", _functionId, "ver_1", "img@sha256:abc"), RunLimits.Default, 1, default);
+            await Pool.WarmUpAsync(new WarmKey("tenant_test", _functionId, "ver_1", "img@sha256:abc"), 1);
             var job = await QueueAsync(reuse: true);
 
             (await processor.ProcessAsync(job, default)).Should().Be(RunProcessor.Disposition.Complete);
@@ -495,26 +488,17 @@ namespace Blocks.FunctionRunner.Tests
         public async Task A_single_run_refused_for_memory_evicts_an_idle_warm_sandbox()
         {
             Skip.If(Unavailable, "no Redis available");
-            // Room for exactly one 128 MB sandbox above the 2 GB host reserve.
+            // Room for exactly one 128 MB sandbox above the 2 GB host reserve, read live: each warm
+            // sandbox alive takes its 128 MB out of what the host says is available.
             var sandbox = new CountingSandbox();
-            var (processor, _) = Processor(sandbox, reuseOn: true, new CalmHost { TotalMemoryBytes = (2048L + 128) * 1024 * 1024 });
-            await Pool.PrewarmAsync(new WarmKey("tenant_test", "fn_other", "v", "img"), RunLimits.Default, 1, default);
+            var (processor, _) = Processor(sandbox, reuseOn: true,
+                new LiveMemoryHost(() => ((2048L + 128) * 1024 * 1024) - (Pool.Counts.Total * Ceilings.MemoryBytes)));
+            await Pool.WarmUpAsync(new WarmKey("tenant_test", "fn_other", "v", "img"), 1);
 
             (await processor.ProcessAsync(await QueueAsync(reuse: false), default)).Should().Be(RunProcessor.Disposition.Complete);
 
             sandbox.Calls.Should().Be(1);
             Pool.Counts.Total.Should().Be(0, "the idle sandbox gave its memory to the waiting run");
-        }
-
-        [SkippableFact]
-        public async Task A_warm_calls_memory_snapshot_is_not_fed_to_the_footprint()
-        {
-            Skip.If(Unavailable, "no Redis available");
-            var (processor, _) = Processor(new CountingSandbox(), reuseOn: true);
-
-            await processor.ProcessAsync(await QueueAsync(reuse: true), default);
-
-            _footprint.SampleCount.Should().Be(0);
         }
     }
 }

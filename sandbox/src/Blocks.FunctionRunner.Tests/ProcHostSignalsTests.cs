@@ -5,68 +5,52 @@ using Xunit;
 namespace Blocks.FunctionRunner.Tests
 {
     /// <summary>
-    /// PSI is the signal the whole controller turns on, and it is read as text out of
-    /// <c>/proc</c>. The samples below are literal copies of what the kernel writes, including
-    /// the <c>full</c> line that <c>/proc/pressure/cpu</c> only grew in 5.13 — a parser that
-    /// mistook a missing or malformed line for a large number would shrink a healthy host, and
-    /// one that mistook it for garbage would grow a stalling one.
+    /// The room check turns on two figures read as text out of <c>/proc</c>: CPU in use from
+    /// <c>/proc/stat</c> and <c>MemAvailable</c>. The samples are literal copies of what the kernel
+    /// writes. A parser that read a busy machine as idle would start sandboxes into a full host; one
+    /// that read an idle machine as busy would refuse work on an empty one — the 2026-10-26 failure.
     /// </summary>
     public class ProcHostSignalsTests
     {
-        private const string IdleCpu =
-            "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\n" +
-            "full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n";
-
-        private const string BusyCpu =
-            "some avg10=31.42 avg60=18.07 avg300=6.55 total=1420933514\n" +
-            "full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n";
-
-        private const string BusyMemory =
-            "some avg10=2.71 avg60=1.13 avg300=0.42 total=96551403\n" +
-            "full avg10=1.09 avg60=0.55 avg300=0.19 total=42117905\n";
-
-        /// <summary>A pre-5.13 kernel: /proc/pressure/cpu has a some line and nothing else.</summary>
-        private const string CpuWithoutFullLine =
-            "some avg10=4.20 avg60=2.10 avg300=0.70 total=99887766\n";
-
         [Fact]
-        public void Reads_avg10_from_a_real_pressure_file()
+        public void Reads_total_and_idle_cpu_time_from_the_aggregate_line()
         {
-            ProcHostSignals.ParsePressure(BusyCpu, "some").Should().Be(31.42);
-            ProcHostSignals.ParsePressure(BusyMemory, "some").Should().Be(2.71);
-            ProcHostSignals.ParsePressure(BusyMemory, "full").Should().Be(1.09);
+            // user nice system idle iowait irq softirq steal guest guest_nice
+            var times = ProcHostSignals.ParseCpuLine("cpu  4705 150 1120 16250 520 0 30 5 100 0");
+
+            times.Should().Be(new ProcHostSignals.CpuTimes(4705 + 150 + 1120 + 16250 + 520 + 0 + 30 + 5, 16250 + 520));
         }
 
         [Fact]
-        public void Reads_an_idle_host_as_no_stall_at_all()
+        public void A_per_cpu_line_or_garbage_is_not_read_as_the_machine()
         {
-            ProcHostSignals.ParsePressure(IdleCpu, "some").Should().Be(0);
-            ProcHostSignals.ParsePressure(IdleCpu, "full").Should().Be(0);
+            ProcHostSignals.ParseCpuLine("cpu0 100 0 100 800 0 0 0 0").Should().BeNull();
+            ProcHostSignals.ParseCpuLine("cpu  x y z").Should().BeNull();
         }
 
         [Fact]
-        public void Reads_a_missing_line_as_calm_rather_than_as_pressure()
+        public void Cpu_in_use_is_the_busy_share_between_two_readings()
         {
-            ProcHostSignals.ParsePressure(CpuWithoutFullLine, "full").Should().Be(0);
-            ProcHostSignals.ParsePressure(string.Empty, "some").Should().Be(0);
-            ProcHostSignals.ParsePressure("some avg60=1.00 total=5\n", "some").Should().Be(0);
-            ProcHostSignals.ParsePressure("some avg10=notanumber avg60=1.00\n", "some").Should().Be(0);
+            var before = new ProcHostSignals.CpuTimes(Total: 1000, Idle: 800);
+            var after = new ProcHostSignals.CpuTimes(Total: 2000, Idle: 1050);
+
+            // 1000 ticks passed, 250 of them idle: 75 % busy.
+            ProcHostSignals.BusyBetween(before, after).Should().Be(0.75);
         }
 
         [Fact]
-        public void Does_not_mistake_the_full_line_for_the_some_line()
+        public void No_time_between_readings_reads_as_idle_rather_than_dividing_by_zero()
         {
-            // They differ by a prefix and nothing else, and reading memory's `full` as its `some`
-            // would under-report the one stall the controller reacts to hardest.
-            ProcHostSignals.ParsePressure(BusyMemory, "some").Should().NotBe(
-                ProcHostSignals.ParsePressure(BusyMemory, "full"));
+            var same = new ProcHostSignals.CpuTimes(1000, 800);
+
+            ProcHostSignals.BusyBetween(same, same).Should().Be(0);
         }
 
         [Fact]
-        public void Handles_the_trailing_field_on_the_last_line_without_a_newline()
+        public void Reads_mem_available_in_bytes()
         {
-            ProcHostSignals.ParsePressure("some avg10=7.50 avg60=1.00 avg300=0.10 total=12", "some")
-                .Should().Be(7.50);
+            ProcHostSignals.ParseMemInfoKb("MemAvailable:   12345678 kB", "MemAvailable:").Should().Be(12345678L * 1024);
+            ProcHostSignals.ParseMemInfoKb("MemFree:   1 kB", "MemAvailable:").Should().BeNull();
         }
     }
 }

@@ -217,13 +217,41 @@ namespace Blocks.FunctionRunner.Tests
         }
     }
 
-    /// <summary>A large, calm host.</summary>
-    internal sealed class CalmHost : IHostSignals
+    /// <summary>A large, calm host: 8 cores, 64 GB, nothing busy. Every field can be changed between checks.</summary>
+    internal class CalmHost : IHostSignals
     {
         public double Cores { get; set; } = 8;
         public long TotalMemoryBytes { get; set; } = 64L * 1024 * 1024 * 1024;
         public long AvailableMemoryBytes { get; set; } = 64L * 1024 * 1024 * 1024;
-        public HostSignalSample Sample() => new(0, 0, 0, AvailableMemoryBytes);
+        public double BusyCores { get; set; }
+        public HostReading Read() => new(Cores, TotalMemoryBytes, AvailableMemoryBytes, BusyCores);
+    }
+
+    /// <summary>A calm host whose free RAM is read from the test's own state on every check, as the real one is.</summary>
+    internal sealed class LiveMemoryHost(Func<long> available) : IHostSignals
+    {
+        public HostReading Read() => new(8, 64L * 1024 * 1024 * 1024, available(), 0);
+    }
+
+    /// <summary>The same calm host, under the name the run-processor tests use.</summary>
+    internal sealed class RoomyHost : CalmHost;
+
+    /// <summary>Test set-up for idle warm sandboxes, now that nothing pre-warms: start them for calls, hand them back unused.</summary>
+    internal static class WarmPoolSetup
+    {
+        /// <returns>How many were started and left idle.</returns>
+        public static async Task<int> WarmUpAsync(this WarmPool pool, WarmKey key, int count = 1)
+        {
+            var handles = new List<WarmHandle>();
+            for (var i = 0; i < count; i++)
+            {
+                var acquired = await pool.AcquireAsync(key, RunLimits.Default, default, allowIdle: false);
+                if (acquired.Handle is null) break;
+                handles.Add(acquired.Handle);
+            }
+            foreach (var handle in handles) await pool.ReturnUnusedAsync(handle);
+            return handles.Count;
+        }
     }
 
     /// <summary>A clock that moves only when told to.</summary>

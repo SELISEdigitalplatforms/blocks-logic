@@ -30,10 +30,9 @@ namespace Blocks.FunctionRunner.Runs
         private readonly IDatabase _db;
         private readonly ISandbox _sandbox;
         private readonly IImageResolver _images;
-        private readonly HostBudget _budget;
+        private readonly HostRoom _room;
         private readonly FleetCapacity? _fleet;
         private readonly Maintenance.IImageUsageLog? _usage;
-        private readonly SecretStore.ISecretStoreBreaker? _secretBreaker;
         private readonly IRunSecretResolver _secrets;
         private readonly IRunAccessTokenResolver _accessTokens;
         private readonly WarmPool? _warm;
@@ -44,13 +43,12 @@ namespace Blocks.FunctionRunner.Runs
             IDatabase db,
             ISandbox sandbox,
             IImageResolver images,
-            HostBudget budget,
+            HostRoom room,
             IRunSecretResolver secrets,
             IRunAccessTokenResolver accessTokens,
             IOptions<RunnerOptions> options,
             ILogger<RunProcessor> logger,
             Maintenance.IImageUsageLog? usage = null,
-            SecretStore.ISecretStoreBreaker? secretBreaker = null,
             WarmPool? warmPool = null,
             System.Diagnostics.ActivitySource? traces = null,
             FleetCapacity? fleet = null)
@@ -60,9 +58,8 @@ namespace Blocks.FunctionRunner.Runs
             _db = db;
             _sandbox = sandbox;
             _images = images;
-            _budget = budget;
+            _room = room;
             _usage = usage;
-            _secretBreaker = secretBreaker;
             _secrets = secrets;
             _accessTokens = accessTokens;
             _options = options.Value;
@@ -92,16 +89,21 @@ namespace Blocks.FunctionRunner.Runs
 
         /// <summary>
         /// Reports a run that never reached a sandbox — a test whose build failed, or that found
-        /// no capacity — through the same result path as an executed one. Does nothing when the
-        /// run's payload is gone (expired, or its function was deleted): there is no record left
-        /// to report to, and writing the status would recreate the key.
+        /// no room, or a run too old to start — through the same result path as an executed one.
+        /// Does nothing when the run's payload is gone (expired, or its function was deleted): there
+        /// is no record left to report to, and writing the status would recreate the key. Nor when it
+        /// already finished: that outcome stands.
         /// </summary>
         public async Task ReportUnexecutedAsync(
             RunJob job, string status, string errorCode, string errorMessage, CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(job);
             var runKey = RedisKeys.Run(job.RunId);
+            // Gone: nothing to report to. Already finished (a redelivery of a run that did run): its
+            // outcome stands and is not overwritten.
             if (!await _db.KeyExistsAsync(runKey).ConfigureAwait(false)) return;
+            var recorded = await _db.HashGetAsync(runKey, "status").ConfigureAwait(false);
+            if (IsFinished(recorded.ToString())) return;
 
             await CompleteAsync(job, runKey, DateTimeOffset.UtcNow, status, errorCode, errorMessage,
                 null, 0, null, null, null, null, false).ConfigureAwait(false);
@@ -194,9 +196,15 @@ namespace Blocks.FunctionRunner.Runs
         /// Processes one run inside its <c>Function::Run</c> span, which continues the Api's trace
         /// (<see cref="Tracing.RunTracing"/>). Ids and outcome only — nothing the function saw.
         /// </summary>
-        public async Task<Disposition> ProcessAsync(RunJob job, CancellationToken token)
+        /// <param name="admitted">
+        /// Called once, as soon as the run has its room decision (a sandbox or a start place taken, or
+        /// none) — or when it ends without one. The run loop waits for it before its next room check,
+        /// so that check sees this start (RUNNER-FLOW step 3: one check-and-start at a time).
+        /// </param>
+        public async Task<Disposition> ProcessAsync(RunJob job, CancellationToken token, Action? admitted = null)
         {
             ArgumentNullException.ThrowIfNull(job);
+            var signal = new AdmittedSignal(admitted);
             using var span = Tracing.RunTracing.Start(
                 _traces, "Function::Run", System.Diagnostics.ActivityKind.Consumer, job.TraceParent, job.TenantId);
             if (Interlocked.Exchange(ref _tracingReported, 1) == 0)
@@ -210,12 +218,30 @@ namespace Blocks.FunctionRunner.Runs
             span?.SetTag("blocks.function.version_id", job.VersionId);
             span?.SetTag("blocks.function.run_id", job.RunId);
             span?.SetTag("blocks.function.attempt", job.Attempt);
-            var disposition = await ProcessCoreAsync(job, token).ConfigureAwait(false);
-            span?.SetTag("blocks.function.disposition", disposition.ToString());
-            return disposition;
+            try
+            {
+                var disposition = await ProcessCoreAsync(job, signal, token).ConfigureAwait(false);
+                span?.SetTag("blocks.function.disposition", disposition.ToString());
+                return disposition;
+            }
+            finally
+            {
+                signal.Fire();
+            }
         }
 
-        private async Task<Disposition> ProcessCoreAsync(RunJob job, CancellationToken token)
+        /// <summary>The <c>admitted</c> callback, fired at most once.</summary>
+        private sealed class AdmittedSignal(Action? callback)
+        {
+            private int _fired;
+
+            public void Fire()
+            {
+                if (callback is not null && Interlocked.Exchange(ref _fired, 1) == 0) callback();
+            }
+        }
+
+        private async Task<Disposition> ProcessCoreAsync(RunJob job, AdmittedSignal admitted, CancellationToken token)
         {
 
             var runKey = RedisKeys.Run(job.RunId);
@@ -281,31 +307,14 @@ namespace Blocks.FunctionRunner.Runs
                 return Disposition.Complete;
             }
 
-            // Asked before any slot is taken, which is the whole point: a store that is known to
-            // be down should cost nothing at all, rather than three slots per run for the length
-            // of a timeout. Resolution itself stays where it is, as late as possible.
-            if (_secretBreaker?.ShouldSkip(job.TenantId) == true)
+            // A test yields to real traffic (RUNNER-FLOW step 7): it waits while less than 30 % of
+            // the sandbox CPU is free, read live. Checked before anything is taken, so a waiting
+            // test holds nothing at all.
+            if (job.IsTest && !_room.HasRoomForTest())
             {
-                _logger.LogDebug(
-                    "Secret store for tenant {TenantId} is being left alone; deferring run {RunId}",
-                    job.TenantId, job.RunId);
+                _logger.LogDebug("Host is busy ({Reason}); test run {RunId} waits so deployed versions keep the room",
+                    _room.LastRefusal, job.RunId);
                 return Disposition.Deferred;
-            }
-
-            // A test yields to real traffic. It is a developer convenience and the deployed
-            // version is somebody's customer, so on a busy host the test waits — on the queue, like
-            // everything else that cannot run yet. Checked before the reservation so a waiting test
-            // holds nothing at all.
-            if (job.IsTest && _budget.Capacity > 0)
-            {
-                var usedPercent = _budget.Active * 100 / _budget.Capacity;
-                if (usedPercent >= _options.TestDeferAbovePercent)
-                {
-                    _logger.LogDebug(
-                        "Host is {Used}% busy; deferring test run {RunId} so deployed versions keep the room",
-                        usedPercent, job.RunId);
-                    return Disposition.Deferred;
-                }
             }
 
             // Served by a warm sandbox only when both sides asked: the host (SandboxReuse) and the
@@ -314,15 +323,20 @@ namespace Blocks.FunctionRunner.Runs
             var useWarm = _options.SandboxReuse && job.Reuse && !job.IsTest
                 && _warm is not null && _warm.SupportsReuse(image);
 
-            // Admission. Neither refusal is a failure: the entry stays pending and is retried.
-            // A warm call takes a slot only — the sandbox's memory and its start are charged by the
-            // pool, for as long as the sandbox lives, not per call.
-            using var reservation = new Admission(useWarm ? _budget.TryReserveSlot() : await ReserveSingleAsync(limits).ConfigureAwait(false));
-            if (reservation.Current is null)
+            // The room check (RUNNER-FLOW step 0). A single run starts a container, so it needs a
+            // start's room now: the boost CPU, its RAM, and one of the cold-start places. A warm call
+            // needs nothing here — the run loop checked the run CPU before reading it, and the pool
+            // takes a start's room itself if it has to start a sandbox. No room is not a failure:
+            // the run goes back to the queue.
+            using var start = new StartPlace(useWarm ? null : await TryStartSingleAsync(limits).ConfigureAwait(false));
+            if (!useWarm)
             {
-                _logger.LogDebug("Host is at capacity ({Active}/{Capacity}); deferring run {RunId}",
-                    _budget.Active, _budget.Capacity, job.RunId);
-                return Disposition.Deferred;
+                admitted.Fire();
+                if (start.Current is null)
+                {
+                    _logger.LogDebug("No room to start run {RunId}: {Reason}", job.RunId, _room.LastRefusal);
+                    return Disposition.Deferred;
+                }
             }
 
             // A tenant's share of the fleet, and the function's own limit. The host budget above is
@@ -336,7 +350,8 @@ namespace Blocks.FunctionRunner.Runs
             // taken is released by its `await using` when the other refuses, so the outcome is
             // the same as taking them one after the other.
             // A share of the fleet: the count is one key every runner shares (FN-17).
-            var tenantLimit = _options.TenantSlotLimit(_fleet?.For(_budget.Capacity) ?? _budget.Capacity);
+            var capacity = _room.Capacity;
+            var tenantLimit = _options.TenantSlotLimit(_fleet?.For(capacity) ?? capacity);
             var tenantSlotTask = string.IsNullOrEmpty(job.TenantId)
                 ? Task.FromResult<FunctionConcurrency?>(null)
                 : FunctionConcurrency.TryEnterTenantAsync(_db, job.TenantId, job.RunId, tenantLimit);
@@ -388,18 +403,18 @@ namespace Blocks.FunctionRunner.Runs
 
             if (useWarm)
             {
-                var served = await ProcessWarmAsync(job, fields, runKey, startedAt, claimed, timings, image, limits, lease, token)
+                var served = await ProcessWarmAsync(job, fields, runKey, startedAt, claimed, timings, image, limits, lease, admitted, token)
                     .ConfigureAwait(false);
                 if (served is { } disposition) return disposition;
 
                 // The image turned out to have no reuse runtime (built on 24-v1). That is nobody's
-                // failure: this run, and every later one of this image, takes the single-run path.
-                // It needs a single run's whole reservation — memory and a start — not just the
-                // slot a warm call takes.
-                reservation.Swap(await ReserveSingleAsync(limits).ConfigureAwait(false));
-                if (reservation.Current is null)
+                // failure: this run, and every later one of this image, takes the single-run path,
+                // which needs a start's room.
+                start.Swap(await TryStartSingleAsync(limits).ConfigureAwait(false));
+                if (start.Current is null)
                 {
-                    _logger.LogDebug("Host is at capacity; deferring run {RunId} after its warm start fell back", job.RunId);
+                    _logger.LogDebug("No room to start run {RunId} after its warm start fell back: {Reason}",
+                        job.RunId, _room.LastRefusal);
                     return Disposition.Deferred;
                 }
             }
@@ -448,9 +463,6 @@ namespace Blocks.FunctionRunner.Runs
                 // --- execute ----------------------------------------------------------
                 await SetStatusAsync(runKey, RunStatuses.Running).ConfigureAwait(false);
 
-                // From here a container is created: the start charge is spent. Every return above
-                // gives it back with the reservation (HostReservation).
-                reservation.Current?.ContainerStarted();
                 // A streamed answer's pieces, relayed as they are read (F-5) — a Test run streams
                 // like a warm call. Null until the first piece.
                 StreamRelay? relay = null;
@@ -500,11 +512,6 @@ namespace Blocks.FunctionRunner.Runs
                 // message that reached it unmasked (a crash before redaction was armed, a line
                 // the bootstrap did not write) is still not stored with a value in it.
                 errorMessage = Redact(errorMessage, resolvedValues);
-
-                // What this run actually cost, fed back into admission. Reserving a run's whole
-                // limit is safe and wasteful; the budget narrows that to the observed p95 only
-                // because every completed run reports its peak here.
-                _budget.Observe(result.PeakMemoryBytes);
 
                 // The stream's end goes out before the result, after its last piece (same connection, in order).
                 if (relay is not null) await relay.EndAsync(status, errorCode, errorMessage).ConfigureAwait(false);
@@ -581,12 +588,10 @@ namespace Blocks.FunctionRunner.Runs
                         //
                         // Failing instead spent one of the run's attempts, and a second blip
                         // then reported a permanently failed run to a tenant whose function was
-                        // fine. The breaker below keeps the deferred runs from taking slots
-                        // while they wait.
+                        // fine. No breaker (RUNNER-FLOW step 5.1): the run goes back to the queue
+                        // and the next attempt asks the store again.
                         if (failure.Code == ErrorCodes.SecretStoreUnavailable)
                         {
-                            _secretBreaker?.RecordUnavailable(job.TenantId);
-
                             // Deferring suits a deployed run: nobody is waiting, the entry keeps
                             // its place on the stream, and it runs when the store is back.
                             //
@@ -606,13 +611,11 @@ namespace Blocks.FunctionRunner.Runs
 
                         // A secret that does not exist, or that this caller may not read, is the
                         // author's to fix. Retrying it changes nothing, so it stays a failure.
-                        _secretBreaker?.RecordSuccess(job.TenantId);
                         await CompleteAsync(job, runKey, startedAt, RunStatuses.Failed, failure.Code,
                             failure.Message, null, 0, null, null, null, null, false).ConfigureAwait(false);
                         return new PreparedRun(null, [], false, Disposition.Complete);
                     }
 
-                    _secretBreaker?.RecordSuccess(job.TenantId);
                     envelope = prepared.Envelope!;
                     resolvedValues = prepared.Values;
                 }
@@ -664,12 +667,14 @@ namespace Blocks.FunctionRunner.Runs
         /// </summary>
         private async Task<Disposition?> ProcessWarmAsync(
             RunJob job, Dictionary<string, string> fields, string runKey, DateTimeOffset startedAt,
-            Stopwatch claimed, HandoverTimings timings, string image, RunLimits limits, RunLease lease, CancellationToken token)
+            Stopwatch claimed, HandoverTimings timings, string image, RunLimits limits, RunLease lease,
+            AdmittedSignal admitted, CancellationToken token)
         {
             var key = new WarmKey(job.TenantId ?? string.Empty, job.FunctionId, job.VersionId ?? string.Empty, image);
 
             var (acquired, early) = await AcquireWarmAsync(job, runKey, startedAt, claimed, key, limits, lease, allowIdle: true, token)
                 .ConfigureAwait(false);
+            admitted.Fire();
             if (acquired is null) return early;
 
             var handle = acquired;
@@ -835,10 +840,6 @@ namespace Blocks.FunctionRunner.Runs
             // still tells its reader how it ended. A no-op when the answer already closed it.
             if (relay is not null) await relay.EndAsync(status, errorCode, errorMessage).ConfigureAwait(false);
 
-            // Not fed to _budget.Observe: a warm call's memory figure is a snapshot of a long-lived
-            // sandbox after the call, not the peak of one run, and the footprint estimate is a
-            // distribution of single-run peaks. The pool reserves a warm sandbox's memory itself.
-
             await CompleteAsync(
                 job, runKey, startedAt, status, errorCode, errorMessage, result.ExitCode, result.DurationMs,
                 result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
@@ -886,7 +887,7 @@ namespace Blocks.FunctionRunner.Runs
                     return (null, null);
 
                 case WarmAcquireStatus.NoCapacity:
-                    _logger.LogDebug("No room for a warm sandbox of function {FunctionId}; deferring run {RunId}",
+                    _logger.LogDebug("No room for a warm sandbox of function {FunctionId}; run {RunId} goes back to the queue",
                         job.FunctionId, job.RunId);
                     return (null, Disposition.Deferred);
 
@@ -899,19 +900,19 @@ namespace Blocks.FunctionRunner.Runs
         }
 
         /// <summary>
-        /// A single run's whole reservation. Refused for memory while idle warm sandboxes hold it,
-        /// the least recently used one is given up and the reservation tried once more: a paused
+        /// A start's room for a single run. Refused for RAM while idle warm sandboxes hold it, the
+        /// oldest idle one is removed and the check made once more (RUNNER-FLOW step 6.3): a paused
         /// sandbox nobody is calling must not starve a run, or a test, that is waiting.
         /// </summary>
-        private async Task<HostReservation?> ReserveSingleAsync(RunLimits limits)
+        private async Task<ColdStart?> TryStartSingleAsync(RunLimits limits)
         {
-            var reservation = _budget.TryReserve(limits.MemoryBytes, out var refusal);
-            if (reservation is null && refusal == AdmissionRefusal.Memory && _warm is not null
+            var start = _room.TryStartCold(limits.MemoryBytes, out var refusal);
+            if (start is null && refusal == RoomRefusal.Memory && _warm is not null
                 && await _warm.EvictIdleAsync().ConfigureAwait(false))
             {
-                reservation = _budget.TryReserve(limits.MemoryBytes, out _);
+                start = _room.TryStartCold(limits.MemoryBytes, out _);
             }
-            return reservation;
+            return start;
         }
 
         /// <summary>
@@ -945,14 +946,14 @@ namespace Blocks.FunctionRunner.Runs
         private sealed record WarmReport(bool Reused, string Discard, long? HandoverMs);
 
         /// <summary>
-        /// The run's host reservation, swappable: a warm run that falls back to the single path
-        /// trades its slot for a single run's full reservation without leaving the using scope.
+        /// The run's cold-start place, swappable: a warm run that falls back to the single path
+        /// takes one without leaving the using scope.
         /// </summary>
-        private sealed class Admission(HostReservation? current) : IDisposable
+        private sealed class StartPlace(ColdStart? current) : IDisposable
         {
-            public HostReservation? Current { get; private set; } = current;
+            public ColdStart? Current { get; private set; } = current;
 
-            public void Swap(HostReservation? next)
+            public void Swap(ColdStart? next)
             {
                 Current?.Dispose();
                 Current = next;

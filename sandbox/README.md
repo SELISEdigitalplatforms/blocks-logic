@@ -196,11 +196,10 @@ Consuming local:functions:runs and local:functions:event-runs as kind-falcon (ca
 
 ### One tenant's share of a host
 
-`RUNNER__MaxActiveSandboxes` is the host's total; on its own it is first-come-first-served, so one
-tenant's burst can hold every slot while every other tenant waits. `RUNNER__MaxSandboxesPerTenant`
-caps what any single tenant holds at once — empty or `0` derives half the host's capacity, rounded
-up. Work over the share is *deferred*, never rejected, like every other gate here. Set it to
-`RUNNER__MaxActiveSandboxes` or higher to turn the share off.
+Admission alone is first-come-first-served, so one tenant's burst can take all the room while every
+other tenant waits. `RUNNER__MaxSandboxesPerTenant` caps what any single tenant holds at once —
+empty or `0` derives half the fleet's capacity (sandbox cores ÷ 100m), rounded up. Work over the
+share waits on the queue, never rejected, like every other gate here. Set it high to turn the share off.
 
 Editor test runs draw on their own per-function budget rather than the deployed function's, so
 testing a function cannot delay the traffic its live version is serving.
