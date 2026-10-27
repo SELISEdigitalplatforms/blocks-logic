@@ -7,7 +7,7 @@ const ENV_BUTTON = /Development|Testing|Staging|IAT|UAT|Production|Pre-Prod|Prod
  * Projects console at `/app/console`.
  *
  * Surface: project cards with env chips, "Add Project" / "Create a project"
- * CTA, Resources cards (Docs/Code/Cloud), and cross-app nav to Blocks OS
+ * CTA, Resources cards (Read Docs/Install CLI/Bootstrap), and cross-app nav to Blocks OS
  * for project configuration.
  */
 export class ConsolePage {
@@ -73,18 +73,21 @@ export class ConsolePage {
     await this.configureButton().click();
   }
 
-  // ---- Resources cards (Docs / Code / Cloud) -------------------------------
+  // ---- Resources cards (Read Docs / Install CLI / Bootstrap) ---------------
+  // genesis-os 4.4.0 (pinned on dev by 7837ef44) replaced the Docs/Code/Cloud
+  // cards with Learn/Build/Automate cards. Each card is an <a target="_blank">
+  // whose accessible name is "<label>: <description>".
 
   docsLink(): Locator {
-    return this.page.getByRole("link", { name: "Docs", exact: false });
+    return this.page.getByRole("link", { name: /^Read Docs:/ });
   }
 
-  codeLink(): Locator {
-    return this.page.getByRole("link", { name: "Code", exact: false });
+  cliLink(): Locator {
+    return this.page.getByRole("link", { name: /^Install CLI:/ });
   }
 
-  cloudLink(): Locator {
-    return this.page.getByRole("link", { name: "Cloud", exact: false });
+  bootstrapLink(): Locator {
+    return this.page.getByRole("link", { name: /^Bootstrap:/ });
   }
 
   /**

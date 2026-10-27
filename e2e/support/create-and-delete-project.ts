@@ -93,14 +93,19 @@ async function waitForProjectCard(page: Page, projectName: string, host: "logic"
   for (let attempt = 0; attempt < 6; attempt++) {
     await ensureConsole(page, host)
 
+    // The console renders skeleton cards until the project list query
+    // resolves; wait for the named card itself instead of an instant
+    // isVisible() check followed by a fixed sleep.
     const card = namedProjectCard(page, projectName)
-    if (await card.isVisible({ timeout: 1_500 }).catch(() => false)) {
+    try {
+      await expect(card).toBeVisible({ timeout: 10_000 })
       return card
+    } catch {
+      // Not rendered yet; reload and try again.
     }
 
     if (attempt < 5) {
       await page.reload({ waitUntil: "domcontentloaded" })
-      await page.waitForTimeout(500)
     }
   }
 
@@ -201,6 +206,12 @@ export async function openNamedProjectDashboard(
     const envButton = card.getByRole("button", { name: ENV_BUTTON }).first()
     await expect(envButton).toBeVisible({ timeout: 10_000 })
     await envButton.click({ force: true })
+    // The env chip navigates client-side; until it does, the console heading
+    // is still on screen and waitForLogicDashboardReady would read it as a
+    // bounce back to the console.
+    await page
+      .waitForURL((url) => !/\/app\/console\/?$/i.test(url.pathname), { timeout: 15_000 })
+      .catch(() => undefined)
 
     try {
       await waitForLogicDashboardReady(page, projectName)

@@ -178,7 +178,11 @@ test.describe("flow: Schedules menu", () => {
       await form.fillWebhookUrl("https://api.example.com/webhook");
       await form.fillCron("not-a-cron");
       await form.clickSubmit();
-      await form.expectValidationError("Enter a valid 5-field cron expression");
+      // Since 179b99f1 the cron field is checked by validateCronExpression(); a
+      // single token fails the field-count check before any per-field range check.
+      await form.expectValidationError(
+        "Cron expression must have 5 fields: minute hour day-of-month month day-of-week",
+      );
       await form.expectStillOnCreate();
     });
 

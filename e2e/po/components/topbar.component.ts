@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * Topbar controls on the project dashboard / console:
- *   - Theme tablist (Dark / Light)
+ *   - Theme switcher ("Change theme" dropdown: Auto / Light / Dark)
  *   - Language selector
  *   - Notification bell
  *   - Apps switcher
@@ -16,17 +16,25 @@ export class TopbarComponent {
 
   // ---- Theme switcher ----
 
-  /** Theme tablist (Dark / Light toggle group). */
-  get themeTablist(): Locator {
-    return this.page.getByRole("tablist").first();
+  /**
+   * Theme switcher trigger. Since genesis-os 4.3.3 (pinned on dev by 50d21caf) the
+   * topbar renders a "Change theme" dropdown with an "Appearance" radio group
+   * (Auto / Light / Dark) instead of the old Dark/Light tablist.
+   */
+  get themeSwitcher(): Locator {
+    return this.page.getByRole("button", { name: "Change theme" });
   }
 
-  get darkTab(): Locator {
-    return this.themeTablist.locator('[aria-controls$="-content-dark"]');
+  themeOption(label: "Auto" | "Light" | "Dark"): Locator {
+    return this.page.getByRole("menuitemradio", { name: label });
   }
 
-  get lightTab(): Locator {
-    return this.themeTablist.locator('[aria-controls$="-content-light"]');
+  get darkOption(): Locator {
+    return this.themeOption("Dark");
+  }
+
+  get lightOption(): Locator {
+    return this.themeOption("Light");
   }
 
   async expectThemeApplied(theme: "dark" | "light"): Promise<void> {
@@ -37,12 +45,19 @@ export class TopbarComponent {
     }
   }
 
+  private async selectTheme(option: Locator): Promise<void> {
+    await this.themeSwitcher.click();
+    await expect(option).toBeVisible();
+    await option.click();
+    await expect(option).toBeHidden();
+  }
+
   async switchToDark(): Promise<void> {
-    await this.darkTab.click();
+    await this.selectTheme(this.darkOption);
   }
 
   async switchToLight(): Promise<void> {
-    await this.lightTab.click();
+    await this.selectTheme(this.lightOption);
   }
 
   // ---- Language selector ----

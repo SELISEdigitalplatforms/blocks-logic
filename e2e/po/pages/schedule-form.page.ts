@@ -22,7 +22,8 @@ import { e2eBaseUrl } from "../../support/env";
  *   - "Cron expression is required"
  *   - "Webhook URL is required"
  *   - "Enter a valid URL"
- *   - "Enter a valid 5-field cron expression"
+ *   - "Cron expression must have 5 fields: minute hour day-of-month month day-of-week"
+ *     (plus per-field range messages from cron-validation.ts)
  *   - "Payload must be valid JSON"
  *   - "End date must be after start date"
  */

@@ -23,7 +23,7 @@ test.describe("flow: Overview menu", () => {
     await page.goto(`${e2eBaseUrl()}/app/console`, { waitUntil: "domcontentloaded" });
 
     await test.step("Topbar: switching theme to Dark applies it, then Light restores it", async () => {
-      await expect(topbar.themeTablist).toBeVisible({ timeout: 30_000 });
+      await expect(topbar.themeSwitcher).toBeVisible({ timeout: 30_000 });
       await topbar.switchToDark();
       await topbar.expectThemeApplied("dark");
       await topbar.switchToLight();
@@ -152,8 +152,8 @@ test.describe("flow: Overview menu", () => {
       await expect(console.consoleHeading).toBeVisible({ timeout: 30_000 });
     });
 
-    await test.step("Console: Resources cards (Docs/Code/Cloud) actually navigate to their target URL when clicked", async () => {
-      const links = [console.docsLink(), console.codeLink(), console.cloudLink()];
+    await test.step("Console: Resources cards (Read Docs/Install CLI/Bootstrap) actually navigate to their target URL when clicked", async () => {
+      const links = [console.docsLink(), console.cliLink(), console.bootstrapLink()];
 
       for (const link of links) {
         await expect(link).toBeVisible({ timeout: 15_000 });
@@ -261,11 +261,9 @@ test.describe("flow: Overview menu", () => {
       const add = edgeConsole.addProjectText;
       const create = edgeConsole.createProjectButton;
       const welcome = edgeConsole.welcomeHeading;
-      const visible =
-        (await add.isVisible({ timeout: 5_000 }).catch(() => false)) ||
-        (await create.isVisible({ timeout: 5_000 }).catch(() => false)) ||
-        (await welcome.isVisible({ timeout: 5_000 }).catch(() => false));
-      expect(visible).toBe(true);
+      // isVisible() does not wait, and the console shows skeleton cards until
+      // the project list loads; wait for any of the three CTAs instead.
+      await expect(add.or(create).or(welcome).first()).toBeVisible({ timeout: 15_000 });
 
       const envChip = page
         .getByRole("main")
