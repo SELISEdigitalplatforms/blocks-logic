@@ -6,9 +6,11 @@ namespace Mail.DomainService.Shared.Utilities
 {
     /// <summary>
     /// Reads one Blocks Secrets value inside an authenticated context for a given tenant, then
-    /// restores the caller's context. The one variant of this pattern in the service: the Office 365
+    /// restores the caller's context. Shared by the mail and identifier domains: the Office 365
     /// token provider, the mail password resolver and the service bus connection string resolver
-    /// all read through it.
+    /// all read through it. Other domains still keep their own variants (for example
+    /// <c>ProxyVariableResolver</c> and <c>NugetSecretResolver</c> build their own contexts, and
+    /// <c>FunctionSecretCatalog</c> reads under the caller's context); unifying them is out of scope.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -19,7 +21,7 @@ namespace Mail.DomainService.Shared.Utilities
     /// </para>
     /// <para>
     /// Blocks Secrets rejects any context with <c>!IsAuthenticated</c> or a blank tenant id, and the
-    /// queue consumers that drive most reads carry no authenticated identity of its own. The
+    /// queue consumers that drive most reads carry no authenticated identity of their own. The
     /// synthetic context below lives for exactly one read and is restored afterwards, also when the
     /// read throws.
     /// </para>

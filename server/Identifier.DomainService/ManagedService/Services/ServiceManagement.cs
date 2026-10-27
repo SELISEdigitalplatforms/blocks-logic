@@ -33,11 +33,11 @@ namespace DomainService.ManagedService.Services
                                  IConfiguration configuration,
                                  IServiceBusConnectionStringResolver connectionStringResolver )
         {
-            _connectionStringResolver = connectionStringResolver;
             _logger = logger;
             _serviceManagementRepository = serviceManagementRepository;
             _tenants = tenants;
             _configuration = configuration;
+            _connectionStringResolver = connectionStringResolver;
         }
         public async Task<GetAllServiceResponse> GetAllServicesAsync ( GetAllServiceRequest request )
         {
@@ -55,12 +55,40 @@ namespace DomainService.ManagedService.Services
                     tenantId, serviceList.Count);
             }
 
-            // Root can hold rows of one TenantId with two salts (project salt and console/root salt). Step 1 is
-            // today's rule. Step 2 = the context tenant's own salt (matters when impersonating, where step 1 used
-            // the console's salt), then the root tenant's salt. Salts equal to step 1's are skipped.
-            var firstSalt = tenant?.TenantSalt ?? FallbackEncryptionKey;
-            var extraSalts = new List<string>();
             var contextTenantId = BlocksContext.GetContext()?.TenantId;
+            var firstSalt = tenant?.TenantSalt ?? FallbackEncryptionKey;
+            var keys = new LegacyKeys(
+                tenantId,
+                firstSalt,
+                tenant is null ? "fallback" : "tenant salt",
+                ExtraSalts(firstSalt, contextTenantId) );
+
+            foreach (var item in serviceList)
+            {
+                await ResolveConnectionStringAsync(item, contextTenantId, keys);
+            }
+
+            return new GetAllServiceResponse
+            {
+                Data = serviceList.AsQueryable(),
+                TotalCount = count
+            };
+        }
+
+        /// <summary>
+        /// The salts the legacy ladder tries for one page: <see cref="FirstSalt"/> (today's rule),
+        /// then <see cref="ExtraSalts"/>.
+        /// </summary>
+        private sealed record LegacyKeys ( string TenantId, string FirstSalt, string KeySource, IReadOnlyList<string> ExtraSalts );
+
+        /// <summary>
+        /// Root can hold rows of one TenantId with two salts (project salt and console/root salt). Step 1 is
+        /// today's rule. Step 2 = the context tenant's own salt (matters when impersonating, where step 1 used
+        /// the console's salt), then the root tenant's salt. Salts equal to step 1's are skipped.
+        /// </summary>
+        private List<string> ExtraSalts ( string firstSalt, string? contextTenantId )
+        {
+            var extraSalts = new List<string>();
             if (!string.IsNullOrEmpty(contextTenantId))
             {
                 extraSalts.Add(_tenants.GetTenantByID(contextTenantId)?.TenantSalt ?? string.Empty);
@@ -70,54 +98,50 @@ namespace DomainService.ManagedService.Services
             {
                 extraSalts.Add(_tenants.GetTenantByID(rootTenantId)?.TenantSalt ?? string.Empty);
             }
-            extraSalts = extraSalts.Where(x => !string.IsNullOrEmpty(x) && x != firstSalt).Distinct().ToList();
+            return extraSalts.Where(x => !string.IsNullOrEmpty(x) && x != firstSalt).Distinct().ToList();
+        }
 
-            foreach (var item in serviceList)
+        /// <summary>
+        /// Puts the plaintext connection string of one row in place and clears its reference, so
+        /// the reference never leaves this service.
+        /// </summary>
+        private async Task ResolveConnectionStringAsync ( BlocksManagedService item, string? contextTenantId, LegacyKeys keys )
+        {
+            item.ServiceType ??= "backend";
+
+            // A non-empty reference is authoritative: the value is in Blocks Secrets and the
+            // ciphertext field is not used, even when it is non-empty.
+            item.ServiceBusConnectionString = string.IsNullOrEmpty(item.ServiceBusConnectionStringReference)
+                ? DecryptLegacyConnectionString(item, keys)
+                : await ReadReferencedConnectionStringAsync(item, contextTenantId);
+
+            item.ServiceBusConnectionStringReference = null;
+        }
+
+        /// <summary>Today's salt ladder for a row without a reference; empty when no salt fits.</summary>
+        private string DecryptLegacyConnectionString ( BlocksManagedService item, LegacyKeys keys )
+        {
+            var cipherText = item.ServiceBusConnectionString;
+            var plainText = DecryptConnectionString(cipherText, keys.FirstSalt);
+            if (plainText.Length > 0 || string.IsNullOrEmpty(cipherText))
             {
-                // A non-empty reference is authoritative: the value is in Blocks Secrets and the
-                // ciphertext field is not used, even when it is non-empty. The reference never
-                // leaves this method.
-                if (!string.IsNullOrEmpty(item.ServiceBusConnectionStringReference))
-                {
-                    item.ServiceBusConnectionString = await ReadReferencedConnectionStringAsync(item, contextTenantId);
-                    item.ServiceBusConnectionStringReference = null;
-                    item.ServiceType = item.ServiceType ?? "backend";
-                    continue;
-                }
-
-                item.ServiceBusConnectionStringReference = null;
-
-                var plainText = DecryptConnectionString(
-                    item.ServiceBusConnectionString,
-                    firstSalt
-                );
-
-                if (plainText.Length == 0 && !string.IsNullOrEmpty(item.ServiceBusConnectionString))
-                {
-                    foreach (var extraSalt in extraSalts)
-                    {
-                        plainText = DecryptConnectionString(item.ServiceBusConnectionString, extraSalt);
-                        if (plainText.Length > 0) break;
-                    }
-                }
-
-                if (plainText.Length == 0 && !string.IsNullOrEmpty(item.ServiceBusConnectionString))
-                {
-                    _logger.LogError(
-                        "Connection string for service {ServiceId} (tenant {TenantId}) could not be decrypted with " +
-                        "the {KeySource} key; returning it empty",
-                        item.ServiceId, tenantId, tenant is null ? "fallback" : "tenant salt");
-                }
-
-                item.ServiceBusConnectionString = plainText;
-                item.ServiceType = item.ServiceType ?? "backend";
+                return plainText;
             }
 
-            return new GetAllServiceResponse
+            foreach (var extraSalt in keys.ExtraSalts)
             {
-                Data = serviceList.AsQueryable(),
-                TotalCount = count
-            };
+                plainText = DecryptConnectionString(cipherText, extraSalt);
+                if (plainText.Length > 0)
+                {
+                    return plainText;
+                }
+            }
+
+            _logger.LogError(
+                "Connection string for service {ServiceId} (tenant {TenantId}) could not be decrypted with " +
+                "the {KeySource} key; returning it empty",
+                item.ServiceId, keys.TenantId, keys.KeySource);
+            return plainText;
         }
 
         /// <summary>
@@ -129,23 +153,32 @@ namespace DomainService.ManagedService.Services
         private async Task<string> ReadReferencedConnectionStringAsync ( BlocksManagedService item, string? contextTenantId )
         {
             var secretTenantId = string.IsNullOrEmpty(item.TenantId) ? contextTenantId : item.TenantId;
+            string failureType;
 
-            try
+            if (string.IsNullOrWhiteSpace(secretTenantId))
             {
-                if (string.IsNullOrWhiteSpace(secretTenantId))
+                // No tenant to read the connection string in: no read, and the same log line as
+                // any other failure.
+                failureType = nameof(InvalidOperationException);
+            }
+            else
+            {
+                try
                 {
-                    throw new InvalidOperationException("No tenant to read the connection string in.");
+                    return await _connectionStringResolver.ResolveAsync(secretTenantId, item.ServiceBusConnectionStringReference!);
                 }
+                catch (Exception ex)
+                {
+                    // Only the type name leaves the catch: the exception object is deliberately not
+                    // logged, because its message and properties carry the reference id.
+                    failureType = ex.GetType().Name;
+                }
+            }
 
-                return await _connectionStringResolver.ResolveAsync(secretTenantId, item.ServiceBusConnectionStringReference!);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    "Connection string for service {ServiceId} could not be read from Blocks Secrets ({ExceptionType}); returning it empty",
-                    item.ServiceId, ex.GetType().Name);
-                return string.Empty;
-            }
+            _logger.LogError(
+                "Connection string for service {ServiceId} could not be read from Blocks Secrets ({ExceptionType}); returning it empty",
+                item.ServiceId, failureType);
+            return string.Empty;
         }
 
         private static string ResolveEncryptionTenantId ( )

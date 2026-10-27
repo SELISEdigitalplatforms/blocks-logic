@@ -40,10 +40,10 @@ namespace MailBoxSyncService.Services
             IMailPasswordResolver passwordResolver,
             ILogger<MailBoxSyncService>? logger = null)
         {
-            _passwordResolver = passwordResolver;
             _repository = repository;
             _messageClient = messageClient;
             _imapClientFactory = imapClientFactory;
+            _passwordResolver = passwordResolver;
             _logger = logger ?? NullLogger<MailBoxSyncService>.Instance;
             _mapClientMapper = new ConcurrentDictionary<string, IImapClientWrapper>();
         }
@@ -285,7 +285,7 @@ namespace MailBoxSyncService.Services
                 config.ItemId,
                 tenantId,
                 resolved.FailureClass,
-                resolved.ExceptionType ?? "(none)");
+                resolved.ExceptionType ?? MailLog.None);
 
             throw new MailCredentialException(resolved.FailureClass!, resolved.ExceptionType);
         }

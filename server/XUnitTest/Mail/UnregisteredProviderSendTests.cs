@@ -34,10 +34,9 @@ namespace XUnitTest.Mail
             new(NullLogger<SendMailService>.Instance,
                 _repository.Object,
                 new OutboundMailSenderRegistry(senders),
-                _resolver.Object,
+                new MailSendResolvers(_resolver.Object, MailSecretsTestDoubles.PasswordResolver(_secrets)),
                 _messageClient.Object,
-                Options.Create(new MailStatusEventOptions()),
-                MailSecretsTestDoubles.PasswordResolver(_secrets));
+                Options.Create(new MailStatusEventOptions()));
 
         private static MailToBeSent AMail(MailServiceProvider provider) => new()
         {

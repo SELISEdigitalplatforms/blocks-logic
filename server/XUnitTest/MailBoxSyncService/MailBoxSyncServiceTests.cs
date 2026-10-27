@@ -526,9 +526,11 @@ namespace XUnitTest.MailBoxSyncService
         }
 
         [Fact]
-        public async Task ReferencedConfig_ReadsInTheSyncedTenant_AndRestoresTheAmbientContext()
+        public async Task ReferencedConfig_ReadsInTheSyncedTenant_NotTheAmbientOne()
         {
-            // H6, C5 inbound: the read tenant is the tenant being synced, never the ambient one.
+            // H6, C5 inbound: the read tenant is the tenant being synced, never the ambient one. The
+            // ambient context is still in place afterwards; the explicit restore itself (C6) is proven
+            // by MailPasswordResolverTests' ContextLeftAfterReadAsync harness.
             var seen = new List<BlocksContext?>();
             var service = SyncService(
                 new FakeImapClientFactory(new[] { new FakeImapClient(new List<MimeMessage>()) }),
@@ -615,10 +617,86 @@ namespace XUnitTest.MailBoxSyncService
             thrown.InnerException.Should().BeNull();
             thrown.ToString().Should().NotContain(Reference).And.NotContain("old-pass");
             factory.CreateCalls.Should().Be(0);
+            // C10: exactly one read for the one connect attempt, so a retry on failure is caught.
+            secrets.Reads().Should().Be(1);
             logger.Lines.Should().ContainSingle(l => l.Contains("MAIL FAILED (credential)", StringComparison.Ordinal)
                                                      && l.Contains($"failureClass={failureClass}", StringComparison.Ordinal)
                                                      && l.Contains("configId=config-1", StringComparison.Ordinal));
             logger.All.Should().NotContain(Reference).And.NotContain("old-pass");
+        }
+
+        [Fact]
+        public async Task WhitespaceReference_IsTreatedAsAReferenceAndFailsClosed()
+        {
+            // Decision (review minor): only a null or empty reference means "legacy". A whitespace-only
+            // reference counts as a reference, so it is read from Blocks Secrets and, when that read
+            // fails, the connect fails closed: no IMAP connection and the plaintext is never used.
+            // Same rule as blocks-monitor#253.
+            const string whitespace = "   ";
+            var secrets = MailSecretsTestDoubles.Throwing(whitespace, new Blocks.Secrets.SecretNotFoundException(whitespace));
+            var factory = new FakeImapClientFactory(Array.Empty<FakeImapClient>());
+            var service = SyncService(factory, secrets);
+            var config = ReferencedConfig(accountPassword: "old-pass");
+            config.AccountPasswordReference = whitespace;
+
+            var act = () => service.SyncInboxAsync(config, "tenant-123");
+
+            var thrown = (await act.Should().ThrowExactlyAsync<MailCredentialException>()).Which;
+            thrown.FailureClass.Should().Be("credential");
+            thrown.ExceptionType.Should().Be(nameof(Blocks.Secrets.SecretNotFoundException));
+            factory.CreateCalls.Should().Be(0);
+            secrets.Verify(s => s.GetValueAsync(whitespace, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task ResolverItselfThrows_IsReducedToItsTypeName_AndNoConnectionIsAttempted()
+        {
+            // C4, C7, Q3: the safety net around the resolver. Whatever escapes it reaches the worker
+            // only as a MailCredentialException carrying the type name: no message, no inner exception.
+            var logger = new CapturingLogger<global::MailBoxSyncService.Services.MailBoxSyncService>();
+            var resolver = new Mock<IMailPasswordResolver>(MockBehavior.Strict);
+            resolver.Setup(r => r.ResolveAsync(It.IsAny<MailServerConfiguration>(), "tenant-123", It.IsAny<CancellationToken>()))
+                    .ThrowsAsync(new InvalidOperationException($"resolver bug near '{Reference}'"));
+            var factory = new FakeImapClientFactory(Array.Empty<FakeImapClient>());
+            var service = new global::MailBoxSyncService.Services.MailBoxSyncService(
+                _mockRepository.Object, _mockMessageClient.Object, factory, resolver.Object, logger);
+
+            var act = () => service.SyncInboxAsync(ReferencedConfig(accountPassword: "old-pass"), "tenant-123");
+
+            var thrown = (await act.Should().ThrowExactlyAsync<MailCredentialException>()).Which;
+            thrown.FailureClass.Should().Be("unexpected");
+            thrown.ExceptionType.Should().Be(nameof(InvalidOperationException));
+            thrown.InnerException.Should().BeNull();
+            thrown.ToString().Should().NotContain(Reference).And.NotContain("old-pass");
+            factory.CreateCalls.Should().Be(0);
+            resolver.Verify(r => r.ResolveAsync(It.IsAny<MailServerConfiguration>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+            logger.Lines.Should().ContainSingle(l => l.Contains("MAIL FAILED (credential)", StringComparison.Ordinal)
+                                                     && l.Contains("failureClass=unexpected", StringComparison.Ordinal)
+                                                     && l.Contains($"exceptionType={nameof(InvalidOperationException)}", StringComparison.Ordinal));
+            logger.All.Should().NotContain(Reference).And.NotContain("old-pass");
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("  ")]
+        public async Task ReferencedConfig_WithABlankTenant_FailsWithoutARead_AndLogsNoExceptionType(string tenantId)
+        {
+            // C5 inbound: no tenant may stand in for the record's own. The resolver fails before any
+            // read, so there is no exception type and the log says "(none)".
+            var logger = new CapturingLogger<global::MailBoxSyncService.Services.MailBoxSyncService>();
+            var secrets = new Mock<Blocks.Secrets.ISecretService>(MockBehavior.Strict);
+            var factory = new FakeImapClientFactory(Array.Empty<FakeImapClient>());
+            var service = SyncService(factory, secrets, logger);
+
+            var act = () => service.SyncInboxAsync(ReferencedConfig(), tenantId);
+
+            var thrown = (await act.Should().ThrowExactlyAsync<MailCredentialException>()).Which;
+            thrown.FailureClass.Should().Be("unexpected");
+            thrown.ExceptionType.Should().BeNull();
+            secrets.Invocations.Should().BeEmpty();
+            factory.CreateCalls.Should().Be(0);
+            logger.Lines.Should().ContainSingle(l => l.Contains("failureClass=unexpected", StringComparison.Ordinal)
+                                                     && l.Contains("exceptionType=(none)", StringComparison.Ordinal));
         }
 
         [Fact]

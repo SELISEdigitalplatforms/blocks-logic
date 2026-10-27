@@ -47,6 +47,11 @@ namespace Mail.DomainService.Mails
         /// The password for one send or one IMAP connect of <paramref name="configuration"/>,
         /// read in <paramref name="tenantId"/> when the record holds a reference.
         /// </summary>
+        /// <remarks>
+        /// No caller passes <paramref name="cancellationToken"/> today, so a slow store is bounded
+        /// by the Blocks Secrets / Key Vault client's own retry and timeout policy, and a failure
+        /// of any kind (including a timeout) fails only this send or connect.
+        /// </remarks>
         Task<MailPasswordResult> ResolveAsync(
             MailServerConfiguration configuration,
             string? tenantId,
@@ -124,6 +129,10 @@ namespace Mail.DomainService.Mails
     /// original exception's type name: no inner exception, because Secret* messages and properties
     /// carry the reference id, and whoever logs this exception must not log that id.
     /// </summary>
+    /// <remarks>
+    /// Deliberately has only this one constructor: the standard (message, innerException) overload
+    /// would invite wrapping a Secret* exception, which is exactly what must not happen.
+    /// </remarks>
     public sealed class MailCredentialException : Exception
     {
         public MailCredentialException(string failureClass, string? exceptionType)
@@ -131,23 +140,6 @@ namespace Mail.DomainService.Mails
         {
             FailureClass = failureClass;
             ExceptionType = exceptionType;
-        }
-
-        public MailCredentialException()
-            : this(MailPasswordResult.Unexpected, (string?)null)
-        {
-        }
-
-        public MailCredentialException(string message)
-            : base(message)
-        {
-            FailureClass = MailPasswordResult.Unexpected;
-        }
-
-        public MailCredentialException(string message, Exception innerException)
-            : base(message, innerException)
-        {
-            FailureClass = MailPasswordResult.Unexpected;
         }
 
         public string FailureClass { get; }

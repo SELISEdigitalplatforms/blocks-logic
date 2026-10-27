@@ -378,7 +378,6 @@ namespace XUnitTest.Mail
             Office365GraphMailSender.FitsInOneRequest(text).Should().BeTrue();
         }
 
-        /// <summary>A sender whose Graph session is a recorder.</summary>
         // ---------- #371: Graph records and AccountPasswordReference ----------
 
         [Fact]
@@ -396,10 +395,9 @@ namespace XUnitTest.Mail
                 NullLogger<SendMailService>.Instance,
                 Mock.Of<IMailRepository>(),
                 new OutboundMailSenderRegistry([new Office365MailSender(Sender(), new Office365SmtpClient(NullLogger<Office365SmtpClient>.Instance), NullLogger<Office365MailSender>.Instance)]),
-                attachments.Object,
+                new MailSendResolvers(attachments.Object, MailSecretsTestDoubles.PasswordResolver(secrets)),
                 Mock.Of<Blocks.Genesis.IMessageClient>(),
-                Options.Create(new MailStatusEventOptions { Enabled = false }),
-                MailSecretsTestDoubles.PasswordResolver(secrets));
+                Options.Create(new MailStatusEventOptions { Enabled = false }));
 
             var previous = Blocks.Genesis.BlocksContext.GetContext();
             Blocks.Genesis.BlocksContext.SetContext(Blocks.Genesis.BlocksContext.Create("blocks-tenant", [], "user", true, "", "", DateTime.MaxValue, "", [], "", "", "", "", "", "blocks-tenant"), true);
@@ -417,6 +415,7 @@ namespace XUnitTest.Mail
             _session.Created.Should().BeTrue();
         }
 
+        /// <summary>A sender whose Graph session is a recorder.</summary>
         private sealed class TestableGraphSender : Office365GraphMailSender
         {
             private readonly RecordingGraphSession _session;

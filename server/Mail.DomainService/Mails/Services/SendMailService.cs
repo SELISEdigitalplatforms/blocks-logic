@@ -12,6 +12,27 @@ using System.Net;
 
 namespace Mail.DomainService.Mails
 {
+    /// <summary>
+    /// The two lookups a send makes in other stores right before the mail is handed to its sender:
+    /// the attachments (file storage) and the account password (Blocks Secrets). Grouped so
+    /// <see cref="SendMailService"/> takes them as one dependency.
+    /// </summary>
+    public sealed class MailSendResolvers
+    {
+        public MailSendResolvers(IMailAttachmentResolver attachments, IMailPasswordResolver password)
+        {
+            ArgumentNullException.ThrowIfNull(attachments);
+            ArgumentNullException.ThrowIfNull(password);
+
+            Attachments = attachments;
+            Password = password;
+        }
+
+        public IMailAttachmentResolver Attachments { get; }
+
+        public IMailPasswordResolver Password { get; }
+    }
+
     public class SendMailService : ISendMailService
     {
         /// <summary>
@@ -34,21 +55,22 @@ namespace Mail.DomainService.Mails
             ILogger<SendMailService> logger,
             IMailRepository mailRepository,
             IOutboundMailSenderRegistry senderRegistry,
-            IMailAttachmentResolver attachmentResolver,
+            MailSendResolvers resolvers,
             IMessageClient messageClient,
             IOptions<MailStatusEventOptions> statusEventOptions,
-            IMailPasswordResolver passwordResolver,
             IBuiltInNotificationSender? builtInNotifications = null
         )
         {
-            _passwordResolver = passwordResolver;
-            _builtIn = builtInNotifications;
+            ArgumentNullException.ThrowIfNull(resolvers);
+
             _logger = logger;
             _mailRepository = mailRepository;
             _senderRegistry = senderRegistry;
-            _attachmentResolver = attachmentResolver;
+            _attachmentResolver = resolvers.Attachments;
             _messageClient = messageClient;
             _statusEventOptions = statusEventOptions.Value;
+            _passwordResolver = resolvers.Password;
+            _builtIn = builtInNotifications;
         }
 
         public async Task<bool> ProcessSendMailAsync(MailToBeSent mailToBeSent)

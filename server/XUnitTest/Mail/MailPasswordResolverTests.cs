@@ -7,6 +7,7 @@ using DomainService.ManagedService.Services;
 using FluentAssertions;
 using Mail.DomainService.Entities;
 using Mail.DomainService.Mails;
+using Mail.DomainService.Shared.Utilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -49,10 +50,52 @@ namespace XUnitTest.Mail
         }
 
         [Fact]
-        public async Task ReferencedConfig_ReadsInsideAnAuthenticatedContextOfTheGivenTenant_AndRestoresTheCaller()
+        public async Task WhitespaceReference_IsTreatedAsAReferenceAndFailsClosed()
+        {
+            // Decision (review minor): only a null or empty reference means "legacy". A whitespace-only
+            // reference counts as a reference, so it is read from Blocks Secrets and, when that read
+            // fails, the resolution fails closed: the plaintext AccountPassword is never used.
+            // Same rule as blocks-monitor#253.
+            const string whitespace = "   ";
+            var secrets = MailSecretsTestDoubles.Throwing(whitespace, new SecretNotFoundException(whitespace));
+
+            var result = await MailSecretsTestDoubles.PasswordResolver(secrets)
+                .ResolveAsync(Referenced(whitespace, accountPassword: "old-pass"), Tenant);
+
+            result.Succeeded.Should().BeFalse();
+            result.Password.Should().BeNull();
+            result.FailureClass.Should().Be("credential");
+            result.ExceptionType.Should().Be(nameof(SecretNotFoundException));
+            secrets.Verify(s => s.GetValueAsync(whitespace, It.IsAny<CancellationToken>()), Times.Once);
+            secrets.Reads().Should().Be(1);
+        }
+
+        [Fact]
+        public async Task NullConfiguration_IsRejected()
+        {
+            var act = () => new MailPasswordResolver(new Mock<IServiceScopeFactory>(MockBehavior.Strict).Object).ResolveAsync(null!, Tenant);
+
+            await act.Should().ThrowAsync<ArgumentNullException>();
+        }
+
+        [Fact]
+        public async Task TenantSecretReader_WithoutAScopeFactory_IsRejected_AndLeavesTheContextAlone()
+        {
+            var before = BlocksContext.GetContext();
+
+            var act = () => TenantSecretReader.ReadAsync(null!, Tenant, Reference);
+
+            await act.Should().ThrowAsync<ArgumentNullException>();
+            BlocksContext.GetContext().Should().BeSameAs(before);
+        }
+
+        [Fact]
+        public async Task ReferencedConfig_ReadsInsideAnAuthenticatedContextOfTheGivenTenant()
         {
             // H6: the read runs as the send's tenant even though another authenticated caller
-            // context is forced in place; that context is back afterwards.
+            // context is forced in place. The caller still sees its own context afterwards, but in
+            // an ordinary await the runtime's async-local rollback guarantees that on its own; the
+            // explicit restore (C6) is proven by the ContextLeftAfterReadAsync harness below.
             var seen = new List<BlocksContext?>();
             var secrets = MailSecretsTestDoubles.Answering(Reference, SecretPassword, seen);
             var caller = CallerContext();
@@ -329,8 +372,10 @@ namespace XUnitTest.Mail
                    .Returns(() => { tenants["ref-b"] = BlocksContext.GetContext()!.TenantId; bothStarted.Signal(); return gateB.Task; });
             var sut = MailSecretsTestDoubles.PasswordResolver(secrets);
 
-            var a = Task.Run(() => { BlocksContext.SetContext(CallerContext("tenant-a"), true); return sut.ResolveAsync(Referenced("ref-a"), "tenant-a"); });
-            var b = Task.Run(() => { BlocksContext.SetContext(CallerContext("tenant-b"), true); return sut.ResolveAsync(Referenced("ref-b"), "tenant-b"); });
+            // Each task's ambient tenant is the *other* tenant, so a resolver that read in the ambient
+            // context instead of the tenant it was given would fail this test.
+            var a = Task.Run(() => { BlocksContext.SetContext(CallerContext("tenant-b"), true); return sut.ResolveAsync(Referenced("ref-a"), "tenant-a"); });
+            var b = Task.Run(() => { BlocksContext.SetContext(CallerContext("tenant-a"), true); return sut.ResolveAsync(Referenced("ref-b"), "tenant-b"); });
             bothStarted.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue("both reads must be in flight together");
             gateB.SetResult("pass-b");
             gateA.SetResult("pass-a");
@@ -370,6 +415,26 @@ namespace XUnitTest.Mail
             ex.InnerException.Should().BeNull();
             ex.FailureClass.Should().Be("credential");
             ex.ToString().Should().Contain("credential").And.Contain(nameof(SecretNotFoundException)).And.NotContain(Reference);
+        }
+
+        [Fact]
+        public void CredentialException_HasOnlyTheSanitizingConstructor()
+        {
+            // C4, Q3: no (message, innerException) overload through which a Secret* exception, whose
+            // message carries the reference id, could be wrapped and logged by the worker.
+            typeof(MailCredentialException).GetConstructors()
+                .Select(c => c.GetParameters().Select(p => p.ParameterType).ToArray())
+                .Should().ContainSingle()
+                .Which.Should().Equal(typeof(string), typeof(string));
+        }
+
+        [Fact]
+        public void CredentialException_WithoutAnExceptionType_SaysSo()
+        {
+            var ex = new MailCredentialException("unexpected", null);
+
+            ex.ExceptionType.Should().BeNull();
+            ex.Message.Should().Contain("unexpected").And.Contain("no exception");
         }
     }
 }

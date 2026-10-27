@@ -277,6 +277,83 @@ namespace XUnitTest.Identifier
         }
 
         [Fact]
+        public async Task GetAllServicesAsync_RowTenantDiffersFromTheContextTenant_ReadsInTheRowsTenant()
+        {
+            // Q2:A, C5: the row's own tenant wins over the context tenant ("read only in the tenant
+            // that owns the row"); the context tenant is only the fallback for a row without one.
+            _tenants.Setup(t => t.GetTenantByID(It.IsAny<string>())).Returns(Tenant("salty"));
+            var seen = new List<BlocksContext?>();
+            _secrets.Setup(s => s.GetValueAsync("s-7", It.IsAny<CancellationToken>()))
+                    .Callback(() => seen.Add(BlocksContext.GetContext()))
+                    .ReturnsAsync(ServiceBusValue);
+            GivenRows(new BlocksManagedService { ItemId = "1", ServiceId = "R1", TenantId = "row-tenant", ServiceBusConnectionStringReference = "s-7" });
+            BlocksContext.GetContext()!.TenantId.Should().Be("tenant-123", "precondition: the context tenant differs from the row's");
+
+            var result = await CreateService().GetAllServicesAsync(new GetAllServiceRequest());
+
+            result.Data!.Single()!.ServiceBusConnectionString.Should().Be(ServiceBusValue);
+            seen.Single()!.TenantId.Should().Be("row-tenant");
+            SecretReads.Should().Be(1);
+        }
+
+        [Fact]
+        public async Task GetAllServicesAsync_WhitespaceReference_IsTreatedAsAReferenceAndFailsClosed()
+        {
+            // Decision (review minor): only a null or empty reference means "legacy". A whitespace-only
+            // reference counts as a reference, so it is read from Blocks Secrets and, when that read
+            // fails, the row is blanked: the legacy ciphertext is never decrypted as a fallback.
+            // Same rule as blocks-monitor#253.
+            const string whitespace = "   ";
+            _tenants.Setup(t => t.GetTenantByID("tenant-123")).Returns(Tenant("salty"));
+            _secrets.Setup(s => s.GetValueAsync(whitespace, It.IsAny<CancellationToken>()))
+                    .ThrowsAsync(new Blocks.Secrets.SecretValidationException("bad id"));
+            GivenRows(new BlocksManagedService
+            {
+                ItemId = "1", ServiceId = "R1", TenantId = "tenant-123",
+                ServiceBusConnectionString = EncryptionHelper.Encrypt("amqp://legacy", "salty"),
+                ServiceBusConnectionStringReference = whitespace
+            });
+
+            var result = await CreateService().GetAllServicesAsync(new GetAllServiceRequest());
+
+            result.Data!.Single()!.ServiceBusConnectionString.Should().BeEmpty();
+            result.Data!.Single()!.ServiceBusConnectionStringReference.Should().BeNull();
+            SecretReads.Should().Be(1);
+        }
+
+        [Fact]
+        public async Task ServiceBusResolver_WhitespaceReference_IsReadAsAReference_AndItsFailurePropagates()
+        {
+            // Decision (review minor), at the resolver: a whitespace-only reference passes the
+            // null-or-empty guard and is read; the store's refusal reaches the caller, which blanks the row.
+            const string whitespace = "   ";
+            _secrets.Setup(s => s.GetValueAsync(whitespace, It.IsAny<CancellationToken>()))
+                    .ThrowsAsync(new Blocks.Secrets.SecretNotFoundException(whitespace));
+            var sut = new ServiceBusConnectionStringResolver(MailSecretsTestDoubles.ScopeFactory(_secrets));
+
+            var act = () => sut.ResolveAsync("tenant-123", whitespace);
+
+            await act.Should().ThrowAsync<Blocks.Secrets.SecretNotFoundException>();
+            SecretReads.Should().Be(1);
+        }
+
+        [Theory]
+        [InlineData(null, "s-7")]
+        [InlineData("", "s-7")]
+        [InlineData("  ", "s-7")]
+        [InlineData("tenant-123", null)]
+        [InlineData("tenant-123", "")]
+        public async Task ServiceBusResolver_BlankTenantOrEmptyReference_IsRejectedWithoutARead(string? tenantId, string? reference)
+        {
+            var sut = new ServiceBusConnectionStringResolver(MailSecretsTestDoubles.ScopeFactory(_secrets));
+
+            var act = () => sut.ResolveAsync(tenantId!, reference!);
+
+            await act.Should().ThrowAsync<ArgumentException>();
+            _secrets.Invocations.Should().BeEmpty();
+        }
+
+        [Fact]
         public async Task GetAllServicesAsync_ReferenceRowWithoutATenant_ReadsInTheContextTenant()
         {
             _tenants.Setup(t => t.GetTenantByID("tenant-123")).Returns(Tenant("salty"));

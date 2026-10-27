@@ -49,6 +49,8 @@ namespace Mail.DomainService.Shared.Utilities
             services.AddTransient<MailKitSmtpClient>();
             services.AddTransient<MicrosoftSmtpClient>();
             services.AddSingleton<ISendMailService, SendMailService>();
+            // SendMailService's attachment and password lookups, taken as one dependency.
+            services.TryAddSingleton<MailSendResolvers>();
 
             // Registered unconditionally rather than via TryAdd: RegisterAllMailApplicationServices
             // has five call sites and runs twice inside the Api, so any presence-detection scheme

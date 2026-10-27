@@ -59,10 +59,9 @@ namespace XUnitTest.Mail
                 NullLogger<SendMailService>.Instance,
                 _repository.Object,
                 registry,
-                _resolver.Object,
+                new MailSendResolvers(_resolver.Object, MailSecretsTestDoubles.PasswordResolver(_secrets)),
                 _messageClient.Object,
-                Options.Create(_statusOptions),
-                MailSecretsTestDoubles.PasswordResolver(_secrets));
+                Options.Create(_statusOptions));
         }
 
         private static MailToBeSent AMail(params string[] attachmentIds) => new()
@@ -312,10 +311,9 @@ namespace XUnitTest.Mail
                 _log,
                 _repository.Object,
                 registry,
-                _resolver.Object,
+                new MailSendResolvers(_resolver.Object, MailSecretsTestDoubles.PasswordResolver(_secrets)),
                 _messageClient.Object,
                 Options.Create(_statusOptions),
-                MailSecretsTestDoubles.PasswordResolver(_secrets),
                 _builtIn.Object);
         }
 
@@ -531,8 +529,8 @@ namespace XUnitTest.Mail
             sender.Setup(s => s.SendAsync(It.IsAny<MailToBeSent>(), It.IsAny<MailBody>()))
                   .Callback<MailToBeSent, MailBody>((m, _) => m.MailServerConfiguration.AccountPassword.Should().Be(SecretPassword))
                   .ThrowsAsync(new InvalidOperationException("transport bug"));
-            var service = new SendMailService(_log, _repository.Object, new OutboundMailSenderRegistry([sender.Object]), _resolver.Object,
-                _messageClient.Object, Options.Create(_statusOptions), MailSecretsTestDoubles.PasswordResolver(_secrets));
+            var service = new SendMailService(_log, _repository.Object, new OutboundMailSenderRegistry([sender.Object]), new MailSendResolvers(_resolver.Object, MailSecretsTestDoubles.PasswordResolver(_secrets)),
+                _messageClient.Object, Options.Create(_statusOptions));
             var mail = ReferencedMail(MailServiceProvider.Zoho, accountPassword: "old-pass");
 
             var act = () => service.ProcessSendMailAsync(mail);
@@ -567,6 +565,8 @@ namespace XUnitTest.Mail
 
             SmtpConnections.Should().Be(0);
             _smtp.Credentials.Concat(_o365Smtp.Credentials).Should().BeEmpty();
+            // C10: exactly one read per send attempt (two sends), so a retry on failure is caught.
+            _secrets!.Reads().Should().Be(2);
             _builtIn.Verify(b => b.SendToTenantAdminsAsync(TenantId, It.IsAny<string>(), It.IsAny<BuiltInNotificationPayload>(),
                 It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
             var failures = _log.Lines.Where(l => l.Contains("MAIL FAILED (credential)", StringComparison.Ordinal)).ToList();
@@ -626,8 +626,11 @@ namespace XUnitTest.Mail
         [Fact]
         public async Task TwoTenantsSendingConcurrently_EachReadsInItsOwnTenant()
         {
-            // C5 through the orchestrator: the read tenant is the ambient tenant of each send.
+            // C5 through the orchestrator: the read tenant is the ambient tenant of each send. Neither
+            // read completes until both are in flight, so the two sends really overlap.
             var tenants = new System.Collections.Concurrent.ConcurrentBag<(string Reference, string Tenant)>();
+            var bothReading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var reading = 0;
             _secrets = new Mock<Blocks.Secrets.ISecretService>(MockBehavior.Strict);
             foreach (var reference in new[] { "ref-a", "ref-b" })
             {
@@ -635,17 +638,22 @@ namespace XUnitTest.Mail
                         .Returns(async () =>
                         {
                             tenants.Add((reference, BlocksContext.GetContext()!.TenantId));
-                            await Task.Delay(20);
+                            if (Interlocked.Increment(ref reading) == 2)
+                            {
+                                bothReading.SetResult();
+                            }
+
+                            await bothReading.Task.WaitAsync(TimeSpan.FromSeconds(10));
                             return "pass-" + reference;
                         });
             }
             GivenAttachments();
             var service = CreateSecretAwareService();
 
-            Task<bool> Send(string tenant, string reference) => Task.Run(() =>
+            Task<bool> Send(string tenant, string reference) => Task.Run(async () =>
             {
                 using var _ = InTenant(tenant);
-                return service.ProcessSendMailAsync(ReferencedMail(MailServiceProvider.Zoho, reference: reference));
+                return await service.ProcessSendMailAsync(ReferencedMail(MailServiceProvider.Zoho, reference: reference));
             });
 
             var results = await Task.WhenAll(Send("tenant-a", "ref-a"), Send("tenant-b", "ref-b"));
@@ -709,8 +717,8 @@ namespace XUnitTest.Mail
             var sender = new Mock<IOutboundMailSender>();
             sender.SetupGet(s => s.Provider).Returns(MailServiceProvider.Office365Smtp);
             sender.Setup(s => s.SendAsync(It.IsAny<MailToBeSent>(), It.IsAny<MailBody>())).ReturnsAsync(true);
-            var service = new SendMailService(_log, _repository.Object, new OutboundMailSenderRegistry([sender.Object]), _resolver.Object,
-                _messageClient.Object, Options.Create(_statusOptions), MailSecretsTestDoubles.PasswordResolver(_secrets));
+            var service = new SendMailService(_log, _repository.Object, new OutboundMailSenderRegistry([sender.Object]), new MailSendResolvers(_resolver.Object, MailSecretsTestDoubles.PasswordResolver(_secrets)),
+                _messageClient.Object, Options.Create(_statusOptions));
 
             (await service.ProcessSendMailAsync(mail)).Should().BeTrue();
 
