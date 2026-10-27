@@ -84,6 +84,18 @@ namespace XUnitTest.Notification
         }
 
         [Fact]
+        public async Task Notify_WithNoUserIds_SendsNothing_InsteadOfThrowing()
+        {
+            var request = Request();
+            request.UserIds = null;
+
+            var act = () => _sut.Notify(request, Configuration());
+
+            await act.Should().NotThrowAsync();
+            _handler.Requests.Should().BeEmpty();
+        }
+
+        [Fact]
         public async Task Notify_CarriesTheDataNotificationAndContentFlagSections()
         {
             await _sut.Notify(Request("user-1"), Configuration());

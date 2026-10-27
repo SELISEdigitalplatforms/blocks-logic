@@ -144,6 +144,40 @@ namespace XUnitTest.Notification
             results[1].IsValid.Should().BeTrue();
         }
 
+        [Theory]
+        [InlineData(NotificationReceiverTypes.UserSpecificReceiverType)]
+        [InlineData(NotificationReceiverTypes.FilterSpecificReceiverType)]
+        public async Task NotifyRequestValidator_SenderListsAreOptional_WhenTheConfigurationHasAnAudience(NotificationReceiverTypes type)
+        {
+            SetupConfiguration(new NotificationConfiguration
+            {
+                Name = "ruled",
+                NotificationType = type,
+                Audience = new NotificationAudience { Roles = ["admin"] },
+            });
+
+            var result = await new NotifyRequestValidator(_configurationRepository.Object)
+                .ValidateAsync(new NotifyRequest { ConfigurationName = "ruled" });
+
+            result.IsValid.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task NotifyRequestValidator_AnAudienceWithoutRules_StillRequiresSenderLists()
+        {
+            SetupConfiguration(new NotificationConfiguration
+            {
+                Name = "personal",
+                NotificationType = NotificationReceiverTypes.UserSpecificReceiverType,
+                Audience = new NotificationAudience(),
+            });
+
+            var result = await new NotifyRequestValidator(_configurationRepository.Object)
+                .ValidateAsync(new NotifyRequest { ConfigurationName = "personal" });
+
+            result.IsValid.Should().BeFalse();
+        }
+
         [Fact]
         public async Task NotifyRequestValidator_RequiresUsersOrRolesForAUserSpecificConfiguration()
         {

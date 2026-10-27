@@ -21,6 +21,8 @@ namespace DomainService.Utilities
             serviceCollection.AddSingleton<IStrategicClientProviderFactory, StrategicClientProviderFactory>();
             serviceCollection.AddSingleton<IConfigurationService, ConfigurationService>();
             serviceCollection.AddSingleton<IConfigurationRepository, ConfigurationRepository>();
+            serviceCollection.AddSingleton<INotificationAudienceRepository, NotificationAudienceRepository>();
+            serviceCollection.AddSingleton<INotificationAudienceResolver, NotificationAudienceResolver>();
 
             serviceCollection.AddSingleton<FirebaseNotificationServiceProvider>();
             serviceCollection.AddSingleton<SignalRNotificationServiceProvider>();

@@ -3,6 +3,8 @@ using DomainService.Configuration.Services;
 using DomainService.Shared;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using StackExchange.Redis;
 using Blocks.Genesis.Entities.Logic;
@@ -18,14 +20,17 @@ namespace DomainService.Notification
         private readonly ILogger<NotificationService> _logger;
         private readonly INotifierServiceFactory _notifierFactory;
         private readonly IConfigurationRepository _configurationRepository;
+        private readonly INotificationAudienceResolver _audienceResolver;
 
         public NotificationService(INotificationRepository notificationRepository,
                                    IValidator<Subscription> validator,
                                    IValidator<NotifyRequest> notifyRequestValidator,
                                    ILogger<NotificationService> logger,
                                    INotifierServiceFactory notifierFactory,
-                                   IConfigurationRepository configurationRepository)
+                                   IConfigurationRepository configurationRepository,
+                                   INotificationAudienceResolver audienceResolver)
         {
+            _audienceResolver = audienceResolver;
             _notificationRepository = notificationRepository;
             _subscriptionValidator = validator;
             _notifyRequestValidator = notifyRequestValidator;
@@ -106,12 +111,64 @@ namespace DomainService.Notification
                 return new BaseResponse { IsSuccess = true };
             }
 
-            await SendNotificationAsync(configuration, notifyRequest);
+            var sendConfiguration = await ApplyAudienceAsync(configuration, notifyRequest);
+            if (sendConfiguration is null)
+            {
+                return new NotifyResponse { IsSuccess = true, Message = NotifyResponse.NoReceivers };
+            }
+
+            await SendNotificationAsync(sendConfiguration, notifyRequest);
 
             //TODO
             //await PublishEventForNotification(notifyRequest);
 
             return new BaseResponse { IsSuccess = true };
+        }
+
+        /// <summary>
+        /// Applies the configuration audience: the request is narrowed to the final user ids and sent user-specific
+        /// through a copy of the configuration. Returns the configuration to send with, or null when no one is left.
+        /// Without an audience, and for an everyone-broadcast the sender did not narrow, nothing changes.
+        /// </summary>
+        private async Task<NotificationConfiguration?> ApplyAudienceAsync(NotificationConfiguration configuration, NotifyRequest notifyRequest)
+        {
+            var audience = configuration.Audience;
+            if (audience is null || !audience.IsSet())
+                return configuration;
+
+            if (audience.EveryoneInTenant && !audience.HasRules()
+                && configuration.NotificationType == NotificationReceiverTypes.BroadcastReceiverType
+                && !SenderNarrowing.SenderGaveLists(notifyRequest))
+                return configuration;
+
+            var resolution = await _audienceResolver.ResolveAsync(audience, notifyRequest);
+            if (resolution.DroppedRequestedCount > 0)
+            {
+                // Counts only: user ids never go to the log.
+                _logger.LogWarning("Notify: {DroppedCount} requested user(s) are outside the audience of configuration {ConfigurationName}; left out",
+                    resolution.DroppedRequestedCount, notifyRequest.ConfigurationName);
+            }
+
+            if (resolution.UserIds.Count == 0)
+            {
+                _logger.LogInformation("Notify: no receivers for configuration {ConfigurationName} (audience {AudienceCount}, final 0); nothing sent",
+                    notifyRequest.ConfigurationName, resolution.AudienceCount);
+                return null;
+            }
+
+            notifyRequest.UserIds = [.. resolution.UserIds];
+            notifyRequest.Roles = null;
+            notifyRequest.OrganizationIds = null;
+            notifyRequest.SubscriptionFilters = null;
+            return AsUserSpecific(configuration);
+        }
+
+        /// <summary>A copy, so a configuration object the caller or a cache holds is never changed.</summary>
+        private static NotificationConfiguration AsUserSpecific(NotificationConfiguration configuration)
+        {
+            var copy = BsonSerializer.Deserialize<NotificationConfiguration>(configuration.ToBsonDocument());
+            copy.NotificationType = NotificationReceiverTypes.UserSpecificReceiverType;
+            return copy;
         }
 
         private async Task SendNotificationAsync(NotificationConfiguration configuration, NotifyRequest notifyRequest)

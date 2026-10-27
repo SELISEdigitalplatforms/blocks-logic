@@ -125,7 +125,7 @@ namespace XUnitTest.Notification
             BlocksContext.IsTestMode = true;
 
             _sut = new NotificationService(_repo.Object, Mock.Of<IValidator<Subscription>>(), _notifyValidator.Object,
-                _logger.Object, _notifierFactory.Object, _configRepo.Object);
+                _logger.Object, _notifierFactory.Object, _configRepo.Object, Mock.Of<INotificationAudienceResolver>());
         }
 
         public void Dispose()

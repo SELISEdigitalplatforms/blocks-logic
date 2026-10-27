@@ -45,7 +45,8 @@ namespace XUnitTest.Notification
                 notifyValidator.Object,
                 Mock.Of<ILogger<NotificationService>>(),
                 Mock.Of<INotifierServiceFactory>(),
-                Mock.Of<IConfigurationRepository>());
+                Mock.Of<IConfigurationRepository>(),
+                Mock.Of<INotificationAudienceResolver>());
         }
 
         public void Dispose()

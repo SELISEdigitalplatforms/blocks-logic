@@ -52,7 +52,8 @@ namespace XUnitTest.Notifications
                 _notifyValidator.Object,
                 NullLogger<NotificationService>.Instance,
                 _notifierFactory.Object,
-                _configRepo.Object);
+                _configRepo.Object,
+                Mock.Of<INotificationAudienceResolver>());
         }
 
         public void Dispose()

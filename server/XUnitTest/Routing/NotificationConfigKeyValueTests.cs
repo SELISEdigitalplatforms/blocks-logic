@@ -199,8 +199,11 @@ public class NotificationConfigKeyValueTests : IDisposable
         result.Should().BeNull();
         (await CollectionNames(_fixture.Dev)).Should().NotContain(Old);
         (await CollectionNames(_fixture.Main)).Should().NotContain(Old);
-        // The KV read is the only store call; there is no live "does the collection exist" check on this path.
-        _kv.Invocations.Should().ContainSingle();
+        // The KV reads are the only store calls (tenant row, then the root built-in fallback); there is no live
+        // "does the collection exist" check on this path.
+        _kv.Invocations.Should().HaveCount(2);
+        _kv.Verify(k => k.GetAsync<SendConfig>(Prefix + "welcome", true, default), Times.Once);
+        _kv.Verify(k => k.GetAsync<SendConfig>(Prefix + "welcome", false, default), Times.Once);
     }
 
     [Fact]
@@ -235,6 +238,48 @@ public class NotificationConfigKeyValueTests : IDisposable
 
         result.Should().BeNull();
         _kv.Verify(k => k.GetAsync<SendConfig>(Prefix, true, default), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendTime_FoundInTenantKv_NeverReadsTheRootRow()
+    {
+        TestBlocksContext.Set("dev");
+        _kv.Setup(k => k.GetAsync<SendConfig>(Prefix + "welcome", true, default))
+            .ReturnsAsync(new SendConfig { Name = "welcome", NotifyMethod = "tenant" });
+
+        (await Send().GetByNameAsync("welcome")).NotifyMethod.Should().Be("tenant");
+        _kv.Verify(k => k.GetAsync<SendConfig>(It.IsAny<string>(), false, default), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendTime_OnlyARootBuiltIn_IsUsed_SoProjectKeySendsOfConsoleBuiltInsStillWork()
+    {
+        TestBlocksContext.Set("dev");
+        _kv.Setup(k => k.GetAsync<SendConfig>(Prefix + "welcome", false, default))
+            .ReturnsAsync(new SendConfig { Name = "welcome", NotifyMethod = "root-builtin", IsBuiltIn = true });
+
+        (await Send().GetByNameAsync("welcome")).NotifyMethod.Should().Be("root-builtin");
+    }
+
+    [Fact]
+    public async Task SendTime_RootCustomConfig_IsNeverUsedForAProject()
+    {
+        TestBlocksContext.Set("dev");
+        _kv.Setup(k => k.GetAsync<SendConfig>(Prefix + "welcome", false, default))
+            .ReturnsAsync(new SendConfig { Name = "welcome", NotifyMethod = "root-custom", IsBuiltIn = false });
+
+        (await Send().GetByNameAsync("welcome")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SendTime_TenantOldCollectionRow_WinsOverTheRootBuiltIn()
+    {
+        TestBlocksContext.Set("dev");
+        await _fixture.Dev.GetCollection<SendConfig>(Old).InsertOneAsync(new SendConfig { ItemId = "old", Name = "welcome", NotifyMethod = "tenant-old" });
+        _kv.Setup(k => k.GetAsync<SendConfig>(Prefix + "welcome", false, default))
+            .ReturnsAsync(new SendConfig { Name = "welcome", NotifyMethod = "root-builtin", IsBuiltIn = true });
+
+        (await Send().GetByNameAsync("welcome")).NotifyMethod.Should().Be("tenant-old");
     }
 
     [Fact]

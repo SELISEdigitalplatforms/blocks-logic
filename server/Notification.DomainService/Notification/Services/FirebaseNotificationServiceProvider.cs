@@ -47,7 +47,8 @@ namespace DomainService.Notification
                 await Task.CompletedTask;
             }
 
-            var userIds = notifyRequest.UserIds;
+            // A filter or role send can arrive with no user ids; that is no one to push to, not a crash.
+            var userIds = notifyRequest.UserIds ?? [];
             var config = await _notificationRepository.GetItemAsync<FirebaseConfiguration>(x => true);
 
             if (config == null)
