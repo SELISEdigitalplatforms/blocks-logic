@@ -8,24 +8,43 @@ const ENV_BUTTON =
 const isVisibleNow = async (locator: { isVisible: (opts: { timeout: number }) => Promise<boolean> }) =>
   locator.isVisible({ timeout: 500 }).catch(() => false)
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
-/** Match e2e-created names: `Test Project 123` and `${PROJECT_NAME} 123`. */
-function orphanProjectPatterns(): RegExp[] {
+/** Prefixes of e2e-created names: `Test Project 123` and `${PROJECT_NAME} 123`. */
+function orphanProjectPrefixes(): string[] {
   const prefixes = new Set(["Test Project"])
   const configured = process.env.PROJECT_NAME?.trim()
   if (configured) prefixes.add(configured)
-  return [...prefixes].map((prefix) => new RegExp(`${escapeRegExp(prefix)} \\d+`, "g"))
+  return [...prefixes]
+}
+
+const isAsciiDigit = (ch: string) => ch >= "0" && ch <= "9"
+
+/**
+ * Every non-overlapping `<prefix> <digits>` in `text`, scanning left to right (the same matches a global
+ * `/<escaped prefix> \d+/g` gives) — a plain string scan, so the configured prefix is never compiled as a pattern.
+ */
+function findNumberedNames(text: string, prefix: string): string[] {
+  const needle = `${prefix} `
+  const found: string[] = []
+  let at = text.indexOf(needle)
+  while (at !== -1) {
+    let end = at + needle.length
+    while (end < text.length && isAsciiDigit(text[end])) end++
+    if (end > at + needle.length) {
+      found.push(text.slice(at, end))
+      at = text.indexOf(needle, end)
+    } else {
+      at = text.indexOf(needle, at + 1)
+    }
+  }
+  return found
 }
 
 async function listOrphanProjectNames(page: Page): Promise<string[]> {
   const bodyText = await page.locator("body").innerText().catch(() => "")
   const names = new Set<string>()
-  for (const pattern of orphanProjectPatterns()) {
-    for (const match of bodyText.matchAll(pattern)) {
-      names.add(match[0])
+  for (const prefix of orphanProjectPrefixes()) {
+    for (const name of findNumberedNames(bodyText, prefix)) {
+      names.add(name)
     }
   }
   return [...names]
@@ -412,7 +431,7 @@ export async function deleteCreatedProject(
       }
       return deleted
     } catch (error) {
-      console.warn(`[e2e] Failed to delete project "${projectName}" on OS:`, error)
+      console.warn('[e2e] Failed to delete project "%s" on OS:', projectName, error)
       return false
     }
   })

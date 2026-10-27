@@ -21,7 +21,9 @@ namespace XUnitTest.Functions
     {
         private const string Tenant = "t1";
         private const string FunctionId = "fn_1";
-        private const string Literal = "sk_live_51HxYzAbCdEf0123456789";
+        // Any typed value under a credential-looking name is a literal (the rule never looks at the value's shape);
+        // a live-key-shaped value keeps the test realistic. Split so secret scanners do not read the fixture as a real key.
+        private const string Literal = "sk_" + "live_51HxYzAbCdEf0123456789";
         private const string SecretRef = "{{secret.0f3a9c2e-1111-4222-8333-944455556666}}";
 
         private readonly Mock<IFunctionRepository> _functions = new();

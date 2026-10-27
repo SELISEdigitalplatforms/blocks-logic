@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -26,7 +26,7 @@ const Harness = ({
     },
     resolver: zodResolver(proxyFormSchema),
   });
-  const value = form.watch("resilience");
+  const value = useWatch({ control: form.control, name: "resilience" });
 
   return (
     <Form {...form}>

@@ -25,12 +25,16 @@ export const RadioField = ({
     }
   }, [config, data, field]);
 
-  // Update options if they change and are static
-  useEffect(() => {
+  // Update options if they change and are static. Adjusted during render when field.options
+  // changes (React's "adjust state when a prop changes" pattern). Wrapped in an object because
+  // options may be a loader function, which useState would otherwise call.
+  const [syncedOptions, setSyncedOptions] = useState({ source: field.options });
+  if (syncedOptions.source !== field.options) {
+    setSyncedOptions({ source: field.options });
     if (Array.isArray(field.options)) {
       setOptions(field.options);
     }
-  }, [field.options]);
+  }
 
   return (
     <RadioGroup

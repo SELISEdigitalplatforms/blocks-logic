@@ -39,7 +39,7 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { formatDate, parseDateString } from "@/lib/utils";
 import { isErrorWithErrors } from "@/lib/error";
 import { useGetScheduleById, useUpdateSchedule } from "../../hooks/use-schedule-api";
-import { ISchedule, ScheduleKind } from "../../types/schedule.service.type";
+import { ScheduleKind } from "../../types/schedule.service.type";
 import { CRON_PRESETS } from "../../components/schedule-form-dialog/utils";
 import { DeleteScheduleDialog } from "../../components/delete-schedule";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { FieldProps } from "../form-field.types";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { TextField } from "./text-field";
@@ -12,7 +12,8 @@ export const TabWithTextField = ({
   field,
   value,
   onChange,
-  readOnly, // readOnly might be true if displayValue is set, but we shouldn't block tabs with it
+  // readOnly is intentionally not used: it might be true if displayValue is set, but we
+  // shouldn't block tabs with it.
   data,
   config,
 }: FieldProps<unknown>) => {
@@ -23,9 +24,13 @@ export const TabWithTextField = ({
   
   const [localValue, setLocalValue] = useState<unknown>(dataVal !== undefined ? dataVal : configVal);
 
-  useEffect(() => {
+  // Re-seed the local value when the data/config value changes; adjusted during render
+  // (React's "adjust state when a prop changes" pattern).
+  const [syncedFrom, setSyncedFrom] = useState({ dataVal, configVal });
+  if (syncedFrom.dataVal !== dataVal || syncedFrom.configVal !== configVal) {
+    setSyncedFrom({ dataVal, configVal });
     setLocalValue(dataVal !== undefined ? dataVal : configVal);
-  }, [dataVal, configVal]);
+  }
 
   const selectedValue = localValue !== undefined ? String(localValue) : String(options[0]?.value ?? "");
 

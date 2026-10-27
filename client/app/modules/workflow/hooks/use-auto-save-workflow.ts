@@ -78,8 +78,12 @@ export const useAutoSaveWorkflow = ({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // isSavingRef also covers the synchronous work around the mutation that isPending does not, and
+  // saveNow only reads the ref when invoked; moving this to state would change when isSaving flips.
+  /* eslint-disable react-hooks/refs */
   return {
     isSaving: isPending || isSavingRef.current,
     saveNow: saveWorkflow,
   };
+  /* eslint-enable react-hooks/refs */
 };

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isParseableUrl } from "@/lib/utils";
 import { resilienceIssues } from "./proxy-resilience";
 import {
   ProxyAccess,
@@ -585,7 +586,7 @@ export const proxyFormSchema = z
     upstreamUrl: z
       .string()
       .trim()
-      .url("Please enter a valid url")
+      .refine(isParseableUrl, "Please enter a valid url")
       .refine((url) => url.startsWith("https://"), "Use an https endpoint."),
     methods: z
       .array(z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]))

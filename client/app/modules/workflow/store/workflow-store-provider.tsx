@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef } from "react";
+import { createContext, useContext, useState } from "react";
 import { useStore } from "zustand";
 import { createWorkflowStore, WorkflowStore, WorkflowState } from "./workflow-store";
 
@@ -9,12 +9,10 @@ export function WorkflowStoreProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const storeRef = useRef<WorkflowStore | null>(null);
-  if (storeRef.current === null) {
-    storeRef.current = createWorkflowStore();
-  }
+  // Created once per provider (lazy state initializer).
+  const [store] = useState<WorkflowStore>(createWorkflowStore);
   return (
-    <WorkflowStoreContext.Provider value={storeRef.current}>
+    <WorkflowStoreContext.Provider value={store}>
       {children}
     </WorkflowStoreContext.Provider>
   );

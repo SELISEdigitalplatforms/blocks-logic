@@ -140,3 +140,16 @@ export function formatSize(
 
   return `${parseFloat(bytes.toFixed(decimals))} ${UNITS[unitIndex]}`;
 }
+
+/**
+ * Whether `value` parses as an absolute URL — the check zod 3's `.url()` made. Used with
+ * `.refine` because zod 4's `.url()` also rewrites the value (trims it, strips tabs/newlines).
+ */
+export const isParseableUrl = (value: string): boolean => {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+};

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { useNotificationListener } from "@/hooks/use-notification-listener";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { workflowService } from "../services/workflow.service";
@@ -24,7 +24,6 @@ export const useWorkflowNotification = () => {
       if (payloadStr) {
         const payload = typeof payloadStr === "string" ? JSON.parse(payloadStr) : payloadStr;
           const code = payload?.Information?.code;
-          const status = payload?.Information?.status;
 
           if (code === EXECUTION_STATUS_COMPLETED || code === EXECUTION_STATUS_FAILED) {
             const executionId = payload?.Information?.executionId || payload?.Information?.data;
@@ -53,7 +52,7 @@ export const useWorkflowNotification = () => {
     } catch (error) {
       showErrorToast({ errors: (error instanceof Error ? error.message : "") || "Failed to parse WorkflowNotification" });
     }
-  }, [isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData]);
+  }, [isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData, setNextExecutionId]);
 
 
   useNotificationListener("WorkflowNotification", handleNotification);

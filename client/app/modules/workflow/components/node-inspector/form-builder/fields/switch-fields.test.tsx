@@ -41,7 +41,8 @@ const RulesHarness = ({ initial, readOnly, disabled, onValue }: { initial: Switc
 };
 
 const last = (fn: ReturnType<typeof vi.fn>) => fn.mock.calls.at(-1)![0] as SwitchRule[];
-const header = (n: number) => screen.getByRole("button", { name: new RegExp(`^Routing Rule ${n},`) });
+const header = (n: number) =>
+  screen.getByRole("button", { name: (accessibleName) => accessibleName.startsWith(`Routing Rule ${n},`) });
 
 describe("SwitchRulesField", () => {
   it("opens a single rule, and starts several rules closed", () => {

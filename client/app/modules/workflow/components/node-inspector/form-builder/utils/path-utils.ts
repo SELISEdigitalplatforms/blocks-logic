@@ -12,16 +12,20 @@ export const setValueByPath = (
   path: string,
   value: unknown,
 ): Record<string, unknown> => {
-  const keys = path.split(".");
-  const result = { ...data };
-  let current: Record<string, unknown> = result;
+  return setValueByKeys(data, path.split("."), value);
+};
 
-  for (let i = 0; i < keys.length - 1; i++) {
-    const key = keys[i];
-    current[key] = { ...(current[key] || {}) } as Record<string, unknown>;
-    current = current[key] as Record<string, unknown>;
-  }
-
-  current[keys[keys.length - 1]] = value;
-  return result;
+/**
+ * Copies each object along `keys` and sets the leaf. Keys are written as computed properties of
+ * fresh object literals, so a `__proto__` segment can never reach an object's prototype.
+ */
+const setValueByKeys = (
+  data: Record<string, unknown>,
+  keys: string[],
+  value: unknown,
+): Record<string, unknown> => {
+  const [key, ...rest] = keys;
+  if (rest.length === 0) return { ...data, [key]: value };
+  const child = { ...(data[key] || {}) } as Record<string, unknown>;
+  return { ...data, [key]: setValueByKeys(child, rest, value) };
 };

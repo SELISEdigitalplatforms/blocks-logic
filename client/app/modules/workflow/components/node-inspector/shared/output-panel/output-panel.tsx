@@ -162,7 +162,7 @@ export const OutputPanel = ({
     let newPinData;
     try {
       newPinData = JSON.parse(mockDataInput);
-    } catch (e) {
+    } catch {
       showErrorToast({ errors: "Invalid JSON format" });
       return;
     }
@@ -194,7 +194,7 @@ export const OutputPanel = ({
                 </Badge>
               </TooltipTrigger>
               <TooltipContent className="text-xs">
-                Showing mock data. Runs use it as this step's output instead of running the step.
+                Showing mock data. Runs use it as this step&apos;s output instead of running the step.
               </TooltipContent>
             </Tooltip>
           )}

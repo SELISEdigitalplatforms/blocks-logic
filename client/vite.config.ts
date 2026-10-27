@@ -13,13 +13,17 @@ function selfHostMonaco(): Plugin {
   return {
     name: "self-host-monaco",
     configResolved(config) {
+      // Vite's own resolved config (project root and build.outDir), not request input.
+      // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
       outDir = path.resolve(config.root, config.build.outDir);
     },
     configureServer(server) {
       server.middlewares.use(MONACO_VS_URL, (req, res, next) => {
         const relative = decodeURIComponent((req.url ?? "/").split("?")[0]);
+        // Never serve outside the Monaco folder (e.g. /monaco/vs/../../package.json): the resolved
+        // path is confined by the startsWith check below, which the scanner does not model.
+        // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
         const file = path.resolve(MONACO_VS_DIR, "." + relative);
-        // Never serve outside the Monaco folder (e.g. /monaco/vs/../../package.json).
         if (!file.startsWith(MONACO_VS_DIR + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
           return next();
         }

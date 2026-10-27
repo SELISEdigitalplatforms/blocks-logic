@@ -38,6 +38,9 @@ on:
         required: false
         type: boolean
         default: true
+    secrets:
+      INCEPTION_SONAR_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -108,14 +111,17 @@ jobs:
 
       - name: Sonar begin
         env:
+          IN_SONAR_PROJECT_KEY: ${{ inputs.SONAR_PROJECT_KEY }}
+          IN_SONAR_PROJECT_VERSION: ${{ inputs.SONAR_PROJECT_VERSION }}
+          IN_SONAR_HOST_URL: ${{ inputs.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.INCEPTION_SONAR_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p "$COV_DIR"
           dotnet sonarscanner begin \
-            /k:"${{ inputs.SONAR_PROJECT_KEY }}" \
-            /v:"${{ inputs.SONAR_PROJECT_VERSION }}" \
-            /d:sonar.host.url="${{ inputs.SONAR_HOST_URL }}" \
+            /k:"${IN_SONAR_PROJECT_KEY}" \
+            /v:"${IN_SONAR_PROJECT_VERSION}" \
+            /d:sonar.host.url="${IN_SONAR_HOST_URL}" \
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.scanner.scanAll=true \
             /d:sonar.exclusions="**/node_modules/**,**/dist/**,**/wwwroot/**,**/bin/**,**/obj/**,**/coverage/**,**/TestResults/**,**/.coverage/**" \
@@ -201,15 +207,21 @@ jobs:
 
       - name: Report test outcome
         if: always()
+        env:
+          SERVER_OUTCOME: ${{ steps.test_server.outcome }}
+          CLIENT_OUTCOME: ${{ steps.test_client.outcome }}
+          IN_SONAR_HOST_URL: ${{ inputs.SONAR_HOST_URL }}
+          IN_SONAR_PROJECT_KEY: ${{ inputs.SONAR_PROJECT_KEY }}
+          IN_FAIL_ON_TEST_FAILURE: ${{ inputs.FAIL_ON_TEST_FAILURE }}
         run: |
           set -euo pipefail
-          srv="${{ steps.test_server.outcome }}"
-          cli="${{ steps.test_client.outcome }}"
+          srv="${SERVER_OUTCOME}"
+          cli="${CLIENT_OUTCOME}"
           echo "server tests: $srv"
           echo "client tests: $cli"
-          echo "results: ${{ inputs.SONAR_HOST_URL }}/dashboard?id=${{ inputs.SONAR_PROJECT_KEY }}"
+          echo "results: ${IN_SONAR_HOST_URL}/dashboard?id=${IN_SONAR_PROJECT_KEY}"
           if [ "$srv" != "success" ] || [ "$cli" != "success" ]; then
-            if [ "${{ inputs.FAIL_ON_TEST_FAILURE }}" = "true" ]; then
+            if [ "${IN_FAIL_ON_TEST_FAILURE}" = "true" ]; then
               echo "::error::unit tests failed (results published to SonarQube)"
               exit 1
             fi

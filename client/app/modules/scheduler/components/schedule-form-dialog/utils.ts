@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isParseableUrl } from "@/lib/utils";
 import { validateCronExpression } from "./cron-validation";
 
 export const WEBHOOK_METHODS = ["POST", "GET", "PUT", "PATCH", "DELETE"] as const;
@@ -25,7 +26,7 @@ export const scheduleFormSchema = z
     description: z.string().max(500, "Description cannot exceed 500 characters"),
     webhook: z.object({
 
-      url: z.string().min(1, "Webhook URL is required").url("Enter a valid URL"),
+      url: z.string().min(1, "Webhook URL is required").refine(isParseableUrl, "Enter a valid URL"),
       method: z.string().default("POST"),
       headers: webhookHeadersSchema,
       signingSecret: z.string(),

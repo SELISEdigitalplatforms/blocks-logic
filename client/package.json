@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "type": "module",
   "overrides": {
-    "dompurify": "^3.4.12"
+    "dompurify": "^3.4.12",
+    "zod": "$zod"
   },
   "scripts": {
     "dev": "vite --port 4000 --host dev-logic.blocksdevelopers.com",
@@ -22,7 +23,7 @@
   },
   "dependencies": {
     "@hcaptcha/react-hcaptcha": "^1.12.0",
-    "@hookform/resolvers": "^3.9.0",
+    "@hookform/resolvers": "^5.7.1",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-checkbox": "^1.1.1",
@@ -68,7 +69,7 @@
     "tailwind-merge": "^2.3.0",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.1.0",
-    "zod": "^3.23.8",
+    "zod": "^4.6.6",
     "zustand": "^5.0.1"
   },
   "devDependencies": {
