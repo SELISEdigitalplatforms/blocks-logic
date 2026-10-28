@@ -431,7 +431,10 @@
             <summary>Takes the mail and configuration services.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.MailController.SendToAny(Mail.DomainService.Mails.SendMailToAny)">
-            <summary><c>POST</c> — sends a mail to arbitrary recipients, bypassing the stored recipient lists.</summary>
+            <summary>
+            <c>POST</c> — sends a mail to addresses that need not be users of the project. Its own
+            permission: <c>mail::manage</c> alone reaches only the project's users (<see cref="M:BlocksTemplate.Api.Controllers.MailController.Send(Mail.DomainService.Mails.SendMail)"/>).
+            </summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.MailController.Send(Mail.DomainService.Mails.SendMail)">
             <summary><c>POST</c> — sends a mail through the configured mail server.</summary>

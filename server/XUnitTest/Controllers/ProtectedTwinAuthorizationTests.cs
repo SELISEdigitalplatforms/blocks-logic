@@ -80,7 +80,7 @@ namespace XUnitTest.Controllers
             Row(typeof(StorageController), "GetFile", L + "storage-file::read"),
             Row(typeof(StorageController), "GetFiles", L + "storage-file::read"),
             Row(typeof(StorageController), "DeleteFile", L + "storage-file::manage"),
-            Row(typeof(MailController), "SendToAny", L + "mail::manage"),
+            Row(typeof(MailController), "SendToAny", L + "mail::send-any"),
             Row(typeof(MailController), "Send", L + "mail::manage"),
             Row(typeof(MailController), "GetMailBoxMails", L + "mail::read"),
             Row(typeof(MailController), "GetMailBoxMail", L + "mail::read"),
@@ -146,7 +146,7 @@ namespace XUnitTest.Controllers
         public void NewLogicPermissionListIsComplete()
         {
             NewLogicPermissions().Should().HaveCount(54);
-            NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(14);
+            NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(15, "mail::send-any was split from mail::manage, 2026-10-28");
         }
 
         // Open by design (data plane with its own check, or a public callback): no named permission, no [Authorize].
