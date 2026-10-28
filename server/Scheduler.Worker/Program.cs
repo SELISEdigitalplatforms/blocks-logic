@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using Blocks.Genesis.Notifications;
 using DataAccess.InternalService;
 using Scheduler.DomainService.Utils;
 using SeliseBlocks.ConfigurationDriver;
@@ -28,6 +29,8 @@ IHostBuilder CreateHostBuilder(string[] args) =>
         .ConfigureServices((hostContext, services) =>
         {
             services.AddLogicDataAccess();
+            // The built-in notification sender (AddLogicDataAccess) publishes through genesis.
+            services.AddBlocksNotifications();
             services.AddSchedulerServices();
             services.AddSchedulerWorkerServices();
 

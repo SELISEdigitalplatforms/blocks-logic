@@ -28,14 +28,32 @@ namespace Mail.DomainService.Shared.Utilities
     /// </remarks>
     public static class TenantSecretReader
     {
-        public static async Task<string> ReadAsync(
+        public static Task<string> ReadAsync(
             IServiceScopeFactory scopeFactory,
             string tenantId,
             string secretReference,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default) =>
+            RunAsync(scopeFactory, tenantId, secrets => secrets.GetValueAsync(secretReference, cancellationToken));
+
+        /// <summary>
+        /// Runs <paramref name="read"/> against <c>ISecretService</c> inside the same synthetic tenant context as
+        /// <see cref="ReadAsync"/>, for reads that need more than one call (for example find by name, then value).
+        /// </summary>
+        public static Task<T> RunAsync<T>(
+            IServiceScopeFactory scopeFactory,
+            string tenantId,
+            Func<ISecretService, Task<T>> read)
         {
             ArgumentNullException.ThrowIfNull(scopeFactory);
+            ArgumentNullException.ThrowIfNull(read);
+            return RunCoreAsync(scopeFactory, tenantId, read);
+        }
 
+        private static async Task<T> RunCoreAsync<T>(
+            IServiceScopeFactory scopeFactory,
+            string tenantId,
+            Func<ISecretService, Task<T>> read)
+        {
             var restore = BlocksContext.GetContext();
 
             try
@@ -45,7 +63,7 @@ namespace Mail.DomainService.Shared.Utilities
                 using var scope = scopeFactory.CreateScope();
                 var secrets = scope.ServiceProvider.GetRequiredService<ISecretService>();
 
-                return await secrets.GetValueAsync(secretReference, cancellationToken).ConfigureAwait(false);
+                return await read(secrets).ConfigureAwait(false);
             }
             finally
             {

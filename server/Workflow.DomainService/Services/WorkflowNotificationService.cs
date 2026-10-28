@@ -1,8 +1,6 @@
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Blocks.Genesis;
-using DomainService.Notification;
+using Blocks.Genesis.Notifications;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Utils;
@@ -15,35 +13,20 @@ namespace Workflow.DomainService.Services
 {
     public class WorkflowNotificationService : IWorkflowNotificationService
     {
-        private static readonly JsonSerializerOptions JsonOptions = new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        };
-
-        private readonly ICryptoService _cryptoService;
-        private readonly ITenants _tenants;
         private readonly IConfiguration _configuration;
         private readonly ILogger<WorkflowNotificationService> _logger;
-        private readonly INotificationService _notificationService;
-        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly INotificationPublisher _publisher;
         private readonly IBuiltInNotificationSender? _builtIn;
 
         public WorkflowNotificationService(
-            ICryptoService cryptoService,
-            ITenants tenants,
             IConfiguration configuration,
-            INotificationService notificationService,
-            IHttpClientFactory httpClientFactory,
+            INotificationPublisher publisher,
             ILogger<WorkflowNotificationService> logger,
             IBuiltInNotificationSender? builtInNotifications = null)
         {
             _builtIn = builtInNotifications;
-            _cryptoService = cryptoService;
-            _tenants = tenants;
             _configuration = configuration;
-            _notificationService = notificationService;
-            _httpClientFactory = httpClientFactory;
+            _publisher = publisher;
             _logger = logger;
         }
 
@@ -102,84 +85,34 @@ namespace Workflow.DomainService.Services
                 isSuccess.ToString());
         }
 
-        private async Task<bool> SendNotifyAsync(
+        /// <summary>
+        /// Publishes in the ROOT tenant, as the HTTP send with the root key did before: the users are the console users
+        /// who run the test, and their connections join the root tenant's user group (also while they work in a
+        /// project). Returns true when queued; delivery is the publisher's job and is not awaited.
+        /// </summary>
+        private Task<bool> SendNotifyAsync(
             List<string> userIds,
             string denormalizedPayload,
             string? configurationName,
             string responseKey,
             string responseValue)
         {
-            var payload = new
+            if (string.IsNullOrWhiteSpace(configurationName))
             {
-                ConnectionId = "",
-                Roles = new List<string> { },
-                UserIds = userIds,
-                DenormalizedPayload = denormalizedPayload,
-                SaveDenormalizedPayloadAsAnObject = false,
-                ConfigurationName = configurationName,
-                ContentAvailable = true,
+                _logger.LogError("WORKFLOW_NOTIFICATION_CONFIGURATION_NAME is not configured; workflow notification not sent.");
+                return Task.FromResult(false);
+            }
+
+            _publisher.Publish(new NotificationRequest
+            {
+                Name = configurationName,
+                TenantId = _configuration["RootTenantId"],
+                NamedUserIds = userIds,
+                Payload = denormalizedPayload,
                 ResponseKey = responseKey,
                 ResponseValue = responseValue,
-            };
-            var blocksKey = _configuration["RootTenantId"];
-            var salt = _tenants.GetTenantByID(blocksKey)?.TenantSalt;
-            var actulalSecret = _cryptoService.Hash(blocksKey, salt);
-
-
-            var url = _configuration["NotificationServiceUrl"];
-            if (string.IsNullOrWhiteSpace(url))
-            {
-                _logger.LogError("NotificationServiceUrl is not configured; cannot send notifications to users: {UserIds}.", string.Join(", ", userIds));
-                return false;
-            }
-
-            try
-            {
-                var httpClient = _httpClientFactory.CreateClient();
-                using var request = new HttpRequestMessage(HttpMethod.Post, url)
-                {
-                    Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json")
-                };
-                request.Headers.Add("x-blocks-key", blocksKey);
-                request.Headers.Add("Secret", actulalSecret);
-
-                using var httpResponse = await httpClient.SendAsync(request);
-                var rawResponse = await httpResponse.Content.ReadAsStringAsync();
-
-                NotificationResponse? response = null;
-                if (!string.IsNullOrWhiteSpace(rawResponse))
-                {
-                    try
-                    {
-                        response = JsonSerializer.Deserialize<NotificationResponse>(rawResponse, JsonOptions);
-                    }
-                    catch (JsonException ex)
-                    {
-                        // Length only: the body is the notifier's echo and is not ours to log (user rule 2026-10-08).
-                        _logger.LogWarning("Failed to deserialize notification response ({ErrorKind}); body {BodyLength} chars.", ex.GetType().Name, rawResponse.Length);
-                    }
-                }
-
-                var isSuccess = httpResponse.IsSuccessStatusCode && (response?.isSuccess ?? false);
-                if (isSuccess)
-                {
-                    _logger.LogInformation("Successfully sent notification to users : {UserIds}", string.Join(", ", userIds));
-                    return true;
-                }
-
-                var errorMessage = response?.errors
-                    ?? $"HTTP {(int)httpResponse.StatusCode} {httpResponse.ReasonPhrase}";
-                _logger.LogError(
-                    "Failed to sent notification to users : {UserIds}. Error : {Error}",
-                    string.Join(", ", userIds),
-                    errorMessage);
-                return false;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to sent notification to users : {UserIds}", string.Join(", ", userIds));
-                return false;
-            }
+            });
+            return Task.FromResult(true);
         }
 
         public async Task NotifyExecutionEventAsync(

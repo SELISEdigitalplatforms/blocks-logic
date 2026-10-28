@@ -1,6 +1,8 @@
 ﻿using Blocks.Extension.DependencyInjection;
 using DataAccess.InternalService;
 using Blocks.Genesis;
+using Blocks.Genesis.Notifications;
+using DomainService.Notification.Push;
 using Blocks.Secrets;
 using DomainService.Shared;
 using DomainService.Projects;
@@ -86,6 +88,9 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             // The event trigger: starts the functions that subscribe to a FunctionEvent (ctx.events.add('FunctionEvent', ...)).
             services.AddSingleton<IConsumer<Functions.DomainService.Events.FunctionEvent>, Functions.DomainService.Consumers.FunctionEventConsumer>();
             services.AddSingleton<IConsumer<PublishScheduleCommand>, SchedulerTriggerConsumer>();
+            // Mobile push: genesis senders queue PushRequested; this worker renders and sends it through FCM.
+            services.AddSingleton<IConsumer<PushRequested>, PushRequestedConsumer>();
+            services.AddBlocksNotifications();
             services.AddApplicationServices();
             // IScheduleService only (WorkflowService needs it). Hangfire and the schedule registry run in Scheduler.Worker.
             services.AddSchedulerServices();

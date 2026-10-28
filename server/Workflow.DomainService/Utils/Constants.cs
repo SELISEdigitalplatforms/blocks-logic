@@ -1,4 +1,5 @@
 using Blocks.Genesis;
+using Blocks.Genesis.Notifications;
 using Mail.DomainService.Utilities;
 using Scheduler.DomainService.Utils;
 
@@ -102,6 +103,9 @@ namespace Workflow.DomainService.Utils
                                              ConsumerSubscription.BindToQueue(FunctionEventQueueName),
                                              ConsumerSubscription.BindToQueue(CommunicationConstants.MailStatusQueueName),
                                              ConsumerSubscription.BindToQueue(MigrationCompletionTopic),
+                                             // Mobile push requests from every Blocks service (genesis). Only the Worker
+                                             // registers a consumer; binding it in the other hosts declares the queue.
+                                             ConsumerSubscription.BindToQueue(NotificationQueues.Push),
                                              .. registry,
                                              .. AllNodeQueues
                                                  .Select(q => new ConsumerSubscription(q, string.Empty, 8, parallelProcessing: true))],
@@ -118,7 +122,7 @@ namespace Workflow.DomainService.Utils
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, FunctionEventQueueName, CommunicationConstants.MailStatusQueueName, .. registry],
+                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, FunctionEventQueueName, CommunicationConstants.MailStatusQueueName, NotificationQueues.Push, .. registry],
                     Topics = [MigrationCompletionTopic],
                     QueuePrefetchCount = 40,
                     MaxConcurrentCalls = 40
