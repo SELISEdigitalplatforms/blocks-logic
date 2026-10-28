@@ -39,121 +39,62 @@ namespace Workflow.DomainService.Nodes.ActionNotification
             _sender = sender;
         }
 
+        /// <summary>What one step shares across its items.</summary>
+        private sealed record StepState(
+            NodeExecutionContext Context,
+            ActionNotificationParameters Parameters,
+            BsonDocument ParametersDocument,
+            string TenantId,
+            Dictionary<string, NotificationConfiguration?> Configurations);
+
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, ActionNotificationParameters? nodeparameters)
         {
             var parameters = nodeparameters ?? new ActionNotificationParameters();
-            var parametersDocument = parameters.ToBsonDocument();
-            var outputItems = new List<NodeOutputItem>();
             var tenantId = context.TenantId ?? "";
-            var configurations = new Dictionary<string, NotificationConfiguration?>(StringComparer.Ordinal);
+            var step = new StepState(context, parameters, parameters.ToBsonDocument(), tenantId,
+                new Dictionary<string, NotificationConfiguration?>(StringComparer.Ordinal));
 
+            // The configuration lookup reads the workflow's project, so the step runs under its tenant.
             var blocksContext = BlocksContext.GetContext();
             var securityData = BlocksContext.Create(tenantId, [], "", false, "", "", DateTime.MinValue, "", [], "", "", "", "", "", tenantId);
             BlocksContext.SetContext(securityData, false);
             try
             {
-                for (int i = 0; i < context.IterationCount; i++)
-                {
-                    var inputItem = context.InputItems[i];
-                    try
-                    {
-                        string payload;
-                        try
-                        {
-                            payload = string.IsNullOrWhiteSpace(parameters.Payload)
-                                ? "{}"
-                                : FillJsonTemplateOrThrow(parameters.Payload, "Payload", inputItem, context);
-                        }
-                        catch (InvalidFilledJsonException ex)
-                        {
-                            // Nothing was sent for this item. The configured payload is broken, so the step
-                            // fails; items before it already ran and are kept.
-                            return NodeExecutionResult.Failed(ex.ForItem(i), outputItems);
-                        }
-
-                        var name = (Resolve(parameters.ConfigurationName, inputItem, context) ?? "").Trim();
-                        if (name.Length == 0)
-                        {
-                            AppendErrorOutputItem(outputItems, inputItem, parametersDocument, "No notification configuration is selected.");
-                            continue;
-                        }
-
-                        if (!configurations.TryGetValue(name, out var configuration))
-                        {
-                            configuration = await _configurations.GetByNameAsync(name);
-                            configurations[name] = configuration;
-                        }
-
-                        var refusal = Refusal(configuration, name);
-                        if (refusal is not null)
-                        {
-                            AppendErrorOutputItem(outputItems, inputItem, parametersDocument, refusal);
-                            continue;
-                        }
-
-                        var receiver = configuration!.NotificationType;
-                        var request = BuildRequest(parameters, receiver, name, payload, inputItem, context);
-
-                        var recipientError = RecipientError(receiver, request);
-                        if (recipientError is not null)
-                        {
-                            AppendErrorOutputItem(outputItems, inputItem, parametersDocument, recipientError);
-                            continue;
-                        }
-
-                        if (Encoding.UTF8.GetByteCount(payload) > MaxPayloadBytes)
-                        {
-                            AppendErrorOutputItem(outputItems, inputItem, parametersDocument,
-                                $"Payload is larger than {MaxPayloadBytes / 1024} KB after filling in values.");
-                            continue;
-                        }
-
-                        string? skipped = null;
-                        NotificationNodeSendResult result;
-                        // Switched off by the tenant, and allowed to be (built-ins are already refused above).
-                        if (configuration.IsDisabled && configuration.CanBeDisabled())
-                        {
-                            // The Notifier would answer success and send nothing; say so instead.
-                            skipped = "disabled";
-                            result = new NotificationNodeSendResult(true, null);
-                        }
-                        else
-                        {
-                            result = await _sender.SendAsync(tenantId, request, context.CancellationToken);
-                        }
-
-                        if (!result.Success)
-                        {
-                            AppendErrorOutputItem(outputItems, inputItem, parametersDocument,
-                                $"Notification was not sent: {result.Error}");
-                            continue;
-                        }
-
-                        outputItems.Add(new NodeOutputItem
-                        {
-                            Data = new NodeOutputItemData
-                            {
-                                Input = inputItem.Data.Output,
-                                Output = BuildOutput(request, receiver, skipped),
-                                Parameters = parametersDocument,
-                            },
-                            Branch = "source",
-                            ParentItemIds = new List<string> { inputItem.Id },
-                        });
-                    }
-                    catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
-                    {
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        AppendErrorOutputItem(outputItems, inputItem, parametersDocument, ex);
-                    }
-                }
+                return await SendItemsAsync(step);
             }
             finally
             {
                 BlocksContext.SetContext(blocksContext, false);
+            }
+        }
+
+        private async Task<NodeExecutionResult> SendItemsAsync(StepState step)
+        {
+            var context = step.Context;
+            var outputItems = new List<NodeOutputItem>();
+
+            for (int i = 0; i < context.IterationCount; i++)
+            {
+                var inputItem = context.InputItems[i];
+                try
+                {
+                    var item = await SendItemAsync(step, inputItem);
+                    if (item is not null) outputItems.Add(item);
+                }
+                catch (InvalidFilledJsonException ex)
+                {
+                    // Nothing was sent for this item. The configured payload is broken, so the step
+                    // fails; items before it already ran and are kept.
+                    return NodeExecutionResult.Failed(ex.ForItem(i), outputItems);
+                }
+                catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    AppendErrorOutputItem(outputItems, inputItem, step.ParametersDocument, ex);
+                }
             }
 
             // Counts only: never recipients, payloads or configuration names.
@@ -162,6 +103,75 @@ namespace Workflow.DomainService.Nodes.ActionNotification
 
             return NodeExecutionResult.Successful(outputItems);
         }
+
+        /// <summary>
+        /// Sends the notification for one item: its output item, or an error item saying why nothing was sent.
+        /// Throws <see cref="InvalidFilledJsonException"/> when the payload is not JSON after filling.
+        /// </summary>
+        private async Task<NodeOutputItem?> SendItemAsync(StepState step, WorkflowItemExecutionEntity inputItem)
+        {
+            var parameters = step.Parameters;
+            NodeOutputItem? Error(string message) => TryBuildErrorOutputItem(inputItem, step.ParametersDocument, message);
+
+            var payload = string.IsNullOrWhiteSpace(parameters.Payload)
+                ? "{}"
+                : FillJsonTemplateOrThrow(parameters.Payload, "Payload", inputItem, step.Context);
+
+            var name = (Resolve(parameters.ConfigurationName, inputItem, step.Context) ?? "").Trim();
+            if (name.Length == 0)
+                return Error("No notification configuration is selected.");
+
+            var configuration = await GetConfigurationAsync(step, name);
+            var refusal = Refusal(configuration, name);
+            if (refusal is not null)
+                return Error(refusal);
+
+            var receiver = configuration!.NotificationType;
+            var request = BuildRequest(parameters, receiver, name, payload, inputItem, step.Context);
+
+            var problem = RecipientError(receiver, request) ?? PayloadSizeError(payload);
+            if (problem is not null)
+                return Error(problem);
+
+            // Switched off by the tenant, and allowed to be (built-ins are already refused above). The Notifier
+            // would answer success and send nothing; say so instead.
+            var skipped = configuration.IsDisabled && configuration.CanBeDisabled() ? "disabled" : null;
+            if (skipped is null)
+            {
+                var result = await _sender.SendAsync(step.TenantId, request, step.Context.CancellationToken);
+                if (!result.Success)
+                    return Error($"Notification was not sent: {result.Error}");
+            }
+
+            return new NodeOutputItem
+            {
+                Data = new NodeOutputItemData
+                {
+                    Input = inputItem.Data.Output,
+                    Output = BuildOutput(request, receiver, skipped),
+                    Parameters = step.ParametersDocument,
+                },
+                Branch = "source",
+                ParentItemIds = new List<string> { inputItem.Id },
+            };
+        }
+
+        /// <summary>The configuration by name, looked up once per step.</summary>
+        private async Task<NotificationConfiguration?> GetConfigurationAsync(StepState step, string name)
+        {
+            if (!step.Configurations.TryGetValue(name, out var configuration))
+            {
+                configuration = await _configurations.GetByNameAsync(name);
+                step.Configurations[name] = configuration;
+            }
+
+            return configuration;
+        }
+
+        private static string? PayloadSizeError(string payload) =>
+            Encoding.UTF8.GetByteCount(payload) > MaxPayloadBytes
+                ? $"Payload is larger than {MaxPayloadBytes / 1024} KB after filling in values."
+                : null;
 
         public static Task<bool> ValidateConfigurationAsync(JsonDocument parameters)
         {

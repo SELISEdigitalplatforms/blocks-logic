@@ -135,13 +135,11 @@ namespace Workflow.DomainService.Nodes.ActionNotification
 
         private static bool TryGet(JsonElement root, string name, out JsonElement value)
         {
-            foreach (var property in root.EnumerateObject())
+            foreach (var property in root.EnumerateObject()
+                         .Where(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)))
             {
-                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
-                {
-                    value = property.Value;
-                    return true;
-                }
+                value = property.Value;
+                return true;
             }
 
             value = default;
