@@ -9,11 +9,13 @@ namespace XUnitTest.Notification.Push
 {
     /// <summary>
     /// FCM sending through the real token provider and client over a fake HTTP handler: refused tokens are deleted,
-    /// 429/5xx retried at most 3 times, 401 renews the token once, and nothing secret reaches the logs.
+    /// a bare 404 is not, 429/5xx retried at most 3 times, 401 renews the token once, the project comes from the key,
+    /// and nothing secret reaches the logs.
     /// </summary>
     public class FcmPushSenderTests
     {
         private const string Tenant = "tenant-1";
+        private const string SecretName = "firebase-service-account";
         private static readonly PushDb Db = new(Tenant, Root: false);
 
         private readonly FakeGoogle _google = new();
@@ -26,34 +28,62 @@ namespace XUnitTest.Notification.Push
 
         public FcmPushSenderTests()
         {
-            _credentials.Setup(c => c.ReadAsync(Tenant, "firebase-service-account", It.IsAny<CancellationToken>()))
+            _credentials.Setup(c => c.ReadAsync(Tenant, It.IsAny<string?>(), SecretName, It.IsAny<CancellationToken>()))
                         .ReturnsAsync(ServiceAccountJson());
             var factory = new FakeHttpClientFactory(_google);
             _sut = new FcmPushSender(_credentials.Object, new FcmAccessTokenProvider(factory, TimeProvider.System, _tokenLogger),
-                new FcmClient(factory), _devices.Object, _delay, _logger);
+                new FcmClient(factory, TimeProvider.System), _devices.Object, _delay, _logger);
         }
 
         private static PushNote Note(string token) =>
             new(Db, Device("user-1", token), "Title text", "Body text", new Dictionary<string, string> { ["notificationId"] = "n-1" });
 
-        private Task<PushSendSummary> SendAsync(params PushNote[] notes) =>
-            _sut.SendAsync(Tenant, Settings(), notes, CancellationToken.None);
+        private async Task<PushSendSummary> SendAsync(PushSettingsRecord settings, params PushNote[] notes)
+        {
+            var opening = await _sut.OpenAsync(Tenant, settings, CancellationToken.None);
+            return await _sut.SendAsync(opening.Session!, notes, CancellationToken.None);
+        }
+
+        private Task<PushSendSummary> SendAsync(params PushNote[] notes) => SendAsync(Settings(), notes);
+
+        private static (int Sent, int Removed, int Failed) Counts(PushSendSummary summary) => (summary.Sent, summary.Removed, summary.Failed);
 
         [Fact]
         public async Task ASend_PostsOneMessagePerDevice_ToTheProjectsEndpoint_WithTheToken()
         {
             var summary = await SendAsync(Note("token-a"), Note("token-b"));
 
-            summary.Should().Be(new PushSendSummary(2, 0, 0));
+            Counts(summary).Should().Be((2, 0, 0));
             _google.FcmRequests.Should().HaveCount(2).And.OnlyContain(r =>
                 r.Url == "https://fcm.googleapis.com/v1/projects/demo-project/messages:send" && r.Authorization == "Bearer access-1");
             _google.FcmRequests.Select(r => r.Body).Should().Contain(b => b.Contains("token-a") && b.Contains("Title text"));
             _google.TokenRequests.Should().ContainSingle("the access token is cached between messages");
         }
 
+        [Fact]
+        public async Task Bug_KvProjectIdWasUsed_TheProjectNowComesFromTheKey()
+        {
+            var settings = Settings();
+            settings.ProjectId = "another-project";
+
+            await SendAsync(settings, Note("token-a"));
+
+            _google.FcmRequests.Single().Url.Should().Contain("/projects/demo-project/").And.NotContain("another-project");
+        }
+
+        [Fact]
+        public async Task TheKey_IsReadBySecretId_WhenTheRecordHasOne()
+        {
+            var settings = Settings();
+            settings.SecretId = "secret-42";
+
+            await SendAsync(settings, Note("token-a"));
+
+            _credentials.Verify(c => c.ReadAsync(Tenant, "secret-42", SecretName, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
         [Theory]
-        [InlineData(HttpStatusCode.NotFound, "{}")]
-        [InlineData(HttpStatusCode.BadRequest, """{"error":{"status":"NOT_FOUND","details":[{"errorCode":"UNREGISTERED"}]}}""")]
+        [InlineData(HttpStatusCode.NotFound, """{"error":{"status":"NOT_FOUND","details":[{"errorCode":"UNREGISTERED"}]}}""")]
         [InlineData(HttpStatusCode.BadRequest, """{"error":{"status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"INVALID_ARGUMENT"},{"@type":"type.googleapis.com/google.rpc.BadRequest","fieldViolations":[{"field":"message.token","description":"Invalid registration token"}]}]}}""")]
         [InlineData(HttpStatusCode.BadRequest, """{"error":{"status":"INVALID_ARGUMENT","message":"The registration token is not a valid FCM registration token"}}""")]
         public async Task ARefusedToken_DeletesTheDevice(HttpStatusCode status, string body)
@@ -63,7 +93,21 @@ namespace XUnitTest.Notification.Push
             var summary = await SendAsync(Note("dead-token"));
 
             summary.Removed.Should().Be(1);
+            summary.Results.Single().Removed.Should().BeTrue();
             _devices.Verify(d => d.DeleteAsync(Db, NotificationDevice.IdOf("dead-token"), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Theory]
+        [InlineData("{}")]
+        [InlineData("""{"error":{"status":"NOT_FOUND","message":"Requested entity was not found."}}""")]
+        public async Task Bug_ABare404DeletedTheDevice_AWrongProjectNoLongerWipesDevices(string body)
+        {
+            _google.Then(HttpStatusCode.NotFound, body).Then(HttpStatusCode.NotFound, body);
+
+            var summary = await SendAsync(Note("token-a"), Note("token-b"));
+
+            Counts(summary).Should().Be((0, 0, 2));
+            _devices.Verify(d => d.DeleteAsync(It.IsAny<PushDb>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Theory]
@@ -76,7 +120,7 @@ namespace XUnitTest.Notification.Push
 
             var summary = await SendAsync(Note("good-token"));
 
-            summary.Should().Be(new PushSendSummary(0, 0, 1));
+            Counts(summary).Should().Be((0, 0, 1));
             _devices.Verify(d => d.DeleteAsync(It.IsAny<PushDb>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
             _logger.All.Should().Contain("device kept").And.NotContain("good-token").And.NotContain("Title text");
         }
@@ -100,7 +144,7 @@ namespace XUnitTest.Notification.Push
 
             var summary = await SendAsync(Note("token-a"));
 
-            summary.Should().Be(new PushSendSummary(0, 0, 1));
+            Counts(summary).Should().Be((0, 0, 1));
             _google.FcmRequests.Should().HaveCount(1 + FcmPushSender.MaxRetries);
             _devices.Verify(d => d.DeleteAsync(It.IsAny<PushDb>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
@@ -121,28 +165,41 @@ namespace XUnitTest.Notification.Push
 
             summary.Sent.Should().Be(1);
             _google.TokenRequests.Should().HaveCount(2);
-            _google.FcmRequests.Last().Authorization.Should().Be("Bearer access-2");
+            _google.FcmRequests[^1].Authorization.Should().Be("Bearer access-2");
         }
 
         [Fact]
-        public async Task AMissingOrBrokenKey_SendsNothing()
+        public async Task AMissingOrBrokenKey_OpensNoSession_AndSendsNothing()
         {
-            _credentials.Setup(c => c.ReadAsync(Tenant, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("{ broken");
+            _credentials.Setup(c => c.ReadAsync(Tenant, It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("{ broken");
 
-            var summary = await SendAsync(Note("token-a"));
+            var opening = await _sut.OpenAsync(Tenant, Settings(), CancellationToken.None);
 
-            summary.Should().Be(new PushSendSummary(0, 0, 1));
+            opening.Should().Be(new FcmOpening(null, FcmOpenFailure.NoKey));
+            _google.TokenRequests.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task ARefusedAccessToken_OpensNoSession()
+        {
+            _google.TokenStatus = HttpStatusCode.BadRequest;
+
+            var opening = await _sut.OpenAsync(Tenant, Settings(), CancellationToken.None);
+
+            opening.Failure.Should().Be(FcmOpenFailure.KeyRefused);
             _google.FcmRequests.Should().BeEmpty();
         }
 
         [Fact]
-        public async Task ARefusedAccessToken_SendsNothing()
+        public async Task ASecretStoreFailure_Throws_AndIsLoggedByTypeOnly()
         {
-            _google.TokenStatus = HttpStatusCode.BadRequest;
+            _credentials.Setup(c => c.ReadAsync(Tenant, It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                        .ThrowsAsync(new InvalidOperationException("secret firebase-service-account value s3cr3t-part"));
 
-            var summary = await SendAsync(Note("token-a"));
+            var open = () => _sut.OpenAsync(Tenant, Settings(), CancellationToken.None);
 
-            summary.Failed.Should().Be(1);
+            (await open.Should().ThrowAsync<PushKeyUnavailableException>()).Which.InnerException.Should().BeNull();
+            _logger.All.Should().Contain(nameof(InvalidOperationException)).And.NotContain("s3cr3t-part").And.NotContain(SecretName);
             _google.FcmRequests.Should().BeEmpty();
         }
 

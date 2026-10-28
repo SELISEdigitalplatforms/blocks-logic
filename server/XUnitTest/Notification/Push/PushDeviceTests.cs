@@ -7,7 +7,10 @@ using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Notification.Push
 {
-    /// <summary>Device API rules on local MongoDB: own devices only, at most 10, impersonated root users in the ROOT DB.</summary>
+    /// <summary>
+    /// Device API rules on local MongoDB: own devices only, at most 10, impersonated root users in the ROOT DB, the
+    /// device name, and devices not seen for 60 days removed (TTL index) and never read for sending.
+    /// </summary>
     public sealed class PushDeviceTests : IDisposable
     {
         private readonly TenantPlacementFixture _fixture = new();
@@ -31,7 +34,7 @@ namespace XUnitTest.Notification.Push
 
         public void Dispose() => _fixture.Dispose();
 
-        private IMongoCollection<NotificationDevice> Devices(IMongoDatabase database) =>
+        private static IMongoCollection<NotificationDevice> Devices(IMongoDatabase database) =>
             database.GetCollection<NotificationDevice>(NotificationDevice.CollectionName);
 
         private Task RegisterAsync(string token, string platform = "android") =>
@@ -117,6 +120,58 @@ namespace XUnitTest.Notification.Push
             (await dedup.TryClaimAsync(id, CancellationToken.None)).Should().BeTrue();
             (await dedup.TryClaimAsync(id, CancellationToken.None)).Should().BeFalse();
             (await dedup.TryClaimAsync(Guid.NewGuid(), CancellationToken.None)).Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task AReleasedClaim_CanBeClaimedAgain()
+        {
+            var dedup = new PushDedupStore(_fixture.Provider, _fixture.Secret, TimeProvider.System);
+            var id = Guid.NewGuid();
+            await dedup.TryClaimAsync(id, CancellationToken.None);
+
+            await dedup.ReleaseAsync(id, CancellationToken.None);
+
+            (await dedup.TryClaimAsync(id, CancellationToken.None)).Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task TheDeviceName_IsStored_AndAnOverlongNameRefused()
+        {
+            await _sut.RegisterAsync(new RegisterDeviceRequest { Token = "token-1", Platform = "ios", Name = " iPhone 15 " }, CancellationToken.None);
+            var refused = await _sut.RegisterAsync(new RegisterDeviceRequest
+            {
+                Token = "token-2", Platform = "ios", Name = new string('n', PushDeviceService.MaxNameLength + 1),
+            }, CancellationToken.None);
+
+            (await Devices(_fixture.Dev).Find(d => d.Token == "token-1").SingleAsync()).Name.Should().Be("iPhone 15");
+            refused.Errors.Should().ContainKey("Name");
+            (await Devices(_fixture.Dev).CountDocumentsAsync(d => d.Token == "token-2")).Should().Be(0);
+        }
+
+        [Fact]
+        public async Task Bug_OldDevicesWereNeverCleaned_NowATtlIndexRemovesThemAfter60Days()
+        {
+            await RegisterAsync("token-1");
+
+            var indexes = await (await Devices(_fixture.Dev).Indexes.ListAsync()).ToListAsync();
+            var ttl = indexes.Single(i => i["name"] == PushDeviceStore.TtlIndexName);
+            ttl["key"].AsBsonDocument.Names.Should().Equal(nameof(NotificationDevice.LastSeenAt));
+            ttl["expireAfterSeconds"].ToInt64().Should().Be((long)TimeSpan.FromDays(60).TotalSeconds);
+        }
+
+        [Fact]
+        public async Task ADeviceNotSeenFor60Days_IsNeverReadForSending()
+        {
+            var now = new DateTime(2026, 10, 28, 0, 0, 0, DateTimeKind.Utc);
+            await Devices(_fixture.Dev).InsertManyAsync(
+            [
+                new NotificationDevice { Id = "old", UserId = "alice", Token = "old", Platform = "android", LastSeenAt = now.AddDays(-61) },
+                new NotificationDevice { Id = "new", UserId = "alice", Token = "new", Platform = "android", LastSeenAt = now.AddDays(-59) },
+            ]);
+
+            var devices = await _store.GetForUsersAsync(new PushDb("dev", false), ["alice"], NotificationDevice.SeenSince(now), CancellationToken.None);
+
+            devices.Select(d => d.Token).Should().Equal("new");
         }
     }
 }

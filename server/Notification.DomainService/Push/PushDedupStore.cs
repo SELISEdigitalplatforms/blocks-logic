@@ -9,6 +9,9 @@ namespace DomainService.Notification.Push
     {
         /// <summary>True for the first claim of <paramref name="notificationId"/> within <see cref="PushDedupStore.Window"/>.</summary>
         Task<bool> TryClaimAsync(Guid notificationId, CancellationToken cancellationToken);
+
+        /// <summary>Drops the claim of <paramref name="notificationId"/> so a redelivery can try again (nothing was sent).</summary>
+        Task ReleaseAsync(Guid notificationId, CancellationToken cancellationToken);
     }
 
     /// <inheritdoc cref="IPushDedupStore"/>
@@ -36,8 +39,7 @@ namespace DomainService.Notification.Push
 
         public async Task<bool> TryClaimAsync(Guid notificationId, CancellationToken cancellationToken)
         {
-            var collection = _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName)
-                .GetCollection<PushClaim>(CollectionName);
+            var collection = Claims();
             await EnsureIndexAsync(collection, cancellationToken);
 
             try
@@ -54,6 +56,13 @@ namespace DomainService.Notification.Push
                 return false;
             }
         }
+
+        public Task ReleaseAsync(Guid notificationId, CancellationToken cancellationToken) =>
+            Claims().DeleteOneAsync(Builders<PushClaim>.Filter.Eq(c => c.Id, notificationId.ToString("N")), cancellationToken);
+
+        private IMongoCollection<PushClaim> Claims() =>
+            _dbContextProvider.GetDatabase(_blocksSecret.DatabaseConnectionString, _blocksSecret.RootDatabaseName)
+                .GetCollection<PushClaim>(CollectionName);
 
         private async Task EnsureIndexAsync(IMongoCollection<PushClaim> collection, CancellationToken cancellationToken)
         {

@@ -1,6 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <InternalsVisibleTo Include="XUnitTest" />
+  </ItemGroup>
+
+  <ItemGroup>
 	  <PackageReference Include="FluentValidation" />
 	  <PackageReference Include="Newtonsoft.Json" />
 	  <PackageReference Include="SeliseBlocks.Genesis.OS" />
