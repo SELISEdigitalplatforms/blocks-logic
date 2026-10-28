@@ -15,6 +15,7 @@ import { NodeSchemaActionProxy } from "./node-schema-action-proxy";
 import { NodeSchemaLogicSwitchV2 } from "./node-schema-logic-switch-v2";
 import { NodeSchemaTransformSplitOutV2 } from "./node-schema-transform-splitOut-v2";
 import { NodeSchemaTransformMergeV2 } from "./node-schema-transform-merge-v2";
+import { NodeSchemaActionNotification } from "./node-schema-action-notification";
 
 const V1_SCHEMAS: Record<string, NodeSchemaDefinition> = {
   triggerwebhookv1: NodeSchemaTriggerWebhookV1,
@@ -45,4 +46,5 @@ export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   logicswitchv2: NodeSchemaLogicSwitchV2,
   transformsplitOutv2: NodeSchemaTransformSplitOutV2,
   transformmergev2: NodeSchemaTransformMergeV2,
+  actionnotificationv2: NodeSchemaActionNotification,
 };
