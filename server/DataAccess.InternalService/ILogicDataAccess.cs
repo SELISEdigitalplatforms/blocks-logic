@@ -26,7 +26,6 @@ public static class LogicSchemas
     public const string NotificationConnection = "NotificationConnection";
     public const string NotificationSubscription = "NotificationSubscription";
     public const string OfflineNotification = "OfflineNotification";
-    public const string FirebaseConfiguration = "FirebaseConfiguration";
 }
 
 /// <summary>

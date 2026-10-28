@@ -27,7 +27,6 @@
     <!--<PackageReference Include="SeliseBlocks.StorageDriver.OS" />-->
     <PackageReference Include="SeliseBlocks.ConfigurationDriver" />
     <PackageReference Include="SeliseBlocks.Genesis.OS" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DataAccess.InternalService\DataAccess.InternalService.csproj" />
