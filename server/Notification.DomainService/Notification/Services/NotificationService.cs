@@ -1,36 +1,28 @@
-﻿using Blocks.Genesis;
-using DomainService.Configuration.Services;
+using Blocks.Genesis;
 using DomainService.Shared;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
-using StackExchange.Redis;
 using Blocks.Genesis.Entities.Logic;
-using Blocks.Genesis.Entities.Os;
 
 namespace DomainService.Notification
 {
+    /// <summary>Hub connections and subscriptions, and the caller's inbox (read and mark as read).</summary>
     public class NotificationService : INotificationService
     {
         private readonly INotificationRepository _notificationRepository;
         private readonly IValidator<Subscription> _subscriptionValidator;
-        private readonly IValidator<NotifyRequest> _notifyRequestValidator;
+        private readonly INotificationUserRepository _users;
         private readonly ILogger<NotificationService> _logger;
-        private readonly INotifierServiceFactory _notifierFactory;
-        private readonly IConfigurationRepository _configurationRepository;
 
         public NotificationService(INotificationRepository notificationRepository,
                                    IValidator<Subscription> validator,
-                                   IValidator<NotifyRequest> notifyRequestValidator,
-                                   ILogger<NotificationService> logger,
-                                   INotifierServiceFactory notifierFactory,
-                                   IConfigurationRepository configurationRepository)
+                                   INotificationUserRepository users,
+                                   ILogger<NotificationService> logger)
         {
             _notificationRepository = notificationRepository;
             _subscriptionValidator = validator;
-            _notifyRequestValidator = notifyRequestValidator;
-            _notifierFactory = notifierFactory;
-            _configurationRepository = configurationRepository;
+            _users = users;
             _logger = logger;
         }
 
@@ -75,53 +67,6 @@ namespace DomainService.Notification
             await _notificationRepository.SaveAsync(connection);
         }
 
-        public async Task<BaseResponse> NotifyAsync(NotifyRequest notifyRequest)
-        {
-            var validateResult = await _notifyRequestValidator.ValidateAsync(notifyRequest);
-
-            if (!validateResult.IsValid)
-            {
-                return new BaseResponse { IsSuccess = false, Errors = validateResult.Errors.ToDictionary(e => e.PropertyName, e => e.ErrorMessage) };
-            }
-
-            var configuration = await _configurationRepository.GetByNameAsync(notifyRequest.ConfigurationName);
-            if (configuration is null)
-            {
-                // Said, not thrown: an unknown name used to end in a NullReferenceException (HTTP 500) that
-                // told the sender nothing, and the notification was silently lost.
-                _logger.LogWarning("Notify: no notification configuration named {ConfigurationName}", notifyRequest.ConfigurationName);
-                return new BaseResponse
-                {
-                    IsSuccess = false,
-                    Errors = new Dictionary<string, string>
-                    {
-                        [nameof(NotifyRequest.ConfigurationName)] = $"No notification configuration named '{notifyRequest.ConfigurationName}'.",
-                    },
-                };
-            }
-            if (configuration.IsDisabledByTenant())
-            {
-                // Switched off by the tenant: no push and no stored copy. Success, so senders do not retry.
-                _logger.LogInformation("Notify: configuration {ConfigurationName} is disabled by the tenant; nothing sent", notifyRequest.ConfigurationName);
-                return new BaseResponse { IsSuccess = true };
-            }
-
-            await SendNotificationAsync(configuration, notifyRequest);
-
-            //TODO
-            //await PublishEventForNotification(notifyRequest);
-
-            return new BaseResponse { IsSuccess = true };
-        }
-
-        private async Task SendNotificationAsync(NotificationConfiguration configuration, NotifyRequest notifyRequest)
-        {
-            var provider = _notifierFactory.GetNotifierServiceProvider(configuration.ChannelToNotify);
-            await provider.Notify(notifyRequest, configuration);
-
-            _logger.LogInformation("Notify: Notify request has handled successfully for configuration {ConfigurationName}", notifyRequest.ConfigurationName);
-        }
-
         public async Task RemoveCollectionAsync(string collectionId)
         {
             await Task.WhenAll(_notificationRepository.DeleteAsync<NotificationConnection>(p => p.ConnectionId == collectionId),
@@ -152,102 +97,63 @@ namespace DomainService.Notification
             return new BaseResponse { IsSuccess = true };
         }
 
+        /// <summary>
+        /// The caller's rows matching a subscription filter. The caller is always the token user: a different
+        /// <see cref="GetUnreadNotificationsRequestBySubscriptionFilter.UserId"/> is ignored and logged.
+        /// </summary>
         public async Task<List<OfflineNotification>> GetUnreadNotificationsBySubscriptionFilter(GetUnreadNotificationsRequestBySubscriptionFilter request)
         {
+            var filterData = request?.SubscriptionFilterData;
+            if (request is null || filterData is null)
+                return [];
+
+            var viewer = await ViewerAsync();
+            if (!string.IsNullOrWhiteSpace(request.UserId) && request.UserId != viewer.UserId)
+            {
+                _logger.LogWarning("GetUnreadNotificationsBySubscriptionFilter named another user id; the caller's own user id is used");
+            }
+
+            var visible = InboxFilters.Visible(viewer, includeLegacyBroadcast: true);
             return request.OrderBy switch
             {
-                OfflineNotificationOrder.CreatedTime => await GetUnReadNotificationsByUserIdOrderByCreatedDateDesc(request.UserId, request.SubscriptionFilterData),
-                OfflineNotificationOrder.ReadStatus => await GetUnReadNotificationsByUserIdOrderByReadStatus(request.UserId, request.SubscriptionFilterData),
+                OfflineNotificationOrder.CreatedTime => await ByCreatedTimeAsync(visible, filterData, viewer.UserId),
+                OfflineNotificationOrder.ReadStatus => await ByReadStatusAsync(visible, filterData, viewer.UserId),
                 _ => []
             };
         }
 
-        private async Task<List<OfflineNotification>> GetUnReadNotificationsByUserIdOrderByReadStatus(string userId, SubscriptionFilter subscriptionFilterData)
+        private async Task<List<OfflineNotification>> ByReadStatusAsync(FilterDefinition<OfflineNotification> visible,
+            SubscriptionFilter filterData, string userId)
         {
-            var offlineNotifications = (await _notificationRepository.GetItemsAsync<OfflineNotification>(p => ((!string.IsNullOrWhiteSpace(p.Payload.UserId) && p.Payload.UserId == userId) || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString())
-                                       && p.Payload.SubscriptionFilters.Contains(subscriptionFilterData))).ToList();
-
-            if (offlineNotifications.Any())
-            {
-                offlineNotifications = offlineNotifications.Select(p => new OfflineNotification
-                {
-                    Id = p.Id,
-                    Payload = p.Payload,
-                    CreatedTime = p.CreatedTime,
-                    ReadByUserIds = p.ReadByUserIds,
-                    IsRead = p.ReadByUserIds?.Contains(userId.ToString()) ?? false,
-                    DenormalizedPayload = p.DenormalizedPayload
-                }).OrderBy(p => p.IsRead).ToList();
-            }
-
-            return offlineNotifications;
+            var filter = visible & Builders<OfflineNotification>.Filter.Where(p => p.Payload.SubscriptionFilters.Contains(filterData));
+            var rows = await _notificationRepository.GetInboxItemsAsync(filter);
+            return [.. InboxRows.ForViewer(rows, userId).OrderBy(p => p.IsRead)];
         }
 
-        private async Task<List<OfflineNotification>> GetUnReadNotificationsByUserIdOrderByCreatedDateDesc(string userId, SubscriptionFilter subscriptionFilterData)
+        private async Task<List<OfflineNotification>> ByCreatedTimeAsync(FilterDefinition<OfflineNotification> visible,
+            SubscriptionFilter filterData, string userId)
         {
+            var contexts = !string.IsNullOrWhiteSpace(filterData.Context) ? filterData.Context.Split(',').ToList() : null;
+            var match = contexts is { Count: > 1 }
+                ? Builders<OfflineNotification>.Filter.Where(p => p.Payload.SubscriptionFilters.Any(sf =>
+                    contexts.Contains(sf.Context) && sf.ActionName == filterData.ActionName && sf.Value == filterData.Value))
+                : Builders<OfflineNotification>.Filter.Where(p => p.Payload.SubscriptionFilters.Any(sf =>
+                    sf.ActionName == filterData.ActionName && sf.Value == filterData.Value));
 
-            var statusList = !string.IsNullOrWhiteSpace(subscriptionFilterData?.Context)
-                ? subscriptionFilterData.Context.Split(',')
-                : null;
-            List<OfflineNotification> offlineNotifications = [];
-
-            offlineNotifications = statusList != null && statusList.Length > 1
-                ? await GetNotificationForMultiContext(statusList, userId, subscriptionFilterData)
-                : await GetNotificationForSingleContext(userId, subscriptionFilterData);
-
-            var notifications = offlineNotifications.Select(p => new OfflineNotification
-            {
-                Id = p.Id,
-                Payload = p.Payload,
-                CreatedTime = p.CreatedTime,
-                ReadByUserIds = p.ReadByUserIds,
-                IsRead = p.ReadByUserIds?.Contains(userId.ToString()) ?? false,
-                DenormalizedPayload = p.DenormalizedPayload
-            });
-
-            return notifications.ToList();
-        }
-
-        private async Task<List<OfflineNotification>> GetNotificationForMultiContext(string[] statusList, string userId, SubscriptionFilter subscriptionFilterData)
-        {
-            if (subscriptionFilterData == null)
-                return [];
-
-            var statList = statusList.ToList();
-            var notificationList = (await _notificationRepository.GetItemsAsync<OfflineNotification>(p =>
-                                              ((!string.IsNullOrWhiteSpace(p.Payload.UserId) && p.Payload.UserId == userId) || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString()) &&
-                                               p.Payload.SubscriptionFilters.Any(sf =>
-                                               statList.Contains(sf.Context) &&
-                                               sf.ActionName == subscriptionFilterData.ActionName && sf.Value == subscriptionFilterData.Value))).OrderByDescending(f => f.CreatedTime);
-
-            return [.. notificationList];
-        }
-
-        private async Task<List<OfflineNotification>> GetNotificationForSingleContext(string userId, SubscriptionFilter subscriptionFilterData)
-        {
-            if (subscriptionFilterData == null)
-                return [];
-
-            var notificationList = (await _notificationRepository.GetItemsAsync<OfflineNotification>(p =>
-                                                    ((!string.IsNullOrWhiteSpace(p.Payload.UserId) && p.Payload.UserId == userId) || p.Payload.NotificationType == NotificationReceiverTypes.BroadcastReceiverType.ToString()) &&
-                                                    p.Payload.SubscriptionFilters.Any(sf =>
-                                                    sf.ActionName == subscriptionFilterData.ActionName && sf.Value == subscriptionFilterData.Value))).OrderByDescending(p => p.CreatedTime);
-
-            return [.. notificationList];
+            var rows = await _notificationRepository.GetInboxItemsAsync(visible & match);
+            return [.. InboxRows.ForViewer(rows, userId).OrderByDescending(p => p.CreatedTime)];
         }
 
         public async Task<BaseResponse> MarkAllNotificationAsRead()
         {
             try
             {
-                string userId = BlocksContext.GetContext()?.UserId ?? string.Empty;
-                await _notificationRepository.UpdateNotificationAsReadByUserIdAsync(userId);
+                await _notificationRepository.MarkAllAsReadAsync(await ViewerAsync());
                 return new BaseResponse { IsSuccess = true };
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error while marking notificationAsRead {errorMessage: } {stackTrace}", ex.Message, ex.StackTrace);
-                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string>() { { "Exception", $" {ex.Message}" } } };
+                return MarkFailed(ex);
             }
         }
 
@@ -255,20 +161,40 @@ namespace DomainService.Notification
         {
             try
             {
-                string userId = BlocksContext.GetContext()?.UserId ?? string.Empty;
-                await _notificationRepository.UpdateNotificationAsReadByUserIdAsync(userId, request.Id);
+                await _notificationRepository.MarkAsReadAsync(await ViewerAsync(), request.Id);
                 return new BaseResponse { IsSuccess = true };
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error while marking notificationAsRead {errorMessage: } {stackTrace}", ex.Message, ex.StackTrace);
-                return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string>() { { "Exception", $" {ex.Message}" } } };
+                return MarkFailed(ex);
             }
         }
 
         public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
         {
-            return await _notificationRepository.GetNotificationsAsync(request);
+            return await _notificationRepository.GetNotificationsAsync(request, await ViewerAsync());
+        }
+
+        private BaseResponse MarkFailed(Exception ex)
+        {
+            // Type only: a driver message can carry ids.
+            _logger.LogError("Error while marking notifications as read ({ErrorType})", ex.GetType().Name); // NOSONAR S6667 — type only
+            return new BaseResponse { IsSuccess = false, Errors = new Dictionary<string, string> { { "Exception", "Marking as read failed." } } };
+        }
+
+        /// <summary>
+        /// The token user, the organizations they belong to (organization rows), and for an impersonated root user the
+        /// project they work in. No user: refused, never "every row without a user".
+        /// </summary>
+        private async Task<InboxViewer> ViewerAsync()
+        {
+            var context = BlocksContext.GetContext();
+            var userId = context?.UserId;
+            if (string.IsNullOrWhiteSpace(userId))
+                throw new InvalidOperationException("User context is required to read notifications.");
+
+            var organizationIds = await _users.GetOrganizationIdsAsync(userId) ?? [];
+            return new InboxViewer(userId, organizationIds, context!.Impersonated ? context.TenantId : null);
         }
     }
 }
