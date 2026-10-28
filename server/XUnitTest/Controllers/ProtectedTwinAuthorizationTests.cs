@@ -22,6 +22,10 @@ namespace XUnitTest.Controllers
             Row(typeof(CertificateController), "UploadCertificate", "blocks-os::project::mutate-token-validation-params"),
             Row(typeof(NotificationController), "Gets", "blocks-os::notification::gets"),
             Row(typeof(NotificationController), "Get", "blocks-os::notification::gets"),
+            // Push settings: same permissions as the os notification configuration endpoints.
+            Row(typeof(global::Api.Controllers.NotifierPushSettingsController), "GetPushSettings", "blocks-os::notification::gets"),
+            Row(typeof(global::Api.Controllers.NotifierPushSettingsController), "SavePushSettings", "blocks-os::notification::save"),
+            Row(typeof(global::Api.Controllers.NotifierPushSettingsController), "SendPushTest", "blocks-os::notification::save"),
             Row(typeof(global::Api.Controllers.ProjectController), "Gets", "blocks-os::project::projects"),
             Row(typeof(global::Api.Controllers.ProjectController), "Get", "blocks-os::project::projects"),
             Row(typeof(global::Api.Controllers.PeopleController), "Gets", "blocks-os::people::gets"),
@@ -97,6 +101,8 @@ namespace XUnitTest.Controllers
             Row(typeof(global::Api.Controllers.NotifierController), "MarkAllNotificationAsRead", L + "notifier::manage"),
             Row(typeof(global::Api.Controllers.NotifierController), "MarkNotificationAsRead", L + "notifier::manage"),
             Row(typeof(global::Api.Controllers.NotifierController), "GetNotifications", L + "notifier::read"),
+            Row(typeof(global::Api.Controllers.NotifierDevicesController), "RegisterDevice", L + "notifier::manage"),
+            Row(typeof(global::Api.Controllers.NotifierDevicesController), "RemoveDevice", L + "notifier::manage"),
             Row(typeof(SchedulerController), "CreateSchedule", L + "scheduler::manage"),
             Row(typeof(SchedulerController), "UpdateSchedule", L + "scheduler::manage"),
             Row(typeof(SchedulerController), "DeleteSchedule", L + "scheduler::manage"),
@@ -139,7 +145,7 @@ namespace XUnitTest.Controllers
         [Fact]
         public void NewLogicPermissionListIsComplete()
         {
-            NewLogicPermissions().Should().HaveCount(52);
+            NewLogicPermissions().Should().HaveCount(54);
             NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(14);
         }
 

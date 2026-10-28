@@ -221,15 +221,6 @@ namespace XUnitTest.Notification
         }
 
         [Fact]
-        public void FirebaseConfiguration_CarriesTheAuthorizationKey()
-        {
-            var configuration = new FirebaseConfiguration { ItemId = "fb-1", AuthorizationKey = "auth-key" };
-
-            configuration.AuthorizationKey.Should().Be("auth-key");
-            configuration.ItemId.Should().Be("fb-1");
-        }
-
-        [Fact]
         public void NotificationReceiverTypes_KeepsTheOrderTheStoredConfigurationsRelyOn()
         {
             ((int)NotificationReceiverTypes.NoReceiverType).Should().Be(0);

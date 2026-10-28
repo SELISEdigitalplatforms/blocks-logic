@@ -7,7 +7,6 @@ using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
 using Mail.DomainService.Shared.Enums;
-using MailBoxSyncService.Services;
 using IMailRepository = Mail.DomainService.Services.IMailRepository;
 using Mail.DomainService.Dtos;
 using Mail.DomainService.Entities;
@@ -82,10 +81,8 @@ namespace XUnitTest.Notifications
 
         private WorkflowNotificationService WorkflowNotifier()
         {
-            var tenants = new Mock<ITenants>();
             return new WorkflowNotificationService(
-                Mock.Of<ICryptoService>(), tenants.Object, new ConfigurationBuilder().Build(),
-                Mock.Of<DomainService.Notification.INotificationService>(), Mock.Of<IHttpClientFactory>(),
+                new ConfigurationBuilder().Build(), Mock.Of<Blocks.Genesis.Notifications.INotificationPublisher>(),
                 NullLogger<WorkflowNotificationService>.Instance, _sender.Object);
         }
 
@@ -474,84 +471,6 @@ namespace XUnitTest.Notifications
             var ok = await MailService(withSender: false).ProcessSendMailAsync(Mail(complete: false));
 
             ok.Should().BeFalse();
-        }
-
-        // ================================ mailbox sync failing (H8, C11) ================================
-
-        private sealed class TestWorker : global::MailBoxSyncService.Worker
-        {
-            public TestWorker(IBuiltInNotificationSender sender, global::MailBoxSyncService.Services.IMailRepository repo, IMailBoxSyncService sync)
-                : base(repo, sync, new InboundMailPollerRegistry([]), NullLogger<global::MailBoxSyncService.Worker>.Instance,
-                    new ConfigurationBuilder().Build(), sender)
-            {
-            }
-
-            public Task Fail(string tenant, string config) => RecordFailureAsync(tenant, config);
-
-            public void Recover(string tenant, string config) => ResetStreak(tenant, config);
-        }
-
-        private TestWorker Worker() => new(_sender.Object, Mock.Of<global::MailBoxSyncService.Services.IMailRepository>(), Mock.Of<IMailBoxSyncService>());
-
-        [Fact]
-        public async Task The_admins_are_told_once_on_the_fifth_failure_in_a_row()
-        {
-            var worker = Worker();
-
-            for (var i = 0; i < global::MailBoxSyncService.Worker.FailureStreakThreshold - 1; i++) await worker.Fail(Tenant, "cfg-1");
-            VerifyNothingSent();
-
-            await worker.Fail(Tenant, "cfg-1");
-            await worker.Fail(Tenant, "cfg-1");
-            await worker.Fail(Tenant, "cfg-1");
-
-            _sender.Verify(s => s.SendToTenantAdminsAsync(
-                Tenant, BuiltInNotificationNames.MailboxSyncFailing,
-                It.Is<BuiltInNotificationPayload>(p => p.Ids!["configId"] == "cfg-1"),
-                It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
-        }
-
-        [Fact]
-        public async Task A_success_resets_the_streak_so_a_later_streak_tells_again()
-        {
-            var worker = Worker();
-
-            for (var i = 0; i < global::MailBoxSyncService.Worker.FailureStreakThreshold; i++) await worker.Fail(Tenant, "cfg-1");
-            worker.Recover(Tenant, "cfg-1");
-            for (var i = 0; i < global::MailBoxSyncService.Worker.FailureStreakThreshold; i++) await worker.Fail(Tenant, "cfg-1");
-
-            _sender.Verify(s => s.SendToTenantAdminsAsync(
-                Tenant, BuiltInNotificationNames.MailboxSyncFailing, It.IsAny<BuiltInNotificationPayload>(),
-                It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
-        }
-
-        [Fact]
-        public async Task Streaks_are_counted_per_tenant_and_mailbox()
-        {
-            var worker = Worker();
-
-            for (var i = 0; i < global::MailBoxSyncService.Worker.FailureStreakThreshold - 1; i++)
-            {
-                await worker.Fail(Tenant, "cfg-1");
-                await worker.Fail(Tenant, "cfg-2");
-                await worker.Fail("tenant-2", "cfg-1");
-            }
-
-            VerifyNothingSent();
-        }
-
-        [Fact]
-        public async Task A_sender_that_throws_does_not_break_the_sync_loop()
-        {
-            SenderThrows();
-            var worker = Worker();
-
-            var act = async () =>
-            {
-                for (var i = 0; i < global::MailBoxSyncService.Worker.FailureStreakThreshold; i++) await worker.Fail(Tenant, "cfg-1");
-            };
-
-            await act.Should().NotThrowAsync();
         }
 
         // ================================ schedule registration failed (H9, H10) ================================
