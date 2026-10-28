@@ -199,8 +199,24 @@ public class NotificationConfigKeyValueTests : IDisposable
         result.Should().BeNull();
         (await CollectionNames(_fixture.Dev)).Should().NotContain(Old);
         (await CollectionNames(_fixture.Main)).Should().NotContain(Old);
-        // The KV read is the only store call; there is no live "does the collection exist" check on this path.
-        _kv.Invocations.Should().ContainSingle();
+        // Only KV reads (the tenant's, then the root built-in fallback); no live "does the collection exist" check.
+        _kv.Invocations.Should().HaveCount(2);
+        _kv.Verify(k => k.GetAsync<SendConfig>(Prefix + "welcome", false, default), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true, "root-built-in")]
+    [InlineData(false, null)]
+    public async Task SendTime_ProjectMiss_UsesTheRootRowOnlyWhenItIsABuiltIn(bool isBuiltIn, string? expected)
+    {
+        TestBlocksContext.Set("dev");
+        _kv.Setup(k => k.GetAsync<SendConfig>(Prefix + "welcome", false, default))
+           .ReturnsAsync(new SendConfig { Name = "welcome", NotifyMethod = "root-built-in", IsBuiltIn = isBuiltIn });
+
+        var result = await Send().GetByNameAsync("welcome");
+
+        result?.NotifyMethod.Should().Be(expected);
+        if (expected is null) result.Should().BeNull("a root custom configuration never applies to a project");
     }
 
     [Fact]
