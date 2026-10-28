@@ -5,7 +5,7 @@ import { CalendarIcon } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import useIsMobile from "@/hooks/use-is-mobile";
 import { Separator } from "@/components/ui-kits/separator/separator";
-import { MouseEvent, useEffect, useState } from "react";
+import { MouseEvent, useState } from "react";
 
 type DateRangeType = { from?: Date; to?: Date } | null;
 
@@ -20,11 +20,16 @@ export function DateRange({ label, value, onChange }: DateRangeFilterProps) {
   const [open, setOpen] = useState<boolean>(false);
   const [date, setDate] = useState<DateRangeType>(value);
 
-  useEffect(() => {
-    if (!open) {
-      setDate(value);
-    }
-  }, [open, value]);
+  // While the popover is closed, the draft follows the committed value. Adjusted during
+  // render when open/value change (React's "adjust state when a prop changes" pattern).
+  const [syncedFrom, setSyncedFrom] = useState<{ open: boolean; value: DateRangeType }>({
+    open,
+    value,
+  });
+  if (syncedFrom.open !== open || syncedFrom.value !== value) {
+    setSyncedFrom({ open, value });
+    if (!open) setDate(value);
+  }
 
   const handleDateSelect = (selectedDateRange: DateRangeType | undefined) => {
     if (!selectedDateRange) return setDate(null);

@@ -18,7 +18,7 @@ interface VersionHistorySidebarProps {
   selectedVersionId?: string | null;
 }
 
-export const VersionHistorySidebar = ({ onClose, onSelectVersion, selectedVersionId }: VersionHistorySidebarProps) => {
+export const VersionHistorySidebar = ({ onSelectVersion, selectedVersionId }: VersionHistorySidebarProps) => {
   const { id: workflowId } = useParams<{ id: string }>();
   
   const { data: versionsData, isLoading } = useGetWorkflowVersions({

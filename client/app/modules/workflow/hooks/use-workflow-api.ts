@@ -395,6 +395,11 @@ export const useWorkflowExecutionHistory = (workflowId: string) => {
   const mergedAtRef = useRef(0);
   const seenWorkflow = useRef(workflowId);
 
+  // Workflow switches are detected and the paging bookkeeping reset synchronously during render,
+  // so the very first render for a new workflowId already sees empty rows and the newer-poll
+  // query is disabled; the refs are also read by query functions outside render. Moving this
+  // into effects/state would add a render with the previous workflow's rows (behavior change).
+  /* eslint-disable react-hooks/refs */
   const switched = seenWorkflow.current !== workflowId;
   if (switched) {
     seenWorkflow.current = workflowId;
@@ -414,6 +419,7 @@ export const useWorkflowExecutionHistory = (workflowId: string) => {
     .filter((row) => NON_TERMINAL_STATUSES.has(row.status))
     .slice(0, MAX_REFRESH_IDS)
     .map((row) => row.id);
+  /* eslint-enable react-hooks/refs */
 
   const initialQuery = useQuery({
     queryKey: ["workflow-executions", workflowId, "page", pageSize],
@@ -448,6 +454,9 @@ export const useWorkflowExecutionHistory = (workflowId: string) => {
   useEffect(() => {
     if (!workflowId || !initialQuery.isFetched) return;
     if (initialQuery.isError) {
+      // Settles paging state from the query result together with the ref bookkeeping below;
+      // deriving it during render would decouple it from appliedForWorkflow (behavior change).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setInitialSettled(true);
       return;
     }

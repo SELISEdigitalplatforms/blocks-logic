@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
@@ -40,8 +40,8 @@ const Harness = ({
       responseInclude,
     },
   });
-  const paths = form.watch("responseInclude");
-  const mode = form.watch("responseMode");
+  const paths = useWatch({ control: form.control, name: "responseInclude" });
+  const mode = useWatch({ control: form.control, name: "responseMode" });
   return (
     <Form {...form}>
       <ProxyResponseCard control={form.control} runSample={runSample} seedKey="new" />
@@ -81,7 +81,7 @@ const EditHarness = ({ resetTo }: { resetTo: string[] }) => {
       responseInclude: resetTo,
     });
   }, [form, resetTo]);
-  const paths = form.watch("responseInclude");
+  const paths = useWatch({ control: form.control, name: "responseInclude" });
   return (
     <Form {...form}>
       <ProxyResponseCard control={form.control} runSample={vi.fn()} seedKey="proxy-1" />

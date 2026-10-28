@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui-kits/input/input";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { FieldProps } from "../form-field.types";
@@ -74,10 +74,14 @@ export const FixedKeyValuePairsField = ({
   // Refs to hold latest onChange and value so the sync effect doesn't
   // re-fire on every parent render (onChange is a new closure each time
   // any form field changes, and currentValue is a new object reference).
+  // Updated in a layout effect (after commit, before the passive sync effect below runs) rather
+  // than during render.
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
   const valueRef = useRef(value);
-  valueRef.current = value;
+  useLayoutEffect(() => {
+    onChangeRef.current = onChange;
+    valueRef.current = value;
+  });
 
   const depValues = useMemo(() => {
     if (field.fixedKeysDependencies) {
@@ -95,6 +99,9 @@ export const FixedKeyValuePairsField = ({
   useEffect(() => {
     if (Array.isArray(field.fixedKeys)) {
       hasLoadedKeysRef.current = true;
+      // Keys are (re)applied only when depString changes, in the same effect that resolves
+      // async keys; deriving them during render would change when they reset.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setKeys(field.fixedKeys);
       return;
     }

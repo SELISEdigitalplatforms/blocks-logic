@@ -254,8 +254,6 @@ export const FunctionDetailPage = () => {
   const codeCardRef = useRef<HTMLDivElement>(null);
   const editorActions = useRef<CodeEditorActions | null>(null);
   const setLimits = useFunctionEditorStore((s) => s.setLimits);
-  const retry = useFunctionEditorStore((s) => s.retry);
-  const setRetry = useFunctionEditorStore((s) => s.setRetry);
   const trigger = useFunctionEditorStore((s) => s.trigger);
   const setTrigger = useFunctionEditorStore((s) => s.setTrigger);
   const outputActions = useFunctionEditorStore((s) => s.outputActions);

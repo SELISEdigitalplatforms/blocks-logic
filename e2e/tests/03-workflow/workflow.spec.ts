@@ -394,7 +394,7 @@ test.describe("workflow", () => {
       await editor.expectOnEditorTab();
     });
 
-    await test.step("[Positive] Editor tab header shows Published/Unpublished status and last-saved timestamp", async () => {
+    await test.step("[Positive] Editor tab header shows the publish status (Published/Publish) and last-saved timestamp", async () => {
       await editor.expectStatusBadgeVisible();
       await editor.expectLastSavedLabelVisible();
     });

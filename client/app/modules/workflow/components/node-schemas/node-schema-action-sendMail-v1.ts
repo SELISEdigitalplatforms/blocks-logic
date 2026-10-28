@@ -71,7 +71,7 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
         info: "Choose language for the email template",
         key: "Language",
         required: true,
-        options: (_data, config) => {
+        options: (_data, _config) => {
           return new Promise((resolve, reject) => {
             languageManagerService
               .fetchBlocksLanguages()

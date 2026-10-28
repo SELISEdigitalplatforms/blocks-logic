@@ -56,7 +56,6 @@ import { NodeSchemasDefinition } from "./node-schemas";
 import { NodeSchemaTriggerWebhookV1 } from "./node-schema-trigger-webhook-v1";
 import { NodeSchemaTriggerEmailV1 } from "./node-schema-trigger-email-v1";
 import { NodeSchemaTriggerDataGatewayV1 } from "./node-schema-trigger-dataGateway-v1";
-import { NodeSchemaTriggerScheduleV1 } from "./node-schema-trigger-schedule-v1";
 import { NodeSchemaActionAiAgentV1 } from "./node-schema-action-aiAgent-v1";
 import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
 import { NodeSchemaActionHttpRequestV1 } from "./node-schema-action-httpRequest-v1";

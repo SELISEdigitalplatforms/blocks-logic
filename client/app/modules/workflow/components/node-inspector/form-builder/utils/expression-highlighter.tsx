@@ -153,6 +153,13 @@ export type VariablePickerConfig = {
 
 type Control = HTMLInputElement | HTMLTextAreaElement;
 
+/** Forwards the mounted control to the child's own ref (callback or object ref). */
+const forwardToChildRef = (childRef: React.Ref<Control> | undefined, node: Control | null) => {
+  if (typeof childRef === "function") childRef(node);
+  else if (childRef && typeof childRef === "object")
+    childRef.current = node;
+};
+
 export const ExpressionHighlighter = ({
   children,
   value,
@@ -275,9 +282,7 @@ export const ExpressionHighlighter = ({
   const refProps = {
     ref: (node: Control | null) => {
       attachControl(node);
-      if (typeof childRef === "function") childRef(node);
-      else if (childRef && typeof childRef === "object")
-        (childRef as React.MutableRefObject<Control | null>).current = node;
+      forwardToChildRef(childRef, node);
     },
   };
 

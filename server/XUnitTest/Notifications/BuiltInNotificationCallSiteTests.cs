@@ -359,7 +359,7 @@ namespace XUnitTest.Notifications
                 .ReturnsAsync(new List<MailAttachment>());
             return new SendMailService(
                 NullLogger<SendMailService>.Instance, Mock.Of<IMailRepository>(), registry,
-                resolver.Object, Mock.Of<IMessageClient>(),
+                new MailSendResolvers(resolver.Object, MailSecretsTestDoubles.PasswordResolver()), Mock.Of<IMessageClient>(),
                 Options.Create(new MailStatusEventOptions { Enabled = false }),
                 withSender ? _sender.Object : null);
         }
@@ -459,7 +459,7 @@ namespace XUnitTest.Notifications
             var messages = new Mock<IMessageClient>();
             var service = new SendMailService(
                 NullLogger<SendMailService>.Instance, Mock.Of<IMailRepository>(), new OutboundMailSenderRegistry([]),
-                Mock.Of<IMailAttachmentResolver>(), messages.Object,
+                new MailSendResolvers(Mock.Of<IMailAttachmentResolver>(), MailSecretsTestDoubles.PasswordResolver()), messages.Object,
                 Options.Create(new MailStatusEventOptions { Enabled = false }), _sender.Object);
 
             var ok = await service.ProcessSendMailAsync(Mail(complete: false));

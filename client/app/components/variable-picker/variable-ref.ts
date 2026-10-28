@@ -54,8 +54,13 @@ export const varNameRef: VariableRefCodec = {
  * there is no chip that would honestly represent the surrounding text.
  */
 export const soleRefKey = (value: string, codec: VariableRefCodec): string | null => {
-  const match = value.trim().match(new RegExp(`^${codec.pattern().source}$`));
-  return match ? match[1] : null;
+  // Exactly one token spanning the whole trimmed value. The codec keys cannot contain `}`, so this
+  // is the same test as anchoring the codec pattern with ^…$, without building a RegExp at runtime.
+  const trimmed = value.trim();
+  const matches = [...trimmed.matchAll(codec.pattern())];
+  if (matches.length !== 1) return null;
+  const [match] = matches;
+  return match.index === 0 && match[0].length === trimmed.length ? match[1] : null;
 };
 
 /** Every key referenced in `value`, in order, including duplicates. */

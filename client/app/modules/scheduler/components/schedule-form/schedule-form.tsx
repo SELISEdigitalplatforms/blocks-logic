@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { type Resolver, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import Editor, { type OnMount } from "@monaco-editor/react";
@@ -132,7 +132,8 @@ export const ScheduleForm = ({
 
   const form = useForm<ScheduleFormValues>({
     defaultValues: scheduleFormDefaultValues,
-    resolver: zodResolver(scheduleFormSchema),
+    // Typed as @hookform/resolvers 3 inferred it; v5 infers separate input/output types.
+    resolver: zodResolver(scheduleFormSchema) as Resolver<ScheduleFormValues>,
   });
 
   const { fields, append, remove } = useFieldArray({

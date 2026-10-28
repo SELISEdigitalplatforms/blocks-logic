@@ -8,6 +8,9 @@ function usePrevious<T>(value: T): T | undefined {
 		ref.current = value;
 	}, [value]);
 
+	// Intentionally returns the value from the last committed render (classic usePrevious);
+	// a state-based rewrite would change when previousActiveStep updates for vertical-step.
+	// eslint-disable-next-line react-hooks/refs
 	return ref.current;
 }
 

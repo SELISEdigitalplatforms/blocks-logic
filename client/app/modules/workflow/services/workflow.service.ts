@@ -31,7 +31,6 @@ import {
   IRestoreWorkflowPayload,
   IRestoreWorkflowResponse,
   IGetWorkflowByVersionPayload,
-  IGetWorkflowByVersionResponse,
   IUpdateWorkflowVersionPayload,
   IUpdateWorkflowVersionResponse,
   IGetLastSuccessfulExecutionPayload,

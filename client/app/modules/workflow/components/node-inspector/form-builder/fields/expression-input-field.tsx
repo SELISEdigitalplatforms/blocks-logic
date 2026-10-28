@@ -103,10 +103,11 @@ export const ExpressionInputField = ({
   const nodesMap = useWorkflowStore((state) => state.nodesMap);
   const edgesMap = useWorkflowStore((state) => state.edgesMap);
 
+  const nodeId = config?.nodeId;
   const ancestorNodes = useMemo(() => {
-    if (!config?.nodeId) return [];
-    return getAncestorNodes(config.nodeId, nodesMap, edgesMap);
-  }, [config?.nodeId, nodesMap, edgesMap]);
+    if (!nodeId) return [];
+    return getAncestorNodes(nodeId, nodesMap, edgesMap);
+  }, [nodeId, nodesMap, edgesMap]);
 
   const parseExpression = (text: string, position: number) => {
     const beforeCursor = text.substring(0, position);

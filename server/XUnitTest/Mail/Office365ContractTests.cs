@@ -181,6 +181,41 @@ namespace XUnitTest.Mail
             Office365ConfigurationContract.Validate(config, "blocks-tenant").Should().BeNull();
         }
 
+        private static MailServerConfiguration PasswordRecord(string? password, string? reference)
+        {
+            var config = Valid();
+            config.AuthenticationType = MailAuthenticationType.Password;
+            config.TenantId = null;
+            config.ClientId = null;
+            config.ClientSecretReference = null;
+            config.MailboxAddress = null;
+            config.SenderUserName = "support@contoso.com";
+            config.AccountPassword = password!;
+            config.AccountPasswordReference = reference;
+            return config;
+        }
+
+        [Theory]
+        [InlineData("", "s-9")]
+        [InlineData(null, "s-9")]
+        [InlineData("old-pass", "s-9")]
+        public void Validate_APasswordRecordWithAReference_HasAPassword(string? password, string reference)
+        {
+            // H4: a record saved by blocks-os SPEC31 keeps only the reference.
+            Office365ConfigurationContract.Validate(PasswordRecord(password, reference), "blocks-tenant").Should().BeNull();
+        }
+
+        [Theory]
+        [InlineData(null, null)]
+        [InlineData("", null)]
+        [InlineData(null, "")]
+        [InlineData("", "")]
+        public void Validate_APasswordRecordWithNeitherReferenceNorPassword_IsMissingItsPassword(string? password, string? reference)
+        {
+            // C11: answered exactly as before the reference existed.
+            Office365ConfigurationContract.Validate(PasswordRecord(password, reference), "blocks-tenant").Should().Be("password is missing");
+        }
+
         private static MailServerConfiguration ValidInbound()
         {
             var config = Valid();
