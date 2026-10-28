@@ -10,7 +10,10 @@ namespace DomainService.Notification.Push
     {
         Sent,
 
-        /// <summary>The device token is no longer valid (404, UNREGISTERED, INVALID_ARGUMENT): delete the device.</summary>
+        /// <summary>
+        /// The device token is no longer valid: 404, UNREGISTERED, or INVALID_ARGUMENT that names the registration token.
+        /// Delete the device.
+        /// </summary>
         InvalidToken,
 
         /// <summary>429 or 5xx: try again later.</summary>
@@ -22,7 +25,14 @@ namespace DomainService.Notification.Push
         Failed,
     }
 
-    public sealed record FcmSendResult(FcmOutcome Outcome, int Status, TimeSpan? RetryAfter = null);
+    /// <param name="ErrorCode">FCM's error code (for example INVALID_ARGUMENT), for the log. Never holds the token.</param>
+    public sealed record FcmSendResult(FcmOutcome Outcome, int Status, TimeSpan? RetryAfter = null, string? ErrorCode = null);
+
+    /// <summary>The parts of an FCM error body that decide what to do. <paramref name="NamesToken"/>: the error is about the registration token.</summary>
+    public sealed record FcmError(string? Code, bool NamesToken)
+    {
+        public static readonly FcmError None = new(null, false);
+    }
 
     /// <summary>One push to one device token. <paramref name="Data"/> values must be strings (FCM rule).</summary>
     public sealed record FcmMessage(string Token, string Title, string Body, IReadOnlyDictionary<string, string> Data);
@@ -36,6 +46,10 @@ namespace DomainService.Notification.Push
     /// <inheritdoc cref="IFcmClient"/>
     public sealed class FcmClient : IFcmClient
     {
+        private const string UnregisteredCode = "UNREGISTERED";
+        private const string InvalidArgumentCode = "INVALID_ARGUMENT";
+        private const string TokenField = "message.token";
+
         private readonly IHttpClientFactory _httpClientFactory;
 
         public FcmClient(IHttpClientFactory httpClientFactory)
@@ -66,20 +80,25 @@ namespace DomainService.Notification.Push
                 return new FcmSendResult(FcmOutcome.Sent, (int)response.StatusCode);
             }
 
-            var errorCode = await ErrorCodeAsync(response, cancellationToken);
-            return Classify(response, errorCode);
+            var error = await ReadErrorAsync(response, cancellationToken);
+            return Classify(response, error);
         }
 
-        internal static FcmSendResult Classify(HttpResponseMessage response, string? errorCode)
+        /// <summary>
+        /// Only a refused token deletes the device. INVALID_ARGUMENT also means a bad message from our side (payload too
+        /// big, bad data key): then the device is kept, or one bad message would wipe every valid token.
+        /// </summary>
+        internal static FcmSendResult Classify(HttpResponseMessage response, FcmError error)
         {
             var status = (int)response.StatusCode;
-            if (response.StatusCode == HttpStatusCode.NotFound || errorCode is "UNREGISTERED" or "INVALID_ARGUMENT")
-                return new FcmSendResult(FcmOutcome.InvalidToken, status);
+            if (response.StatusCode == HttpStatusCode.NotFound || error.Code == UnregisteredCode
+                || (error.Code == InvalidArgumentCode && error.NamesToken))
+                return new FcmSendResult(FcmOutcome.InvalidToken, status, ErrorCode: error.Code);
             if (response.StatusCode == HttpStatusCode.Unauthorized)
-                return new FcmSendResult(FcmOutcome.AuthFailed, status);
+                return new FcmSendResult(FcmOutcome.AuthFailed, status, ErrorCode: error.Code);
             if (response.StatusCode == HttpStatusCode.TooManyRequests || status >= 500)
-                return new FcmSendResult(FcmOutcome.Retry, status, RetryAfter(response));
-            return new FcmSendResult(FcmOutcome.Failed, status);
+                return new FcmSendResult(FcmOutcome.Retry, status, RetryAfter(response), error.Code);
+            return new FcmSendResult(FcmOutcome.Failed, status, ErrorCode: error.Code);
         }
 
         private static TimeSpan? RetryAfter(HttpResponseMessage response)
@@ -93,36 +112,44 @@ namespace DomainService.Notification.Push
         }
 
         /// <summary>
-        /// The FCM error code: <c>details[].errorCode</c> (FcmError), else <c>error.status</c>. The body is never logged.
+        /// The FCM error code (<c>details[].errorCode</c> of FcmError, else <c>error.status</c>) and whether the error
+        /// names the registration token (<c>google.rpc.BadRequest</c> field <c>message.token</c>, or the message says
+        /// "registration token"). The body is never logged.
         /// </summary>
-        private static async Task<string?> ErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+        private static async Task<FcmError> ReadErrorAsync(HttpResponseMessage response, CancellationToken cancellationToken)
         {
             try
             {
                 using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
-                if (!document.RootElement.TryGetProperty("error", out var error) || error.ValueKind != JsonValueKind.Object)
-                    return null;
-
-                return DetailCode(error) ?? (error.TryGetProperty("status", out var status) ? status.GetString() : null);
+                return ParseError(document.RootElement);
             }
             catch (JsonException)
             {
-                return null;
+                return FcmError.None;
             }
         }
 
-        private static string? DetailCode(JsonElement error)
+        private static FcmError ParseError(JsonElement root)
         {
-            if (!error.TryGetProperty("details", out var details) || details.ValueKind != JsonValueKind.Array)
-                return null;
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("error", out var error) || error.ValueKind != JsonValueKind.Object)
+                return FcmError.None;
 
-            foreach (var detail in details.EnumerateArray())
-            {
-                if (detail.ValueKind == JsonValueKind.Object && detail.TryGetProperty("errorCode", out var code) && code.ValueKind == JsonValueKind.String)
-                    return code.GetString();
-            }
-
-            return null;
+            var details = error.TryGetProperty("details", out var list) && list.ValueKind == JsonValueKind.Array
+                ? list.EnumerateArray().Where(d => d.ValueKind == JsonValueKind.Object).ToList()
+                : [];
+            var code = details.Select(d => StringOf(d, "errorCode")).FirstOrDefault(c => c is not null) ?? StringOf(error, "status");
+            var namesToken = details.Any(NamesTokenField)
+                || (StringOf(error, "message") ?? string.Empty).Contains("registration token", StringComparison.OrdinalIgnoreCase);
+            return new FcmError(code, namesToken);
         }
+
+        /// <summary>A <c>google.rpc.BadRequest</c> detail with a field violation on <c>message.token</c>.</summary>
+        private static bool NamesTokenField(JsonElement detail) =>
+            detail.TryGetProperty("fieldViolations", out var violations)
+            && violations.ValueKind == JsonValueKind.Array
+            && violations.EnumerateArray().Any(v => v.ValueKind == JsonValueKind.Object && StringOf(v, "field") == TokenField);
+
+        private static string? StringOf(JsonElement element, string name) =>
+            element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     }
 }

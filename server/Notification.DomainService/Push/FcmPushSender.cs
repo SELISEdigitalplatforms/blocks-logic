@@ -126,7 +126,8 @@ namespace DomainService.Notification.Push
 
             if (last!.Outcome is FcmOutcome.Retry or FcmOutcome.AuthFailed or FcmOutcome.Failed)
             {
-                _logger.LogWarning("Push: one message dropped (HTTP {Status}, {Outcome})", last.Status, last.Outcome);
+                // Status and FCM code only: never the token, the texts or the response body. The device is kept.
+                _logger.LogWarning("Push: one message dropped, device kept (HTTP {Status}, {Outcome}, {ErrorCode})", last.Status, last.Outcome, last.ErrorCode ?? "none");
             }
 
             return last.Outcome;

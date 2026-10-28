@@ -53,8 +53,9 @@ namespace XUnitTest.Notification.Push
 
         [Theory]
         [InlineData(HttpStatusCode.NotFound, "{}")]
-        [InlineData(HttpStatusCode.BadRequest, """{"error":{"status":"INVALID_ARGUMENT"}}""")]
         [InlineData(HttpStatusCode.BadRequest, """{"error":{"status":"NOT_FOUND","details":[{"errorCode":"UNREGISTERED"}]}}""")]
+        [InlineData(HttpStatusCode.BadRequest, """{"error":{"status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"INVALID_ARGUMENT"},{"@type":"type.googleapis.com/google.rpc.BadRequest","fieldViolations":[{"field":"message.token","description":"Invalid registration token"}]}]}}""")]
+        [InlineData(HttpStatusCode.BadRequest, """{"error":{"status":"INVALID_ARGUMENT","message":"The registration token is not a valid FCM registration token"}}""")]
         public async Task ARefusedToken_DeletesTheDevice(HttpStatusCode status, string body)
         {
             _google.Then(status, body);
@@ -63,6 +64,21 @@ namespace XUnitTest.Notification.Push
 
             summary.Removed.Should().Be(1);
             _devices.Verify(d => d.DeleteAsync(Db, NotificationDevice.IdOf("dead-token"), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Theory]
+        [InlineData("""{"error":{"status":"INVALID_ARGUMENT","message":"Request contains an invalid argument."}}""")]
+        [InlineData("""{"error":{"status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.rpc.BadRequest","fieldViolations":[{"field":"message.data[0].key","description":"Invalid data key"}]}]}}""")]
+        [InlineData("not json")]
+        public async Task ABadMessage_KeepsTheDevice_AndLogsOnlyTheCode(string body)
+        {
+            _google.Then(HttpStatusCode.BadRequest, body);
+
+            var summary = await SendAsync(Note("good-token"));
+
+            summary.Should().Be(new PushSendSummary(0, 0, 1));
+            _devices.Verify(d => d.DeleteAsync(It.IsAny<PushDb>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            _logger.All.Should().Contain("device kept").And.NotContain("good-token").And.NotContain("Title text");
         }
 
         [Fact]
