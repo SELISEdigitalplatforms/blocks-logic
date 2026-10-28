@@ -4,7 +4,6 @@ using Blocks.Genesis;
 using Blocks.Genesis.Entities.Logic;
 using Blocks.Genesis.Entities.Os;
 using DomainService.Configuration.Services;
-using DomainService.Notification;
 using MongoDB.Bson;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Logging;
@@ -111,7 +110,8 @@ namespace Workflow.DomainService.Nodes.ActionNotification
 
                         string? skipped = null;
                         NotificationNodeSendResult result;
-                        if (configuration.IsDisabledByTenant())
+                        // Switched off by the tenant, and allowed to be (built-ins are already refused above).
+                        if (configuration.IsDisabled && configuration.CanBeDisabled())
                         {
                             // The Notifier would answer success and send nothing; say so instead.
                             skipped = "disabled";
