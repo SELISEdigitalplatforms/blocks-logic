@@ -42,12 +42,15 @@ const RECEIVER_LABELS: Record<NotificationReceiver, string> = {
 const isReceiver = (data: Record<string, unknown>, receiver: NotificationReceiver) =>
   data.NotificationType === receiver;
 
+/** A text parameter; anything that is not a string (missing, or a wrong saved shape) reads as "". */
+const text = (value: unknown): string => (typeof value === "string" ? value : "");
+
 /** One-filter editor: the three fields write to their own keys and keep `SubscriptionFilters` in step. */
 const filterFrom = (data: Record<string, unknown>) => [
   {
-    Context: String(data.FilterContext ?? ""),
-    ActionName: String(data.FilterActionName ?? ""),
-    Value: String(data.FilterValue ?? ""),
+    Context: text(data.FilterContext),
+    ActionName: text(data.FilterActionName),
+    Value: text(data.FilterValue),
   },
 ];
 
@@ -93,13 +96,19 @@ export const buildNotificationConfigDetails = (
     ),
   ];
 
-  const message = config.isDisabled
-    ? "This configuration is switched off for the project: the step succeeds but nothing is sent."
-    : config.receiver === "none"
-      ? "This configuration has no receiver, so the step cannot send it. Pick another configuration."
-      : undefined;
-
+  const message = detailsWarning(config);
   return { fields, ...(message ? { message } : {}) };
+};
+
+/** Why the picked configuration will not send as expected, or undefined when it will. */
+const detailsWarning = (config: INotificationConfig): string | undefined => {
+  if (config.isDisabled) {
+    return "This configuration is switched off for the project: the step succeeds but nothing is sent.";
+  }
+  if (config.receiver === "none") {
+    return "This configuration has no receiver, so the step cannot send it. Pick another configuration.";
+  }
+  return undefined;
 };
 
 const EXPRESSION_HINT = "Accepts expressions such as {{$json.userId}}.";
@@ -138,7 +147,7 @@ export const NodeSchemaActionNotification: NodeSchemaDefinition = {
             .catch(() => []),
         onChange: (value: unknown) => ({
           ConfigurationName: value,
-          NotificationType: receiverByName.get(String(value)) ?? "none",
+          NotificationType: receiverByName.get(text(value)) ?? "none",
         }),
       },
       {
@@ -151,7 +160,7 @@ export const NodeSchemaActionNotification: NodeSchemaDefinition = {
         hidden: (data) => !data.ConfigurationName,
         detailsDependencies: ["ConfigurationName"],
         details: async (data, config) => {
-          const name = String(data.ConfigurationName ?? "");
+          const name = text(data.ConfigurationName);
           if (!name) return { fields: [] };
           try {
             const configs = await getConfigsCached(config.tenantId);

@@ -30,7 +30,9 @@ const RECEIVER_BY_CODE: Record<string, NotificationReceiver> = {
 
 /** `NotificationReceiverTypes` (number or name) to the node's receiver; unknown reads as "none". */
 export const toNotificationReceiver = (value: unknown): NotificationReceiver =>
-  RECEIVER_BY_CODE[String(value ?? "")] ?? "none";
+  typeof value === "number" || typeof value === "string"
+    ? (RECEIVER_BY_CODE[String(value)] ?? "none")
+    : "none";
 
 class NotificationConfigService {
   private readonly LogicHttpClient = serviceInstances.logicService;
