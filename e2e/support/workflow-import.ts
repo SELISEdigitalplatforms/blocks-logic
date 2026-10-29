@@ -1,8 +1,9 @@
 import { expect, type Page } from "@playwright/test"
 import { ConfirmationModalComponent } from "../po/components/confirmation-modal.component"
 import { WorkflowEditorPage } from "../po/pages/workflow-editor.page"
+import { WorkflowListPage } from "../po/pages/workflow-list.page"
 import type { WorkflowImportFile } from "./filter-fixtures"
-import { openWorkflowList } from "./workflow-helpers"
+import { openWorkflowList, waitForRowsLoaded } from "./workflow-helpers"
 
 const EDITOR_URL = /\/workflow\/[^/?#]+(?:[?#].*)?$/
 
@@ -63,6 +64,28 @@ export async function deleteWorkflowAt(page: Page, workflow: ImportedWorkflow): 
   await editor.openHeaderMenu()
   await page.getByRole("menuitem", { name: "Delete" }).click()
   await modal.expectOpen("Delete Workflow")
+  await modal.clickConfirm()
+  await expect(page.getByText("Workflow deleted successfully").first()).toBeVisible({
+    timeout: 15_000,
+  })
+}
+
+/**
+ * Delete a workflow by its exact name from the workflow list, for an import that created the
+ * workflow but never reached its editor. Does nothing when no row has that name.
+ */
+export async function deleteWorkflowNamed(page: Page, name: string): Promise<void> {
+  const list = new WorkflowListPage(page)
+  const modal = new ConfirmationModalComponent(page)
+
+  await openWorkflowList(page)
+  await list.searchBy(name)
+  await waitForRowsLoaded(page)
+  const row = page.getByRole("row").filter({ has: page.getByText(name, { exact: true }) })
+  if ((await row.count()) === 0) return
+
+  await list.openRowMenu(row.first())
+  await list.clickRowMenuItem("Delete")
   await modal.clickConfirm()
   await expect(page.getByText("Workflow deleted successfully").first()).toBeVisible({
     timeout: 15_000,

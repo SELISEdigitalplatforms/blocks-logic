@@ -8,6 +8,7 @@ import {
 } from "../../support/filter-fixtures";
 import {
   deleteWorkflowAt,
+  deleteWorkflowNamed,
   importWorkflowFile,
   type ImportedWorkflow,
 } from "../../support/workflow-import";
@@ -62,7 +63,14 @@ test.describe("workflow — Filter node", () => {
 
     const stamp = Date.now();
     const created: ImportedWorkflow[] = [];
+    // Names of every import started, so cleanup also finds a workflow whose import never reached its editor.
+    const importedNames: string[] = [];
     let primaryFailure = false;
+
+    const importTracked = async (...args: Parameters<typeof importWorkflowFile>) => {
+      importedNames.push(args[1].name);
+      return importWorkflowFile(...args);
+    };
 
     /** Open a node's inspector on the Editor tab. */
     const openInEditor = async (name: string) => {
@@ -123,7 +131,7 @@ test.describe("workflow — Filter node", () => {
 
       const main =
         await test.step("[Setup] Import the §10 fixture: Webhook → Set Field, and After (not connected yet)", async () => {
-          const imported = await importWorkflowFile(page, mainWorkflowFile(`E2E Filter ${stamp}`));
+          const imported = await importTracked(page, mainWorkflowFile(`E2E Filter ${stamp}`));
           created.push(imported);
           await expect(editor.canvasNode(WEBHOOK)).toBeVisible();
           await expect(editor.canvasNode(SET_FIELD)).toBeVisible();
@@ -368,7 +376,7 @@ test.describe("workflow — Filter node", () => {
       // ---- §10 step 6 ----------------------------------------------------------------
 
       await test.step("[C3/C4] Negative: an imported Filter with operator starts_with fails the step and the run with the If/Switch message", async () => {
-        const startsWith = await importWorkflowFile(
+        const startsWith = await importTracked(
           page,
           startsWithWorkflowFile(`E2E Filter starts_with ${stamp}`),
         );
@@ -520,7 +528,7 @@ test.describe("workflow — Filter node", () => {
       // ---- §10 step 11 ---------------------------------------------------------------
 
       await test.step("[C2] Join: Filter (removes every item) and a second branch feed Merge with Run When = Any; the run completes and Merge runs", async () => {
-        const join = await importWorkflowFile(page, joinWorkflowFile(`E2E Filter join ${stamp}`));
+        const join = await importTracked(page, joinWorkflowFile(`E2E Filter join ${stamp}`));
         created.push(join);
         await expect(editor.canvasNode(MERGE)).toBeVisible();
 
@@ -551,6 +559,13 @@ test.describe("workflow — Filter node", () => {
             await deleteWorkflowAt(page, workflow);
           } catch (error) {
             problems.push(`${workflow.name} (${workflow.url}): ${(error as Error).message}`);
+          }
+        }
+        for (const name of importedNames.filter((n) => !created.some((w) => w.name === n))) {
+          try {
+            await deleteWorkflowNamed(page, name);
+          } catch (error) {
+            problems.push(`${name}: ${(error as Error).message}`);
           }
         }
         if (problems.length === 0) return;

@@ -335,6 +335,8 @@ export class WorkflowEditorPage {
    */
   async startTestListener(): Promise<void> {
     if (await this.stopWorkflowButton.isVisible()) {
+      // The listener can finish on its own between the check and the click; the wait below is the
+      // real check that the play button is back.
       await this.stopWorkflowButton.click({ timeout: 5_000 }).catch(() => undefined);
     }
     await expect(this.executeWorkflowButton).toBeEnabled({ timeout: 30_000 });
