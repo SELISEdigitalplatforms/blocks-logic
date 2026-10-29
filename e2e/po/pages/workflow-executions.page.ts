@@ -81,10 +81,12 @@ export class WorkflowExecutionsPage {
 
   /** Log rows of one node: the row's node chip is a button "<name>" or "<name>#<run>". */
   nodeLogRows(nodeName: string): Locator {
-    const escaped = nodeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return this.logRows.filter({
-      has: this.page.getByRole("button", { name: new RegExp(`^${escaped}(#\\d+)?$`) }),
-    });
+    // String matchers only (no RegExp built from the name): the exact name, or "<name>#" followed
+    // by the run number (a substring match: no node name in these specs contains another's + "#").
+    const chip = this.page
+      .getByRole("button", { name: nodeName, exact: true })
+      .or(this.page.getByRole("button", { name: `${nodeName}#` }));
+    return this.logRows.filter({ has: chip });
   }
 
   async openLogs(): Promise<void> {
