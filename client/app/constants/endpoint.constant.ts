@@ -17,6 +17,7 @@ export const API_BASES = {
   WORKFLOW: "/api",
   LOCALIZATION: getRuntimeEnv("BLOCKS_LOCALIZATION_BASE_URL") + "/api",
   LOGIC: getLogicBaseUrl() + "/api",
+  OS: getRuntimeEnv("BLOCKS_OS_BASE_URL") + "/api",
 } as const;
 
 

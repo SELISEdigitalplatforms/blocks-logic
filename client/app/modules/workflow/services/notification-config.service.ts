@@ -35,11 +35,11 @@ export const toNotificationReceiver = (value: unknown): NotificationReceiver =>
     : "none";
 
 class NotificationConfigService {
-  private readonly LogicHttpClient = serviceInstances.logicService;
+  private readonly OsHttpClient = serviceInstances.osService;
 
   /** Every notification configuration of the current project (page size 0 means all). */
   fetchConfigurations = async (): Promise<INotificationConfig[]> => {
-    const res = await this.LogicHttpClient.get<RawNotificationConfigsResponse | null>(
+    const res = await this.OsHttpClient.get<RawNotificationConfigsResponse | null>(
       `${NOTIFICATION_CONFIG_ENDPOINTS.GET_CONFIGS}?Page=0&PageSize=0`,
       undefined,
       { absoluteUrl: true },

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 
 vi.mock("@/lib/http-client", () => ({
-  serviceInstances: { logicService: { get } },
+  serviceInstances: { osService: { get } },
 }));
 
 import { notificationConfigService, toNotificationReceiver } from "./notification-config.service";
