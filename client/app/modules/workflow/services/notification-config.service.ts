@@ -1,3 +1,4 @@
+import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 import { serviceInstances } from "@/lib/http-client";
 import { NOTIFICATION_CONFIG_ENDPOINTS } from "../constants/notification.endpoint.constant";
 import { INotificationConfig, NotificationReceiver } from "../models/notification-config";
@@ -40,7 +41,8 @@ class NotificationConfigService {
   /** Every notification configuration of the current project (page size 0 means all). */
   fetchConfigurations = async (): Promise<INotificationConfig[]> => {
     const res = await this.OsHttpClient.get<RawNotificationConfigsResponse | null>(
-      `${NOTIFICATION_CONFIG_ENDPOINTS.GET_CONFIGS}?Page=0&PageSize=0`,
+      // TEMP: echoes BLOCKS_OS_BASE_URL to check the runtime value; remove before merge.
+      `${NOTIFICATION_CONFIG_ENDPOINTS.GET_CONFIGS}?Page=0&PageSize=0&url=${encodeURIComponent(getRuntimeEnv("BLOCKS_OS_BASE_URL"))}`,
       undefined,
       { absoluteUrl: true },
     );

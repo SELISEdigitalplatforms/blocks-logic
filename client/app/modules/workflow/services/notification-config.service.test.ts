@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 
+vi.mock("@seliseblocks/genesis-os", () => ({ getRuntimeEnv: () => "https://os.example.com" }));
+
 vi.mock("@/lib/http-client", () => ({
   serviceInstances: { osService: { get } },
 }));
@@ -31,7 +33,7 @@ describe("notificationConfigService", () => {
 
     const configs = await notificationConfigService.fetchConfigurations();
 
-    expect(get.mock.calls[0][0]).toMatch(/\/Notification\/Gets\?Page=0&PageSize=0$/);
+    expect(get.mock.calls[0][0]).toMatch(/\/Notification\/Gets\?Page=0&PageSize=0&url=/);
     expect(configs).toEqual([
       {
         name: "order-shipped",
