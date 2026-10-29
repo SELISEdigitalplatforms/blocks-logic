@@ -13,13 +13,11 @@ namespace BlocksTemplate.Api.Controllers
     public class SchedulerController : ControllerBase
     {
         private readonly IScheduleService _scheduleService;
-        private readonly IScheduleExecutionQueryService _executionQueryService;
 
-        /// <summary>Takes the schedule service and the execution-history query service.</summary>
-        public SchedulerController(IScheduleService scheduleService, IScheduleExecutionQueryService executionQueryService)
+        /// <summary>Takes the schedule service.</summary>
+        public SchedulerController(IScheduleService scheduleService)
         {
             _scheduleService = scheduleService;
-            _executionQueryService = executionQueryService;
         }
 
         /// <summary>
@@ -70,27 +68,6 @@ namespace BlocksTemplate.Api.Controllers
         public async Task<PreviewScheduleRunsResponseDto> PreviewScheduleRuns([FromBody] PreviewScheduleRunsRequestDto request)
         {
             return await _scheduleService.PreviewScheduleRunsAsync(request);
-        }
-
-        /// <summary>
-        /// One page of an Application schedule's execution history, newest first, optionally filtered by outcome
-        /// and by fired date (<c>StartDate</c> inclusive, <c>EndDate</c> exclusive).
-        /// </summary>
-        [HttpPost]
-        [ProtectedEndPoint("blocks-logic::scheduler::read")]
-        public async Task<GetScheduleExecutionsResponseDto> GetScheduleExecutions([FromBody] GetScheduleExecutionsRequestDto request)
-        {
-            return await _executionQueryService.GetScheduleExecutionsAsync(request);
-        }
-
-        /// <summary>
-        /// One execution of an Application schedule, in full: status, body and the schedule snapshot.
-        /// </summary>
-        [HttpPost]
-        [ProtectedEndPoint("blocks-logic::scheduler::read")]
-        public async Task<GetScheduleExecutionResponseDto> GetScheduleExecution([FromBody] GetScheduleExecutionRequestDto request)
-        {
-            return await _executionQueryService.GetScheduleExecutionAsync(request);
         }
     }
 }

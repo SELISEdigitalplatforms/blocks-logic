@@ -15,6 +15,9 @@ namespace Scheduler.DomainService.Services
 {
     public class ScheduleService : IScheduleService
     {
+        private const string ValidationFailed = "validation_failed";
+        private const string InvalidCronMessage = "Cron expression is not valid";
+
         private readonly IScheduleRepository _scheduleRepository;
         private readonly IMessageClient _messageClient;
         private readonly ILogger<ScheduleService> _logger;
@@ -39,11 +42,11 @@ namespace Scheduler.DomainService.Services
             var isValidCronExp = Helper.IsValidApplicationCronExpression(request.CronExpression);
             if (!isValidCronExp)
             {
-                return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");
+                return CreateMutationErrorResponse(ValidationFailed, InvalidCronMessage);
             }
             if (!ScheduleTimeZones.TryNormalize(request.TimeZone, out var timeZone))
             {
-                return CreateMutationErrorResponse("validation_failed", ScheduleTimeZones.InvalidMessage);
+                return CreateMutationErrorResponse(ValidationFailed, ScheduleTimeZones.InvalidMessage);
             }
             var schedule = new Schedule
             {
@@ -100,11 +103,11 @@ namespace Scheduler.DomainService.Services
             var isValidCronExp = Helper.IsValidApplicationCronExpression(request.CronExpression);
             if (!isValidCronExp)
             {
-                return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");
+                return CreateMutationErrorResponse(ValidationFailed, InvalidCronMessage);
             }
             if (!ScheduleTimeZones.TryNormalize(request.TimeZone, out var timeZone))
             {
-                return CreateMutationErrorResponse("validation_failed", ScheduleTimeZones.InvalidMessage);
+                return CreateMutationErrorResponse(ValidationFailed, ScheduleTimeZones.InvalidMessage);
             }
             var schedule = await _scheduleRepository.GetByIdAsync(request.ItemId);
             if (schedule is null)
@@ -205,7 +208,7 @@ namespace Scheduler.DomainService.Services
         {
             if (string.IsNullOrWhiteSpace(request.WorkflowId) || string.IsNullOrWhiteSpace(request.NodeId))
             {
-                return CreateMutationErrorResponse("validation_failed", "WorkflowId and NodeId are required");
+                return CreateMutationErrorResponse(ValidationFailed, "WorkflowId and NodeId are required");
             }
 
             var tenantId = string.IsNullOrWhiteSpace(request.TenantId)
@@ -214,7 +217,7 @@ namespace Scheduler.DomainService.Services
 
             if (!Helper.IsValidCronExpression(request.CronExpression))
             {
-                return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");
+                return CreateMutationErrorResponse(ValidationFailed, InvalidCronMessage);
             }
 
             var payload = System.Text.Json.JsonSerializer.Serialize(new
@@ -455,7 +458,7 @@ namespace Scheduler.DomainService.Services
             static PreviewScheduleRunsResponseDto Invalid(string message) => new()
             {
                 IsSuccess = false,
-                Errors = new Dictionary<string, string> { { "validation_failed", message } },
+                Errors = new Dictionary<string, string> { { ValidationFailed, message } },
             };
 
             try
@@ -464,7 +467,7 @@ namespace Scheduler.DomainService.Services
                     || request.CronExpression.Length > MaxPreviewCronLength
                     || !Helper.IsValidApplicationCronExpression(request.CronExpression))
                 {
-                    return Task.FromResult(Invalid("Cron expression is not valid"));
+                    return Task.FromResult(Invalid(InvalidCronMessage));
                 }
                 if (!ScheduleTimeZones.TryNormalize(request.TimeZone, out var timeZone))
                 {

@@ -96,16 +96,24 @@ namespace XUnitTest.Scheduler
         }
 
         [Theory]
-        [InlineData(nameof(SchedulerController.GetScheduleExecutions))]
-        [InlineData(nameof(SchedulerController.GetScheduleExecution))]
-        [InlineData(nameof(SchedulerController.PreviewScheduleRuns))]
-        public void Actions_ArePostAndNeedSchedulerRead(string action)
+        [InlineData(typeof(ScheduleExecutionsController), nameof(ScheduleExecutionsController.GetScheduleExecutions))]
+        [InlineData(typeof(ScheduleExecutionsController), nameof(ScheduleExecutionsController.GetScheduleExecution))]
+        [InlineData(typeof(SchedulerController), nameof(SchedulerController.PreviewScheduleRuns))]
+        public void Actions_ArePostAndNeedSchedulerRead(Type controller, string action)
         {
-            var method = typeof(SchedulerController).GetMethod(action)!;
+            var method = controller.GetMethod(action)!;
 
             method.GetCustomAttribute<HttpPostAttribute>().Should().NotBeNull();
             method.GetCustomAttribute<ProtectedEndPointAttribute>()!.ResourceName.Should().Be("blocks-logic::scheduler::read");
-            typeof(SchedulerController).GetCustomAttribute<ApiControllerAttribute>().Should().NotBeNull();
+            controller.GetCustomAttribute<ApiControllerAttribute>().Should().NotBeNull();
+        }
+
+        [Fact]
+        public void HistoryActions_KeepTheSchedulerRoute()
+        {
+            // Split out of SchedulerController; the client still calls /api/Scheduler/GetScheduleExecution(s).
+            typeof(ScheduleExecutionsController).GetCustomAttribute<RouteAttribute>()!.Template.Should().Be("Scheduler/[action]");
+            typeof(SchedulerController).GetCustomAttribute<RouteAttribute>()!.Template.Should().Be("[controller]/[action]");
         }
     }
 }

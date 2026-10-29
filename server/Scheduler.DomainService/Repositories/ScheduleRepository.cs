@@ -94,7 +94,7 @@ namespace Scheduler.DomainService.Repositories
         }
 
         private static bool IsZero(BsonValue value) =>
-            (value.IsNumeric && value.ToDouble() == 0) || (value.IsBoolean && !value.AsBoolean);
+            (value.IsNumeric && Math.Abs(value.ToDouble()) < double.Epsilon) || (value.IsBoolean && !value.AsBoolean);
 
         public async Task<Schedule?> GetByIdAsync(string scheduleId, string tenantId = "")
         {

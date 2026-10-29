@@ -113,52 +113,13 @@ namespace Scheduler.DomainService.Services
 
             try
             {
-                var payload = schedule.Payload ?? string.Empty;
-
-                using var request = new HttpRequestMessage(new HttpMethod(webhook.Method), webhook.Url);
-
-                if (!string.IsNullOrWhiteSpace(payload))
-                {
-                    request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
-                }
-
-                if (webhook.Headers is not null)
-                {
-                    foreach (var header in webhook.Headers)
-                    {
-                        // Content-Type is set on the StringContent itself; ignore any incoming copy.
-                        if (header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        request.Headers.TryAddWithoutValidation(header.Key, header.Value);
-                    }
-                }
-
-                if (!string.IsNullOrEmpty(webhook.SigningSecret))
-                {
-                    request.Headers.TryAddWithoutValidation("x-signature-sha256", ComputeSignature(webhook.SigningSecret, payload));
-                }
+                using var request = BuildWebhookRequest(webhook, schedule.Payload ?? string.Empty);
 
                 firedUtc = UtcNow();
                 using var response = await _httpClient.SendAsync(request);
                 status = (int)response.StatusCode;
                 body = await ReadBodyAsync(response);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    // Log only — webhook deliveries are fire-and-forget; Hangfire must not retry.
-                    _logger.LogWarning(
-                        "Webhook for schedule {ItemId} to host {Host} returned non-success status code {StatusCode} ({ReasonPhrase}).",
-                        schedule.ItemId, WebhookHost(webhook.Url), (int)response.StatusCode, response.ReasonPhrase);
-                }
-                else
-                {
-                    _logger.LogInformation(
-                        "Webhook for schedule {ItemId} delivered with status code {StatusCode}.",
-                        schedule.ItemId, (int)response.StatusCode);
-                }
+                LogWebhookResponse(schedule, webhook, response);
             }
             catch (HttpRequestException ex)
             {
@@ -195,6 +156,46 @@ namespace Scheduler.DomainService.Services
 
             // The body was read inside the try (before this point), so the finish time covers it.
             await RecordAsync(schedule, tenantId, firedUtc, UtcNow(), status, body);
+        }
+
+        /// <summary>The webhook call: JSON payload, the configured headers (Content-Type excepted) and the signature.</summary>
+        private static HttpRequestMessage BuildWebhookRequest(WebhookConfiguration webhook, string payload)
+        {
+            var request = new HttpRequestMessage(new HttpMethod(webhook.Method), webhook.Url);
+
+            if (!string.IsNullOrWhiteSpace(payload))
+            {
+                request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+            }
+
+            // Content-Type is set on the StringContent itself; ignore any incoming copy.
+            foreach (var header in (webhook.Headers ?? Enumerable.Empty<KeyValuePair<string, string>>()).Where(h => !h.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)))
+            {
+                request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+
+            if (!string.IsNullOrEmpty(webhook.SigningSecret))
+            {
+                request.Headers.TryAddWithoutValidation("x-signature-sha256", ComputeSignature(webhook.SigningSecret, payload));
+            }
+
+            return request;
+        }
+
+        private void LogWebhookResponse(Schedule schedule, WebhookConfiguration webhook, HttpResponseMessage response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                // Log only — webhook deliveries are fire-and-forget; Hangfire must not retry.
+                _logger.LogWarning(
+                    "Webhook for schedule {ItemId} to host {Host} returned non-success status code {StatusCode} ({ReasonPhrase}).",
+                    schedule.ItemId, WebhookHost(webhook.Url), (int)response.StatusCode, response.ReasonPhrase);
+                return;
+            }
+
+            _logger.LogInformation(
+                "Webhook for schedule {ItemId} delivered with status code {StatusCode}.",
+                schedule.ItemId, (int)response.StatusCode);
         }
 
         internal static string ComputeSignature(string secret, string payload)

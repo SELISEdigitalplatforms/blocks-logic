@@ -110,6 +110,9 @@ namespace XUnitTest.Controllers
             Row(typeof(SchedulerController), "UpdateSchedule", L + "scheduler::manage"),
             Row(typeof(SchedulerController), "DeleteSchedule", L + "scheduler::manage"),
             Row(typeof(SchedulerController), "GetSchedules", L + "scheduler::read"),
+            Row(typeof(SchedulerController), "PreviewScheduleRuns", L + "scheduler::read"),
+            Row(typeof(ScheduleExecutionsController), "GetScheduleExecutions", L + "scheduler::read"),
+            Row(typeof(ScheduleExecutionsController), "GetScheduleExecution", L + "scheduler::read"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "GetAll", L + "workflow::read"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "Get", L + "workflow::read"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "Create", L + "workflow::manage"),
@@ -148,7 +151,7 @@ namespace XUnitTest.Controllers
         [Fact]
         public void NewLogicPermissionListIsComplete()
         {
-            NewLogicPermissions().Should().HaveCount(55, "push-web-config added 2026-10-28");
+            NewLogicPermissions().Should().HaveCount(58, "schedule preview runs and execution history (list, detail) added 2026-10-29");
             NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(15, "mail::send-any was split from mail::manage, 2026-10-28");
         }
 
