@@ -38,7 +38,7 @@ namespace Mail.DomainService.Mails
             LogRequested("SendToAny", request);
 
             // The console's "send test mail" button: it may reach only the person pressing it.
-            if (request?.IsTestMail == true && !IsOnlyTheCaller(request))
+            if (request?.IsTestMail == true && !await IsOnlyTheCallerAsync(request))
             {
                 return new BaseMutationResponse
                 {
@@ -75,16 +75,49 @@ namespace Mail.DomainService.Mails
             return await ProcessMailSent(await MapAsync(request, onlyUser: false));
         }
 
-        private static bool IsOnlyTheCaller(BaseMailRequest request)
+        private async Task<bool> IsOnlyTheCallerAsync(BaseMailRequest request)
         {
-            var own = BlocksContext.GetContext()?.Email;
-            if (string.IsNullOrWhiteSpace(own) || request.To is null || !request.To.Any())
+            if (request.To is null || !request.To.Any())
+            {
+                return false;
+            }
+
+            var own = (await CallerEmailAsync())?.Trim();
+            if (string.IsNullOrEmpty(own))
             {
                 return false;
             }
 
             return request.To.Concat(request.Cc ?? []).Concat(request.Bcc ?? [])
                 .All(address => string.Equals(address?.Trim(), own, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// The caller's own address. IAM access tokens carry no email claim, so a Blocks user's address is
+        /// read from their user record; only a third-party token brings a mapped email of its own.
+        /// </summary>
+        private async Task<string?> CallerEmailAsync()
+        {
+            var context = BlocksContext.GetContext();
+            if (!string.IsNullOrWhiteSpace(context?.Email))
+            {
+                return context.Email;
+            }
+
+            if (string.IsNullOrWhiteSpace(context?.UserId))
+            {
+                return null;
+            }
+
+            // An impersonating console user is a user of the root tenant, not of the project it acts in:
+            // the same tenant Genesis reads the caller's permissions from.
+            var tenantId = context.Impersonated && !string.IsNullOrEmpty(context.OriginalTenantId)
+                ? context.OriginalTenantId
+                : context.TenantId;
+
+            return string.IsNullOrWhiteSpace(tenantId)
+                ? null
+                : await _mailRepository.GetUserEmailAsync(tenantId, context.UserId);
         }
 
         private void LogRequested(string mode, BaseMailRequest? request)
