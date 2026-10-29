@@ -8,10 +8,35 @@ import { SwitchConditionList } from "./switch-condition-list";
 export type FilterConditionsValue = { conditions: Condition[]; conditionType: unknown };
 
 // .NET char.IsWhiteSpace, which string.Trim and the enum parser use. Unlike JS \s it has U+0085 and not U+FEFF.
-const DOTNET_SPACE = "[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]";
-const TRIM = new RegExp(`^${DOTNET_SPACE}+|${DOTNET_SPACE}+$`, "g");
+// Matched one code unit at a time (no regex), so trimming stays linear on any input.
+const DOTNET_SPACES = new Set(["\t", "\n", "\v", "\f", "\r", " ", "\u0085", "\u00a0", "\u1680", "\u2028", "\u2029", "\u202f", "\u205f", "\u3000"]);
+const isDotnetSpace = (ch: string) => DOTNET_SPACES.has(ch) || (ch >= "\u2000" && ch <= "\u200a");
+
+/** string.Trim(): drops .NET white space from both ends. */
+const dotnetTrim = (text: string): string => {
+  let start = 0;
+  let end = text.length;
+  while (start < end && isDotnetSpace(text.charAt(start))) start++;
+  while (end > start && isDotnetSpace(text.charAt(end - 1))) end--;
+  return text.slice(start, end);
+};
+
 // Int32.Parse (NumberStyles.Integer) after Trim: a sign, ASCII digits, trailing white space and trailing NULs.
-const INTEGER_TEXT = /^[+-]?[0-9]+[\t\n\v\f\r ]*\0*$/;
+const INTEGER_TRAILING_SPACES = new Set(["\t", "\n", "\v", "\f", "\r", " "]);
+const isAsciiDigit = (ch: string) => ch >= "0" && ch <= "9";
+
+/** The value of trimmed integer text as Int32.Parse reads it, or undefined when the text is not integer text. */
+const parseIntegerText = (text: string): number | undefined => {
+  let i = text.charAt(0) === "+" || text.charAt(0) === "-" ? 1 : 0;
+  const digitsStart = i;
+  while (i < text.length && isAsciiDigit(text.charAt(i))) i++;
+  if (i === digitsStart) return undefined;
+  const value = Number(text.slice(0, i));
+  while (i < text.length && INTEGER_TRAILING_SPACES.has(text.charAt(i))) i++;
+  while (i < text.length && text.charAt(i) === "\0") i++;
+  return i === text.length ? value : undefined;
+};
+
 const NAME = /^(and|or)$/i;
 const TWO_POW_32 = 2 ** 32;
 
@@ -27,9 +52,10 @@ const TWO_POW_32 = 2 ** 32;
 export const isOrConditionType = (value: unknown): boolean => {
   if (typeof value === "number") return Number.isSafeInteger(value) && ((value % TWO_POW_32) + TWO_POW_32) % TWO_POW_32 === 1;
   if (typeof value !== "string") return false;
-  const text = value.replace(TRIM, "");
-  if (INTEGER_TEXT.test(text)) return Number(text.replace(/[\t\n\v\f\r \0]+$/, "")) === 1;
-  const names = text.split(",").map((part) => part.replace(TRIM, ""));
+  const text = dotnetTrim(value);
+  const integer = parseIntegerText(text);
+  if (integer !== undefined) return integer === 1;
+  const names = text.split(",").map((part) => dotnetTrim(part));
   return names.every((name) => NAME.test(name)) && names.some((name) => name.toLowerCase() === "or");
 };
 

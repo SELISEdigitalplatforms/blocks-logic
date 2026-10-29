@@ -116,10 +116,14 @@ namespace XUnitTest.Workflow
             {
                 var items = Items(size);
                 var ifNode = new LogicIfV1Node();
+                var run = await ifNode.RunAsync(Context(items));
+                run.IsSuccess.Should().BeTrue(run.ErrorMessage);
+                run.OutputItems.Should().NotBeEmpty($"If v1 routes the n={size} items");
                 for (var i = 0; i < WarmUpRuns; i++) await TimeOnce(ifNode, items);
                 var samples = new List<double>();
                 for (var i = 0; i < MeasuredRuns; i++) samples.Add(await TimeOnce(ifNode, items));
-                Report("If v1", size, samples);
+                samples.Should().HaveCount(MeasuredRuns);
+                Report("If v1", size, samples).Should().BePositive($"n={size}");
             }
         }
 
