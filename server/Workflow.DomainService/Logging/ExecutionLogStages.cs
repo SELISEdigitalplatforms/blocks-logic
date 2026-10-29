@@ -45,6 +45,7 @@ namespace Workflow.DomainService.Logging
         public const string TriggerRead = "node.trigger.read";
         public const string IfEvaluated = "node.if.evaluated";
         public const string SwitchEvaluated = "node.switch.evaluated";
+        public const string FilterApplied = "node.filter.applied";
         public const string SplitOutApplied = "node.splitOut.applied";
         public const string SplitOutFieldNotFound = "node.splitOut.fieldNotFound";
         public const string MergeApplied = "node.merge.applied";

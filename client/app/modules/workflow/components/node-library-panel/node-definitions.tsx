@@ -16,6 +16,7 @@ import {
 	Split,
 	Signpost,
 	Merge,
+	Filter,
 } from "lucide-react";
 import { deriveMergeHandle } from "@blocks-workflow/utils/merge-handles";
 import { deriveSwitchHandle, switchHandleLabel } from "@blocks-workflow/utils/switch-handles";
@@ -202,6 +203,20 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		},
 		deriveHandle: deriveSwitchHandle,
 		handleLabel: switchHandleLabel,
+	},
+	{
+		id: "logic-filter-v2",
+		icon: <Filter className="h-5 w-5 text-success" />,
+		title: "Filter",
+		description: "Keep only the items that match the conditions.",
+		type: "filter",
+		category: "logic",
+		version: "v2",
+		defaultName: "Filter",
+		handle: {
+			sources: [{ key: "source", label: "" }],
+			targets: [{ key: "target", label: "" }],
+		},
 	},
 	{
 		id: "transform-setfield-v2",
