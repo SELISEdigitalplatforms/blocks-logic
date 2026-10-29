@@ -107,6 +107,38 @@ namespace XUnitTest.Scheduler
             result.Errors.Should().Equal(new Dictionary<string, string> { ["Message"] = "Something went wrong" });
         }
 
+        [Fact]
+        public async Task Errors_LogTheStoredScheduleId_NeverTheRequestValue()
+        {
+            // A request id carrying a forged log line: the guard's read still finds the stored schedule.
+            const string forged = "s1\r\n2026-10-29 INFO forged entry";
+            _schedules.Setup(r => r.GetByIdAsync(forged, It.IsAny<string>()))
+                .ReturnsAsync(new Schedule { ItemId = "s1", Kind = ScheduleKind.Application });
+            _executions.Setup(r => r.CountAsync(It.IsAny<ScheduleExecutionFilter>())).ThrowsAsync(new TimeoutException());
+            _executions.Setup(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>())).ThrowsAsync(new TimeoutException());
+
+            await _service.GetScheduleExecutionsAsync(new GetScheduleExecutionsRequestDto { ScheduleId = forged });
+            await _service.GetScheduleExecutionAsync(new GetScheduleExecutionRequestDto { ScheduleId = forged, ExecutionId = "e1\nforged" });
+
+            var messages = _logger.Invocations
+                .Where(i => i.Method.Name == nameof(ILogger.Log))
+                .Select(i => i.Arguments[2]?.ToString() ?? string.Empty)
+                .ToList();
+            messages.Should().HaveCount(2).And.OnlyContain(m => m.Contains("schedule s1.") && !m.Contains("forged"));
+            _executions.Verify(r => r.GetByIdAsync("s1", "e1\nforged"), Times.Once);
+        }
+
+        [Fact]
+        public async Task Errors_BeforeTheScheduleLoads_LogNoId()
+        {
+            _schedules.Setup(r => r.GetByIdAsync(It.IsAny<string>(), It.IsAny<string>())).ThrowsAsync(new TimeoutException());
+
+            await _service.GetScheduleExecutionsAsync(new GetScheduleExecutionsRequestDto { ScheduleId = "s1\nforged" });
+
+            var message = _logger.Invocations.Single(i => i.Method.Name == nameof(ILogger.Log)).Arguments[2]?.ToString();
+            message.Should().Be("Failed to list executions of schedule (not loaded).");
+        }
+
         // ---------- Paging and filters ----------
 
         [Fact]

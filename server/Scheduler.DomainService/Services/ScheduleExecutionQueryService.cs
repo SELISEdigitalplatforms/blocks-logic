@@ -32,11 +32,16 @@ namespace Scheduler.DomainService.Services
             _logger = logger;
         }
 
+        private const string NotLoaded = "(not loaded)";
+
         public async Task<GetScheduleExecutionsResponseDto> GetScheduleExecutionsAsync(GetScheduleExecutionsRequestDto request)
         {
+            // Logs carry the id as stored, once the schedule is loaded, never the raw request value (log forging).
+            string? scheduleId = null;
             try
             {
-                if (!await IsApplicationScheduleAsync(request.ScheduleId))
+                scheduleId = await LoadApplicationScheduleIdAsync(request.ScheduleId);
+                if (scheduleId is null)
                 {
                     return new GetScheduleExecutionsResponseDto { Errors = NotFound("Schedule not found") };
                 }
@@ -49,7 +54,7 @@ namespace Scheduler.DomainService.Services
                 }
                 else if (request.Outcome == Failed)
                 {
-                    statuses = await FailureStatusesAsync(request.ScheduleId);
+                    statuses = await FailureStatusesAsync(scheduleId);
                     if (statuses is null)
                     {
                         nonSuccessRange = true;
@@ -62,7 +67,7 @@ namespace Scheduler.DomainService.Services
                 }
 
                 var filter = new ScheduleExecutionFilter(
-                    request.ScheduleId,
+                    scheduleId,
                     statuses,
                     request.StartDate is { } start ? GetScheduleExecutionsRequestDto.ToUtc(start) : null,
                     request.EndDate is { } end ? GetScheduleExecutionsRequestDto.ToUtc(end) : null,
@@ -80,21 +85,24 @@ namespace Scheduler.DomainService.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to list executions of schedule {ScheduleId}.", request.ScheduleId);
+                _logger.LogError(ex, "Failed to list executions of schedule {ScheduleId}.", scheduleId ?? NotLoaded);
                 return new GetScheduleExecutionsResponseDto { Errors = SomethingWentWrong() };
             }
         }
 
         public async Task<GetScheduleExecutionResponseDto> GetScheduleExecutionAsync(GetScheduleExecutionRequestDto request)
         {
+            // As above: only stored ids reach the log, never the request's values.
+            string? scheduleId = null;
             try
             {
-                if (!await IsApplicationScheduleAsync(request.ScheduleId))
+                scheduleId = await LoadApplicationScheduleIdAsync(request.ScheduleId);
+                if (scheduleId is null)
                 {
                     return new GetScheduleExecutionResponseDto { Errors = NotFound("Schedule not found") };
                 }
 
-                var row = await _executionRepository.GetByIdAsync(request.ScheduleId, request.ExecutionId);
+                var row = await _executionRepository.GetByIdAsync(scheduleId, request.ExecutionId);
                 if (row is null)
                 {
                     return new GetScheduleExecutionResponseDto { Errors = NotFound("Execution not found") };
@@ -104,19 +112,19 @@ namespace Scheduler.DomainService.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to read execution {ExecutionId} of schedule {ScheduleId}.", request.ExecutionId, request.ScheduleId);
+                _logger.LogError(ex, "Failed to read an execution of schedule {ScheduleId}.", scheduleId ?? NotLoaded);
                 return new GetScheduleExecutionResponseDto { Errors = SomethingWentWrong() };
             }
         }
 
         /// <summary>
-        /// The schedule guard: the same not-found answer for a missing, denied, Internal or other-tenant schedule
-        /// (the read goes to the caller's own DB through data access).
+        /// The schedule guard: the same not-found answer (null) for a missing, denied, Internal or other-tenant
+        /// schedule (the read goes to the caller's own DB through data access). Returns the id as stored.
         /// </summary>
-        private async Task<bool> IsApplicationScheduleAsync(string scheduleId)
+        private async Task<string?> LoadApplicationScheduleIdAsync(string scheduleId)
         {
             var schedule = await _scheduleRepository.GetByIdAsync(scheduleId);
-            return schedule is not null && schedule.Kind == ScheduleKind.Application;
+            return schedule is not null && schedule.Kind == ScheduleKind.Application ? schedule.ItemId : null;
         }
 
         /// <summary>
