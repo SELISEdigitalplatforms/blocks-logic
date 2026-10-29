@@ -98,6 +98,7 @@ namespace XUnitTest.Scheduler
         [Theory]
         [InlineData(nameof(SchedulerController.GetScheduleExecutions))]
         [InlineData(nameof(SchedulerController.GetScheduleExecution))]
+        [InlineData(nameof(SchedulerController.PreviewScheduleRuns))]
         public void Actions_ArePostAndNeedSchedulerRead(string action)
         {
             var method = typeof(SchedulerController).GetMethod(action)!;

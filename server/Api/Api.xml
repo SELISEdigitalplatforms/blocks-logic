@@ -528,6 +528,11 @@
             Get schedules.
             </summary>
         </member>
+        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.PreviewScheduleRuns(Scheduler.DomainService.Dtos.Requests.PreviewScheduleRunsRequestDto)">
+            <summary>
+            The next fires of a cron in a time zone (and date window), for the schedule form. No database access.
+            </summary>
+        </member>
         <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.GetScheduleExecutions(Scheduler.DomainService.Dtos.Requests.GetScheduleExecutionsRequestDto)">
             <summary>
             One page of an Application schedule's execution history, newest first, optionally filtered by outcome

@@ -63,6 +63,16 @@ namespace BlocksTemplate.Api.Controllers
         }
 
         /// <summary>
+        /// The next fires of a cron in a time zone (and date window), for the schedule form. No database access.
+        /// </summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::scheduler::read")]
+        public async Task<PreviewScheduleRunsResponseDto> PreviewScheduleRuns([FromBody] PreviewScheduleRunsRequestDto request)
+        {
+            return await _scheduleService.PreviewScheduleRunsAsync(request);
+        }
+
+        /// <summary>
         /// One page of an Application schedule's execution history, newest first, optionally filtered by outcome
         /// and by fired date (<c>StartDate</c> inclusive, <c>EndDate</c> exclusive).
         /// </summary>

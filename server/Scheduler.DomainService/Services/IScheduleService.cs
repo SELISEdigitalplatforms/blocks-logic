@@ -12,5 +12,6 @@ namespace Scheduler.DomainService.Services
         Task<BaseMutationResponse> CreateWorkflowScheduleAsync(CreateWorkflowScheduleRequest request);
         Task<BaseResponse> DeleteWorkflowSchedulesAsync(IEnumerable<string> itemIds);
         Task<GetSchedulesResponseDto> GetSchedulesAsync(GetSchedulesRequestDto request);
+        Task<PreviewScheduleRunsResponseDto> PreviewScheduleRunsAsync(PreviewScheduleRunsRequestDto request);
     }
 }
