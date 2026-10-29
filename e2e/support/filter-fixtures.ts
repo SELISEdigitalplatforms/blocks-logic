@@ -79,11 +79,14 @@ const webhookNode = (id: string, x: number, y: number): ImportNode => ({
   position: { x, y },
   handle: { sources: [{ key: "source", label: "" }], targets: [] },
   // node-schema-trigger-webhook-v1.ts defaults + transform (path = node id, authorizationMode).
-  // "immediate" keeps the normal queued run path; authType "none" lets the test POST go anonymous.
+  // "last" runs the whole workflow in-process in the Api that answers the webhook. A PR preview
+  // deploys only the Api image; "immediate" runs are queued to the shared dev Worker, which has no
+  // Filter executor until this change is merged, so the Filter step would fail there.
+  // authType "none" lets the test POST go anonymous.
   parameters: {
     httpMethod: "POST",
     authType: "none",
-    httpResponseMode: "immediate",
+    httpResponseMode: "last",
     httpResponseData: "all",
     organizationId: "",
     roles: { operator: "all", values: [] },
