@@ -216,7 +216,7 @@ Key store actions: `addNode`, `updateNode`, `deleteNode`, `duplicateNode`, `sele
 | Category    | Node Types                                                        |
 | ----------- | ----------------------------------------------------------------- |
 | **Trigger** | `webhook`, `email`, `event`, `manual`                             |
-| **Action**  | `httpRequest`, `sendMail`, `agent`, `setfield`, `webhookResponse` |
+| **Action**  | `httpRequest`, `sendMail`, `notification`, `agent`, `setfield`, `webhookResponse` |
 | **Logic**   | `if`                                                              |
 
 Each has a corresponding schema in `components/node-schemas/` (e.g., `node-schema-action-httpRequest-v1.ts`) that feeds the dynamic form builder.
