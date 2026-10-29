@@ -2,10 +2,11 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 
 export const ExecutionSheetLoading = () => (
-  <div className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground" role="status">
+  // <output> carries the "status" role natively.
+  <output className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground">
     <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
     Loading execution…
-  </div>
+  </output>
 );
 
 interface ExecutionSheetErrorProps {
