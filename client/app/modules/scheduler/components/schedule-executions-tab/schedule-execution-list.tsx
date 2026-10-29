@@ -40,6 +40,18 @@ const ColumnHeader = ({ label }: Readonly<{ label: string }>) => (
 const rowLabel = (row: IScheduleExecutionListItem, tz: string) =>
   `Open execution fired at ${row.firedUtc ? formatInZone(row.firedUtc, tz, "datetime") : "unknown time"}`;
 
+/** The list's columns, built outside the component so no render function is redefined per render. */
+export const executionColumns = (tz: string): ColumnDef<IScheduleExecutionListItem>[] => [
+  { id: "firedUtc", header: () => <ColumnHeader label="Fired at" />, cell: (info) => <ZonedTime iso={info.row.original.firedUtc} tz={tz} /> },
+  { id: "outcome", header: () => <ColumnHeader label="Result" />, cell: (info) => <OutcomeBadge outcome={info.row.original.outcome} /> },
+  { id: "status", header: () => <ColumnHeader label="Status" />, cell: (info) => <StatusChip label={statusLabel(info.row.original.status)} /> },
+  {
+    id: "durationMs",
+    header: () => <ColumnHeader label="Duration" />,
+    cell: (info) => <span className="whitespace-nowrap">{formatDuration(info.row.original.durationMs)}</span>,
+  },
+];
+
 export const ScheduleExecutionList = ({
   executions,
   isLoading,
@@ -47,19 +59,7 @@ export const ScheduleExecutionList = ({
   selectedId,
   onSelect,
 }: Readonly<ScheduleExecutionListProps>) => {
-  const columns = useMemo<ColumnDef<IScheduleExecutionListItem>[]>(
-    () => [
-      { id: "firedUtc", header: () => <ColumnHeader label="Fired at" />, cell: (info) => <ZonedTime iso={info.row.original.firedUtc} tz={tz} /> },
-      { id: "outcome", header: () => <ColumnHeader label="Result" />, cell: (info) => <OutcomeBadge outcome={info.row.original.outcome} /> },
-      { id: "status", header: () => <ColumnHeader label="Status" />, cell: (info) => <StatusChip label={statusLabel(info.row.original.status)} /> },
-      {
-        id: "durationMs",
-        header: () => <ColumnHeader label="Duration" />,
-        cell: (info) => <span className="whitespace-nowrap">{formatDuration(info.row.original.durationMs)}</span>,
-      },
-    ],
-    [tz],
-  );
+  const columns = useMemo(() => executionColumns(tz), [tz]);
 
   // TanStack Table returns non-memoizable functions; the React compiler skips this component.
   // eslint-disable-next-line react-hooks/incompatible-library

@@ -29,8 +29,8 @@ export function listStateOf(
 ): ListState {
   if (isLoading) return "list";
   if (data?.errors?.not_found) return "gone";
-  if (isError || (data && !data.isSuccess)) return "error";
-  if (data && data.totalCount === 0 && !data.data?.length) return isFiltered ? "no-match" : "empty";
+  if (isError || data?.isSuccess === false) return "error";
+  if (data?.totalCount === 0 && !data.data?.length) return isFiltered ? "no-match" : "empty";
   return "list";
 }
 

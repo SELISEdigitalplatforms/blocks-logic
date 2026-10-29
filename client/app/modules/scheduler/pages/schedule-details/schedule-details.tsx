@@ -35,21 +35,14 @@ import {
 } from "@/components/ui-kits/tabs/tabs";
 import { Switch } from "@/components/ui-kits/switch/switch";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
-import { formatDate, parseDateString } from "@/lib/utils";
 import { isErrorWithErrors } from "@/lib/error";
 import { useGetScheduleById, useUpdateSchedule } from "../../hooks/use-schedule-api";
 import { ScheduleKind } from "../../types/schedule.service.type";
 import { CRON_PRESETS } from "../../components/schedule-form-dialog/utils";
 import { DeleteScheduleDialog } from "../../components/delete-schedule";
 import { ScheduleExecutionsTab } from "../../components/schedule-executions-tab/schedule-executions-tab";
-import { ZonedTime } from "../../components/schedule-executions-tab/zoned-time";
+import { ScheduleTimingFields } from "../../components/schedule-timing-fields";
 import { UTC } from "../../utils/timezone";
-import { toFormDate } from "../../components/schedule-form-dialog/utils";
-import { localDate } from "../../utils/execution-date-range";
-
-/** UTC dates show exactly as before; another zone shows the calendar day in that zone, same format. */
-const scheduleDate = (iso: string, timeZone: string) =>
-  timeZone === UTC ? formatDate(parseDateString(iso)) : formatDate(localDate(toFormDate(iso, timeZone)));
 
 export const ScheduleDetails = () => {
   const navigate = useNavigate();
@@ -246,30 +239,7 @@ export const ScheduleDetails = () => {
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 border-t pt-3">
-                      <div>
-                        <span className="text-xs font-medium text-muted-foreground">Start Date</span>
-                        <p className="mt-0.5 text-sm font-medium">
-                          {schedule.startDate
-                            ? scheduleDate(schedule.startDate, timeZone)
-                            : "Immediate (No start date)"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-xs font-medium text-muted-foreground">End Date</span>
-                        <p className="mt-0.5 text-sm font-medium">
-                          {schedule.endDate
-                            ? scheduleDate(schedule.endDate, timeZone)
-                            : "Indefinite (No end date)"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-xs font-medium text-muted-foreground">Next run</span>
-                        <p className="mt-0.5 text-sm font-medium">
-                          <ZonedTime iso={schedule.nextRunAtUtc} tz={timeZone} />
-                        </p>
-                      </div>
-                    </div>
+                    <ScheduleTimingFields schedule={schedule} />
                   </CardContent>
                 </Card>
 
