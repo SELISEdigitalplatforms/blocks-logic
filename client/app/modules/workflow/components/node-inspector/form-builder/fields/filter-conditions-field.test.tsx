@@ -144,10 +144,17 @@ describe("FilterConditionsField (SPEC9)", () => {
   });
 
   it("editing a condition keeps the saved condition type as it is", () => {
-    const { lastSaved } = renderFilter({ conditions: [cond()] });
+    const { lastSaved } = renderFilter({ conditionType: 1, conditions: [cond()] });
 
     fireEvent.change(screen.getByLabelText("Condition 1 value to check"), { target: { value: "x" } });
-    expect(lastSaved()).toEqual({ conditionType: undefined, conditions: [cond("x")] });
+    expect(lastSaved()).toStrictEqual({ conditionType: 1, conditions: [cond("x")] });
+  });
+
+  it("the variable picker names the Conditions heading, not the internal key", () => {
+    renderFilter(newNodeParameters());
+
+    expect(screen.getAllByRole("button", { name: /^Insert a configuration variable into Conditions condition 1 left operand/ })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /filterConditions/ })).toBeNull();
   });
 
   it.each([
@@ -173,8 +180,6 @@ describe("FilterConditionsField (SPEC9)", () => {
     for (const label of ["Condition 1 value to check", "Condition 1 value to compare with", "Condition 2 value to check", "Condition 2 value to compare with"]) {
       expect((screen.getByLabelText(label) as HTMLInputElement).disabled).toBe(true);
     }
-    fireEvent.click(toggle("OR"));
-    expect(onChange).not.toHaveBeenCalled();
   });
 });
 

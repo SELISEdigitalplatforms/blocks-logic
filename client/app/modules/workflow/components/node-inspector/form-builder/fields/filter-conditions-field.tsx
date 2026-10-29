@@ -19,7 +19,9 @@ export const FilterConditionsField = ({ field, onChange, readOnly, data }: Field
 
   return (
     <SwitchConditionList
-      field={field}
+      // The schema field has no label (the list shows its own heading); the variable picker names its
+      // target from the label, so give it the heading instead of the internal key.
+      field={{ ...field, label: field.label || "Conditions" }}
       idPrefix={field.id}
       conditions={conditions}
       conditionType={typeof conditionType === "string" ? conditionType : ""}

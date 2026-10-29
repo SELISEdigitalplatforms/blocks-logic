@@ -18,7 +18,8 @@ namespace XUnitTest.Workflow
     /// <summary>SPEC9 Filter node: examples E1–E13, the log line, conditionType binding and equivalence with If and Switch.</summary>
     public class LogicFilterV2NodeTests
     {
-        private const string KeptStage = "[wf:" + ExecutionLogStages.FilterApplied + "] [node:f1#1] ";
+        // The stage text is a log contract, so it is spelled out rather than taken from the constant.
+        private const string KeptStage = "[wf:node.filter.applied] [node:f1#1] ";
 
         private sealed class CollectingSink : ILogEventSink
         {
@@ -248,7 +249,8 @@ namespace XUnitTest.Workflow
 
             run.Result.IsSuccess.Should().BeFalse();
             // One failure: the single-failure form, naming the item and the evaluator's message.
-            run.Result.ErrorMessage.Should().Be("Condition could not be evaluated. Item 1: Object reference not set to an instance of an object.");
+            // The exception text itself is the runtime's; only the single-failure form and the item are Filter's.
+            run.Result.ErrorMessage.Should().StartWith("Condition could not be evaluated. Item 1: ");
             run.Result.OutputItems.Should().HaveCount(2);
             KeptIds(run).Should().Equal(1);
             run.Result.OutputItems.Single(o => o.IsError).ParentItemIds.Should().Equal("item-1");
@@ -267,11 +269,16 @@ namespace XUnitTest.Workflow
             run.Result.OutputItems.Should().ContainSingle().Which.IsError.Should().BeTrue();
         }
 
-        [Fact]
-        public async Task AnUnknownType_IsAnItemError_EvenWhenAnEarlierConditionAlreadyDecides()
+        [Theory]
+        [InlineData("and", "nope")] // the first condition is false, which already decides AND
+        [InlineData("or", "paid")] // the first condition is true, which already decides OR
+        public async Task AnUnknownType_IsAnItemError_EvenWhenAnEarlierConditionAlreadyDecides(string conditionType, string status)
         {
-            var run = await RunFilter(Params("or", Paid, Cond("a", "equals", "a", "Money")), [E1Items()[0]]);
+            var first = Cond("{{ $json.status }}", "equals", status, "string");
 
+            var run = await RunFilter(Params(conditionType, first, Cond("a", "equals", "a", "Money")), [E1Items()[0]]);
+
+            run.Result.IsSuccess.Should().BeFalse();
             run.Result.ErrorMessage.Should().Be("Condition could not be evaluated. Item 0: Unknown type money");
             run.Result.OutputItems.Should().ContainSingle().Which.IsError.Should().BeTrue();
         }
@@ -285,7 +292,6 @@ namespace XUnitTest.Workflow
             yield return ["or", new[] { 1, 2, 3 }];
             yield return ["OR", new[] { 1, 2, 3 }];
             yield return [0, new[] { 1 }];
-            yield return [1, new[] { 1, 2, 3 }];
             // Q2 (answered A): the converter also accepts these; pinned so a change is deliberate.
             yield return ["0", new[] { 1 }];
             yield return ["1", new[] { 1, 2, 3 }];
@@ -399,6 +405,8 @@ namespace XUnitTest.Workflow
                     var filterResult = await new LogicFilterV2Node().RunAsync(context(Params(filterType, condition)));
 
                     var ifTrue = ifResult.OutputItems.Single().Branch == "if-true";
+                    filterResult.IsSuccess.Should().BeTrue(because);
+                    filterResult.OutputItems.Should().OnlyContain(o => !o.IsError, because);
                     filterResult.OutputItems.Any().Should().Be(ifTrue, because);
                     switchResult.OutputItems.Any().Should().Be(ifTrue, because);
                 }

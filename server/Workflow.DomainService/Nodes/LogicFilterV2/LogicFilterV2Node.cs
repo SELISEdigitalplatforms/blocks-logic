@@ -30,7 +30,7 @@ namespace Workflow.DomainService.Nodes.LogicFilterV2
             var useOr = parameters.ConditionType == FilterConditionType.Or;
             var outputItems = new List<NodeOutputItem>();
             string? firstError = null;
-            var failedCount = 0;
+            int failedCount = 0, kept = 0;
 
             for (var i = 0; i < context.IterationCount; i++)
             {
@@ -56,6 +56,7 @@ namespace Workflow.DomainService.Nodes.LogicFilterV2
                             Branch = "source",
                             ParentItemIds = new List<string> { inputItem.Id },
                         });
+                        kept++;
                     }
                 }
                 catch (Exception ex)
@@ -68,7 +69,7 @@ namespace Workflow.DomainService.Nodes.LogicFilterV2
 
             // Counts only: never condition text, operands or item values.
             context.Log.Info(ExecutionLogStages.FilterApplied, "Kept {Kept} of {Total} item(s).",
-                outputItems.Count(o => !o.IsError), context.IterationCount);
+                kept, context.IterationCount);
 
             if (firstError != null)
             {
