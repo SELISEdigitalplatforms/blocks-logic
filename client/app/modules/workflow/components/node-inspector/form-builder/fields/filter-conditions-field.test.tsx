@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { FormBuilder } from "../form-builder";
 import { NodeSchemaLogicFilterV2 } from "../../../node-schemas/node-schema-logic-filter-v2";
-import { FilterConditionsField } from "./filter-conditions-field";
+import { FilterConditionsField, isOrConditionType } from "./filter-conditions-field";
 import { SwitchRulesField } from "./switch-rules-field";
 import type { Condition } from "./conditions-field";
 import type { SwitchRule } from "@blocks-workflow/utils/switch-handles";
@@ -180,6 +180,72 @@ describe("FilterConditionsField (SPEC9)", () => {
     for (const label of ["Condition 1 value to check", "Condition 1 value to compare with", "Condition 2 value to check", "Condition 2 value to compare with"]) {
       expect((screen.getByLabelText(label) as HTMLInputElement).disabled).toBe(true);
     }
+  });
+});
+
+describe("Filter conditionType display (Q6: A)", () => {
+  // Every value the server's FilterConditionType converter binds to Or (Newtonsoft 13, probed against the library).
+  const orValues: unknown[] = [1, "1", "OR", "Or", " or", "or", "or ", "oR", "\tor\n", "\u00a0or", "or\u3000", "\u2000or\u205f", "or\u0085"];
+  const orEdgeValues: unknown[] = [
+    " 1 ", "+1", " +1", "01", "+01", "00001", "1\u0000", "1 \u0000", "\u00a01", "\u00851", "\u3000 1",
+    "and,or", "or,and", "or, or", "Or,And", " and , or ", "Or\u00a0,\u00a0and",
+    4294967297, -4294967295, 8589934593,
+  ];
+  // And, an undefined number, or a value the server cannot bind: all show AND.
+  const andValues: unknown[] = [
+    "and", "AND", "And", 0, "0", "-0", 2, "2", -1, "-1", "", " ", null, undefined, true, 1.5, "1.0", "1e0", "0x1", "\uff11",
+    "+ 1", "1,0", "0,1", "1,1", "or,1", "1,or", "or,", ",or", " , or", "or,,and", "or or", "and,and",
+    "or\u200b", "or\ufeff", "\ufeff1", "\u180eor", "or\u001c", "or\u0000", "1\u0000x", "\u0000 1", "-+1", "4294967297",
+    Number.NaN, 2 ** 53, ["or"], { or: true },
+  ];
+
+  it.each(orValues.map((v) => [JSON.stringify(v), v]))("a saved %s shows OR", (_, conditionType) => {
+    renderFilter({ conditionType, conditions: [cond("a"), cond("b")] });
+
+    expect(toggle("OR").getAttribute("aria-pressed")).toBe("true");
+    expect(toggle("AND").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it.each(["and", "AND", 0, "0", 2, "-1", "or,", null].map((v) => [JSON.stringify(v), v]))("a saved %s shows AND", (_, conditionType) => {
+    renderFilter({ conditionType, conditions: [cond("a"), cond("b")] });
+
+    expect(toggle("AND").getAttribute("aria-pressed")).toBe("true");
+    expect(toggle("OR").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("isOrConditionType matches the server binding for the Or values and their edge forms", () => {
+    for (const value of [...orValues, ...orEdgeValues]) expect([value, isOrConditionType(value)]).toEqual([value, true]);
+  });
+
+  it("isOrConditionType is false for And, undefined numbers and values the server rejects", () => {
+    for (const value of andValues) expect([value, isOrConditionType(value)]).toEqual([value, false]);
+  });
+
+  it.each([1, "1", "OR", " or", "and,or", "AND", 2].map((v) => [JSON.stringify(v), v]))(
+    "editing conditions without the toggle saves %s exactly as stored",
+    (_, conditionType) => {
+      const { lastSaved } = renderFilter({ conditionType, conditions: [cond()] });
+
+      fireEvent.change(screen.getByLabelText("Condition 1 value to check"), { target: { value: "x" } });
+      fireEvent.click(screen.getByRole("button", { name: /Add condition/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Remove condition 2" }));
+      expect(lastSaved()).toStrictEqual({ conditionType, conditions: [cond("x")] });
+    },
+  );
+
+  it.each([
+    ["OR", "AND", "and"],
+    [" or", "AND", "and"],
+    [1, "AND", "and"],
+    ["AND", "OR", "or"],
+    [0, "OR", "or"],
+    ["2", "OR", "or"],
+  ] as const)("flipping a saved %j to %s writes %j", (conditionType, name, saved) => {
+    const { lastSaved } = renderFilter({ conditionType, conditions: [cond("a")] });
+
+    fireEvent.click(toggle(name));
+    expect(lastSaved()).toStrictEqual({ conditionType: saved, conditions: [cond("a")] });
+    expect(toggle(name).getAttribute("aria-pressed")).toBe("true");
   });
 });
 
