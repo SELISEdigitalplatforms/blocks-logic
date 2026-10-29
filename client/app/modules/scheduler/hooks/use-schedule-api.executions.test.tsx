@@ -3,7 +3,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactNode } from "react";
 import { scheduleService } from "../services/schedule.service";
-import { useGetScheduleExecution, useGetScheduleExecutions } from "./use-schedule-api";
+import { useGetScheduleExecution, useGetScheduleExecutions, usePreviewScheduleRuns } from "./use-schedule-api";
 
 const makeWrapper = () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -42,5 +42,17 @@ describe("execution hooks", () => {
     renderHook(() => useGetScheduleExecution("s1", ""), { wrapper });
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledWith({ scheduleId: "s1", executionId: "e1" });
+  });
+
+  it("previews runs only when enabled", async () => {
+    const spy = vi.spyOn(scheduleService, "previewScheduleRuns").mockResolvedValue({ isSuccess: true, data: { occurrencesUtc: [] } });
+    const input = { cronExpression: "0 9 * * *", timeZone: null, count: 3 };
+    const wrapper = makeWrapper();
+    renderHook(() => usePreviewScheduleRuns(input, { enabled: false }), { wrapper });
+    expect(spy).not.toHaveBeenCalled();
+
+    const { result } = renderHook(() => usePreviewScheduleRuns(input), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(spy).toHaveBeenCalledWith(input);
   });
 });

@@ -16,5 +16,10 @@ describe("scheduleService executions", () => {
     expect(SCHEDULER_ENDPOINTS.GET_EXECUTION).toMatch(/\/Scheduler\/GetScheduleExecution$/);
     expect(post).toHaveBeenNthCalledWith(1, SCHEDULER_ENDPOINTS.GET_EXECUTIONS, list);
     expect(post).toHaveBeenNthCalledWith(2, SCHEDULER_ENDPOINTS.GET_EXECUTION, { scheduleId: "s1", executionId: "e1" });
+
+    const preview = { cronExpression: "0 9 * * *", timeZone: "Asia/Dhaka", count: 3 };
+    await scheduleService.previewScheduleRuns(preview);
+    expect(SCHEDULER_ENDPOINTS.PREVIEW_RUNS).toMatch(/\/Scheduler\/PreviewScheduleRuns$/);
+    expect(post).toHaveBeenNthCalledWith(3, SCHEDULER_ENDPOINTS.PREVIEW_RUNS, preview);
   });
 });

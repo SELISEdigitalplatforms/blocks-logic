@@ -153,6 +153,14 @@ export class ScheduleDetailsPage {
     await expect(this.page.getByText(label, { exact: true })).toBeVisible();
   }
 
+  async expectEvaluatedIn(timeZone: string): Promise<void> {
+    await expect(this.page.getByText(`Evaluated in ${timeZone}`, { exact: true })).toBeVisible({ timeout: 30_000 });
+  }
+
+  get nextRunLabel(): Locator {
+    return this.page.getByText("Next run", { exact: true });
+  }
+
   get startDateFallback(): Locator {
     return this.page.getByText("Immediate (No start date)");
   }

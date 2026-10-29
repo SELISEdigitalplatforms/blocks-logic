@@ -5,6 +5,8 @@
 
 export type ZonedPattern = "yyyy-MM-dd" | "datetime" | "time";
 
+export const UTC = "UTC";
+
 const EMPTY = "—";
 
 const isValidZone = (tz: string): boolean => {
@@ -21,6 +23,24 @@ const safeZone = (tz: string | null | undefined): string => (tz && isValidZone(t
 
 export function browserTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+type IntlWithZones = typeof Intl & { supportedValuesOf?: (key: "timeZone") => string[] };
+
+/** UTC first, then every zone the runtime knows; just UTC and the browser's zone where it can't list them. */
+export function listTimeZones(): string[] {
+  const supported = (Intl as IntlWithZones).supportedValuesOf;
+  const zones = typeof supported === "function" ? supported("timeZone") : [browserTimeZone()];
+  return [...new Set([UTC, ...zones])];
+}
+
+/** "UTC+06:00" style offset of `tz` at `at`. */
+export function offsetLabel(tz: string, at: Date = new Date()): string {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: safeZone(tz), timeZoneName: "longOffset" })
+    .formatToParts(at)
+    .find((part) => part.type === "timeZoneName")?.value;
+  if (!name || name === "GMT") return "UTC+00:00";
+  return name.replace("GMT", "UTC");
 }
 
 const PATTERN_OPTIONS: Record<ZonedPattern, Intl.DateTimeFormatOptions> = {

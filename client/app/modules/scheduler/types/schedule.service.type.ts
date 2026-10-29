@@ -59,6 +59,20 @@ export interface ICreateSchedulePayload {
   startDate?: string | null;
   endDate?: string | null;
   webhook?: IWebhookConfiguration | null;
+  /** IANA id; null = UTC. Update is a full replace, so omitting it stores UTC. */
+  timeZone?: string | null;
+}
+
+export interface IPreviewScheduleRunsPayload {
+  cronExpression: string;
+  timeZone?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  count: number;
+}
+
+export interface IPreviewScheduleRunsResponse extends IBaseResponse {
+  data: { occurrencesUtc: string[] } | null;
 }
 
 export interface IUpdateSchedulePayload extends ICreateSchedulePayload {

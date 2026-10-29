@@ -3,6 +3,7 @@ import { scheduleService } from "../services/schedule.service";
 import {
   IGetScheduleExecutionsPayload,
   IGetSchedulesPayload,
+  IPreviewScheduleRunsPayload,
 } from "../types/schedule.service.type";
 
 export const useGetSchedules = (payload: IGetSchedulesPayload) => {
@@ -68,6 +69,22 @@ export const useGetScheduleExecution = (
     queryFn: () => scheduleService.getScheduleExecution({ scheduleId, executionId }),
     enabled: enabled && !!scheduleId && !!executionId,
     staleTime: Infinity,
+  });
+};
+
+/**
+ * The next fires of a cron in a time zone. The caller debounces `input`; create/update invalidate the
+ * whole ["schedules"] prefix, which includes these.
+ */
+export const usePreviewScheduleRuns = (
+  input: IPreviewScheduleRunsPayload,
+  { enabled = true }: { enabled?: boolean } = {},
+) => {
+  return useQuery({
+    queryKey: ["schedules", "preview-runs", input],
+    queryFn: () => scheduleService.previewScheduleRuns(input),
+    enabled,
+    staleTime: 30_000,
   });
 };
 

@@ -42,6 +42,14 @@ import { ScheduleKind } from "../../types/schedule.service.type";
 import { CRON_PRESETS } from "../../components/schedule-form-dialog/utils";
 import { DeleteScheduleDialog } from "../../components/delete-schedule";
 import { ScheduleExecutionsTab } from "../../components/schedule-executions-tab/schedule-executions-tab";
+import { ZonedTime } from "../../components/schedule-executions-tab/zoned-time";
+import { UTC } from "../../utils/timezone";
+import { toFormDate } from "../../components/schedule-form-dialog/utils";
+import { localDate } from "../../utils/execution-date-range";
+
+/** UTC dates show exactly as before; another zone shows the calendar day in that zone, same format. */
+const scheduleDate = (iso: string, timeZone: string) =>
+  timeZone === UTC ? formatDate(parseDateString(iso)) : formatDate(localDate(toFormDate(iso, timeZone)));
 
 export const ScheduleDetails = () => {
   const navigate = useNavigate();
@@ -118,6 +126,7 @@ export const ScheduleDetails = () => {
   }
 
   const isInternal = schedule.kind === ScheduleKind.Internal;
+  const timeZone = schedule.timeZone ?? UTC;
   const cronPreset = CRON_PRESETS.find((p) => p.value === schedule.cronExpression);
   const headersList = Object.entries(schedule.webhook?.headers ?? {});
 
@@ -233,7 +242,7 @@ export const ScheduleDetails = () => {
                         )}
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Evaluated in UTC time.
+                        Evaluated in {timeZone}
                       </p>
                     </div>
 
@@ -242,7 +251,7 @@ export const ScheduleDetails = () => {
                         <span className="text-xs font-medium text-muted-foreground">Start Date</span>
                         <p className="mt-0.5 text-sm font-medium">
                           {schedule.startDate
-                            ? formatDate(parseDateString(schedule.startDate))
+                            ? scheduleDate(schedule.startDate, timeZone)
                             : "Immediate (No start date)"}
                         </p>
                       </div>
@@ -250,8 +259,14 @@ export const ScheduleDetails = () => {
                         <span className="text-xs font-medium text-muted-foreground">End Date</span>
                         <p className="mt-0.5 text-sm font-medium">
                           {schedule.endDate
-                            ? formatDate(parseDateString(schedule.endDate))
+                            ? scheduleDate(schedule.endDate, timeZone)
                             : "Indefinite (No end date)"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs font-medium text-muted-foreground">Next run</span>
+                        <p className="mt-0.5 text-sm font-medium">
+                          <ZonedTime iso={schedule.nextRunAtUtc} tz={timeZone} />
                         </p>
                       </div>
                     </div>

@@ -375,6 +375,146 @@ test.describe("flow: Schedules menu", () => {
   });
 
   /**
+   * Schedule time zone (SPEC6 §11.2, E7–E13): picker, helper text, next-runs preview, payload mapping,
+   * server refusal, and the details card.
+   */
+  test("Schedule time zone — picker, next runs, zoned dates, details", async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
+    const form = new ScheduleFormPage(page);
+    const details = new ScheduleDetailsPage(page);
+    const modal = new ConfirmationModalComponent(page);
+    const toast = new ToastComponent(page);
+    const previewUrl = /\/Scheduler\/PreviewScheduleRuns$/;
+    const created: string[] = [];
+
+    await openSharedProjectDashboard(page);
+
+    await test.step("E7: a new schedule defaults to UTC and previews three runs a minute apart", async () => {
+      await gotoScheduleNew(form, page);
+      await expect(form.timezoneTrigger).toContainText("UTC (UTC+00:00)");
+      await expect(form.timezoneHelper).toHaveText("Evaluated in UTC. Daylight-saving changes follow this timezone.");
+      await form.fillCron("* * * * *");
+      await expect(form.nextRunItems).toHaveCount(3, { timeout: 15_000 });
+    });
+
+    await test.step("E8: search 'dhaka', pick Asia/Dhaka; helper and preview follow", async () => {
+      await form.selectTimezone("dhaka", "Asia/Dhaka");
+      await expect(form.timezoneTrigger).toContainText("Asia/Dhaka (UTC+06:00)");
+      await expect(form.timezoneHelper).toHaveText("Evaluated in Asia/Dhaka. Daylight-saving changes follow this timezone.");
+      await form.fillCron("0 9 * * *");
+      await expect(form.nextRunItems.first()).toContainText("09:00:00", { timeout: 15_000 });
+    });
+
+    await test.step("E12: an invalid cron shows the hint and sends no preview", async () => {
+      let previews = 0;
+      const count = (request: import("@playwright/test").Request) => {
+        if (previewUrl.test(request.url())) previews++;
+      };
+      page.on("request", count);
+      await form.fillCron("not a cron");
+      await expect(page.getByText("Enter a valid cron to preview")).toBeVisible();
+      await page.waitForTimeout(1_500);
+      page.off("request", count);
+      expect(previews).toBe(0);
+      await form.fillCron("0 9 * * *");
+    });
+
+    await test.step("E9: saving sends the zone and Dhaka-midnight dates; details show it", async () => {
+      await form.fillName(`E2E-tz-${Date.now()}`);
+      await form.fillWebhookUrl("https://api.example.com/webhook");
+      await form.pickStartDate(1, 1);
+      const createRequest = page.waitForRequest((request) => /\/Scheduler\/CreateSchedule$/.test(request.url()));
+      await form.clickSubmit();
+      const body = JSON.parse((await createRequest).postData() ?? "{}") as { timeZone: string; startDate: string };
+      expect(body.timeZone).toBe("Asia/Dhaka");
+      // Local 00:00 of the picked day in Dhaka (UTC+6) is 18:00Z the day before.
+      expect(body.startDate).toMatch(/T18:00:00\.000Z$/);
+
+      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      created.push(page.url());
+      await details.expectEvaluatedIn("Asia/Dhaka");
+      await expect(details.nextRunLabel).toBeVisible();
+    });
+
+    await test.step("E10: saving an existing UTC schedule unchanged sends a null zone", async () => {
+      await gotoScheduleNew(form, page);
+      await form.fillRequiredFields(`E2E-tz-utc-${Date.now()}`);
+      await form.clickSubmit();
+      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      created.push(page.url());
+
+      await details.clickEdit();
+      await form.expectOnEdit();
+      await expect(form.timezoneTrigger).toContainText("UTC");
+      const updateRequest = page.waitForRequest((request) => /\/Scheduler\/UpdateSchedule$/.test(request.url()));
+      await form.clickSubmit();
+      const body = JSON.parse((await updateRequest).postData() ?? "{}") as { timeZone: string | null; startDate: string | null };
+      expect(body.timeZone).toBeNull();
+      expect(body.startDate).toBeNull();
+      await toast.expectSuccessVisible("Schedule updated successfully.");
+      await details.expectEvaluatedIn("UTC");
+    });
+
+    await test.step("E11: a refused zone shows under the field and the form stays put", async () => {
+      await details.clickEdit();
+      await form.expectOnEdit();
+      await page.route("**/Scheduler/UpdateSchedule", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ isSuccess: false, errors: { validation_failed: "Time zone is not recognised" } }),
+        }),
+      );
+      const editUrl = page.url();
+      await form.clickSubmit();
+      await expect(page.getByText("Time zone is not recognised").first()).toBeVisible();
+      expect(page.url()).toBe(editUrl);
+      await page.unroute("**/Scheduler/UpdateSchedule");
+    });
+
+    await test.step("E13: keyboard in the picker, and the screenshot matrix", async () => {
+      await gotoScheduleNew(form, page);
+      await form.timezoneTrigger.focus();
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Escape");
+      await expect(page.getByPlaceholder("Search timezone…")).toBeHidden();
+
+      const viewports = [
+        { width: 375, height: 812 },
+        { width: 768, height: 1024 },
+        { width: 1280, height: 800 },
+        { width: 1920, height: 1080 },
+      ];
+      for (const colorScheme of ["light", "dark"] as const) {
+        await page.emulateMedia({ colorScheme });
+        for (const viewport of viewports) {
+          await page.setViewportSize(viewport);
+          await expect(form.timezoneTrigger).toBeVisible();
+          await page.screenshot({ path: testInfo.outputPath(`tz-form-${colorScheme}-${viewport.width}.png`), fullPage: true });
+          await form.timezoneTrigger.click();
+          await page.getByPlaceholder("Search timezone…").fill("dhaka");
+          await page.screenshot({ path: testInfo.outputPath(`tz-picker-${colorScheme}-${viewport.width}.png`) });
+          await page.keyboard.press("Escape");
+          expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+        }
+      }
+      await page.emulateMedia({ colorScheme: "light" });
+      await page.setViewportSize({ width: 1280, height: 800 });
+    });
+
+    await test.step("Cleanup: delete the E2E-tz* schedules", async () => {
+      for (const detailsUrl of created) {
+        await page.goto(detailsUrl, { waitUntil: "domcontentloaded" });
+        await details.clickDelete();
+        await modal.clickConfirm();
+        await toast.expectSuccessVisible("Schedule deleted successfully");
+      }
+    });
+  });
+
+  /**
    * Execution history (SPEC7 §11.2, E7–E13). Needs real fires, so it creates two every-minute
    * schedules against the fixture webhooks and waits for them. Skipped unless
    * E2E_WEBHOOK_OK_URL (200 + JSON body) and E2E_WEBHOOK_FAIL_URL (500 + body) are set.
