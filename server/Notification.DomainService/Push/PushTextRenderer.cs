@@ -43,32 +43,69 @@ namespace DomainService.Notification.Push
         }
 
         /// <summary>
-        /// Replaces each <c>{{name}}</c> with the field's value (missing: empty), then cuts the result to
-        /// <paramref name="maxLength"/>. With <paramref name="escapeValues"/> values are URL-escaped (links).
+        /// Replaces each <c>{{name}}</c> (and, with <paramref name="singleBraces"/>, each <c>{name}</c>) with the field's
+        /// value (missing: empty), then cuts the result to <paramref name="maxLength"/>. With
+        /// <paramref name="escapeValues"/> values are URL-escaped (links).
         /// </summary>
-        public static string Fill(string template, IReadOnlyDictionary<string, string> fields, int maxLength, bool escapeValues = false)
+        public static string Fill(string template, IReadOnlyDictionary<string, string> fields, int maxLength, bool escapeValues = false,
+            bool singleBraces = false)
         {
             var result = new StringBuilder(template.Length);
             var position = 0;
-            while (position < template.Length)
+            foreach (var placeholder in Placeholders(template, singleBraces))
             {
-                var open = template.IndexOf("{{", position, StringComparison.Ordinal);
-                var close = open < 0 ? -1 : template.IndexOf("}}", open + 2, StringComparison.Ordinal);
-                if (close < 0)
-                {
-                    result.Append(template, position, template.Length - position);
-                    break;
-                }
-
-                result.Append(template, position, open - position);
-                var name = template.Substring(open + 2, close - open - 2).Trim();
-                var value = fields.TryGetValue(name, out var found) ? found : string.Empty;
+                result.Append(template, position, placeholder.Start - position);
+                var value = fields.TryGetValue(placeholder.Name, out var found) ? found : string.Empty;
                 result.Append(escapeValues ? Uri.EscapeDataString(value) : value);
-                position = close + 2;
+                position = placeholder.End;
             }
 
+            result.Append(template, position, template.Length - position);
             return Cut(result.ToString(), maxLength);
         }
+
+        /// <summary>Sample data of a draft test: every placeholder of the texts filled with its own field name.</summary>
+        public static IReadOnlyDictionary<string, string> SampleFields(IEnumerable<string?> templates)
+        {
+            var fields = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var template in templates.OfType<string>())
+            {
+                foreach (var name in Placeholders(template, singleBraces: true).Select(p => p.Name))
+                    fields[name] = Cut(name, MaxValueLength);
+            }
+
+            return fields;
+        }
+
+        /// <summary><c>{{name}}</c> placeholders in order; with <paramref name="singleBraces"/> also <c>{name}</c>.</summary>
+        private static IEnumerable<Placeholder> Placeholders(string template, bool singleBraces)
+        {
+            var position = 0;
+            while (position < template.Length)
+            {
+                var open = template.IndexOf('{', position);
+                if (open < 0)
+                    yield break;
+
+                var isDouble = open + 1 < template.Length && template[open + 1] == '{';
+                if (!isDouble && !singleBraces)
+                {
+                    position = open + 1;
+                    continue;
+                }
+
+                var closeMark = isDouble ? "}}" : "}";
+                var nameStart = open + (isDouble ? 2 : 1);
+                var close = template.IndexOf(closeMark, nameStart, StringComparison.Ordinal);
+                if (close < 0)
+                    yield break;
+
+                yield return new Placeholder(open, close + closeMark.Length, template[nameStart..close].Trim());
+                position = close + closeMark.Length;
+            }
+        }
+
+        private readonly record struct Placeholder(int Start, int End, string Name);
 
         /// <summary>The text for <paramref name="language"/>, else the default language, else the key name itself.</summary>
         public static string Pick(IReadOnlyDictionary<string, string>? cultures, string? language, string? defaultLanguage, string keyName)

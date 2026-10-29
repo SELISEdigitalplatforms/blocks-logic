@@ -9,6 +9,9 @@ namespace DomainService.Notification.Push
 
         /// <summary><c>android</c>, <c>ios</c> or <c>web</c>.</summary>
         public string? Platform { get; set; }
+
+        /// <summary>Optional device model for the admin list (for example "Pixel 8"), at most 100 characters.</summary>
+        public string? Name { get; set; }
     }
 
     /// <summary>The caller's own push devices.</summary>
@@ -21,6 +24,9 @@ namespace DomainService.Notification.Push
 
         /// <summary>The caller's DB and user: the ROOT DB for an impersonated root user.</summary>
         (PushDb Db, string UserId) Caller();
+
+        /// <summary>The context tenant's own DB (never the ROOT DB), for project-wide device reads.</summary>
+        PushDb TenantDb();
     }
 
     /// <inheritdoc cref="IPushDeviceService"/>
@@ -28,7 +34,7 @@ namespace DomainService.Notification.Push
     {
         public const int MaxDevicesPerUser = 10;
         public const int MaxTokenLength = 4096;
-        private static readonly string[] Platforms = ["android", "ios", "web"];
+        public const int MaxNameLength = 100;
 
         private readonly IPushDeviceStore _devices;
         private readonly TimeProvider _timeProvider;
@@ -46,10 +52,11 @@ namespace DomainService.Notification.Push
             if (errors.Count > 0)
                 return Task.FromResult(new BaseResponse { IsSuccess = false, Errors = errors });
 
-            return RegisterCoreAsync(request.Token!.Trim(), request.Platform!.Trim().ToLowerInvariant(), cancellationToken);
+            var name = string.IsNullOrWhiteSpace(request.Name) ? null : request.Name.Trim();
+            return RegisterCoreAsync(request.Token!.Trim(), PushPlatforms.Normalize(request.Platform)!, name, cancellationToken);
         }
 
-        private async Task<BaseResponse> RegisterCoreAsync(string token, string platform, CancellationToken cancellationToken)
+        private async Task<BaseResponse> RegisterCoreAsync(string token, string platform, string? name, CancellationToken cancellationToken)
         {
             var (db, userId) = Caller();
             var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -59,6 +66,7 @@ namespace DomainService.Notification.Push
                 UserId = userId,
                 Token = token,
                 Platform = platform,
+                Name = name,
                 CreatedAt = now,
                 LastSeenAt = now,
             }, cancellationToken);
@@ -84,6 +92,15 @@ namespace DomainService.Notification.Push
             return (new PushDb(context.TenantId, context.Impersonated), context.UserId);
         }
 
+        public PushDb TenantDb()
+        {
+            var context = BlocksContext.GetContext();
+            if (context is null || string.IsNullOrWhiteSpace(context.TenantId))
+                throw new InvalidOperationException("A tenant context is required.");
+
+            return new PushDb(context.TenantId, Root: false);
+        }
+
         private static Dictionary<string, string> Validate(RegisterDeviceRequest request)
         {
             var errors = new Dictionary<string, string>();
@@ -92,8 +109,11 @@ namespace DomainService.Notification.Push
             else if (request.Token.Trim().Length > MaxTokenLength)
                 errors[nameof(request.Token)] = $"Token is longer than {MaxTokenLength} characters.";
 
-            if (string.IsNullOrWhiteSpace(request.Platform) || !Platforms.Contains(request.Platform.Trim().ToLowerInvariant()))
+            if (PushPlatforms.Normalize(request.Platform) is null)
                 errors[nameof(request.Platform)] = "Platform must be android, ios or web.";
+
+            if (request.Name?.Trim().Length > MaxNameLength)
+                errors[nameof(request.Name)] = $"Name is longer than {MaxNameLength} characters.";
 
             return errors;
         }

@@ -22,10 +22,12 @@ namespace XUnitTest.Controllers
             Row(typeof(CertificateController), "UploadCertificate", "blocks-os::project::mutate-token-validation-params"),
             Row(typeof(NotificationController), "Gets", "blocks-os::notification::gets"),
             Row(typeof(NotificationController), "Get", "blocks-os::notification::gets"),
-            // Push settings: same permissions as the os notification configuration endpoints.
-            Row(typeof(global::Api.Controllers.NotifierPushSettingsController), "GetPushSettings", "blocks-os::notification::gets"),
-            Row(typeof(global::Api.Controllers.NotifierPushSettingsController), "SavePushSettings", "blocks-os::notification::save"),
-            Row(typeof(global::Api.Controllers.NotifierPushSettingsController), "SendPushTest", "blocks-os::notification::save"),
+            // Push runtime for admins: same permissions as the os notification configuration endpoints.
+            Row(typeof(global::Api.Controllers.NotifierPushStatusController), "GetPushStatus", "blocks-os::notification::gets"),
+            Row(typeof(global::Api.Controllers.NotifierPushTestController), "SendPushTest", "blocks-os::notification::save"),
+            Row(typeof(global::Api.Controllers.NotifierPushTestController), "SendNotificationPushTest", "blocks-os::notification::save"),
+            Row(typeof(global::Api.Controllers.NotifierDeviceAdminController), "GetAllDevices", "blocks-os::notification::gets"),
+            Row(typeof(global::Api.Controllers.NotifierDeviceAdminController), "RemoveAnyDevice", "blocks-os::notification::save"),
             Row(typeof(global::Api.Controllers.ProjectController), "Gets", "blocks-os::project::projects"),
             Row(typeof(global::Api.Controllers.ProjectController), "Get", "blocks-os::project::projects"),
             Row(typeof(global::Api.Controllers.PeopleController), "Gets", "blocks-os::people::gets"),
@@ -80,7 +82,7 @@ namespace XUnitTest.Controllers
             Row(typeof(StorageController), "GetFile", L + "storage-file::read"),
             Row(typeof(StorageController), "GetFiles", L + "storage-file::read"),
             Row(typeof(StorageController), "DeleteFile", L + "storage-file::manage"),
-            Row(typeof(MailController), "SendToAny", L + "mail::manage"),
+            Row(typeof(MailController), "SendToAny", L + "mail::send-any"),
             Row(typeof(MailController), "Send", L + "mail::manage"),
             Row(typeof(MailController), "GetMailBoxMails", L + "mail::read"),
             Row(typeof(MailController), "GetMailBoxMail", L + "mail::read"),
@@ -103,6 +105,7 @@ namespace XUnitTest.Controllers
             Row(typeof(global::Api.Controllers.NotifierController), "GetNotifications", L + "notifier::read"),
             Row(typeof(global::Api.Controllers.NotifierDevicesController), "RegisterDevice", L + "notifier::manage"),
             Row(typeof(global::Api.Controllers.NotifierDevicesController), "RemoveDevice", L + "notifier::manage"),
+            Row(typeof(global::Api.Controllers.NotifierPushWebConfigController), "GetPushWebConfig", L + "notifier::manage"),
             Row(typeof(SchedulerController), "CreateSchedule", L + "scheduler::manage"),
             Row(typeof(SchedulerController), "UpdateSchedule", L + "scheduler::manage"),
             Row(typeof(SchedulerController), "DeleteSchedule", L + "scheduler::manage"),
@@ -145,8 +148,8 @@ namespace XUnitTest.Controllers
         [Fact]
         public void NewLogicPermissionListIsComplete()
         {
-            NewLogicPermissions().Should().HaveCount(54);
-            NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(14);
+            NewLogicPermissions().Should().HaveCount(55, "push-web-config added 2026-10-28");
+            NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(15, "mail::send-any was split from mail::manage, 2026-10-28");
         }
 
         // Open by design (data plane with its own check, or a public callback): no named permission, no [Authorize].

@@ -27,21 +27,30 @@ namespace XUnitTest.Notification.Push
                 ["token_uri"] = "https://evil.example.com/token",
             });
 
-        public static PushSettingsRecord Settings(bool enabled = true) => new()
+        /// <summary>Push on with a key; Android and iOS on; Web on (with a web config) only when asked.</summary>
+        public static PushSettingsRecord Settings(bool enabled = true, bool android = true, bool ios = true, bool web = false) => new()
         {
             ProjectId = ProjectId,
             Enabled = enabled,
             KeyUploadedAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
             KeyUploadedBy = "admin-1",
+            Platforms = new PushPlatformSwitches { Android = android, Ios = ios, Web = web },
+            WebConfigUploadedAt = web ? new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc) : null,
         };
 
-        public static NotificationDevice Device(string userId, string token) => new()
+        public static NotificationDevice Device(string userId, string token, string platform = "android") => new()
         {
             Id = NotificationDevice.IdOf(token),
             UserId = userId,
             Token = token,
-            Platform = "android",
+            Platform = platform,
+            Name = "Pixel 8",
+            LastSeenAt = new DateTime(2026, 10, 27, 0, 0, 0, DateTimeKind.Utc),
         };
+
+        /// <summary>A session for the test key (the token provider is faked or real per test).</summary>
+        public static FcmSession Session(string tenantId) =>
+            new(tenantId, ServiceAccountKey.TryParse(ServiceAccountJson(), out _)!);
 
         public sealed class NoDelay : IPushRetryDelay
         {
@@ -58,6 +67,7 @@ namespace XUnitTest.Notification.Push
         public sealed class FakeGoogle : HttpMessageHandler
         {
             private readonly Queue<Func<HttpResponseMessage>> _fcmAnswers = new();
+            private readonly object _gate = new();
 
             public List<string> TokenRequests { get; } = [];
             public List<(string Url, string Authorization, string Body)> FcmRequests { get; } = [];
@@ -79,7 +89,7 @@ namespace XUnitTest.Notification.Push
             {
                 var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
                 var url = request.RequestUri!.ToString();
-                lock (this)
+                lock (_gate)
                 {
                     if (url == "https://oauth2.googleapis.com/token")
                     {

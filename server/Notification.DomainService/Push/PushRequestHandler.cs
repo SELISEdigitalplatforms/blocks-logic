@@ -13,8 +13,10 @@ namespace DomainService.Notification.Push
     /// <inheritdoc cref="IPushRequestHandler"/>
     /// <remarks>
     /// Order: shape → age (<see cref="MaxAge"/>) → dedup by id → tenant's push settings (off or not set up: drop) →
-    /// template and texts → devices (tenant DB; ROOT DB for root users) → FCM. Every drop is logged with the
-    /// configuration name and a reason, never ids, tokens or payload text.
+    /// template, texts and options → devices (tenant DB; ROOT DB for root users; seen in the last 60 days; platforms
+    /// the notification goes to) → settings again (push or a platform may have been switched off meanwhile) → key and
+    /// access token → FCM. A failure before the FCM step releases the dedup claim and is thrown, so a redelivery can
+    /// try again. Every drop is logged with the configuration name and a reason, never ids, tokens or payload text.
     /// MaxAge equals the dedup window on purpose: a message older than the window could be a redelivery whose claim
     /// already expired, and a push hours late is noise rather than news.
     /// </remarks>
@@ -60,7 +62,7 @@ namespace DomainService.Notification.Push
             try
             {
                 BlocksContext.SetContext(TenantContext(message.TenantId));
-                await SendAsync(message, cancellationToken);
+                await SendClaimedAsync(message, cancellationToken);
             }
             finally
             {
@@ -68,43 +70,95 @@ namespace DomainService.Notification.Push
             }
         }
 
-        private async Task SendAsync(PushRequested message, CancellationToken cancellationToken)
+        private async Task SendClaimedAsync(PushRequested message, CancellationToken cancellationToken)
         {
-            var settings = await _settings.GetAsync(cancellationToken);
-            if (settings is not { CanSend: true })
+            PreparedPush? prepared;
+            try
             {
-                _logger.LogInformation("Push {ConfigName} dropped: push is off or not set up for the tenant", message.ConfigName);
-                return;
+                prepared = await PrepareAsync(message, cancellationToken);
             }
+            catch (Exception)
+            {
+                // Nothing was sent yet: without the claim a redelivery of this message can try again.
+                await ReleaseClaimAsync(message);
+                throw;
+            }
+
+            if (prepared is null)
+                return;
+
+            var summary = await _sender.SendAsync(prepared.Session, prepared.Notes, cancellationToken);
+            _logger.LogInformation("Push {ConfigName}: {Sent} sent, {Removed} devices removed, {Failed} failed",
+                message.ConfigName, summary.Sent, summary.Removed, summary.Failed);
+        }
+
+        /// <summary>Everything before the first FCM call. Null = nothing to send (logged).</summary>
+        private async Task<PreparedPush?> PrepareAsync(PushRequested message, CancellationToken cancellationToken)
+        {
+            if (!await CanSendAsync(message, cancellationToken))
+                return null;
 
             var composition = await _composer.PrepareAsync(message, cancellationToken);
             if (composition is null)
             {
                 _logger.LogWarning("Push {ConfigName} dropped: the configuration has no push template", message.ConfigName);
-                return;
+                return null;
             }
 
             var notes = await NotesAsync(message, composition, cancellationToken);
-            if (notes.Count == 0)
+
+            // Read again right before FCM: push or a platform may have been switched off since the message started.
+            var settings = await _settings.GetAsync(cancellationToken);
+            notes = settings is { CanSend: true } ? notes.Where(n => settings.IsOn(n.Device.Platform)).ToList() : [];
+            if (settings is null || notes.Count == 0)
             {
-                _logger.LogInformation("Push {ConfigName}: no registered device", message.ConfigName);
-                return;
+                _logger.LogInformation("Push {ConfigName}: no registered device on a platform that is on", message.ConfigName);
+                return null;
             }
 
-            var summary = await _sender.SendAsync(message.TenantId, settings, notes, cancellationToken);
-            _logger.LogInformation("Push {ConfigName}: {Sent} sent, {Removed} devices removed, {Failed} failed",
-                message.ConfigName, summary.Sent, summary.Removed, summary.Failed);
+            var opening = await _sender.OpenAsync(message.TenantId, settings, cancellationToken);
+            if (opening.Session is null)
+            {
+                _logger.LogWarning("Push {ConfigName} dropped: the service account key is missing or refused ({Failure})", message.ConfigName, opening.Failure);
+                return null;
+            }
+
+            return new PreparedPush(opening.Session, notes);
+        }
+
+        private async Task<bool> CanSendAsync(PushRequested message, CancellationToken cancellationToken)
+        {
+            var settings = await _settings.GetAsync(cancellationToken);
+            if (settings is { CanSend: true })
+                return true;
+
+            _logger.LogInformation("Push {ConfigName} dropped: push is off or not set up for the tenant", message.ConfigName);
+            return false;
+        }
+
+        private async Task ReleaseClaimAsync(PushRequested message)
+        {
+            try
+            {
+                await _dedup.ReleaseAsync(message.Id, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                // The original failure matters more; the claim then expires with its TTL. Type only.
+                _logger.LogWarning("Push {ConfigName}: the dedup claim could not be released ({ErrorType})", message.ConfigName, ex.GetType().Name); // NOSONAR S6667 — type only
+            }
         }
 
         private async Task<List<PushNote>> NotesAsync(PushRequested message, PushComposition composition, CancellationToken cancellationToken)
         {
             var rootIds = message.RootUserIds.ToHashSet(StringComparer.Ordinal);
             var projectIds = message.UserIds.Where(id => !rootIds.Contains(id)).Distinct(StringComparer.Ordinal).ToList();
+            var seenSince = NotificationDevice.SeenSince(_timeProvider.GetUtcNow().UtcDateTime);
 
             var projectDb = new PushDb(message.TenantId, Root: false);
             var rootDb = new PushDb(message.TenantId, Root: true);
-            var devices = (await _devices.GetForUsersAsync(projectDb, projectIds, cancellationToken)).Select(d => (Db: projectDb, Device: d))
-                .Concat((await _devices.GetForUsersAsync(rootDb, rootIds, cancellationToken)).Select(d => (Db: rootDb, Device: d)));
+            var devices = (await _devices.GetForUsersAsync(projectDb, projectIds, seenSince, cancellationToken)).Select(d => (Db: projectDb, Device: d))
+                .Concat((await _devices.GetForUsersAsync(rootDb, rootIds, seenSince, cancellationToken)).Select(d => (Db: rootDb, Device: d)));
 
             var data = new Dictionary<string, string>
             {
@@ -112,13 +166,13 @@ namespace DomainService.Notification.Push
                 ["configName"] = message.ConfigName,
             };
 
-            return devices.Select(pair =>
-            {
-                var (title, body, link) = composition.For(pair.Device.UserId);
-                var deviceData = link is null ? data : new Dictionary<string, string>(data) { ["link"] = link };
-                return new PushNote(pair.Db, pair.Device, title, body, deviceData);
-            }).ToList();
+            return devices
+                .Where(pair => composition.Allows(pair.Device.Platform))
+                .Select(pair => composition.NoteFor(pair.Db, pair.Device, data))
+                .ToList();
         }
+
+        private sealed record PreparedPush(FcmSession Session, IReadOnlyList<PushNote> Notes);
 
         private string? Refusal(PushRequested? message)
         {

@@ -13,7 +13,7 @@ namespace DomainService.Utilities
     public static class ApplicationServiceCollectionExtensions
     {
         /// <summary>
-        /// Inbox, hub handler, Notify, push devices and settings, and the push worker's services. Sending itself is
+        /// Inbox, hub handler, Notify, push devices, push tests and status, and the push worker's services. Sending itself is
         /// genesis <c>AddBlocksNotifications()</c>, called by each host. The <c>PushRequested</c> consumer is registered
         /// by the Worker host only.
         /// </summary>
@@ -44,8 +44,14 @@ namespace DomainService.Utilities
             serviceCollection.AddSingleton<IFcmClient, FcmClient>();
             serviceCollection.AddSingleton<IPushRetryDelay, PushRetryDelay>();
             serviceCollection.AddSingleton<IFcmPushSender, FcmPushSender>();
-            serviceCollection.AddSingleton<IPushTestSender, PushTestSender>();
-            serviceCollection.AddSingleton<IPushSettingsService, PushSettingsService>();
+            serviceCollection.AddSingleton<IPushOptionsStore, PushOptionsStore>();
+            serviceCollection.AddSingleton<IPushStatusStore, PushStatusStore>();
+            serviceCollection.AddSingleton<IPushUserRepository, PushUserRepository>();
+            serviceCollection.AddSingleton<IPushTestRunner, PushTestRunner>();
+            serviceCollection.AddSingleton<IPushTestService, PushTestService>();
+            serviceCollection.AddSingleton<IPushStatusService, PushStatusService>();
+            serviceCollection.AddSingleton<IPushDeviceAdminService, PushDeviceAdminService>();
+            serviceCollection.AddSingleton<IPushWebConfigService, PushWebConfigService>();
             serviceCollection.AddSingleton<IPushRequestHandler, PushRequestHandler>();
             #endregion
 

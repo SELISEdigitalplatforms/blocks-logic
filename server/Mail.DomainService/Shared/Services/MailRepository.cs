@@ -91,6 +91,24 @@ namespace Mail.DomainService.Services
 
             return results.Select(doc => doc["Email"].AsString).Distinct().ToList();
         }
+        public async Task<List<string>> GetPhoneEmailAddressesOfUsers(IEnumerable<string> addresses)
+        {
+            var found = new List<string>();
+            var collection = GetCollectionByName<BsonDocument>("Users");
+
+            foreach (var address in (addresses ?? []).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var pattern = PhoneEmail.UserPhonePattern(address);
+                if (pattern != null
+                    && await collection.Find(Builders<BsonDocument>.Filter.Regex("PhoneNumber", new BsonRegularExpression(pattern))).AnyAsync())
+                {
+                    found.Add(address);
+                }
+            }
+
+            return found;
+        }
+
         public Task<MailServerConfiguration> GetMailServerConfigurationByTenantId(string tenantId)
         {
             var mailServerConfigurationCollection = GetCollection<MailServerConfiguration>();

@@ -431,7 +431,10 @@
             <summary>Takes the mail and configuration services.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.MailController.SendToAny(Mail.DomainService.Mails.SendMailToAny)">
-            <summary><c>POST</c> — sends a mail to arbitrary recipients, bypassing the stored recipient lists.</summary>
+            <summary>
+            <c>POST</c> — sends a mail to addresses that need not be users of the project. Its own
+            permission: <c>mail::manage</c> alone reaches only the project's users (<see cref="M:BlocksTemplate.Api.Controllers.MailController.Send(Mail.DomainService.Mails.SendMail)"/>).
+            </summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.MailController.Send(Mail.DomainService.Mails.SendMail)">
             <summary><c>POST</c> — sends a mail through the configured mail server.</summary>
@@ -831,6 +834,21 @@
         <member name="M:Api.Controllers.NotifierController.GetNotifications(DomainService.Notification.GetNotificationsRequest)">
             <summary><c>GET</c> — the caller's notifications, filtered and paged by the query string.</summary>
         </member>
+        <member name="T:Api.Controllers.NotifierDeviceAdminController">
+            <summary>
+            Every push device of the context tenant, for admins, routed as <c>/api/Notifier/devices/all</c>. Tenant DB only;
+            tokens are never returned.
+            </summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierDeviceAdminController.#ctor(DomainService.Notification.Push.IPushDeviceAdminService)">
+            <summary>Takes the admin device service.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierDeviceAdminController.GetAllDevices(DomainService.Notification.Push.PushDeviceListRequest)">
+            <summary><c>GET</c> — one page of devices, with a platform filter, a user search and counts per platform.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierDeviceAdminController.RemoveAnyDevice(System.String)">
+            <summary><c>DELETE {id}</c> — removes any device of this tenant. 404 when there is none.</summary>
+        </member>
         <member name="T:Api.Controllers.NotifierDevicesController">
             <summary>
             The caller's own mobile push devices, routed as <c>/api/Notifier/devices</c> (route fixed by the clients). Like the
@@ -846,24 +864,44 @@
         <member name="M:Api.Controllers.NotifierDevicesController.RemoveDevice(System.String)">
             <summary><c>DELETE</c> — removes one of the caller's own device tokens. 404 when the caller has no such token.</summary>
         </member>
-        <member name="T:Api.Controllers.NotifierPushSettingsController">
+        <member name="T:Api.Controllers.NotifierPushStatusController">
             <summary>
-            The project's Firebase (mobile push) settings, routed as <c>/api/Notifier/push-settings</c> (route fixed by the
-            os UI), with the permissions of the os notification configuration endpoints. A refused save answers 200 with
-            <c>{ isSuccess: false, errors }</c>. The service-account key is never returned.
+            Push runtime state for the os settings screen, routed as <c>/api/Notifier/push-status</c>: devices per platform
+            and the last test of each. The push configuration itself is owned and served by blocks-os.
             </summary>
         </member>
-        <member name="M:Api.Controllers.NotifierPushSettingsController.#ctor(DomainService.Notification.Push.IPushSettingsService)">
-            <summary>Takes the push settings service.</summary>
+        <member name="M:Api.Controllers.NotifierPushStatusController.#ctor(DomainService.Notification.Push.IPushStatusService)">
+            <summary>Takes the push status service.</summary>
         </member>
-        <member name="M:Api.Controllers.NotifierPushSettingsController.GetPushSettings">
-            <summary><c>GET</c> — project id, on/off and whether a key is stored.</summary>
+        <member name="M:Api.Controllers.NotifierPushStatusController.GetPushStatus">
+            <summary><c>GET</c> — device counts per platform (tenant DB) and the last test per platform.</summary>
         </member>
-        <member name="M:Api.Controllers.NotifierPushSettingsController.SavePushSettings(DomainService.Notification.Push.SavePushSettingsRequest)">
-            <summary><c>POST</c> — saves the settings; a new service-account key goes to Blocks Secrets.</summary>
+        <member name="T:Api.Controllers.NotifierPushTestController">
+            <summary>
+            Test pushes to the caller's own devices, routed as <c>/api/Notifier/push-test</c>. A refused test answers 200
+            with <c>{ isSuccess: false, errors }</c>; a sent test lists the result per device.
+            </summary>
         </member>
-        <member name="M:Api.Controllers.NotifierPushSettingsController.SendPushTest">
-            <summary><c>POST</c> — pushes a fixed test text to the caller's own devices.</summary>
+        <member name="M:Api.Controllers.NotifierPushTestController.#ctor(DomainService.Notification.Push.IPushTestService)">
+            <summary>Takes the push test service.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierPushTestController.SendPushTest(DomainService.Notification.Push.PushTestRequest)">
+            <summary><c>POST</c> — a fixed test text to one platform, or to every platform that is on.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierPushTestController.SendNotificationPushTest(DomainService.Notification.Push.PushNotificationTestRequest)">
+            <summary><c>POST notification</c> — an unsaved notification draft with sample data.</summary>
+        </member>
+        <member name="T:Api.Controllers.NotifierPushWebConfigController">
+            <summary>
+            The Firebase web config for signed-in web apps of the context tenant, routed as
+            <c>/api/Notifier/push-web-config</c> (a browser needs it to register for push). Never cached, never logged.
+            </summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierPushWebConfigController.#ctor(DomainService.Notification.Push.IPushWebConfigService)">
+            <summary>Takes the web config service.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierPushWebConfigController.GetPushWebConfig">
+            <summary><c>GET</c> — the web config when push and Web are on; else <c>{ isSuccess: false }</c>.</summary>
         </member>
         <member name="T:Api.Controllers.PeopleController">
             <summary>Directory lookups for the tenant's users, routed as <c>/api/People/{action}</c>.</summary>

@@ -29,113 +29,16 @@ namespace BlocksTemplate.Api.Controllers
             _mailService = mailService;
             }
 
-        //[HttpPost]
-        //[Authorize]
-        //public async Task<IActionResult> Save([FromBody] MailConfiguration request)
-        //{
-
-        //    if (string.IsNullOrWhiteSpace(request.ConfigurationId))
-        //    {
-        //        request.ConfigurationId = Guid.NewGuid().ToString();
-        //    }
-
-        //    var result = await _configurationService.SaveMailConfigurationAsync(request);
-        //    return result.IsSuccess ? Ok(result) : BadRequest(result);
-        //}
-
-        //[HttpGet]
-        //[Authorize]
-        //public async Task<MailConfiguration> Get([FromQuery] GetMailConfigurationRequest request)
-        //{
-        //    var result = await _configurationService.GetMailConfigurationAsync(request);
-
-        //    if (result == null)
-        //    {
-        //        var response = new BaseMutationResponse
-        //        {
-        //            IsSuccess = false,
-        //            Errors = new Dictionary<string, string>
-        //            {
-        //                { "Configuration", "No configuration found" }
-        //            }
-        //        };
-
-        //        BadRequest(response);
-        //    }
-
-        //    return result;
-        //}
-
-        //[HttpGet]
-        //[Authorize]
-        //public async Task<List<MailServerConfiguration>> Gets([FromQuery] GetAllMailConfigurationsRequest request)
-        //{
-        //    var result = await _configurationService.GetAllMailConfigurationsAsync();
-
-        //    if (result == null)
-        //    {
-        //        var response = new BaseMutationResponse
-        //        {
-        //            IsSuccess = false,
-        //            Errors = new Dictionary<string, string>
-        //            {
-        //                { "Configuration", "No configuration found" }
-        //            }
-        //        };
-
-        //        BadRequest(response);
-        //    }
-
-        //    return result;
-        //}
-
-        //[HttpDelete]
-        //[Authorize]
-        //public async Task<IActionResult> Delete([FromQuery] DeleteMailConfigurationRequest request)
-        //{
-
-        //    if (string.IsNullOrWhiteSpace(request.ConfigurationId))
-        //    {
-        //        return BadRequest(new BaseMutationResponse
-        //        {
-        //            IsSuccess = false,
-        //            Errors = new Dictionary<string, string>
-        //            {
-        //                { "ConfigurationId", "Invalid or missing ConfigurationId" }
-        //            }
-        //        });
-        //    }
-
-        //    var result = await _configurationService.DeleteMailConfigurationAsync(request);
-        //    return result.IsSuccess ? Ok(result) : BadRequest(result);
-        //}
-
-        //[HttpPost]
-        //[Authorize]
-        //public async Task<IActionResult> Duplicate([FromBody] DuplicateMailConfigurationRequest request)
-        //{
-
-        //    if (string.IsNullOrWhiteSpace(request.ConfigurationId))
-        //    {
-        //        return BadRequest(new BaseMutationResponse
-        //        {
-        //            IsSuccess = false,
-        //            Errors = new Dictionary<string, string>
-        //            {
-        //                { "ConfigurationId", "Invalid or missing ConfigurationId" }
-        //            }
-        //        });
-        //    }
-
-        //    var result = await _configurationService.DuplicateMailConfigurationAsync(request);
-        //    return result.IsSuccess ? Ok(result) : BadRequest(result);
-        //}
+        
 
         #region Mail Send
 
-        /// <summary><c>POST</c> — sends a mail to arbitrary recipients, bypassing the stored recipient lists.</summary>
+        /// <summary>
+        /// <c>POST</c> — sends a mail to addresses that need not be users of the project. Its own
+        /// permission: <c>mail::manage</c> alone reaches only the project's users (<see cref="Send"/>).
+        /// </summary>
         [HttpPost]
-        [ProtectedEndPoint("blocks-logic::mail::manage")]
+        [ProtectedEndPoint("blocks-logic::mail::send-any")]
         public async Task<IActionResult> SendToAny ( [FromBody] SendMailToAny request )
         {
             var result = await _mailService.ProcessMailToAnyAsync(request);

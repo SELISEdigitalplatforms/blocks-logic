@@ -9,6 +9,12 @@ namespace Mail.DomainService.Services
     {
         Task<bool> FileExists(string fileId);
         Task<List<string>> GetEmailAdressOfUsers(IEnumerable<string> emails);
+
+        /// <summary>
+        /// The phone-as-email addresses ("&lt;phone&gt;@&lt;gateway&gt;") whose phone part is the phone number
+        /// of a user of the project; any other address is left out.
+        /// </summary>
+        Task<List<string>> GetPhoneEmailAddressesOfUsers(IEnumerable<string> addresses);
         Task<MailServerConfiguration> GetMailServerConfigurationByTenantId(string tenantId);
         Task<List<MailServerConfigurationSummary>> GetMailServerConfigurationSummariesAsync();
         Task<EmailTemplate> GetEmailTemplateByPurpose(string purpose, string language, string organizationId);
