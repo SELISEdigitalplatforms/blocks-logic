@@ -505,8 +505,8 @@
         <member name="T:BlocksTemplate.Api.Controllers.SchedulerController">
             <summary>Scheduled-job management, routed as <c>/api/Scheduler/{action}</c>.</summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.#ctor(Scheduler.DomainService.Services.IScheduleService)">
-            <summary>Takes the schedule service.</summary>
+        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.#ctor(Scheduler.DomainService.Services.IScheduleService,Scheduler.DomainService.Services.IScheduleExecutionQueryService)">
+            <summary>Takes the schedule service and the execution-history query service.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.CreateSchedule(Scheduler.DomainService.Dtos.Requests.CreateScheduleRequestDto)">
             <summary>
@@ -526,6 +526,17 @@
         <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.GetSchedules(Scheduler.DomainService.Dtos.Requests.GetSchedulesRequestDto)">
             <summary>
             Get schedules.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.GetScheduleExecutions(Scheduler.DomainService.Dtos.Requests.GetScheduleExecutionsRequestDto)">
+            <summary>
+            One page of an Application schedule's execution history, newest first, optionally filtered by outcome
+            and by fired date (<c>StartDate</c> inclusive, <c>EndDate</c> exclusive).
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.GetScheduleExecution(Scheduler.DomainService.Dtos.Requests.GetScheduleExecutionRequestDto)">
+            <summary>
+            One execution of an Application schedule, in full: status, body and the schedule snapshot.
             </summary>
         </member>
         <!-- Badly formed XML comment ignored for member "T:BlocksTemplate.Api.Controllers.SecretController" -->

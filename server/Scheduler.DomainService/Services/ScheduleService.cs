@@ -33,7 +33,7 @@ namespace Scheduler.DomainService.Services
 
         public async Task<BaseMutationResponse> CreateScheduleAsync(CreateScheduleRequestDto request)
         {
-            var isValidCronExp = Helper.IsValidCronExpression(request.CronExpression);
+            var isValidCronExp = Helper.IsValidApplicationCronExpression(request.CronExpression);
             if (!isValidCronExp)
             {
                 return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");
@@ -89,7 +89,7 @@ namespace Scheduler.DomainService.Services
 
         public async Task<BaseMutationResponse> UpdateScheduleAsync(UpdateScheduleRequestDto request)
         {
-            var isValidCronExp = Helper.IsValidCronExpression(request.CronExpression);
+            var isValidCronExp = Helper.IsValidApplicationCronExpression(request.CronExpression);
             if (!isValidCronExp)
             {
                 return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");

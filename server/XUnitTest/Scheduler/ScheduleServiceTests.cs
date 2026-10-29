@@ -139,6 +139,67 @@ namespace XUnitTest.Scheduler
             result.Errors.Should().ContainKey("create_failed");
         }
 
+        // ---------- 5-field-only Application crons (D2) ----------
+
+        [Theory]
+        [InlineData("0 */5 * * * *")]
+        [InlineData("*/15 * * * * *")]
+        [InlineData("not-a-cron")]
+        [InlineData("")]
+        public async Task Create_ApplicationSchedule_RejectsSixFieldOrInvalidCron(string cron)
+        {
+            var request = CreateWebhookRequest();
+            request.CronExpression = cron;
+
+            var result = await _service.CreateScheduleAsync(request);
+
+            result.IsSuccess.Should().BeFalse();
+            result.Errors.Should().Equal(new Dictionary<string, string> { ["validation_failed"] = "Cron expression is not valid" });
+            _scheduleRepository.Verify(r => r.CreateAsync(It.IsAny<Schedule>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Create_ApplicationSchedule_AcceptsFiveFieldCron()
+        {
+            var request = CreateWebhookRequest();
+            request.CronExpression = "* * * * *";
+
+            (await _service.CreateScheduleAsync(request)).IsSuccess.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task Update_ApplicationSchedule_RejectsSixFieldCron()
+        {
+            var result = await _service.UpdateScheduleAsync(new UpdateScheduleRequestDto
+            {
+                ItemId = "sched-app",
+                Name = "Schedule",
+                Payload = "{}",
+                CronExpression = "0 0 9 * * *",
+                IsActive = true,
+                Webhook = new WebhookConfiguration { Url = "https://webhook.example.com/hook", Method = "POST" },
+            });
+
+            result.IsSuccess.Should().BeFalse();
+            result.Errors.Should().Equal(new Dictionary<string, string> { ["validation_failed"] = "Cron expression is not valid" });
+            _scheduleRepository.Verify(r => r.UpdateAsync(It.IsAny<Schedule>()), Times.Never);
+        }
+
+        [Theory]
+        [InlineData("* * * * *", true)]
+        [InlineData("0 9 * * MON-FRI", true)]
+        [InlineData("0 */5 * * * *", false)]
+        [InlineData(" ", false)]
+        public void IsValidApplicationCronExpression_IsStandardFormatOnly(string cron, bool valid)
+        {
+            global::Scheduler.DomainService.Utils.Helper.IsValidApplicationCronExpression(cron).Should().Be(valid);
+            // The general (workflow) validator still accepts 6-field crons.
+            if (cron == "0 */5 * * * *")
+            {
+                global::Scheduler.DomainService.Utils.Helper.IsValidCronExpression(cron).Should().BeTrue();
+            }
+        }
+
         // ---------- Update: webhook-only mapping + Internal guard ----------
 
         [Fact]
