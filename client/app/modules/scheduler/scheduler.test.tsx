@@ -150,8 +150,13 @@ describe("Scheduler Feature", () => {
       expect(screen.getByText("Bearer token123")).toBeTruthy();
     });
 
-    it("switches to Executions tab and displays Coming Soon state", async () => {
+    it("switches to Executions tab and loads the execution history", async () => {
       const user = userEvent.setup();
+      const getExecutions = vi.spyOn(scheduleService, "getScheduleExecutions").mockResolvedValue({
+        isSuccess: true,
+        data: [],
+        totalCount: 0,
+      });
       renderWithProviders(
         <MemoryRouter initialEntries={["/schedule/sched-1"]}>
           <Routes>
@@ -164,11 +169,16 @@ describe("Scheduler Feature", () => {
         expect(screen.getByRole("heading", { name: "Daily Report" })).toBeTruthy();
       });
 
+      expect(getExecutions).not.toHaveBeenCalled();
       const executionsTab = screen.getByRole("tab", { name: /executions/i });
       await user.click(executionsTab);
 
-      expect(screen.getByText("Execution History Coming Soon")).toBeTruthy();
-      expect(screen.getByText(/detailed execution logs, delivery attempts/i)).toBeTruthy();
+      expect(await screen.findByText("No executions yet")).toBeTruthy();
+      expect(screen.queryByText("Execution History Coming Soon")).toBeNull();
+      expect(getExecutions).toHaveBeenCalledTimes(1);
+      expect(getExecutions).toHaveBeenCalledWith(
+        expect.objectContaining({ scheduleId: "sched-1", pageNumber: 0, pageSize: 10 }),
+      );
     });
 
     it("opens delete confirmation modal when Delete button is clicked", async () => {

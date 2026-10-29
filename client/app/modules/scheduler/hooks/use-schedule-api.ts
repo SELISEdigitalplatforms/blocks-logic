@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { scheduleService } from "../services/schedule.service";
-import { IGetSchedulesPayload } from "../types/schedule.service.type";
+import {
+  IGetScheduleExecutionsPayload,
+  IGetSchedulesPayload,
+} from "../types/schedule.service.type";
 
 export const useGetSchedules = (payload: IGetSchedulesPayload) => {
   return useQuery({
@@ -39,6 +42,32 @@ export const useDeleteSchedule = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
     },
+  });
+};
+
+/** One page of a schedule's executions; React Query defaults, like `useGetWorkflows`. */
+export const useGetScheduleExecutions = (
+  payload: IGetScheduleExecutionsPayload,
+  { enabled = true }: { enabled?: boolean } = {},
+) => {
+  return useQuery({
+    queryKey: ["schedules", "executions", payload],
+    queryFn: () => scheduleService.getScheduleExecutions(payload),
+    enabled,
+  });
+};
+
+/** One execution in full. Rows never change, so it is fetched once per id. */
+export const useGetScheduleExecution = (
+  scheduleId: string,
+  executionId: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) => {
+  return useQuery({
+    queryKey: ["schedules", "execution", scheduleId, executionId],
+    queryFn: () => scheduleService.getScheduleExecution({ scheduleId, executionId }),
+    enabled: enabled && !!scheduleId && !!executionId,
+    staleTime: Infinity,
   });
 };
 

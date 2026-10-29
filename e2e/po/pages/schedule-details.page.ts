@@ -7,7 +7,7 @@ import { ClipboardComponent } from "../components/clipboard.component";
  *
  * Layout:
  *   - Header (name + Active/Inactive badge + Status switch + Edit + Delete)
- *   - Tabs: Overview (default) | Executions ("Coming Soon")
+ *   - Tabs: Overview (default) | Executions (history list + right-side details sheet)
  *   - Overview cards:
  *     - Timing & Schedule  (cron + cron preset badge + Start/End date fallback)
  *     - Payload            (Monaco + Copy Payload)
@@ -85,10 +85,58 @@ export class ScheduleDetailsPage {
     await expect(this.page.getByRole("tab", { name: tab })).toHaveAttribute("data-state", "active");
   }
 
-  async expectExecutionComingSoon(): Promise<void> {
-    await expect(
-      this.page.getByRole("heading", { name: "Execution History Coming Soon" }),
-    ).toBeVisible();
+  // ---- Executions tab -------------------------------------------------------
+
+  /** History rows are keyboard-reachable buttons named "Open execution fired at …". */
+  get executionRows(): Locator {
+    return this.page.getByRole("button", { name: /^Open execution fired at/ });
+  }
+
+  get executionSheet(): Locator {
+    return this.page.getByRole("dialog");
+  }
+
+  async expectNoExecutionsYet(): Promise<void> {
+    await expect(this.page.getByRole("heading", { name: "No executions yet" })).toBeVisible({ timeout: 30_000 });
+  }
+
+  async expectNoExecutionMatches(): Promise<void> {
+    await expect(this.page.getByRole("heading", { name: "No executions match this filter." })).toBeVisible({
+      timeout: 30_000,
+    });
+  }
+
+  /**
+   * Waits for the first fire. The list refetches only on mount and window focus, so each poll
+   * reloads the page and reopens the tab (the tab itself is local state, not in the URL).
+   */
+  async waitForExecutionRows(minimum = 1, timeout = 130_000): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          await this.page.reload({ waitUntil: "domcontentloaded" });
+          await this.clickExecutionsTab();
+          await this.executionRows.first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+          return this.executionRows.count();
+        },
+        { timeout, intervals: [15_000] },
+      )
+      .toBeGreaterThanOrEqual(minimum);
+  }
+
+  /** Picks an outcome in the toolbar's "Outcome" radio filter. */
+  async filterOutcome(outcome: "All" | "Succeeded" | "Failed"): Promise<void> {
+    await this.page.getByRole("button", { name: /Outcome/ }).first().click();
+    await this.page.getByRole("radio", { name: outcome }).click();
+    await this.page.keyboard.press("Escape");
+  }
+
+  async openFirstExecution(): Promise<Locator> {
+    const row = this.executionRows.first();
+    await row.click();
+    await expect(this.executionSheet).toBeVisible({ timeout: 15_000 });
+    await expect(this.executionSheet.getByRole("region", { name: "Overview" })).toBeVisible({ timeout: 15_000 });
+    return row;
   }
 
   // ---- Timing & Schedule card ---------------------------------------------

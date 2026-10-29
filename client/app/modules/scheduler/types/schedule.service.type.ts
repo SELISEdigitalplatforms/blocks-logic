@@ -33,6 +33,10 @@ export interface ISchedule {
   triggerType?: ScheduleTriggerType;
   webhook?: IWebhookConfiguration | null;
   queue?: IQueueConfiguration | null;
+  /** IANA zone the cron runs in (SPEC6); absent or null = UTC. */
+  timeZone?: string | null;
+  /** Next fire (SPEC6); absent until that ships, null when no run is upcoming. */
+  nextRunAtUtc?: string | null;
 }
 
 export interface IGetSchedulesPayload {
@@ -73,4 +77,46 @@ export interface IBaseResponse {
 
 export interface IBaseMutationResponse extends IBaseResponse {
   itemId?: string | null;
+}
+
+export type ScheduleExecutionOutcome = "Succeeded" | "Failed";
+
+export interface IScheduleExecutionListItem {
+  id: string;
+  firedUtc?: string | null;
+  finishedUtc?: string | null;
+  durationMs?: number | null;
+  status?: number | null;
+  outcome: ScheduleExecutionOutcome;
+}
+
+export interface IScheduleExecution extends IScheduleExecutionListItem {
+  scheduleId: string;
+  scheduleName?: string | null;
+  body?: string | null;
+  snapshot?: string | null;
+}
+
+export interface IGetScheduleExecutionsPayload {
+  scheduleId: string;
+  outcome?: ScheduleExecutionOutcome | null;
+  /** UTC ISO; startDate inclusive, endDate exclusive. */
+  startDate?: string | null;
+  endDate?: string | null;
+  pageNumber: number;
+  pageSize: number;
+}
+
+export interface IGetScheduleExecutionPayload {
+  scheduleId: string;
+  executionId: string;
+}
+
+export interface IGetScheduleExecutionsResponse extends IBaseResponse {
+  data: IScheduleExecutionListItem[] | null;
+  totalCount: number;
+}
+
+export interface IGetScheduleExecutionResponse extends IBaseResponse {
+  data: IScheduleExecution | null;
 }

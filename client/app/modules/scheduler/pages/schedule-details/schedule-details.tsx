@@ -9,7 +9,6 @@ import {
   Copy,
   Eye,
   EyeOff,
-  History,
   Loader2,
   Pen,
   Trash2,
@@ -42,6 +41,7 @@ import { useGetScheduleById, useUpdateSchedule } from "../../hooks/use-schedule-
 import { ScheduleKind } from "../../types/schedule.service.type";
 import { CRON_PRESETS } from "../../components/schedule-form-dialog/utils";
 import { DeleteScheduleDialog } from "../../components/delete-schedule";
+import { ScheduleExecutionsTab } from "../../components/schedule-executions-tab/schedule-executions-tab";
 
 export const ScheduleDetails = () => {
   const navigate = useNavigate();
@@ -423,22 +423,9 @@ export const ScheduleDetails = () => {
           </TabsContent>
 
 
-          {/* Executions Tab (Coming Soon) */}
+          {/* Executions Tab */}
           <TabsContent value="executions">
-            <Card className="border-dashed">
-              <CardContent className="flex min-h-[360px] flex-col items-center justify-center px-6 py-12 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <History className="h-8 w-8" />
-                </div>
-                <h3 className="mt-5 text-xl font-semibold tracking-tight text-foreground">
-                  Execution History Coming Soon
-                </h3>
-                <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                  Detailed execution logs, delivery attempts, HTTP response statuses, and duration
-                  metrics for this schedule will appear here in an upcoming release.
-                </p>
-              </CardContent>
-            </Card>
+            <ScheduleExecutionsTab schedule={schedule} active={activeTab === "executions"} />
           </TabsContent>
         </Tabs>
       </div>
