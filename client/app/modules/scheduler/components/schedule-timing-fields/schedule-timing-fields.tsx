@@ -1,7 +1,7 @@
 import { formatDate, parseDateString } from "@/lib/utils";
 import { ISchedule } from "../../types/schedule.service.type";
 import { localDate } from "../../utils/execution-date-range";
-import { UTC } from "../../utils/timezone";
+import { offsetLabel, UTC } from "../../utils/timezone";
 import { toFormDate } from "../schedule-form-dialog/utils";
 import { ZonedTime } from "../schedule-executions-tab/zoned-time";
 
@@ -16,7 +16,7 @@ const Field = ({ label, children }: Readonly<{ label: string; children: React.Re
   </div>
 );
 
-/** Start, End and Next run of the details page's "Timing & Schedule" card, in the schedule's zone. */
+/** Start, End, Time zone and Next run of the details page's "Timing & Schedule" card, in the schedule's zone. */
 export const ScheduleTimingFields = ({ schedule }: Readonly<{ schedule: ISchedule }>) => {
   const timeZone = schedule.timeZone ?? UTC;
 
@@ -27,6 +27,9 @@ export const ScheduleTimingFields = ({ schedule }: Readonly<{ schedule: ISchedul
       </Field>
       <Field label="End Date">
         {schedule.endDate ? scheduleDate(schedule.endDate, timeZone) : "Indefinite (No end date)"}
+      </Field>
+      <Field label="Time zone">
+        {timeZone} ({offsetLabel(timeZone)})
       </Field>
       <Field label="Next run">
         <ZonedTime iso={schedule.nextRunAtUtc} tz={timeZone} />

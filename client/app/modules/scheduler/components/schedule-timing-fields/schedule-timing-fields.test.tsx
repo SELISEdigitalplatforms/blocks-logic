@@ -18,6 +18,8 @@ describe("ScheduleTimingFields", () => {
     renderWithProviders(<ScheduleTimingFields schedule={schedule({ startDate: null, endDate: null })} />);
     expect(screen.getByText("Immediate (No start date)")).toBeTruthy();
     expect(screen.getByText("Indefinite (No end date)")).toBeTruthy();
+    expect(screen.getByText("Time zone")).toBeTruthy();
+    expect(screen.getByText("UTC (UTC+00:00)")).toBeTruthy();
     expect(screen.getByText("Next run")).toBeTruthy();
     expect(screen.getByText("—")).toBeTruthy();
   });
@@ -36,5 +38,6 @@ describe("ScheduleTimingFields", () => {
     expect(screen.getByText(formatDate(localDate("2026-11-01")))).toBeTruthy();
     expect(screen.getByText(formatDate(localDate("2026-12-01")))).toBeTruthy();
     expect(screen.getByText("Nov 1, 2026, 09:00:00")).toBeTruthy();
+    expect(screen.getByText("Asia/Dhaka (UTC+06:00)")).toBeTruthy();
   });
 });
