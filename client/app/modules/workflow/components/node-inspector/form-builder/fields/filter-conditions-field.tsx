@@ -27,7 +27,7 @@ const isAsciiDigit = (ch: string) => ch >= "0" && ch <= "9";
 
 /** The value of trimmed integer text as Int32.Parse reads it, or undefined when the text is not integer text. */
 const parseIntegerText = (text: string): number | undefined => {
-  let i = text.charAt(0) === "+" || text.charAt(0) === "-" ? 1 : 0;
+  let i = text.startsWith("+") || text.startsWith("-") ? 1 : 0;
   const digitsStart = i;
   while (i < text.length && isAsciiDigit(text.charAt(i))) i++;
   if (i === digitsStart) return undefined;
