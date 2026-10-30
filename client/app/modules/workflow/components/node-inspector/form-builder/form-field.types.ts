@@ -24,6 +24,7 @@ export type FormFieldType =
   | "schema-field-picker"
   | "conditions"
   | "switch-rules"
+  | "filter-conditions"
   | "expression"
   | "display"
   | "split-out-fields"
