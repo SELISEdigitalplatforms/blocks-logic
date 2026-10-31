@@ -174,6 +174,7 @@ namespace Workflow.DomainService.Services
                 return null;
             }
 
+            string failureClass;
             try
             {
                 return await TenantSecretReader.ReadAsync(_scopeFactory, tenantId, reference);
@@ -181,11 +182,13 @@ namespace Workflow.DomainService.Services
             catch (Exception ex)
             {
                 // Caught here, not by the caller's handler: Secret* messages carry the reference id, so
-                // only the type is logged.
-                _logger.LogWarning("The client secret of ClientId: {ClientId} is unavailable: {FailureClass}",
-                    credential.ItemId, ex.GetType().Name);
-                return null;
+                // only the type is kept and the exception itself is never logged.
+                failureClass = ex.GetType().Name;
             }
+
+            _logger.LogWarning("The client secret of ClientId: {ClientId} is unavailable: {FailureClass}",
+                credential.ItemId, failureClass);
+            return null;
         }
     }
 }
