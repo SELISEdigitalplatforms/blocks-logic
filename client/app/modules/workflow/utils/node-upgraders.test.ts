@@ -60,9 +60,9 @@ describe("upgradeNode", () => {
   });
 
   it("H1: every one of the 13 types upgrades to v2 with keys identical to its old handle ids", () => {
-    // The 13 types that existed before SPEC6, plus Switch and Merge (which derive their handles), Split Out and
-    // Blocks Event (new types: created as v2, nothing to upgrade).
-    expect(NodeDefinitions.map((d) => d.type).sort()).toEqual([...Object.keys(OLD_HANDLE_IDS), "switch", "splitOut", "merge", "blocksEvent"].sort());
+    // The 13 types that existed before SPEC6, plus Switch and Merge (which derive their handles), Split Out,
+    // Blocks Event and Limit (new types: created as v2, nothing to upgrade).
+    expect(NodeDefinitions.map((d) => d.type).sort()).toEqual([...Object.keys(OLD_HANDLE_IDS), "switch", "splitOut", "merge", "blocksEvent", "limit"].sort());
     for (const definition of NodeDefinitions.filter((d) => d.type in OLD_HANDLE_IDS)) {
       const upgraded = upgradeNode(
         node({ category: definition.category, type: definition.type, version: "v1" }),
