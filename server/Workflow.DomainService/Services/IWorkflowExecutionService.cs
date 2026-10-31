@@ -1,3 +1,4 @@
+using Blocks.Genesis;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Nodes.TriggerDataV1;
@@ -27,6 +28,11 @@ namespace Workflow.DomainService.Services
         Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(string tenantId, LastSuccessfullExecutionRequestDto dto);
         Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent);
         Task DataTriggerStartAsync(DataChangeEvent dataEvent);
+        /// <summary>
+        /// Starts every published workflow of the message's tenant that listens to the forwarded Blocks event:
+        /// one production execution per workflow, skipping a workflow that already ran for the same EventId.
+        /// </summary>
+        Task BlocksEventTriggerStartAsync(BlocksEventTriggerMessage message);
         Task SchedulerTriggerStartAsync(SchedulerTriggerPayload payload);
         Task<StepExecuteResponseDto> StepExecuteAsync(string tenantId, StepExecuteRequestDto dto);
     }

@@ -135,6 +135,12 @@ namespace XUnitTest.Controllers
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "ResumeExecution", L + "workflow::manage"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "GetExecutionLogs", L + "workflow::read"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "LastSuccessfullExecution", L + "workflow::read"),
+            // Blocks Event Trigger catalog (blocks-logic#375): reads need workflow read, changes need workflow manage.
+            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "GetAll", L + "workflow::read"),
+            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "GetWorkflowEvents", L + "workflow::read"),
+            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "GetUsage", L + "workflow::read"),
+            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "CanManage", L + "workflow::manage"),
+            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "Update", L + "workflow::manage"),
         };
 
         [Theory]
@@ -151,7 +157,7 @@ namespace XUnitTest.Controllers
         [Fact]
         public void NewLogicPermissionListIsComplete()
         {
-            NewLogicPermissions().Should().HaveCount(58, "schedule preview runs and execution history (list, detail) added 2026-10-29");
+            NewLogicPermissions().Should().HaveCount(63, "the Blocks Event Trigger catalog endpoints added 2026-10-31");
             NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(15, "mail::send-any was split from mail::manage, 2026-10-28");
         }
 

@@ -54,7 +54,8 @@ namespace XUnitTest.Workflow
                 accessor.Object,
                 _grants.Object,
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                _releaser.Object);
+                _releaser.Object,
+                Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>());
         }
 
         public void Dispose()
