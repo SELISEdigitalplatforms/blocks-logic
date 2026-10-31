@@ -171,52 +171,6 @@ describe("NodeLibraryPanel Split Out (SPEC2)", () => {
   });
 });
 
-describe("NodeLibraryPanel Limit (SPEC10)", () => {
-  it("H1/H2: lists Limit in Transform and creates a v2 node with one input and one output", () => {
-    const limit = NodeDefinitions.find((d) => d.id === "transform-limit-v2")!;
-    expect(limit).toMatchObject({
-      title: "Limit",
-      description: "Keep at most a set number of items, from the start or the end of the list.",
-      type: "limit",
-      category: "transform",
-      version: "v2",
-      defaultName: "Limit",
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let store: any;
-    renderWithProviders(<NodeLibraryPanel />, {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      seedWorkflow: (s: any) => {
-        store = s;
-        s.getState().openNodeLibraryPanel();
-      },
-    });
-    fireEvent.click(screen.getByText("Limit"));
-    const created = Object.values(store.getState().nodesMap)[0] as Record<string, unknown>;
-    expect(created).toMatchObject({ type: "limit", category: "transform", version: "v2", name: "Limit", parameters: { maxItems: 1, keep: "first" } });
-    expect(created.handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [{ key: "target", label: "" }] });
-  });
-
-  it("C14: two Limit nodes keep independent parameters", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let store: any;
-    renderWithProviders(<NodeLibraryPanel />, {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      seedWorkflow: (s: any) => {
-        store = s;
-        s.getState().openNodeLibraryPanel();
-      },
-    });
-    fireEvent.click(screen.getByText("Limit"));
-    act(() => store.getState().openNodeLibraryPanel());
-    fireEvent.click(screen.getByText("Limit"));
-    const [first, second] = Object.values(store.getState().nodesMap) as { id: string; parameters: Record<string, unknown> }[];
-    expect(second).toBeDefined();
-    store.getState().updateNodeParameters(first.id, { maxItems: 7, keep: "last" });
-    expect(store.getState().nodesMap[second.id].parameters).toEqual({ maxItems: 1, keep: "first" });
-  });
-});
-
 describe("NodeLibraryPanel Merge (SPEC3)", () => {
   it("H8/H11: creates a v2 Merge with 2 inputs; '+' with two selected nodes connects both to input 1", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

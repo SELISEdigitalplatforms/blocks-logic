@@ -16,7 +16,6 @@ import {
 	Split,
 	Signpost,
 	Merge,
-	BetweenHorizontalStart,
 } from "lucide-react";
 import { deriveMergeHandle } from "@blocks-workflow/utils/merge-handles";
 import { deriveSwitchHandle, switchHandleLabel } from "@blocks-workflow/utils/switch-handles";
@@ -227,20 +226,6 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		category: "transform",
 		version: "v2",
 		defaultName: "Split Out",
-		handle: {
-			sources: [{ key: "source", label: "" }],
-			targets: [{ key: "target", label: "" }],
-		},
-	},
-	{
-		id: "transform-limit-v2",
-		icon: <BetweenHorizontalStart className="h-5 w-5 text-blue-500" />,
-		title: "Limit",
-		description: "Keep at most a set number of items, from the start or the end of the list.",
-		type: "limit",
-		category: "transform",
-		version: "v2",
-		defaultName: "Limit",
 		handle: {
 			sources: [{ key: "source", label: "" }],
 			targets: [{ key: "target", label: "" }],

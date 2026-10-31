@@ -50,7 +50,6 @@ namespace Workflow.DomainService.Logging
         public const string MergeApplied = "node.merge.applied";
         public const string MergeIgnored = "node.merge.ignored";
         public const string MergeRunWhenUnmet = "node.merge.runWhenUnmet";
-        public const string LimitApplied = "node.limit.applied";
         public const string JoinWoken = "node.join.woken";
         public const string SetFieldApplied = "node.setfield.applied";
         public const string CodeStarted = "node.code.started";
