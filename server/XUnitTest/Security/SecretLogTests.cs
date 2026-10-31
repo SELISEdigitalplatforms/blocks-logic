@@ -47,7 +47,7 @@ namespace XUnitTest.Security
                    .Returns(() => new HttpClient(new EchoHandler(HttpStatusCode.Unauthorized, body), disposeHandler: false));
             var logger = new CapturingLogger<ClientCredentialTokenService>();
             var sut = new ClientCredentialTokenService(logger, factory.Object, new ConfigurationBuilder().Build(),
-                Mock.Of<IClientCredentialRepository>());
+                Mock.Of<IClientCredentialRepository>(), XUnitTest.Links.ClientCredentialTokenServiceTests.SecretScopes());
 
             var token = await sut.GetTokenAsync(new ClientCredential { ItemId = "client-1", ClientSecret = Secret }, "tenant-1");
 

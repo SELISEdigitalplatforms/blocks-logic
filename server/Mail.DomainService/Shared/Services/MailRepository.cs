@@ -109,6 +109,17 @@ namespace Mail.DomainService.Services
             return found;
         }
 
+        public async Task<string?> GetUserEmailAsync(string tenantId, string userId)
+        {
+            // By tenant id, not the request's database: an impersonating caller is a user of the root tenant.
+            var collection = _dbContextProvider.GetCollection<BsonDocument>(tenantId, "Users");
+            var user = await collection.Find(Builders<BsonDocument>.Filter.Eq("_id", userId))
+                .Project(Builders<BsonDocument>.Projection.Include("Email"))
+                .FirstOrDefaultAsync();
+
+            return user is not null && user.TryGetValue("Email", out var email) && email.IsString ? email.AsString : null;
+        }
+
         public Task<MailServerConfiguration> GetMailServerConfigurationByTenantId(string tenantId)
         {
             var mailServerConfigurationCollection = GetCollection<MailServerConfiguration>();
