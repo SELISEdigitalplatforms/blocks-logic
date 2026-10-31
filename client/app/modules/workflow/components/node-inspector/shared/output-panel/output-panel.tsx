@@ -107,6 +107,18 @@ export const OutputPanel = ({
     };
   }, [executedNodes, selectedNode]);
 
+  // Limit: how many items went in and how many were kept.
+  const limitSummary = useMemo(() => {
+    if (!selectedNode || selectedNode.type !== "limit" || selectedNode.pinData != null) return null;
+    const run = latestRun(executedNodes, selectedNode.id);
+    if (!run || run.status === NodeExecutionStatus.Failed) return null;
+    const input = Array.isArray(run.input) ? run.input : [];
+    return {
+      inputCount: run.inputItemCount ?? input.length,
+      outputCount: run.outputItemCount ?? 0,
+    };
+  }, [executedNodes, selectedNode]);
+
   // Merge: how many items each input received on the latest run.
   const mergeSummary = useMemo(() => {
     if (!selectedNode || selectedNode.type !== "merge" || selectedNode.pinData != null) return null;
@@ -281,6 +293,14 @@ export const OutputPanel = ({
               <span className="break-words">The field &apos;{field}&apos; wasn&apos;t found in any input item</span>
             </output>
           ))}
+        </div>
+      )}
+
+      {limitSummary && !isEditingMock && (
+        <div className="mt-2 flex shrink-0 flex-col gap-1.5">
+          <p className="text-xs text-medium-emphasis">
+            {countItems(limitSummary.inputCount)} in → {countItems(limitSummary.outputCount)} out
+          </p>
         </div>
       )}
 

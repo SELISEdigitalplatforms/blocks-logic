@@ -6,6 +6,7 @@ export type NodeType =
   | "setfield"
   | "splitOut"
   | "merge"
+  | "limit"
   | "code"
   | "webhookResponse"
   | "manual"
