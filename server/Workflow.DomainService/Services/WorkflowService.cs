@@ -21,6 +21,8 @@ namespace Workflow.DomainService.Services
     public class WorkflowService : IWorkflowService
     {
         private const string MessageKey = "Message";
+        private const string WorkflowNotFoundMessage = "Workflow not found";
+        private const string SomethingWentWrongMessage = "Something went wrong";
 
         private readonly IWorkflowRepository _workflowRepository;
         private readonly IWorkflowVersionRepository _workflowVersionRepository;
@@ -331,7 +333,7 @@ namespace Workflow.DomainService.Services
                     return new BaseMutationResponse
                     {
                         IsSuccess = false,
-                        Errors = new Dictionary<string, string> { { MessageKey, "Workflow not found" } },
+                        Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                         ItemId = null
                     };
                 }
@@ -372,7 +374,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { MessageKey, "Something went wrong" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, SomethingWentWrongMessage } },
                     ItemId = null
                 };
             }
@@ -433,7 +435,7 @@ namespace Workflow.DomainService.Services
                 return new WorkflowGetResponseDto
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { MessageKey, "Something went wrong" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, SomethingWentWrongMessage } },
                     data = null
                 };
             }
@@ -444,7 +446,7 @@ namespace Workflow.DomainService.Services
                 return new WorkflowGetResponseDto
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { MessageKey, "Workflow not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                     data = null
                 };
             }
@@ -526,7 +528,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     ItemId = null,
-                    Errors = new Dictionary<string, string> { { MessageKey, "Workflow not found" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } }
                 };
             }
 
@@ -574,7 +576,7 @@ namespace Workflow.DomainService.Services
                     return new BaseMutationResponse
                     {
                         IsSuccess = false,
-                        Errors = new Dictionary<string, string> { { MessageKey, "Workflow not found" } }
+                        Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } }
                     };
                 }
                 // Scheduler orchestration: best-effort cleanup — the workflow is being removed,
@@ -603,7 +605,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     ItemId = null,
-                    Errors = new Dictionary<string, string> { { MessageKey, "Something went wrong" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, SomethingWentWrongMessage } }
                 };
             }
         }
@@ -619,7 +621,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { MessageKey, "Workflow not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                     ItemId = null
                 };
             }
@@ -724,7 +726,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { MessageKey, "Workflow not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                     ItemId = null
                 };
             }
@@ -805,7 +807,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { MessageKey, "Workflow not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                     ItemId = null
                 };
             }
@@ -853,7 +855,7 @@ namespace Workflow.DomainService.Services
                     return new BaseMutationResponse
                     {
                         IsSuccess = false,
-                        Errors = new Dictionary<string, string> { { MessageKey, "Workflow not found" } },
+                        Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                         ItemId = null
                     };
                 }
@@ -892,7 +894,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     ItemId = null,
-                    Errors = new Dictionary<string, string> { { MessageKey, "Something went wrong" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, SomethingWentWrongMessage } }
                 };
             }
         }
@@ -956,7 +958,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { MessageKey, "Workflow not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                     ItemId = null
                 };
             }
