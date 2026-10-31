@@ -19,7 +19,7 @@ namespace XUnitTest.Workflow
 
         /// <summary>The 13 node types that existed before SPEC6; they must keep resolving exactly as before.</summary>
         private static List<INodeExecutor> ProductionExecutors() =>
-            AllProductionExecutors().Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "limit")).ToList();
+            AllProductionExecutors().Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "blocksEvent" or "limit")).ToList();
 
         /// <summary>Every production executor class, read without running its constructor (NodeType/Versions need no state).</summary>
         private static List<INodeExecutor> AllProductionExecutors() =>
@@ -92,7 +92,7 @@ namespace XUnitTest.Workflow
                 var act = () => registry.Resolve("switch", version);
                 act.Should().Throw<InvalidOperationException>($"version '{version}'");
             }
-            foreach (var executor in all.Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "limit")))
+            foreach (var executor in all.Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "blocksEvent" or "limit")))
             {
                 registry.Resolve(executor.NodeType, "v1").Executor.Should().BeSameAs(executor);
             }

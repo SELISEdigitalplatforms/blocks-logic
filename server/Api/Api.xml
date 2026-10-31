@@ -4,6 +4,377 @@
         <name>Api</name>
     </assembly>
     <members>
+        <member name="T:Utilities.Api.Controllers.BlocksEventTriggerController">
+            <summary>
+            The tenant's Blocks Event Trigger catalog, routed as <c>/api/BlocksEventTrigger/{action}</c>: which platform
+            events may start workflows (and, later, functions). Reads need workflow read, changes need workflow manage;
+            the tenant always comes from <see cref="T:Blocks.Genesis.BlocksContext"/>.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.#ctor(Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService)">
+            <summary>Takes the catalog service.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.GetAll">
+            <summary><c>GET</c> — every catalog event, sorted by service then label; <c>isSeeded=false</c> when the tenant has no catalog.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.GetWorkflowEvents">
+            <summary><c>GET</c> — the events enabled for workflows: the Blocks Event node's options.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.GetUsage(System.String)">
+            <summary><c>GET</c> — how many published workflows use the event; shown before turning Workflow off.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.CanManage">
+            <summary>
+            <c>GET</c> — succeeds only for callers who may change the catalog (workflow manage); anyone else gets
+            403. The page uses it to show the switches read-only before a change is attempted.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.Update(Workflow.DomainService.BlocksEvents.BlocksEventFlagUpdateRequest)">
+            <summary>
+            <c>POST</c> — sets one event's workflow and/or function flag. A missing name or no flag is a 400; an
+            unknown event or a tenant without a catalog is <c>isSuccess=false</c> with the reason.
+            </summary>
+        </member>
+        <member name="T:Utilities.Api.Controllers.ProxiesController">
+            <summary>
+            Both proxy planes behind one controller:
+            <list type="bullet">
+            <item><b>Control plane</b> (Phase 1 / SPEC3) — a resource-oriented surface rooted at
+            <c>/api/Proxies</c>: the collection itself, one proxy at <c>/{proxyId}</c>, and its
+            <c>/versions</c>, <c>/executions</c> and <c>/overview</c> sub-resources. The controller segment still
+            comes from <c>[controller]</c> plus the global <c>api</c> prefix
+            (<see cref="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/>); only the sub-paths are explicit.
+            Every action requires a bearer token and a permission: <c>blocks-logic::proxy::read</c> to see
+            proxies, versions and execution logs, <c>blocks-logic::proxy::manage</c> to change them, test them or
+            preview an OpenAPI spec. The tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>.
+            Where a service result carries its own <c>HttpStatus</c> the controller honours it, so the service
+            stays the single source of truth for the SPEC §3.4 error contract.</item>
+            <item><b>Data plane</b> (Phase 2) — <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/> at
+            <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>, the path a tenant's client calls instead of the
+            vendor. That route is pinned absolutely rather than derived from the convention, because it is a
+            published contract (see the remarks on <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/>). Unlike every other action it is
+            <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/>: who may call a proxy ("Who can call it" — public, or a Blocks
+            token optionally narrowed by roles / permissions) is stored per proxy, so the action resolves the
+            tenant from <c>x-blocks-key</c> itself and hands the request to the shared
+            <see cref="T:Common.InternalService.Access.IEndpointAccessAuthorizer"/>, which validates the token against that tenant's certificate
+            and evaluates the stored policy.</item>
+            </list>
+            <para>
+            A route id always wins over the same id supplied in the body or query string: the URL identifies the
+            resource, the payload only describes it.
+            </para>
+            </summary>
+        </member>
+        <member name="F:Utilities.Api.Controllers.ProxiesController.GatewayHardBodyLimitBytes">
+            <summary>
+            Kestrel-level backstop on the gateway body, deliberately ABOVE
+            <see cref="P:Proxy.DomainService.Services.ProxyGatewayService.MaxRequestBodyBytes"/> (1 MB) rather than equal to it.
+            <para>
+            The 1 MB cap has to stay in application code: exceeding it is a documented outcome
+            (<c>RequestTooLarge</c>) that answers 413 with the Blocks error body and still records an execution
+            row. A framework-level limit set to the same value would pre-empt that and return a bare Kestrel
+            413 with no row and no <c>code</c>. This one only catches a client streaming far past the point
+            where the answer is already decided, so the contract is unchanged and the ceiling is bounded.
+            </para>
+            </summary>
+        </member>
+        <member name="F:Utilities.Api.Controllers.ProxiesController._openApiImport">
+            <summary>
+            Takes the four control-plane services, the data-plane gateway service, and the shared access
+            authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
+            </summary>
+        </member>
+        <member name="F:Utilities.Api.Controllers.ProxiesController.ImportHardBodyLimitBytes">
+            <summary>
+            Kestrel backstop on an import body. The real cap is on the proxy config inside it (256 KB canonical,
+            <see cref="F:Proxy.DomainService.Utils.ProxyTransferCodec.MaxConfigBytes"/>, answered with the Blocks error body); this one only stops a
+            client streaming far past it. Room is left for an indented file plus the merge choices.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.List(Proxy.DomainService.Dtos.ProxyGetAllRequestDto)">
+            <summary>
+            <c>GET /api/Proxies</c> — the console list page: the tenant's proxies newest-created first,
+            optionally narrowed by a name / slug search term and by isActive state. A list projection: full
+            upstream and header rows are not included.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Create(Proxy.DomainService.Dtos.ProxyCreateRequestDto)">
+            <summary>
+            <c>POST /api/Proxies</c> — creates a proxy and its first <c>ProxyVersions</c> row. 201 on success;
+            409 <c>PROXY_SLUG_CONFLICT</c> when the slug derived from the name already exists for the tenant.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Get(System.String)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}</c> — one proxy and its full configuration. An unknown id, or another
+            tenant's proxy, returns 200 with a null payload rather than 404.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Update(System.String,Proxy.DomainService.Dtos.ProxyUpdateRequestDto)">
+            <summary>
+            <c>PUT /api/Proxies/{proxyId}</c> — rewrites the proxy's configuration and appends the per-field
+            change set as a new version row. The slug is immutable and is never recomputed from a changed name.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.SetEnabled(System.String,Proxy.DomainService.Dtos.ProxyToggleRequestDto)">
+            <summary>
+            <c>PATCH /api/Proxies/{proxyId}</c> — a partial update; <c>enabled</c> is the only field honoured.
+            While disabled the proxy's <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/> route answers 404
+            <c>PROXY_GATEWAY_PROXYNOTFOUND</c>, exactly as an unknown slug does.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Delete(System.String)">
+            <summary>
+            <c>DELETE /api/Proxies/{proxyId}</c> — hard-deletes the proxy document. Its <c>ProxyVersions</c> and
+            <c>ProxyExecutions</c> rows are deliberately retained, so Change history and Request logs keep
+            working afterwards.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.ListVersions(System.String,Proxy.DomainService.Dtos.ProxyGetVersionsRequestDto)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/versions</c> — the <em>Change history</em> tab: the append-only
+            version rows for one proxy, newest first, each carrying its per-field change set and the effective
+            config snapshot after that change.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Revert(System.String,System.String)">
+            <summary>
+            <c>POST /api/Proxies/{proxyId}/versions/{versionId}/revert</c> — restores the configuration
+            captured by that version and records the restore as a new <c>Revert</c> version row. A controlled
+            action rather than a resource, so it stays a verb on a POST. History is never rewritten or
+            truncated; the version number moves forward, not back.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Test(Proxy.DomainService.Dtos.ProxyTestRequestDto)">
+            <summary>
+            <c>POST /api/Proxies/test</c> — console-only: run the data-plane forward pipeline against a saved
+            proxy or an unsaved draft and return the result WITHOUT recording a <c>ProxyExecutions</c> row and
+            WITHOUT creating or mutating any <c>Proxies</c> / <c>ProxyVersions</c> data (SPEC §3.3). It sits on
+            the collection, not under <c>{proxyId}</c>, precisely because the draft it tests need not exist yet.
+            The tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>; no <c>X-Blocks-Key</c> is required here.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.PreviewOpenApi(Proxy.DomainService.Dtos.ProxyOpenApiPreviewRequestDto,System.Threading.CancellationToken)">
+            <summary>
+            <c>POST /api/Proxies/openapi/preview</c> — reads an OpenAPI document and lists the routes it
+            would produce, so the caller can review them before anything is saved.
+            <para>
+            This writes nothing. The chosen operations come back through the ordinary create/update call,
+            which is what keeps an import inside the same validation, versioning and audit as a route typed
+            by hand rather than around them.
+            </para>
+            <para>
+            A specification may be pasted (<c>specJson</c>) or named by URL (<c>specUrl</c>); the URL is
+            fetched through the same guard as any upstream, because otherwise this endpoint is a request
+            this server makes to wherever a caller points it.
+            </para>
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Export(System.String)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/export</c> — one proxy as a JSON file (<c>proxy-{slug}.json</c>) that imports
+            into another environment as the same proxy: same id, same slug, same config. Secrets travel by name only;
+            a literal credential is written as <c>***</c>. No tenant, audit, version, stats or secret id goes in.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.PreviewImport(Proxy.DomainService.Dtos.ProxyExportFile)">
+            <summary>
+            <c>POST /api/Proxies/import/preview</c> — what importing an export file would do here: <c>new</c>,
+            <c>same</c>, <c>changed</c> (with the field-level diff) or <c>blocked</c> (with the reason), plus secret
+            names that are missing or ambiguous here. Writes nothing.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.ApplyImport(Proxy.DomainService.Dtos.ProxyImportApplyRequestDto)">
+            <summary>
+            <c>POST /api/Proxies/import/apply</c> — imports the file: inserts a new proxy with the file's id and slug, or
+            resolves a difference (<c>takeIncoming</c> / <c>keepMine</c> / <c>merge</c> per field). Every preview check
+            runs again here. 409 <c>PROXY_IMPORT_BLOCKED</c> when blocked, 409 <c>PROXY_VERSION_CONFLICT</c> when the
+            proxy changed since the preview. Replaying the same file changes nothing.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.ListExecutions(System.String,Proxy.DomainService.Dtos.ProxyGetExecutionsRequestDto)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/executions</c> — SPEC3 §3.1, the <em>Request logs</em> list for one
+            proxy: all-time, filtered by <c>statusClass</c>, newest-first, paged, or a Live tail when
+            <c>afterId</c> is supplied. Returns 400 <c>PROXY_VALIDATION</c> on a bad field and 404
+            <c>PROXY_NOT_FOUND</c> for a genuinely unknown proxy id (a deleted proxy whose rows remain still
+            works).
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.GetExecution(System.String,System.String)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/executions/{executionId}</c> — SPEC3 §3.2, one expanded request-log
+            row including the full stored response body, clipped to 64 KB for transport (the stored row is
+            untouched). An unknown id, an id whose proxy differs, or another tenant's row all return 200 with
+            <c>data: null</c>.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.GetOverview(System.String)">
+            <summary>
+            <c>GET /api/Proxies/{proxyId}/overview</c> — SPEC3 §3.3, the Overview tiles for one proxy (calls /
+            avg latency / error rate over the rolling 24h window) plus the Configuration-panel convenience
+            fields. 404 <c>PROXY_NOT_FOUND</c> only when the id neither exists for the tenant nor has any
+            execution rows.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)">
+            <summary>
+            Data plane (Phase 2). A tenant's client calls <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>
+            instead of the vendor. The tenant comes from the <c>x-blocks-key</c> header (or the tenant claim of a
+            presented token); the proxy's stored <see cref="P:Proxy.DomainService.Services.ProxyResolvedConfig.Access"/> policy then decides
+            whether a Blocks token is required and which roles / permissions the caller must hold. A missing
+            tenant or a missing / invalid token when one is required is answered 401 and writes NO execution
+            row (C1); a valid token that fails the rules is answered 403 and DOES write a row
+            (<see cref="F:Proxy.DomainService.Entities.ProxyExecutionOutcome.Forbidden"/>), like a probe of an undeclared route. Blocks then
+            rebuilds the request against the stored upstream, attaches ONLY the configured headers / query
+            params, calls the third party server-side, relays the response, and records one
+            <see cref="T:Blocks.Genesis.Entities.Logic.ProxyExecutionEntity"/> per attempt.
+            <para>
+            Unlike the control-plane actions above, this route is <b>pinned absolutely</b> (<c>~/</c>) instead of
+            being derived from <c>[controller]</c>. The path is a published contract that third-party clients
+            hard-code, so it must not change if this method or its controller is ever renamed, and the
+            registered template must be the exact lowercase spelling we document rather than a case-insensitive
+            match for it. The leading <c>~/</c> also makes it skip
+            <see cref="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/>, so the <c>api</c> segment is written
+            here once and never doubled.
+            </para>
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.AddGatewaySecurityHeaders(Microsoft.AspNetCore.Http.HttpResponse)">
+            <summary>
+            The two headers every gateway answer carries (PS-1), the same pair Functions sends
+            (<c>FunctionHttpResponseMapper.SecurityHeaders</c>). The body is a tenant's upstream content served
+            from the platform origin: <c>nosniff</c> stops a browser re-reading JSON or text as HTML, and
+            <c>Content-Security-Policy: sandbox</c> puts any HTML or SVG an upstream returns in an opaque origin
+            with scripts off, so it cannot read the console's storage or act as the signed-in user. An
+            upstream's own CSP is never relayed, so it cannot loosen this.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.Relay(Proxy.DomainService.Services.ProxyForwardResult)">
+            <summary>Relays the upstream status, body, and Content-Type byte-for-byte. No other header is relayed.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.ProxiesController.GatewayError(System.String,System.Int32,System.String,System.Nullable{System.Int32})">
+            <summary>
+            Blocks-generated error body (SPEC §3.4): <c>{ code: "PROXY_GATEWAY_&lt;OUTCOME&gt;", message, instance }</c>.
+            </summary>
+        </member>
+        <member name="F:Utilities.Api.Controllers.ProxiesController.MaxCallerFieldLength">
+            <summary>
+            Cap on a caller-supplied provenance header before it is stored. A User-Agent or Referer is
+            attacker-controlled and unbounded; the execution row is not the place to find that out.
+            </summary>
+        </member>
+        <member name="T:Utilities.Api.Controllers.WorkflowController">
+            <summary>
+            Management API for workflows, their versions and their executions, routed as
+            <c>/api/Workflow/{action}</c>. Every action except the webhook entry points requires a bearer
+            token; the tenant always comes from <see cref="T:Blocks.Genesis.BlocksContext"/> and is never taken from the payload.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.#ctor(Workflow.DomainService.Services.IWorkflowService,Workflow.DomainService.Services.IWorkflowVersionService,Workflow.DomainService.Services.IWorkflowExecutionService,Workflow.DomainService.Services.IWorkflowImportService,Workflow.DomainService.Logging.IExecutionLogService)">
+            <summary>Takes the workflow, version, execution, import and execution log services.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetAll(Workflow.DomainService.Dtos.WorkflowGetsRequestDto)">
+            <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Get(Workflow.DomainService.Dtos.WorkflowGetRequestDto)">
+            <summary><c>GET</c> — one workflow by id, including its node graph.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Create(Workflow.DomainService.Dtos.WorkflowCreateRequestDto)">
+            <summary><c>POST</c> — creates a workflow. 201 on success.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Duplicate(Workflow.DomainService.Dtos.WorkflowDuplicateRequestDto)">
+            <summary><c>POST</c> — copies an existing workflow into a new one. 201 on success.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Update(Workflow.DomainService.Dtos.WorkflowUpdateRequestDto)">
+            <summary><c>PUT</c> — rewrites a workflow's name, description and node graph.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Import(Workflow.DomainService.Dtos.WorkflowImportRequestDto)">
+            <summary>
+            <c>POST</c> — enqueues a workflow import. The file must already be in storage.
+            Returns immediately; completion is delivered via the <c>workflow-import</c> notification.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Delete(Workflow.DomainService.Dtos.WorkflowDeleteRequestDto)">
+            <summary><c>DELETE</c> — removes a workflow by id.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.CreateVersion(Workflow.DomainService.Dtos.WorkflowVersionCreateRequestDto)">
+            <summary><c>POST</c> — snapshots the working workflow as a new version row. 201 on success.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.UpdateVersion(Workflow.DomainService.Dtos.WorkflowVersionUpdateRequestDto)">
+            <summary><c>POST</c> — edits an existing version's metadata.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetVersions(Workflow.DomainService.Dtos.WorkflowGetVersionsRequestDto)">
+            <summary><c>POST</c> — the version history for one workflow.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetWorkflowByVersion(Workflow.DomainService.Dtos.GetWorkflowByVersionRequestDto)">
+            <summary><c>POST</c> — the workflow graph as captured by a specific version.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.PublishNewVersion(Workflow.DomainService.Dtos.WorkflowPublishNewVersionRequestDto)">
+            <summary><c>POST</c> — snapshots the current graph as a new version and publishes it in one step.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.PublishVersion(Workflow.DomainService.Dtos.WorkflowPublishVersionRequestDto)">
+            <summary><c>POST</c> — publishes an existing version, making it the one webhooks execute.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Unpublish(Workflow.DomainService.Dtos.WorkflowUnpublishRequestDto)">
+            <summary><c>POST</c> — takes the workflow out of service; its webhooks stop executing.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Restore(Workflow.DomainService.Dtos.WorkflowRestoreRequestDto)">
+            <summary><c>POST</c> — restores a soft-deleted workflow.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)">
+            <summary>
+            Data-plane entry point: runs the published workflow behind a webhook trigger.
+            <c>POST /api/Workflow/Webhook/{tenantId}/{workflowId}/{webhookId}</c>. Anonymous at the framework
+            level — the trigger's own <c>authType</c> decides whether a caller must be authenticated or
+            authorized, and a failure surfaces here as 401.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String,System.Text.Json.JsonElement)">
+            <summary>
+            The <c>webhook-test</c> twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: runs the DRAFT graph rather than the
+            published version, for the console's test panel. Same route shape, same 401 behaviour.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)">
+            <summary>
+            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than the
+            path. <c>POST /api/Workflow/Webhook/{workflowId}/{webhookId}</c>. Anonymous at the framework
+            level — missing or blank header is 400; trigger <c>authType</c> failures still surface as 401.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)">
+            <summary>
+            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than
+            the path. <c>POST /api/Workflow/webhook-test/{workflowId}/{webhookId}</c>. Same 400/401 behaviour
+            as <see cref="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)"/>.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.StepExecute(Workflow.DomainService.Dtos.StepExecuteRequestDto)">
+            <summary><c>POST</c> — executes a single node in isolation and returns its output, for the node inspector.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.TriggerListener(Workflow.DomainService.Dtos.TriggerListenerRequestDto)">
+            <summary><c>POST</c> — fires a listener-type trigger by hand.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecutions(Workflow.DomainService.Dtos.WorkflowExecutionsGetRequestDto)">
+            <summary><c>GET</c> — the execution history for one workflow.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecution(Workflow.DomainService.Dtos.WorkflowExecutionGetRequestDto)">
+            <summary><c>GET</c> — one execution, including per-node results.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.ResumeExecution(Workflow.DomainService.Dtos.WorkflowExecutionGetRequestDto)">
+            <summary>
+            <c>POST</c> — continues a failed run from where it stopped. Steps that completed are not run again,
+            and a function step does not call again the items that already succeeded. 409 when it cannot be resumed.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecutionLogs(Workflow.DomainService.Dtos.WorkflowExecutionLogsGetRequestDto)">
+            <summary><c>GET</c> — the stage log lines of one execution (stages and counts only, never data values),
+            with whether they are available, expired or still arriving.</summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.LastSuccessfullExecution(Workflow.DomainService.Dtos.LastSuccessfullExecutionRequestDto)">
+            <summary><c>GET</c> — the most recent successful execution, used to prefill node inputs from real data.</summary>
+        </member>
         <member name="T:BlocksTemplate.Api.Controllers.CertificateController">
             <summary>Certificate storage for the tenant, routed as <c>/api/Certificate/{action}</c>.</summary>
         </member>
@@ -966,346 +1337,6 @@
         </member>
         <member name="M:Api.Controllers.TemplateController.Gets(Mail.DomainService.Mails.GetAllTemplates)">
             <summary><c>GET</c> — the tenant's templates, filtered by the query string.</summary>
-        </member>
-        <member name="T:Utilities.Api.Controllers.ProxiesController">
-            <summary>
-            Both proxy planes behind one controller:
-            <list type="bullet">
-            <item><b>Control plane</b> (Phase 1 / SPEC3) — a resource-oriented surface rooted at
-            <c>/api/Proxies</c>: the collection itself, one proxy at <c>/{proxyId}</c>, and its
-            <c>/versions</c>, <c>/executions</c> and <c>/overview</c> sub-resources. The controller segment still
-            comes from <c>[controller]</c> plus the global <c>api</c> prefix
-            (<see cref="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/>); only the sub-paths are explicit.
-            Every action requires a bearer token and a permission: <c>blocks-logic::proxy::read</c> to see
-            proxies, versions and execution logs, <c>blocks-logic::proxy::manage</c> to change them, test them or
-            preview an OpenAPI spec. The tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>.
-            Where a service result carries its own <c>HttpStatus</c> the controller honours it, so the service
-            stays the single source of truth for the SPEC §3.4 error contract.</item>
-            <item><b>Data plane</b> (Phase 2) — <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/> at
-            <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>, the path a tenant's client calls instead of the
-            vendor. That route is pinned absolutely rather than derived from the convention, because it is a
-            published contract (see the remarks on <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/>). Unlike every other action it is
-            <see cref="T:Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute"/>: who may call a proxy ("Who can call it" — public, or a Blocks
-            token optionally narrowed by roles / permissions) is stored per proxy, so the action resolves the
-            tenant from <c>x-blocks-key</c> itself and hands the request to the shared
-            <see cref="T:Common.InternalService.Access.IEndpointAccessAuthorizer"/>, which validates the token against that tenant's certificate
-            and evaluates the stored policy.</item>
-            </list>
-            <para>
-            A route id always wins over the same id supplied in the body or query string: the URL identifies the
-            resource, the payload only describes it.
-            </para>
-            </summary>
-        </member>
-        <member name="F:Utilities.Api.Controllers.ProxiesController.GatewayHardBodyLimitBytes">
-            <summary>
-            Kestrel-level backstop on the gateway body, deliberately ABOVE
-            <see cref="P:Proxy.DomainService.Services.ProxyGatewayService.MaxRequestBodyBytes"/> (1 MB) rather than equal to it.
-            <para>
-            The 1 MB cap has to stay in application code: exceeding it is a documented outcome
-            (<c>RequestTooLarge</c>) that answers 413 with the Blocks error body and still records an execution
-            row. A framework-level limit set to the same value would pre-empt that and return a bare Kestrel
-            413 with no row and no <c>code</c>. This one only catches a client streaming far past the point
-            where the answer is already decided, so the contract is unchanged and the ceiling is bounded.
-            </para>
-            </summary>
-        </member>
-        <member name="F:Utilities.Api.Controllers.ProxiesController._openApiImport">
-            <summary>
-            Takes the four control-plane services, the data-plane gateway service, and the shared access
-            authorizer that enforces each proxy's "Who can call it" policy on the gateway route.
-            </summary>
-        </member>
-        <member name="F:Utilities.Api.Controllers.ProxiesController.ImportHardBodyLimitBytes">
-            <summary>
-            Kestrel backstop on an import body. The real cap is on the proxy config inside it (256 KB canonical,
-            <see cref="F:Proxy.DomainService.Utils.ProxyTransferCodec.MaxConfigBytes"/>, answered with the Blocks error body); this one only stops a
-            client streaming far past it. Room is left for an indented file plus the merge choices.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.List(Proxy.DomainService.Dtos.ProxyGetAllRequestDto)">
-            <summary>
-            <c>GET /api/Proxies</c> — the console list page: the tenant's proxies newest-created first,
-            optionally narrowed by a name / slug search term and by isActive state. A list projection: full
-            upstream and header rows are not included.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.Create(Proxy.DomainService.Dtos.ProxyCreateRequestDto)">
-            <summary>
-            <c>POST /api/Proxies</c> — creates a proxy and its first <c>ProxyVersions</c> row. 201 on success;
-            409 <c>PROXY_SLUG_CONFLICT</c> when the slug derived from the name already exists for the tenant.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.Get(System.String)">
-            <summary>
-            <c>GET /api/Proxies/{proxyId}</c> — one proxy and its full configuration. An unknown id, or another
-            tenant's proxy, returns 200 with a null payload rather than 404.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.Update(System.String,Proxy.DomainService.Dtos.ProxyUpdateRequestDto)">
-            <summary>
-            <c>PUT /api/Proxies/{proxyId}</c> — rewrites the proxy's configuration and appends the per-field
-            change set as a new version row. The slug is immutable and is never recomputed from a changed name.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.SetEnabled(System.String,Proxy.DomainService.Dtos.ProxyToggleRequestDto)">
-            <summary>
-            <c>PATCH /api/Proxies/{proxyId}</c> — a partial update; <c>enabled</c> is the only field honoured.
-            While disabled the proxy's <see cref="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)"/> route answers 404
-            <c>PROXY_GATEWAY_PROXYNOTFOUND</c>, exactly as an unknown slug does.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.Delete(System.String)">
-            <summary>
-            <c>DELETE /api/Proxies/{proxyId}</c> — hard-deletes the proxy document. Its <c>ProxyVersions</c> and
-            <c>ProxyExecutions</c> rows are deliberately retained, so Change history and Request logs keep
-            working afterwards.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.ListVersions(System.String,Proxy.DomainService.Dtos.ProxyGetVersionsRequestDto)">
-            <summary>
-            <c>GET /api/Proxies/{proxyId}/versions</c> — the <em>Change history</em> tab: the append-only
-            version rows for one proxy, newest first, each carrying its per-field change set and the effective
-            config snapshot after that change.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.Revert(System.String,System.String)">
-            <summary>
-            <c>POST /api/Proxies/{proxyId}/versions/{versionId}/revert</c> — restores the configuration
-            captured by that version and records the restore as a new <c>Revert</c> version row. A controlled
-            action rather than a resource, so it stays a verb on a POST. History is never rewritten or
-            truncated; the version number moves forward, not back.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.Test(Proxy.DomainService.Dtos.ProxyTestRequestDto)">
-            <summary>
-            <c>POST /api/Proxies/test</c> — console-only: run the data-plane forward pipeline against a saved
-            proxy or an unsaved draft and return the result WITHOUT recording a <c>ProxyExecutions</c> row and
-            WITHOUT creating or mutating any <c>Proxies</c> / <c>ProxyVersions</c> data (SPEC §3.3). It sits on
-            the collection, not under <c>{proxyId}</c>, precisely because the draft it tests need not exist yet.
-            The tenant is taken from <see cref="T:Blocks.Genesis.BlocksContext"/>; no <c>X-Blocks-Key</c> is required here.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.PreviewOpenApi(Proxy.DomainService.Dtos.ProxyOpenApiPreviewRequestDto,System.Threading.CancellationToken)">
-            <summary>
-            <c>POST /api/Proxies/openapi/preview</c> — reads an OpenAPI document and lists the routes it
-            would produce, so the caller can review them before anything is saved.
-            <para>
-            This writes nothing. The chosen operations come back through the ordinary create/update call,
-            which is what keeps an import inside the same validation, versioning and audit as a route typed
-            by hand rather than around them.
-            </para>
-            <para>
-            A specification may be pasted (<c>specJson</c>) or named by URL (<c>specUrl</c>); the URL is
-            fetched through the same guard as any upstream, because otherwise this endpoint is a request
-            this server makes to wherever a caller points it.
-            </para>
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.Export(System.String)">
-            <summary>
-            <c>GET /api/Proxies/{proxyId}/export</c> — one proxy as a JSON file (<c>proxy-{slug}.json</c>) that imports
-            into another environment as the same proxy: same id, same slug, same config. Secrets travel by name only;
-            a literal credential is written as <c>***</c>. No tenant, audit, version, stats or secret id goes in.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.PreviewImport(Proxy.DomainService.Dtos.ProxyExportFile)">
-            <summary>
-            <c>POST /api/Proxies/import/preview</c> — what importing an export file would do here: <c>new</c>,
-            <c>same</c>, <c>changed</c> (with the field-level diff) or <c>blocked</c> (with the reason), plus secret
-            names that are missing or ambiguous here. Writes nothing.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.ApplyImport(Proxy.DomainService.Dtos.ProxyImportApplyRequestDto)">
-            <summary>
-            <c>POST /api/Proxies/import/apply</c> — imports the file: inserts a new proxy with the file's id and slug, or
-            resolves a difference (<c>takeIncoming</c> / <c>keepMine</c> / <c>merge</c> per field). Every preview check
-            runs again here. 409 <c>PROXY_IMPORT_BLOCKED</c> when blocked, 409 <c>PROXY_VERSION_CONFLICT</c> when the
-            proxy changed since the preview. Replaying the same file changes nothing.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.ListExecutions(System.String,Proxy.DomainService.Dtos.ProxyGetExecutionsRequestDto)">
-            <summary>
-            <c>GET /api/Proxies/{proxyId}/executions</c> — SPEC3 §3.1, the <em>Request logs</em> list for one
-            proxy: all-time, filtered by <c>statusClass</c>, newest-first, paged, or a Live tail when
-            <c>afterId</c> is supplied. Returns 400 <c>PROXY_VALIDATION</c> on a bad field and 404
-            <c>PROXY_NOT_FOUND</c> for a genuinely unknown proxy id (a deleted proxy whose rows remain still
-            works).
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.GetExecution(System.String,System.String)">
-            <summary>
-            <c>GET /api/Proxies/{proxyId}/executions/{executionId}</c> — SPEC3 §3.2, one expanded request-log
-            row including the full stored response body, clipped to 64 KB for transport (the stored row is
-            untouched). An unknown id, an id whose proxy differs, or another tenant's row all return 200 with
-            <c>data: null</c>.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.GetOverview(System.String)">
-            <summary>
-            <c>GET /api/Proxies/{proxyId}/overview</c> — SPEC3 §3.3, the Overview tiles for one proxy (calls /
-            avg latency / error rate over the rolling 24h window) plus the Configuration-panel convenience
-            fields. 404 <c>PROXY_NOT_FOUND</c> only when the id neither exists for the tenant nor has any
-            execution rows.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.Gateway(System.String,System.String)">
-            <summary>
-            Data plane (Phase 2). A tenant's client calls <c>{METHOD} /api/proxy/gateway/{slug}/{**path}</c>
-            instead of the vendor. The tenant comes from the <c>x-blocks-key</c> header (or the tenant claim of a
-            presented token); the proxy's stored <see cref="P:Proxy.DomainService.Services.ProxyResolvedConfig.Access"/> policy then decides
-            whether a Blocks token is required and which roles / permissions the caller must hold. A missing
-            tenant or a missing / invalid token when one is required is answered 401 and writes NO execution
-            row (C1); a valid token that fails the rules is answered 403 and DOES write a row
-            (<see cref="F:Proxy.DomainService.Entities.ProxyExecutionOutcome.Forbidden"/>), like a probe of an undeclared route. Blocks then
-            rebuilds the request against the stored upstream, attaches ONLY the configured headers / query
-            params, calls the third party server-side, relays the response, and records one
-            <see cref="T:Blocks.Genesis.Entities.Logic.ProxyExecutionEntity"/> per attempt.
-            <para>
-            Unlike the control-plane actions above, this route is <b>pinned absolutely</b> (<c>~/</c>) instead of
-            being derived from <c>[controller]</c>. The path is a published contract that third-party clients
-            hard-code, so it must not change if this method or its controller is ever renamed, and the
-            registered template must be the exact lowercase spelling we document rather than a case-insensitive
-            match for it. The leading <c>~/</c> also makes it skip
-            <see cref="T:BlocksTemplate.Api.GlobalApiRoutePrefixConvention"/>, so the <c>api</c> segment is written
-            here once and never doubled.
-            </para>
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.AddGatewaySecurityHeaders(Microsoft.AspNetCore.Http.HttpResponse)">
-            <summary>
-            The two headers every gateway answer carries (PS-1), the same pair Functions sends
-            (<c>FunctionHttpResponseMapper.SecurityHeaders</c>). The body is a tenant's upstream content served
-            from the platform origin: <c>nosniff</c> stops a browser re-reading JSON or text as HTML, and
-            <c>Content-Security-Policy: sandbox</c> puts any HTML or SVG an upstream returns in an opaque origin
-            with scripts off, so it cannot read the console's storage or act as the signed-in user. An
-            upstream's own CSP is never relayed, so it cannot loosen this.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.Relay(Proxy.DomainService.Services.ProxyForwardResult)">
-            <summary>Relays the upstream status, body, and Content-Type byte-for-byte. No other header is relayed.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.ProxiesController.GatewayError(System.String,System.Int32,System.String,System.Nullable{System.Int32})">
-            <summary>
-            Blocks-generated error body (SPEC §3.4): <c>{ code: "PROXY_GATEWAY_&lt;OUTCOME&gt;", message, instance }</c>.
-            </summary>
-        </member>
-        <member name="F:Utilities.Api.Controllers.ProxiesController.MaxCallerFieldLength">
-            <summary>
-            Cap on a caller-supplied provenance header before it is stored. A User-Agent or Referer is
-            attacker-controlled and unbounded; the execution row is not the place to find that out.
-            </summary>
-        </member>
-        <member name="T:Utilities.Api.Controllers.WorkflowController">
-            <summary>
-            Management API for workflows, their versions and their executions, routed as
-            <c>/api/Workflow/{action}</c>. Every action except the webhook entry points requires a bearer
-            token; the tenant always comes from <see cref="T:Blocks.Genesis.BlocksContext"/> and is never taken from the payload.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.#ctor(Workflow.DomainService.Services.IWorkflowService,Workflow.DomainService.Services.IWorkflowVersionService,Workflow.DomainService.Services.IWorkflowExecutionService,Workflow.DomainService.Services.IWorkflowImportService,Workflow.DomainService.Logging.IExecutionLogService)">
-            <summary>Takes the workflow, version, execution, import and execution log services.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.GetAll(Workflow.DomainService.Dtos.WorkflowGetsRequestDto)">
-            <summary><c>POST</c> — the tenant's workflows, filtered and paged by the request body.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.Get(Workflow.DomainService.Dtos.WorkflowGetRequestDto)">
-            <summary><c>GET</c> — one workflow by id, including its node graph.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.Create(Workflow.DomainService.Dtos.WorkflowCreateRequestDto)">
-            <summary><c>POST</c> — creates a workflow. 201 on success.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.Duplicate(Workflow.DomainService.Dtos.WorkflowDuplicateRequestDto)">
-            <summary><c>POST</c> — copies an existing workflow into a new one. 201 on success.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.Update(Workflow.DomainService.Dtos.WorkflowUpdateRequestDto)">
-            <summary><c>PUT</c> — rewrites a workflow's name, description and node graph.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.Import(Workflow.DomainService.Dtos.WorkflowImportRequestDto)">
-            <summary>
-            <c>POST</c> — enqueues a workflow import. The file must already be in storage.
-            Returns immediately; completion is delivered via the <c>workflow-import</c> notification.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.Delete(Workflow.DomainService.Dtos.WorkflowDeleteRequestDto)">
-            <summary><c>DELETE</c> — removes a workflow by id.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.CreateVersion(Workflow.DomainService.Dtos.WorkflowVersionCreateRequestDto)">
-            <summary><c>POST</c> — snapshots the working workflow as a new version row. 201 on success.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.UpdateVersion(Workflow.DomainService.Dtos.WorkflowVersionUpdateRequestDto)">
-            <summary><c>POST</c> — edits an existing version's metadata.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.GetVersions(Workflow.DomainService.Dtos.WorkflowGetVersionsRequestDto)">
-            <summary><c>POST</c> — the version history for one workflow.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.GetWorkflowByVersion(Workflow.DomainService.Dtos.GetWorkflowByVersionRequestDto)">
-            <summary><c>POST</c> — the workflow graph as captured by a specific version.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.PublishNewVersion(Workflow.DomainService.Dtos.WorkflowPublishNewVersionRequestDto)">
-            <summary><c>POST</c> — snapshots the current graph as a new version and publishes it in one step.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.PublishVersion(Workflow.DomainService.Dtos.WorkflowPublishVersionRequestDto)">
-            <summary><c>POST</c> — publishes an existing version, making it the one webhooks execute.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.Unpublish(Workflow.DomainService.Dtos.WorkflowUnpublishRequestDto)">
-            <summary><c>POST</c> — takes the workflow out of service; its webhooks stop executing.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.Restore(Workflow.DomainService.Dtos.WorkflowRestoreRequestDto)">
-            <summary><c>POST</c> — restores a soft-deleted workflow.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)">
-            <summary>
-            Data-plane entry point: runs the published workflow behind a webhook trigger.
-            <c>POST /api/Workflow/Webhook/{tenantId}/{workflowId}/{webhookId}</c>. Anonymous at the framework
-            level — the trigger's own <c>authType</c> decides whether a caller must be authenticated or
-            authorized, and a failure surfaces here as 401.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String,System.Text.Json.JsonElement)">
-            <summary>
-            The <c>webhook-test</c> twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: runs the DRAFT graph rather than the
-            published version, for the console's test panel. Same route shape, same 401 behaviour.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)">
-            <summary>
-            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than the
-            path. <c>POST /api/Workflow/Webhook/{workflowId}/{webhookId}</c>. Anonymous at the framework
-            level — missing or blank header is 400; trigger <c>authType</c> failures still surface as 401.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)">
-            <summary>
-            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than
-            the path. <c>POST /api/Workflow/webhook-test/{workflowId}/{webhookId}</c>. Same 400/401 behaviour
-            as <see cref="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)"/>.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.StepExecute(Workflow.DomainService.Dtos.StepExecuteRequestDto)">
-            <summary><c>POST</c> — executes a single node in isolation and returns its output, for the node inspector.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.TriggerListener(Workflow.DomainService.Dtos.TriggerListenerRequestDto)">
-            <summary><c>POST</c> — fires a listener-type trigger by hand.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecutions(Workflow.DomainService.Dtos.WorkflowExecutionsGetRequestDto)">
-            <summary><c>GET</c> — the execution history for one workflow.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecution(Workflow.DomainService.Dtos.WorkflowExecutionGetRequestDto)">
-            <summary><c>GET</c> — one execution, including per-node results.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.ResumeExecution(Workflow.DomainService.Dtos.WorkflowExecutionGetRequestDto)">
-            <summary>
-            <c>POST</c> — continues a failed run from where it stopped. Steps that completed are not run again,
-            and a function step does not call again the items that already succeeded. 409 when it cannot be resumed.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.GetExecutionLogs(Workflow.DomainService.Dtos.WorkflowExecutionLogsGetRequestDto)">
-            <summary><c>GET</c> — the stage log lines of one execution (stages and counts only, never data values),
-            with whether they are available, expired or still arriving.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.LastSuccessfullExecution(Workflow.DomainService.Dtos.LastSuccessfullExecutionRequestDto)">
-            <summary><c>GET</c> — the most recent successful execution, used to prefill node inputs from real data.</summary>
         </member>
         <member name="T:Program">
             <summary>

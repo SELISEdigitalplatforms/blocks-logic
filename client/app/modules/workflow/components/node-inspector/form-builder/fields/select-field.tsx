@@ -11,6 +11,9 @@ import { FieldProps, SelectOption } from "../form-field.types";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 
+/** `refetchOnWindowFocus` reloads at most this often. */
+export const REFETCH_ON_FOCUS_THROTTLE_MS = 2000;
+
 /** Radix SelectItem rejects "". Map empty stored values to this sentinel. */
 const EMPTY_SELECT_VALUE = "__empty__";
 
@@ -75,6 +78,41 @@ export const SelectField = ({
         .finally(() => setIsLoading(false));
     }
   }, [config, data, depString, field, onChange, readOnly, value]);
+
+  // Opt-in reload when the window regains focus (another tab may have changed what is selectable). Only the
+  // option list is replaced: the stored value is never reset here, unlike the first load's default fallback.
+  const latest = useRef({ data, config });
+  useEffect(() => {
+    latest.current = { data, config };
+  }, [data, config]);
+  useEffect(() => {
+    if (!field.refetchOnWindowFocus || typeof field.options !== "function") return;
+    const load = field.options;
+    let lastReload = 0;
+    let disposed = false;
+    const reload = () => {
+      const now = Date.now();
+      if (now - lastReload < REFETCH_ON_FOCUS_THROTTLE_MS) return;
+      lastReload = now;
+      load(latest.current.data, latest.current.config)
+        .then((opts) => {
+          if (!disposed) setAsyncOptions(opts);
+        })
+        .catch(() => {
+          // Keep the options already shown; the next focus tries again.
+        });
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") reload();
+    };
+    window.addEventListener("focus", reload);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      disposed = true;
+      window.removeEventListener("focus", reload);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [field.refetchOnWindowFocus, field.options]);
 
   const options = isStaticOptions ? staticOptions : asyncOptions;
 

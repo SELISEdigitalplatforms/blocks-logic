@@ -17,3 +17,4 @@ export { ScheduleFormPage } from "./pages/schedule-form.page";
 export { SchedulesListPage } from "./pages/schedules-list.page";
 export { WorkflowEditorPage } from "./pages/workflow-editor.page";
 export { WorkflowListPage } from "./pages/workflow-list.page";
+export { EventTriggersPage } from "./pages/event-triggers.page";

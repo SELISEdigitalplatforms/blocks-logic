@@ -1,3 +1,5 @@
+using Workflow.DomainService.BlocksEvents;
+using Workflow.DomainService.Nodes.TriggerBlocksEventV2;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using Workflow.DomainService.Import;
@@ -54,6 +56,9 @@ namespace Workflow.DomainService
             services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
             services.AddSingleton<IWorkflowVersionRepository, WorkflowVersionRepository>();
             services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
+            services.AddSingleton<IBlocksEventCatalogRepository, BlocksEventCatalogRepository>();
+            services.AddSingleton<IBlocksEventCatalogService, BlocksEventCatalogService>();
+            services.AddSingleton<IBlocksEventTriggerService, BlocksEventTriggerService>();
 
             //  rigister node executors
 
@@ -62,6 +67,7 @@ namespace Workflow.DomainService
             services.AddSingleton<INodeExecutor, TriggerEmailV1Node>();
             services.AddSingleton<INodeExecutor, TriggerDataV1Node>();
             services.AddSingleton<INodeExecutor, TriggerScheduleV1Node>();
+            services.AddSingleton<INodeExecutor, TriggerBlocksEventV2Node>();
 
             // Logic nodes
             services.AddSingleton<INodeExecutor, LogicIfV1Node>();

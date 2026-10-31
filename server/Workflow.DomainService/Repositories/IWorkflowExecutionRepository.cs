@@ -43,6 +43,11 @@ namespace Workflow.DomainService.Repositories
         Task<List<WorkflowExecutionListRow>> GetNewerThanAsync(string workflowId, string tenantId, DateTime startedAt, string id, int pageSize);
 
         Task<long> CountByWorkflowIdAsync(string workflowId, string tenantId);
+        /// <summary>
+        /// Whether the workflow already has an execution started by the Blocks Event with this <paramref name="eventId"/>
+        /// (a redelivered message). A system check: it is not narrowed by the caller's data access.
+        /// </summary>
+        Task<bool> ExistsForBlocksEventAsync(string tenantId, string workflowId, string eventId);
 
         Task<List<WorkflowExecutionListRow>> GetListItemsByIdsAsync(string workflowId, string tenantId, IReadOnlyCollection<string> ids);
 
