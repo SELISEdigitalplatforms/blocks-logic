@@ -1,6 +1,7 @@
 using Blocks.Genesis;
 using DataAccess.InternalService;
 using Workflow.DomainService.Entities;
+using Workflow.DomainService.Utils;
 using Workflow.DomainService.Services;
 using Microsoft.Extensions.Configuration;
 using MongoDB.Bson;
@@ -400,6 +401,21 @@ namespace Workflow.DomainService.Repositories
                     builder.Eq(e => e.StartedAt, startedAt),
                     builder.Gt(e => e.Id, id)));
             return QueryListAsync(tenantId, WorkflowFilter(workflowId) & newer, OldestFirst, pageSize);
+        }
+
+        public static FilterDefinition<WorkflowExecutionEntity> BlocksEventExecutionFilter(string workflowId, string eventId)
+        {
+            var builder = Builders<WorkflowExecutionEntity>.Filter;
+            return builder.Eq(e => e.WorkflowId, workflowId)
+                & builder.Eq("TriggerMetadata.TriggerType", LogicConstants.BlocksEventNodeType)
+                & builder.Eq("TriggerMetadata.TriggerData.0.EventId", eventId);
+        }
+
+        public async Task<bool> ExistsForBlocksEventAsync(string tenantId, string workflowId, string eventId)
+        {
+            await EnsureIndexesAsync(tenantId);
+            return await GetCollection(tenantId).CountDocumentsAsync(
+                BlocksEventExecutionFilter(workflowId, eventId), new CountOptions { Limit = 1 }) > 0;
         }
 
         public async Task<long> CountByWorkflowIdAsync(string workflowId, string tenantId)

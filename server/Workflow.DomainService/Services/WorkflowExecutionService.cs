@@ -26,6 +26,9 @@ namespace Workflow.DomainService.Services
     [ExcludeFromCodeCoverage]
     public class WorkflowExecutionService : IWorkflowExecutionService
     {
+        private const string TimestampField = "Timestamp";
+        private const string ErrorMessageKey = "Message";
+
         private readonly IWorkflowRepository _workflowRepository;
         private readonly IWorkflowExecutionRepository _executionRepository;
         private readonly IWorkflowVersionRepository _workflowVersionRepository;
@@ -242,7 +245,7 @@ namespace Workflow.DomainService.Services
                 };
 
                 execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
-                execution.Context["Input"] = normalizedInput;
+                execution.Context[LogicConstants.ExecutionInputKey] = normalizedInput;
                 execution.Status = WorkflowExecutionStatus.Queued;
                 execution.ActiveNodeIds.Add(triggerId);
 
@@ -447,7 +450,7 @@ namespace Workflow.DomainService.Services
         {
             return nodes.FirstOrDefault(n =>
                 n.Type == "email" &&
-                n.Category == "trigger" &&
+                n.Category == LogicConstants.TriggerCategory &&
                 n.Parameters != null &&
                 n.Parameters.Contains("mailServerConfigurationId") &&
                 n.Parameters["mailServerConfigurationId"].ToString() == mailServerConfigurationId);
@@ -485,7 +488,7 @@ namespace Workflow.DomainService.Services
                     TriggerData = new BsonArray { emailBsonDoc }
                 }, executionMode);
 
-                execution.Context["Input"] = new BsonArray { emailBsonDoc };
+                execution.Context[LogicConstants.ExecutionInputKey] = new BsonArray { emailBsonDoc };
                 execution.Status = WorkflowExecutionStatus.Queued;
                 execution.ActiveNodeIds.Add(triggerNode.Id);
 
@@ -657,7 +660,7 @@ namespace Workflow.DomainService.Services
             HttpStatus = 400,
             TotalCount = 0,
             Data = [],
-            Errors = new Dictionary<string, string> { { "Message", message } },
+            Errors = new Dictionary<string, string> { { ErrorMessageKey, message } },
         };
 
         private static WorkflowExecutionItemDto ToItem(WorkflowExecutionListRow row) => new()
@@ -832,7 +835,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     Data = null,
-                    Errors = new Dictionary<string, string> { { "Message", "No Execution" } }
+                    Errors = new Dictionary<string, string> { { ErrorMessageKey, "No Execution" } }
                 };
             }
             var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(execution.Id, tenantId);
@@ -1003,7 +1006,7 @@ namespace Workflow.DomainService.Services
                         { "CollectionName", dataEvent.CollectionName },
                         { "SchemaName", dataEvent.SchemaName },
                         { "DocumentId", updatedDoc.DocumentId },
-                        { "Timestamp", timestamp },
+                        { TimestampField, timestamp },
                         { "UpdatedFields", new BsonArray(updatedDoc.UpdatedFields.Select(field => new BsonDocument
                             {
                                 { "FieldName", field.FieldName },
@@ -1024,7 +1027,7 @@ namespace Workflow.DomainService.Services
                         { "Operation", operationStr },
                         { "CollectionName", dataEvent.CollectionName },
                         { "SchemaName", dataEvent.SchemaName },
-                        { "Timestamp", timestamp }
+                        { TimestampField, timestamp }
                     };
 
                     var bsonDoc = DictionaryToBsonDocument(dataDoc);
@@ -1050,7 +1053,7 @@ namespace Workflow.DomainService.Services
                     { "Operation", operationStr },
                     { "CollectionName", dataEvent.CollectionName },
                     { "SchemaName", dataEvent.SchemaName },
-                    { "Timestamp", timestamp }
+                    { TimestampField, timestamp }
                 });
             }
 
@@ -1066,7 +1069,7 @@ namespace Workflow.DomainService.Services
             {
                 var triggerNode = workflow.Nodes.FirstOrDefault(n =>
                     n.Type == "dataGateway" &&
-                    n.Category == "trigger" &&
+                    n.Category == LogicConstants.TriggerCategory &&
                     n.Parameters != null &&
                     n.Parameters.Contains("collectionName") &&
                     n.Parameters["collectionName"].ToString() == dataEvent.CollectionName &&
@@ -1088,7 +1091,7 @@ namespace Workflow.DomainService.Services
                     TriggerData = triggerData
                 };
                 execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
-                execution.Context["Input"] = triggerData;
+                execution.Context[LogicConstants.ExecutionInputKey] = triggerData;
                 execution.Status = WorkflowExecutionStatus.Queued;
                 execution.ActiveNodeIds.Add(triggerNode.Id);
 
@@ -1115,6 +1118,51 @@ namespace Workflow.DomainService.Services
                 _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Data Trigger)",
                     workflow.ItemId);
                 LogStartFailed(execution, ex);
+            }
+        }
+
+        public async Task<bool> QueueTriggeredExecutionAsync(
+            WorkflowEntity workflow, NodeEntity triggerNode, BsonArray triggerData, WorkflowExecutionMode executionMode)
+        {
+            WorkflowExecutionEntity? execution = null;
+            try
+            {
+                var triggerMetadata = new TriggerMetadata
+                {
+                    TriggerNodeId = triggerNode.Id,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = triggerData
+                };
+                execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
+                execution.Context[LogicConstants.ExecutionInputKey] = triggerData;
+                execution.Status = WorkflowExecutionStatus.Queued;
+                execution.ActiveNodeIds.Add(triggerNode.Id);
+
+                await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
+                {
+                    ConsumerName = LogicConstants.NodeQueueFor(execution.Id!),
+                    Payload = new AddExcuationNodeEvent
+                    {
+                        TenantId = workflow.TenantId,
+                        WorkflowId = workflow.ItemId,
+                        WorkflowExecutionId = execution.Id!,
+                        NodeId = triggerNode.Id,
+                    }
+                });
+
+                LogTriggerQueued(execution, triggerNode);
+                _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId} ({TriggerType} trigger)",
+                    execution.Id, workflow.ItemId, triggerNode.Type);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} ({TriggerType} trigger)",
+                    workflow.ItemId, triggerNode.Type);
+                LogStartFailed(execution, ex);
+                return false;
             }
         }
 
@@ -1157,7 +1205,7 @@ namespace Workflow.DomainService.Services
             var triggerNode = workflowSnapshot.Nodes.FirstOrDefault(n =>
                 n.Id == payload.TriggerId &&
                 n.Type == "schedule" &&
-                n.Category == "trigger");
+                n.Category == LogicConstants.TriggerCategory);
 
             if (triggerNode == null)
             {
@@ -1189,7 +1237,7 @@ namespace Workflow.DomainService.Services
                     TriggerData = triggerData
                 };
                 execution = await CreateExecutionAsync(workflowSnapshot, triggerMetadata, WorkflowExecutionMode.Production);
-                execution.Context["Input"] = triggerData;
+                execution.Context[LogicConstants.ExecutionInputKey] = triggerData;
                 execution.Status = WorkflowExecutionStatus.Queued;
                 execution.ActiveNodeIds.Add(triggerNode.Id);
 
@@ -1347,7 +1395,7 @@ namespace Workflow.DomainService.Services
 
             var oldExecution = await _executionRepository.GetByIdAsync(dto.SourceExecutionId, tenantId);
             var ancestors = _workflowEngineService.GetTopologicalAncestorsAndTarget(workflow, dto.NodeId);
-            var triggerNodes = ancestors.Where(n => n.Category == "trigger").ToList();
+            var triggerNodes = ancestors.Where(n => n.Category == LogicConstants.TriggerCategory).ToList();
             var hasAnyPinnedTriggerData = triggerNodes.Any(n => n.PinData != null && n.PinData.Count > 0);
 
 
@@ -1381,7 +1429,7 @@ namespace Workflow.DomainService.Services
                     },
                     WorkflowExecutionMode.Test);
 
-                triggerlessExecution.Context["Input"] = new BsonArray();
+                triggerlessExecution.Context[LogicConstants.ExecutionInputKey] = new BsonArray();
                 triggerlessExecution.Status = WorkflowExecutionStatus.Queued;
                 await NotifyWorkflowStartedAsync(triggerlessExecution);
                 LogStepExecution(triggerlessExecution, targetNode);
@@ -1449,7 +1497,7 @@ namespace Workflow.DomainService.Services
                     return new StepExecuteResponseDto
                     {
                         IsSuccess = false,
-                        Errors = new Dictionary<string, string> { { "Message", "Trigger node not found in ancestors" } }
+                        Errors = new Dictionary<string, string> { { ErrorMessageKey, "Trigger node not found in ancestors" } }
                     };
                 }
             }
@@ -1460,7 +1508,7 @@ namespace Workflow.DomainService.Services
                 return new StepExecuteResponseDto
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Trigger node not found" } }
+                    Errors = new Dictionary<string, string> { { ErrorMessageKey, "Trigger node not found" } }
                 };
             }
 
@@ -1503,7 +1551,7 @@ namespace Workflow.DomainService.Services
 
             };
             var execution = await CreateExecutionAsync(workflow, triggerMetadata, WorkflowExecutionMode.Test);
-            execution.Context["Input"] = triggerMetadata.TriggerData ?? new BsonArray();
+            execution.Context[LogicConstants.ExecutionInputKey] = triggerMetadata.TriggerData ?? new BsonArray();
             execution.Status = WorkflowExecutionStatus.Queued;
             execution.ActiveNodeIds.Add(triggerNode.Id);
             await NotifyWorkflowStartedAsync(execution);
