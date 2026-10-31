@@ -12,6 +12,7 @@ using MongoDB.Bson;
 using Newtonsoft.Json;
 using Scheduler.DomainService.Dtos.Requests;
 using Scheduler.DomainService.Services;
+using Workflow.DomainService.BlocksEvents;
 using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
@@ -23,11 +24,13 @@ namespace Workflow.DomainService.Services
         private readonly IWorkflowVersionRepository _workflowVersionRepository;
         private readonly IScheduleService _scheduleService;
         private readonly ILogger<WorkflowService> _logger;
+        private readonly IBlocksEventCatalogService _blocksEventCatalog;
 
 
 
-        public WorkflowService(IWorkflowRepository workflowRepository, IWorkflowVersionRepository workflowVersionRepository, IScheduleService scheduleService, ILogger<WorkflowService> logger)
+        public WorkflowService(IWorkflowRepository workflowRepository, IWorkflowVersionRepository workflowVersionRepository, IScheduleService scheduleService, ILogger<WorkflowService> logger, IBlocksEventCatalogService blocksEventCatalog)
         {
+            _blocksEventCatalog = blocksEventCatalog;
             _workflowRepository = workflowRepository;
             _workflowVersionRepository = workflowVersionRepository;
             _scheduleService = scheduleService;
@@ -208,6 +211,36 @@ namespace Workflow.DomainService.Services
         /// Creates deep-copied snapshots of the trigger nodes so PublishedMeta
         /// never aliases (or mutates) the live workflow nodes.
         /// </summary>
+        /// <summary>
+        /// A Blocks Event trigger may only be published for an event enabled for workflows in the tenant's
+        /// catalog; otherwise the published workflow would silently never run. Null when every one is fine.
+        /// </summary>
+        private async Task<BaseMutationResponse?> ValidateBlocksEventTriggersAsync(string tenantId, IEnumerable<NodeEntity> nodes)
+        {
+            var eventNames = nodes
+                .Where(n => n.Category == "trigger" && n.Type == LogicConstants.BlocksEventNodeType)
+                .Select(n => n.Parameters != null && n.Parameters.TryGetValue("eventName", out var value) && value.IsString
+                    ? value.AsString.Trim()
+                    : string.Empty)
+                .Distinct();
+
+            foreach (var eventName in eventNames)
+            {
+                if (eventName.Length > 0 && await _blocksEventCatalog.IsEnabledForWorkflowAsync(tenantId, eventName))
+                    continue;
+
+                _logger.LogWarning("Publish rejected: Blocks Event '{EventName}' is not enabled for workflows", eventName);
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    ItemId = null,
+                    Errors = new Dictionary<string, string> { { "Message", $"Event '{eventName}' is not enabled for workflows" } }
+                };
+            }
+
+            return null;
+        }
+
         private static List<NodeEntity> CloneTriggerNodes(IEnumerable<NodeEntity> nodes)
         {
             return nodes.Where(n => n.Category == "trigger").Select(n => new NodeEntity
@@ -603,6 +636,13 @@ namespace Workflow.DomainService.Services
                 LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system",
             };
 
+            // Before anything changes: a rejected publish leaves the workflow and its schedules untouched.
+            var blocksEventError = await ValidateBlocksEventTriggersAsync(tenantId, workflow.Nodes);
+            if (blocksEventError != null)
+            {
+                return blocksEventError;
+            }
+
             // Scheduler orchestration: delete schedules from the previous publish (if any)
             // before flipping publish state; failure leaves the workflow untouched.
             var deleteError = await DeletePublishedSchedulesAsync(workflow);
@@ -712,6 +752,13 @@ namespace Workflow.DomainService.Services
                     Errors = new Dictionary<string, string> { { "Message", "Version not found" } },
                     ItemId = null
                 };
+            }
+
+            // Before anything changes: a rejected publish leaves the workflow and its schedules untouched.
+            var blocksEventError = await ValidateBlocksEventTriggersAsync(tenantId, version.Snapshot.Nodes);
+            if (blocksEventError != null)
+            {
+                return blocksEventError;
             }
 
             // Scheduler orchestration: delete schedules from the previous publish (if any)

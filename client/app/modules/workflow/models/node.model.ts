@@ -16,6 +16,7 @@ export type NodeType =
   | "httpRequest"
   | "email"
   | "dataGateway"
+  | "blocksEvent"
   | "dataAction"
   | "function"
   | "proxy"

@@ -10,6 +10,7 @@ using Workflow.DomainService.Logging;
 using Microsoft.Extensions.Logging;
 using Workflow.DomainService.Nodes.TriggerDataV1;
 using Workflow.DomainService.Nodes.TriggerScheduleV1;
+using Workflow.DomainService.BlocksEvents;
 using MongoDB.Bson;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -40,6 +41,7 @@ namespace Workflow.DomainService.Services
         private readonly IDelegationGrantFactory _delegationGrantFactory;
         private readonly IWorkflowExecutionLogger _executionLogger;
         private readonly IInProcessGrantReleaser _inProcessGrants;
+        private readonly IBlocksEventCatalogService _blocksEventCatalog;
 
         public WorkflowExecutionService(
             IWorkflowRepository workflowRepository,
@@ -53,10 +55,12 @@ namespace Workflow.DomainService.Services
             IHttpContextAccessor httpContextAccessor,
             IDelegationGrantFactory delegationGrantFactory,
             IWorkflowExecutionLogger executionLogger,
-            IInProcessGrantReleaser inProcessGrants
+            IInProcessGrantReleaser inProcessGrants,
+            IBlocksEventCatalogService blocksEventCatalog
             )
         {
             _inProcessGrants = inProcessGrants;
+            _blocksEventCatalog = blocksEventCatalog;
             _executionLogger = executionLogger;
             _workflowRepository = workflowRepository;
             _executionRepository = executionRepository;
@@ -1113,6 +1117,147 @@ namespace Workflow.DomainService.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Data Trigger)",
+                    workflow.ItemId);
+                LogStartFailed(execution, ex);
+            }
+        }
+
+        public async Task BlocksEventTriggerStartAsync(BlocksEventTriggerMessage message)
+        {
+            // The tenant comes only from the message's bus context, never from the payload. Nothing from the
+            // payload is logged: it is another service's data.
+            var tenantId = BlocksContext.GetContext()?.TenantId;
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                _logger.LogError("TenantId is null or empty in BlocksContext; Blocks Event {EventName} dropped", message.EventName);
+                return;
+            }
+
+            // Defense in depth: the event may have been switched off after Genesis forwarded it.
+            if (!await _blocksEventCatalog.IsEnabledForWorkflowAsync(tenantId, message.EventName))
+            {
+                _logger.LogInformation("Blocks Event {EventName} is not enabled for workflows; no executions started", message.EventName);
+                return;
+            }
+
+            var publishedWorkflows = await _workflowRepository.GetPublishWorkflowsByBlocksEventAsync(tenantId, message.EventName);
+            if (publishedWorkflows.Count == 0)
+            {
+                _logger.LogInformation("No published workflow uses Blocks Event {EventName}", message.EventName);
+                return;
+            }
+
+            // The published version snapshots, exactly as the Data Trigger resolves them: never the draft graph.
+            var publishedWorkflowsId = publishedWorkflows.Where(item => item.IsPublished).Select(w => w.ItemId).ToArray();
+            var versions = await _workflowVersionRepository.GetWorkflowVersionsAsync(tenantId, publishedWorkflowsId);
+            var publishedVersionIds = publishedWorkflows.Select(item => item.PublishedVersionId).ToList();
+            var workflows = versions.Where(v => publishedVersionIds.Contains(v.ItemId)).Select(item => item.Snapshot).ToList();
+
+            _logger.LogInformation("Found {Count} workflows for Blocks Event {EventName}", workflows.Count, message.EventName);
+
+            var triggerData = BuildBlocksEventTriggerData(message);
+            foreach (var workflow in workflows)
+            {
+                await QueueBlocksEventTriggerExecutionAsync(workflow, message, triggerData, tenantId);
+            }
+        }
+
+        /// <summary>
+        /// The trigger node's one output item: the event's metadata and its payload. A payload that is not a
+        /// JSON object (an array, a scalar, invalid JSON) is passed on as the raw string.
+        /// </summary>
+        public static BsonArray BuildBlocksEventTriggerData(BlocksEventTriggerMessage message)
+        {
+            BsonValue payload;
+            try
+            {
+                payload = BsonDocument.Parse(message.PayloadJson);
+            }
+            catch (Exception)
+            {
+                payload = new BsonString(message.PayloadJson ?? string.Empty);
+            }
+
+            return new BsonArray
+            {
+                new BsonDocument
+                {
+                    { "EventId", message.EventId },
+                    { "EventName", message.EventName },
+                    { "SourceService", message.SourceService },
+                    { "ConsumerName", message.ConsumerName },
+                    { "IsMassConsumer", message.IsMassConsumer },
+                    { "Timestamp", DateTime.SpecifyKind(message.Timestamp, DateTimeKind.Utc).ToString("o") },
+                    { "Payload", payload },
+                }
+            };
+        }
+
+        private async Task QueueBlocksEventTriggerExecutionAsync(
+            WorkflowEntity workflow, BlocksEventTriggerMessage message, BsonArray triggerData, string tenantId)
+        {
+            WorkflowExecutionEntity? execution = null;
+            try
+            {
+                // One execution per workflow: the first matching Blocks Event node, like the Data Trigger.
+                var triggerNode = workflow.Nodes.FirstOrDefault(n =>
+                    n.Type == LogicConstants.BlocksEventNodeType &&
+                    n.Category == "trigger" &&
+                    n.Parameters != null &&
+                    n.Parameters.Contains("eventName") &&
+                    n.Parameters["eventName"].ToString() == message.EventName
+                );
+
+                if (triggerNode == null)
+                {
+                    _logger.LogWarning("No Blocks Event trigger node found for WorkflowId: {WorkflowId} with Event: {EventName}",
+                        workflow.ItemId, message.EventName);
+                    return;
+                }
+
+                // A redelivered message (same EventId) must not start the workflow twice.
+                if (!string.IsNullOrEmpty(message.EventId)
+                    && await _executionRepository.ExistsForBlocksEventAsync(tenantId, workflow.ItemId, message.EventId))
+                {
+                    _logger.LogInformation("Skipped WorkflowId: {WorkflowId}: Blocks Event {EventId} already started it",
+                        workflow.ItemId, message.EventId);
+                    return;
+                }
+
+                var triggerMetadata = new TriggerMetadata
+                {
+                    TriggerNodeId = triggerNode.Id,
+                    TriggerType = triggerNode.Type,
+                    TriggerData = triggerData
+                };
+                execution = await CreateExecutionAsync(workflow, triggerMetadata, WorkflowExecutionMode.Production);
+                execution.Context["Input"] = triggerData;
+                execution.Status = WorkflowExecutionStatus.Queued;
+                execution.ActiveNodeIds.Add(triggerNode.Id);
+
+                await _executionRepository.UpdateAsync(execution);
+                await NotifyWorkflowStartedAsync(execution);
+                // Sent on the consumer's own flow, so the message client stamps the inbound delegation grant
+                // (the triggering user's) on the node message; it is kept by decision (SPEC3 A13).
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
+                {
+                    ConsumerName = LogicConstants.NodeQueueFor(execution.Id!),
+                    Payload = new AddExcuationNodeEvent
+                    {
+                        TenantId = workflow.TenantId,
+                        WorkflowId = workflow.ItemId,
+                        WorkflowExecutionId = execution.Id!,
+                        NodeId = triggerNode.Id,
+                    }
+                });
+
+                LogTriggerQueued(execution, triggerNode);
+                _logger.LogInformation("Queued execution {ExecutionId} for WorkflowId: {WorkflowId} (Blocks Event)",
+                    execution.Id, workflow.ItemId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Blocks Event)",
                     workflow.ItemId);
                 LogStartFailed(execution, ex);
             }

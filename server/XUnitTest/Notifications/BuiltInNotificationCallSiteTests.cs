@@ -157,7 +157,8 @@ namespace XUnitTest.Notifications
                 Mock.Of<ILogger<WorkflowExecutionService>>(), Mock.Of<IWorkflowEngineService>(), versions.Object,
                 notifier.Object, Mock.Of<IWorkflowAuthService>(), Mock.Of<IHttpContextAccessor>(),
                 Mock.Of<IDelegationGrantFactory>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>());
+                Mock.Of<IInProcessGrantReleaser>(),
+                Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>());
             return (sut, workflows, notifier, versions);
         }
 
