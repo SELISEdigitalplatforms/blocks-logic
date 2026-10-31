@@ -1100,16 +1100,17 @@ describe("transform/limit v2 (SPEC10)", () => {
     const field = schema.schema.parameters.find((f) => f.key === "maxItems")!;
     expect(field).toMatchObject({ type: "number", label: "Max Items", required: true, min: 1, max: 2147483647, step: 1, wholeNumber: true, defaultValue: 1 });
     expect(field.info).toBeUndefined();
-    expect(field.commitOn).toBeUndefined();
+    // Saved on blur or Enter, so the field can be cleared and retyped without snapping back to the default 1.
+    expect(field.commitOn).toBe("blur");
   });
 
-  it("H4: Keep offers exactly First Items and Last Items, saved as first and last", () => {
+  it("H4: Keep Items From offers Start of List and End of List, saved as first and last", () => {
     const field = schema.schema.parameters.find((f) => f.key === "keep")!;
-    expect(field).toMatchObject({ type: "select", label: "Keep", defaultValue: "first" });
+    expect(field).toMatchObject({ type: "select", label: "Keep Items From", defaultValue: "first" });
     expect(field.info).toBeUndefined();
     expect(field.options).toEqual([
-      { value: "first", label: "First Items" },
-      { value: "last", label: "Last Items" },
+      { value: "first", label: "Start of List" },
+      { value: "last", label: "End of List" },
     ]);
     expect(schema.schema.parameters.map((f) => f.key)).toEqual(["maxItems", "keep"]);
   });

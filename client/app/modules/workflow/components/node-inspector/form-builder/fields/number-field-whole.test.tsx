@@ -60,6 +60,20 @@ describe("NumberField wholeNumber (SPEC10 C8/C9)", () => {
     });
   }
 
+  it("commitOn blur: clearing the field and typing a single digit saves that digit (Limit's Max Items)", () => {
+    const onChange = vi.fn();
+    render(<NumberField field={{ ...WHOLE, commitOn: "blur" }} value={1} onChange={onChange} data={{}} config={config} />);
+    const input = screen.getByRole("spinbutton") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "" } });
+    expect(input.value).toBe("");
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "2" } });
+    expect(input.value).toBe("2");
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(2);
+  });
+
   it("without wholeNumber, the decimal point and minus still reach the input", () => {
     const onChange = vi.fn();
     const { input } = renderField({ id: "n", key: "n", type: "number" }, onChange);

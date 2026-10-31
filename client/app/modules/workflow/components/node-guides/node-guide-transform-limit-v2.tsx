@@ -6,7 +6,7 @@ export const NodeGuideTransformLimitV2 = () => (
     description="Use this node to keep at most a set number of items, from the start or the end of the list."
     steps={[
       "Enter Max Items, the largest number of items to keep. It must be a whole number, 1 or more.",
-      "Choose in Keep whether to keep the first items or the last items.",
+      "Choose in Keep Items From whether to keep items from the start or the end of the list.",
     ]}
     notes={[
       "Limit runs once over all input items, not once per item.",
