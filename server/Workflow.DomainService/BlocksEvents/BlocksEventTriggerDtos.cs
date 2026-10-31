@@ -48,6 +48,12 @@ namespace Workflow.DomainService.BlocksEvents
         public List<BlocksEventWorkflowOptionDto> Items { get; set; } = [];
     }
 
+    /// <summary><c>CanManage</c>: returned only to callers with workflow manage permission (anyone else gets 403).</summary>
+    public sealed class BlocksEventCanManageResponse
+    {
+        public bool CanManage { get; set; }
+    }
+
     public sealed class BlocksEventUsageResponse
     {
         public long PublishedWorkflowCount { get; set; }

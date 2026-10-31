@@ -58,6 +58,10 @@ export const buildEventStatus = (events: IBlocksEventWorkflowOption[], savedEven
   return { fields: [] };
 };
 
+/** The node's saved event name; anything that is not a string counts as none. */
+export const eventNameOf = (data: Record<string, unknown>): string =>
+  typeof data.eventName === "string" ? data.eventName : "";
+
 const codeClass = "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold";
 
 export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
@@ -94,7 +98,7 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
         placeholder: "Select an event",
         // The list can change in the Event Triggers tab; returning here picks the change up.
         refetchOnWindowFocus: true,
-        options: (data) => loadWorkflowEvents().then((events) => buildEventOptions(events, String(data.eventName ?? ""))),
+        options: (data) => loadWorkflowEvents().then((events) => buildEventOptions(events, eventNameOf(data))),
       },
       {
         id: "eventStatus",
@@ -103,7 +107,7 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
         // Display only: nothing is saved on the node.
         transient: true,
         detailsDependencies: ["eventName"],
-        details: (data) => loadWorkflowEvents().then((events) => buildEventStatus(events, String(data.eventName ?? ""))),
+        details: (data) => loadWorkflowEvents().then((events) => buildEventStatus(events, eventNameOf(data))),
       },
       {
         id: "output",
@@ -114,7 +118,7 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
         displayValue: (data) => `\`\`\`json
 {
   "EventId": String,
-  "EventName": "${data.eventName || "EventName"}",
+  "EventName": "${eventNameOf(data) || "EventName"}",
   "SourceService": String,
   "ConsumerName": String,
   "IsMassConsumer": Boolean,

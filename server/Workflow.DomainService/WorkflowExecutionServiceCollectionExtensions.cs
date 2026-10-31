@@ -57,6 +57,7 @@ namespace Workflow.DomainService
             services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
             services.AddSingleton<IBlocksEventCatalogRepository, BlocksEventCatalogRepository>();
             services.AddSingleton<IBlocksEventCatalogService, BlocksEventCatalogService>();
+            services.AddSingleton<IBlocksEventTriggerService, BlocksEventTriggerService>();
 
             //  rigister node executors
 

@@ -18,6 +18,7 @@ export const READ_ONLY_TOOLTIP = "You need workflow manage permission";
 export const FUNCTION_HEADER_TOOLTIP = "Saved for function triggers. Functions do not use it yet.";
 
 const COLUMN_COUNT = 5;
+const SKELETON_ROW_KEYS = ["skeleton-1", "skeleton-2", "skeleton-3", "skeleton-4", "skeleton-5"];
 
 type EventTriggerListProps = {
   items: IBlocksEventCatalogItem[];
@@ -63,11 +64,12 @@ const FlagSwitch = ({
   );
 
   if (canManage) return control;
-  // A disabled switch takes no pointer events, so the tooltip hangs on a wrapper.
+  // A disabled switch takes no pointer events, so the hover tooltip hangs on a wrapper. Keyboard and
+  // screen-reader users get the same reason from the page's read-only notice.
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span tabIndex={0} className="inline-flex">
+        <span className="inline-flex">
           {control}
         </span>
       </TooltipTrigger>
@@ -104,8 +106,8 @@ export const EventTriggerList = ({ items, isLoading, canManage, pending, onToggl
         </TableHeader>
         <TableBody className="[&_tr:last-child]:border-0">
           {isLoading &&
-            Array.from({ length: 5 }).map((_, index) => (
-              <TableRow key={index} className="border-0" data-testid="event-trigger-skeleton">
+            SKELETON_ROW_KEYS.map((key) => (
+              <TableRow key={key} className="border-0" data-testid="event-trigger-skeleton">
                 <TableCell colSpan={COLUMN_COUNT} className="rounded-lg border border-border bg-background p-4">
                   <Skeleton className="h-12 w-full" />
                 </TableCell>

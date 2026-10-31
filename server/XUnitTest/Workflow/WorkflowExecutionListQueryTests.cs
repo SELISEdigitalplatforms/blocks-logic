@@ -31,8 +31,7 @@ namespace XUnitTest.Workflow
                 Mock.Of<IHttpContextAccessor>(),
                 Mock.Of<IDelegationGrantFactory>(),
                 Mock.Of<IWorkflowExecutionLogger>(),
-                Mock.Of<IInProcessGrantReleaser>(),
-                Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>());
+                Mock.Of<IInProcessGrantReleaser>());
         }
 
         [Fact]

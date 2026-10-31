@@ -50,6 +50,10 @@ namespace Workflow.DomainService.Utils
         public const string BlocksEventTriggerQueue = BlocksEventTriggerConstants.QueueName;
         /// <summary>Node type of the Blocks Event trigger, on the client and in <c>PublishedMeta.TriggerNodes</c>.</summary>
         public const string BlocksEventNodeType = "blocksEvent";
+        /// <summary>The <c>Category</c> of every trigger node.</summary>
+        public const string TriggerCategory = "trigger";
+        /// <summary>The execution context key that holds the trigger's items.</summary>
+        public const string ExecutionInputKey = "Input";
         public const string SchedulerTriggerQueue = SchedulerConstants.WorkflowSchedulerTriggerQueue;
         public const string WorkflowImportQueue = "blocks_logic_workflow_import_listener";
         /// <summary>Fallback only, when WORKFLOW_NOTIFICATION_CONFIGURATION_NAME is not set; no environment creates it.</summary>

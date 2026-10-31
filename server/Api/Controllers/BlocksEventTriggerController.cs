@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Blocks.Genesis;
 using Workflow.DomainService.BlocksEvents;
@@ -24,6 +25,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>GET</c> — every catalog event, sorted by service then label; <c>isSeeded=false</c> when the tenant has no catalog.</summary>
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::workflow::read")]
+        [ProducesResponseType(typeof(BlocksEventCatalogResponse), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll()
         {
             return Ok(await _catalogService.GetAllAsync(GetTenantId()));
@@ -32,6 +34,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>GET</c> — the events enabled for workflows: the Blocks Event node's options.</summary>
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::workflow::read")]
+        [ProducesResponseType(typeof(BlocksEventWorkflowEventsResponse), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetWorkflowEvents()
         {
             return Ok(await _catalogService.GetWorkflowEventsAsync(GetTenantId()));
@@ -40,6 +43,7 @@ namespace Utilities.Api.Controllers
         /// <summary><c>GET</c> — how many published workflows use the event; shown before turning Workflow off.</summary>
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::workflow::read")]
+        [ProducesResponseType(typeof(BlocksEventUsageResponse), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetUsage([FromQuery] string eventName)
         {
             return Ok(await _catalogService.GetUsageAsync(GetTenantId(), eventName));
@@ -51,9 +55,10 @@ namespace Utilities.Api.Controllers
         /// </summary>
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::workflow::manage")]
+        [ProducesResponseType(typeof(BlocksEventCanManageResponse), StatusCodes.Status200OK)]
         public IActionResult CanManage()
         {
-            return Ok(new { canManage = true });
+            return Ok(new BlocksEventCanManageResponse { CanManage = true });
         }
 
         /// <summary>
@@ -62,6 +67,8 @@ namespace Utilities.Api.Controllers
         /// </summary>
         [HttpPost]
         [ProtectedEndPoint("blocks-logic::workflow::manage")]
+        [ProducesResponseType(typeof(BlocksEventFlagUpdateResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(BlocksEventFlagUpdateResponse), StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Update([FromBody] BlocksEventFlagUpdateRequest request)
         {
             var result = await _catalogService.UpdateAsync(GetTenantId(), request);

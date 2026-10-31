@@ -34,7 +34,7 @@ namespace XUnitTest.Workflow
         private readonly Mock<IBlocksEventCatalogService> _catalog = new();
         private readonly List<WorkflowExecutionEntity> _created = [];
         private readonly List<(ConsumerMessage<AddExcuationNodeEvent> Message, string? Grant)> _sent = [];
-        private readonly WorkflowExecutionService _sut;
+        private readonly BlocksEventTriggerService _sut;
 
         public BlocksEventTriggerStartAsyncTests()
         {
@@ -47,7 +47,8 @@ namespace XUnitTest.Workflow
                 .Returns(Task.CompletedTask);
             _catalog.Setup(c => c.IsEnabledForWorkflowAsync(Tenant, Event)).ReturnsAsync(true);
 
-            _sut = new WorkflowExecutionService(
+            // The real execution service queues the runs, so the whole path down to the node message is covered.
+            var executionService = new WorkflowExecutionService(
                 _workflows.Object,
                 _executions.Object,
                 _messages.Object,
@@ -59,8 +60,14 @@ namespace XUnitTest.Workflow
                 Mock.Of<IHttpContextAccessor>(),
                 Mock.Of<IDelegationGrantFactory>(),
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>(),
-                _catalog.Object);
+                Mock.Of<IInProcessGrantReleaser>());
+            _sut = new BlocksEventTriggerService(
+                _workflows.Object,
+                _versions.Object,
+                _executions.Object,
+                executionService,
+                _catalog.Object,
+                Mock.Of<ILogger<BlocksEventTriggerService>>());
         }
 
         public void Dispose()
@@ -127,7 +134,7 @@ namespace XUnitTest.Workflow
         {
             Published(Pair("wf-1"), Pair("wf-2"));
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             _created.Should().HaveCount(2);
             _created.Select(e => e.WorkflowId).Should().BeEquivalentTo(["wf-1", "wf-2"]);
@@ -142,7 +149,7 @@ namespace XUnitTest.Workflow
         {
             Published(Pair("wf-1"));
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             var execution = _created.Single();
             var input = execution.Context["Input"].AsBsonArray;
@@ -166,7 +173,7 @@ namespace XUnitTest.Workflow
             Published(Pair("wf-1"));
             DelegatedTokenContext.Set(GrantId);
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             // The Genesis message client stamps the DelegationGrant header from this context at send time.
             _sent.Single().Grant.Should().Be(GrantId);
@@ -177,7 +184,7 @@ namespace XUnitTest.Workflow
         {
             Published(Pair("wf-1"));
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             _sent.Single().Grant.Should().BeNull();
         }
@@ -188,7 +195,7 @@ namespace XUnitTest.Workflow
             Published(Pair("wf-1"), Pair("wf-2"));
             _executions.Setup(r => r.ExistsForBlocksEventAsync(Tenant, "wf-1", "a1b2c3d4e5f60718293a4b5c6d7e8f90")).ReturnsAsync(true);
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             _created.Select(e => e.WorkflowId).Should().Equal("wf-2");
             _sent.Should().ContainSingle();
@@ -200,7 +207,7 @@ namespace XUnitTest.Workflow
             Published(Pair("wf-1"));
             _catalog.Setup(c => c.IsEnabledForWorkflowAsync(Tenant, Event)).ReturnsAsync(false);
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             _created.Should().BeEmpty();
             _workflows.Verify(r => r.GetPublishWorkflowsByBlocksEventAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
@@ -211,7 +218,7 @@ namespace XUnitTest.Workflow
         {
             TestBlocksContext.Clear();
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             _created.Should().BeEmpty();
             _catalog.Verify(c => c.IsEnabledForWorkflowAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
@@ -225,7 +232,7 @@ namespace XUnitTest.Workflow
             _executions.Setup(r => r.UpdateAsync(It.Is<WorkflowExecutionEntity>(e => e.WorkflowId == "wf-2")))
                 .ThrowsAsync(new InvalidOperationException("boom"));
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             _created.Should().HaveCount(3);
             _sent.Select(s => s.Message.Payload.WorkflowId).Should().BeEquivalentTo(["wf-1", "wf-3"]);
@@ -236,7 +243,7 @@ namespace XUnitTest.Workflow
         {
             Published();
 
-            var act = () => _sut.BlocksEventTriggerStartAsync(Message());
+            var act = () => _sut.StartAsync(Message());
 
             await act.Should().NotThrowAsync();
             _created.Should().BeEmpty();
@@ -251,7 +258,7 @@ namespace XUnitTest.Workflow
             var snapshot = Workflow("wf-1", BlocksEventNode("published-node", Event));
             Published((draft, snapshot));
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             _created.Single().WorkflowSnapshot.Should().BeSameAs(snapshot);
             _sent.Single().Message.Payload.NodeId.Should().Be("published-node");
@@ -263,7 +270,7 @@ namespace XUnitTest.Workflow
             var snapshot = Workflow("wf-1", BlocksEventNode("n", "PaymentLifecycleEvent"));
             Published((Workflow("wf-1", BlocksEventNode("n", Event)), snapshot));
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             _created.Should().BeEmpty();
         }
@@ -274,10 +281,21 @@ namespace XUnitTest.Workflow
             var both = Workflow("wf-1", BlocksEventNode("first", Event), BlocksEventNode("second", Event));
             Published((both, both));
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             _created.Should().ContainSingle();
             _sent.Single().Message.Payload.NodeId.Should().Be("first");
+        }
+
+        [Fact]
+        public async Task A_failing_dedupe_lookup_skips_only_that_workflow()
+        {
+            Published(Pair("wf-1"), Pair("wf-2"));
+            _executions.Setup(r => r.ExistsForBlocksEventAsync(Tenant, "wf-1", It.IsAny<string>())).ThrowsAsync(new TimeoutException("db"));
+
+            await _sut.StartAsync(Message());
+
+            _created.Select(e => e.WorkflowId).Should().Equal("wf-2");
         }
 
         [Fact]
@@ -285,7 +303,7 @@ namespace XUnitTest.Workflow
         {
             Published(Pair("wf-1"));
 
-            await _sut.BlocksEventTriggerStartAsync(Message());
+            await _sut.StartAsync(Message());
 
             _catalog.Verify(c => c.IsEnabledForWorkflowAsync(It.Is<string>(t => t != Tenant), It.IsAny<string>()), Times.Never);
             _workflows.Verify(r => r.GetPublishWorkflowsByBlocksEventAsync(It.Is<string>(t => t != Tenant), It.IsAny<string>()), Times.Never);
@@ -302,7 +320,7 @@ namespace XUnitTest.Workflow
         {
             Published(Pair("wf-1"));
 
-            await _sut.BlocksEventTriggerStartAsync(Message(payloadJson));
+            await _sut.StartAsync(Message(payloadJson));
 
             var payload = _created.Single().Context["Input"].AsBsonArray[0]["Payload"];
             payload.IsString.Should().BeTrue();
@@ -313,13 +331,13 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task The_consumer_hands_the_message_to_the_fan_out()
         {
-            var service = new Mock<IWorkflowExecutionService>();
+            var service = new Mock<IBlocksEventTriggerService>();
             var consumer = new BlocksEventTriggerConsumer(NullLogger<BlocksEventTriggerConsumer>.Instance, service.Object);
             var message = Message();
 
             await consumer.Consume(message);
 
-            service.Verify(s => s.BlocksEventTriggerStartAsync(message), Times.Once);
+            service.Verify(s => s.StartAsync(message), Times.Once);
         }
     }
 }

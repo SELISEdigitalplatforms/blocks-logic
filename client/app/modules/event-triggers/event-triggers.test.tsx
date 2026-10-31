@@ -80,6 +80,12 @@ describe("Event Triggers page", () => {
     expect(workflowSwitch("User changed").getAttribute("aria-checked")).toBe("false");
   });
 
+  it("a manager sees no read-only notice", async () => {
+    setup();
+    await screen.findByText("User changed");
+    expect(screen.queryByText(/to change these settings/)).toBeNull();
+  });
+
   it("C12: a tenant without a catalog sees the not-seeded alert and no switches", async () => {
     setup({ isSeeded: false });
 
@@ -169,6 +175,7 @@ describe("Event Triggers page", () => {
     await screen.findByText("User changed");
 
     await waitFor(() => expect(screen.getAllByRole("switch").every((s) => s.hasAttribute("disabled"))).toBe(true));
+    expect(screen.getByText("You need workflow manage permission to change these settings.")).toBeTruthy();
     await userEvent.click(workflowSwitch("User changed"));
     expect(update).not.toHaveBeenCalled();
   });

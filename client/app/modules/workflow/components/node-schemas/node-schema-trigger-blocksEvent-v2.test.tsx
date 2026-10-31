@@ -12,6 +12,7 @@ import {
   NodeSchemaTriggerBlocksEventV2,
   buildEventOptions,
   buildEventStatus,
+  eventNameOf,
   resetWorkflowEventsCache,
 } from "./node-schema-trigger-blocksEvent-v2";
 
@@ -74,6 +75,21 @@ describe("Blocks Event node", () => {
     expect(buildEventStatus([], "").message).toBe(NO_ENABLED_EVENTS_MESSAGE);
   });
 
+  it("reads the saved event name only when it is a string", () => {
+    expect(eventNameOf({ eventName: "UserMutationEvent" })).toBe("UserMutationEvent");
+    expect(eventNameOf({ eventName: { nested: true } })).toBe("");
+    expect(eventNameOf({ eventName: 42 })).toBe("");
+    expect(eventNameOf({})).toBe("");
+  });
+
+  it("the output preview names the selected event, or a placeholder", () => {
+    const display = param("output").displayValue!;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(display({ eventName: "SmsStatusEvent" }, {} as any)).toContain('"EventName": "SmsStatusEvent"');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(display({}, {} as any)).toContain('"EventName": "EventName"');
+  });
+
   it("the status line is display-only and follows the selected event", () => {
     const status = param("eventStatus");
     expect(status.type).toBe("readonly-details");
@@ -108,7 +124,7 @@ describe("SelectField refetchOnWindowFocus", () => {
   const renderSelect = (refetchOnWindowFocus?: boolean) => {
     const load = vi.fn().mockResolvedValue([{ value: "A", label: "A" }]);
     const onChange = vi.fn();
-    renderWithProviders(
+    const view = renderWithProviders(
       <SelectField
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         field={{ id: "sel", key: "sel", type: "select", options: load, refetchOnWindowFocus } as any}
@@ -119,7 +135,7 @@ describe("SelectField refetchOnWindowFocus", () => {
         readOnly={false}
       />,
     );
-    return { load, onChange };
+    return { load, onChange, unmount: view.unmount };
   };
 
   const focus = async () => {
@@ -143,6 +159,43 @@ describe("SelectField refetchOnWindowFocus", () => {
     await focus();
     expect(load).toHaveBeenCalledTimes(3);
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("H11: the tab becoming visible again also reloads, and a hidden tab does not", async () => {
+    const { load } = renderSelect(true);
+    await act(async () => {});
+    const setVisibility = async (state: DocumentVisibilityState) => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    };
+
+    await setVisibility("hidden");
+    expect(load).toHaveBeenCalledTimes(1);
+    await setVisibility("visible");
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("a failed reload keeps the options already shown", async () => {
+    const { load, onChange } = renderSelect(true);
+    await act(async () => {});
+    load.mockRejectedValueOnce(new Error("offline"));
+
+    await focus();
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("stops listening once unmounted", async () => {
+    const { load, unmount } = renderSelect(true);
+    await act(async () => {});
+    unmount();
+
+    await focus();
+
+    expect(load).toHaveBeenCalledTimes(1);
   });
 
   it("C18: a select without the flag never reloads on focus", async () => {

@@ -1,4 +1,4 @@
-using Blocks.Genesis;
+using MongoDB.Bson;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Nodes.TriggerDataV1;
@@ -29,10 +29,11 @@ namespace Workflow.DomainService.Services
         Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent);
         Task DataTriggerStartAsync(DataChangeEvent dataEvent);
         /// <summary>
-        /// Starts every published workflow of the message's tenant that listens to the forwarded Blocks event:
-        /// one production execution per workflow, skipping a workflow that already ran for the same EventId.
+        /// Creates an execution of <paramref name="workflow"/> started by <paramref name="triggerNode"/> with
+        /// <paramref name="triggerData"/> as its input, and queues the trigger node. Never throws: a failure is
+        /// logged (and recorded on the execution when it exists) and returns false.
         /// </summary>
-        Task BlocksEventTriggerStartAsync(BlocksEventTriggerMessage message);
+        Task<bool> QueueTriggeredExecutionAsync(WorkflowEntity workflow, NodeEntity triggerNode, BsonArray triggerData, WorkflowExecutionMode executionMode);
         Task SchedulerTriggerStartAsync(SchedulerTriggerPayload payload);
         Task<StepExecuteResponseDto> StepExecuteAsync(string tenantId, StepExecuteRequestDto dto);
     }

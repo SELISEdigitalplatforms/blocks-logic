@@ -1,24 +1,24 @@
 using Blocks.Genesis;
-using Workflow.DomainService.Services;
+using Workflow.DomainService.BlocksEvents;
 
 namespace Worker.Consumers.Workflow
 {
     /// <summary>
     /// Consumes BlocksEventTriggerMessage, which Genesis forwards from any Blocks service when the tenant has
     /// the sent event enabled for workflows. Starts the published workflows that listen to it via
-    /// WorkflowExecutionService. The tenant is the message's (BlocksContext), never the payload's.
+    /// BlocksEventTriggerService. The tenant is the message's (BlocksContext), never the payload's.
     /// </summary>
     public class BlocksEventTriggerConsumer : IConsumer<BlocksEventTriggerMessage>
     {
         private readonly ILogger<BlocksEventTriggerConsumer> _logger;
-        private readonly IWorkflowExecutionService _workflowExecutionService;
+        private readonly IBlocksEventTriggerService _triggerService;
 
         public BlocksEventTriggerConsumer(
             ILogger<BlocksEventTriggerConsumer> logger,
-            IWorkflowExecutionService workflowExecutionService)
+            IBlocksEventTriggerService triggerService)
         {
             _logger = logger;
-            _workflowExecutionService = workflowExecutionService;
+            _triggerService = triggerService;
         }
 
         public async Task Consume(BlocksEventTriggerMessage @event)
@@ -26,7 +26,7 @@ namespace Worker.Consumers.Workflow
             _logger.LogInformation("BlocksEventTriggerConsumer: Received {EventName} ({EventId}) from {SourceService}",
                 @event.EventName, @event.EventId, @event.SourceService);
 
-            await _workflowExecutionService.BlocksEventTriggerStartAsync(@event);
+            await _triggerService.StartAsync(@event);
         }
     }
 }

@@ -133,7 +133,7 @@ namespace Workflow.DomainService.Repositories
             var publishedNode = Builders<NodeEntity>.Filter.And(
                 Builders<NodeEntity>.Filter.Eq("Parameters.mailServerConfigurationId", mailServerConfigurationId),
                 Builders<NodeEntity>.Filter.Eq("Type", "email"),
-                Builders<NodeEntity>.Filter.Eq("Category", "trigger"));
+                Builders<NodeEntity>.Filter.Eq(nameof(NodeEntity.Category), LogicConstants.TriggerCategory));
             var publishedMatch = Builders<WorkflowEntity>.Filter.And(
                 Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, true),
                 Builders<WorkflowEntity>.Filter.ElemMatch(w => w.PublishedMeta.TriggerNodes, publishedNode));
@@ -186,7 +186,7 @@ namespace Workflow.DomainService.Repositories
                 Builders<NodeEntity>.Filter.Eq("Parameters.collectionName", collectionName),
                 Builders<NodeEntity>.Filter.Eq("Parameters.operation", operation),
                 Builders<NodeEntity>.Filter.Eq("Type", "dataGateway"),
-                Builders<NodeEntity>.Filter.Eq("Category", "trigger")
+                Builders<NodeEntity>.Filter.Eq(nameof(NodeEntity.Category), LogicConstants.TriggerCategory)
             );
 
             var filter = Builders<WorkflowEntity>.Filter.And(
@@ -205,7 +205,7 @@ namespace Workflow.DomainService.Repositories
                 Builders<NodeEntity>.Filter.Eq("Parameters.collectionName", collectionName),
                 Builders<NodeEntity>.Filter.Eq("Parameters.operation", operation),
                 Builders<NodeEntity>.Filter.Eq("Type", "dataGateway"),
-                Builders<NodeEntity>.Filter.Eq("Category", "trigger")
+                Builders<NodeEntity>.Filter.Eq(nameof(NodeEntity.Category), LogicConstants.TriggerCategory)
             );
 
             var filter = Builders<WorkflowEntity>.Filter.And(
@@ -226,7 +226,7 @@ namespace Workflow.DomainService.Repositories
             var nodeFilter = Builders<NodeEntity>.Filter.And(
                 Builders<NodeEntity>.Filter.Eq("Parameters.eventName", eventName),
                 Builders<NodeEntity>.Filter.Eq("Type", LogicConstants.BlocksEventNodeType),
-                Builders<NodeEntity>.Filter.Eq("Category", "trigger")
+                Builders<NodeEntity>.Filter.Eq(nameof(NodeEntity.Category), LogicConstants.TriggerCategory)
             );
 
             return Builders<WorkflowEntity>.Filter.And(
