@@ -237,6 +237,37 @@ export class ScheduleFormPage {
     await this.descriptionInput.fill(value);
   }
 
+  // ---- Timezone picker + next runs ------------------------------------------
+
+  get timezoneTrigger(): Locator {
+    return this.page.getByRole("combobox", { name: "Timezone" });
+  }
+
+  get timezoneHelper(): Locator {
+    return this.page.getByText(/^Evaluated in .+\. Daylight-saving changes follow this timezone\.$/);
+  }
+
+  get nextRunItems(): Locator {
+    return this.page.locator("[aria-live='polite'] li");
+  }
+
+  /** Opens the picker, searches, and picks the zone with exactly this id. */
+  async selectTimezone(search: string, zoneId: string): Promise<void> {
+    await this.timezoneTrigger.click();
+    await this.page.getByPlaceholder("Search timezone…").fill(search);
+    await this.page.getByRole("option", { name: new RegExp(`^${zoneId.replace("/", "\\/")}UTC`) }).click();
+    await expect(this.timezoneTrigger).toContainText(zoneId);
+  }
+
+  /** Picks a day in the Start Date calendar, moving `monthsAhead` months forward first. */
+  async pickStartDate(day: number, monthsAhead = 0): Promise<void> {
+    await this.page.getByText("Start Date", { exact: true }).locator("xpath=following::button[1]").click();
+    for (let i = 0; i < monthsAhead; i++) {
+      await this.page.getByRole("button", { name: /next month/i }).click();
+    }
+    await this.page.getByRole("gridcell", { name: String(day), exact: true }).first().click();
+  }
+
   /** Trash icon button next to a header row (removes the header from useFieldArray). */
   get removeHeaderButton(): Locator {
     return this.page.locator("button:has(svg.lucide-trash2)");

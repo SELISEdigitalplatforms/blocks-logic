@@ -502,6 +502,26 @@
         <member name="M:BlocksTemplate.Api.Controllers.NotificationController.Get(CloudConfiguration.DomainService.Notification.RequestModel.GetNotificationConfigurationRequest)">
             <summary><c>GET</c> — one notification configuration.</summary>
         </member>
+        <member name="T:BlocksTemplate.Api.Controllers.ScheduleExecutionsController">
+            <summary>
+            Read side of the schedule execution history. Shares the <c>/api/Scheduler/{action}</c> route with
+            <see cref="T:BlocksTemplate.Api.Controllers.SchedulerController"/>, so the URLs are the same as when both lived there.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.ScheduleExecutionsController.#ctor(Scheduler.DomainService.Services.IScheduleExecutionQueryService)">
+            <summary>Takes the execution-history query service.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.ScheduleExecutionsController.GetScheduleExecutions(Scheduler.DomainService.Dtos.Requests.GetScheduleExecutionsRequestDto)">
+            <summary>
+            One page of an Application schedule's execution history, newest first, optionally filtered by outcome
+            and by fired date (<c>StartDate</c> inclusive, <c>EndDate</c> exclusive).
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.ScheduleExecutionsController.GetScheduleExecution(Scheduler.DomainService.Dtos.Requests.GetScheduleExecutionRequestDto)">
+            <summary>
+            One execution of an Application schedule, in full: status, body and the schedule snapshot.
+            </summary>
+        </member>
         <member name="T:BlocksTemplate.Api.Controllers.SchedulerController">
             <summary>Scheduled-job management, routed as <c>/api/Scheduler/{action}</c>.</summary>
         </member>
@@ -526,6 +546,11 @@
         <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.GetSchedules(Scheduler.DomainService.Dtos.Requests.GetSchedulesRequestDto)">
             <summary>
             Get schedules.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Controllers.SchedulerController.PreviewScheduleRuns(Scheduler.DomainService.Dtos.Requests.PreviewScheduleRunsRequestDto)">
+            <summary>
+            The next fires of a cron in a time zone (and date window), for the schedule form. No database access.
             </summary>
         </member>
         <!-- Badly formed XML comment ignored for member "T:BlocksTemplate.Api.Controllers.SecretController" -->

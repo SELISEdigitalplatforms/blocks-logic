@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { isParseableUrl } from "@/lib/utils";
+import { format } from "date-fns";
+import { isParseableUrl, parseDateString } from "@/lib/utils";
+import { formatInZone, UTC, zonedDateToUtcIso } from "../../utils/timezone";
 import { validateCronExpression } from "./cron-validation";
 
 export const WEBHOOK_METHODS = ["POST", "GET", "PUT", "PATCH", "DELETE"] as const;
@@ -53,6 +55,7 @@ export const scheduleFormSchema = z
     ),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
+    timeZone: z.string().min(1, "Timezone is required"),
     isActive: z.boolean(),
   })
   .superRefine((values, ctx) => {
@@ -94,11 +97,37 @@ export const scheduleFormDefaultValues: ScheduleFormValues = {
   payload: "",
   startDate: "",
   endDate: "",
+  timeZone: UTC,
   isActive: true,
 };
 
 export const toIsoOrNull = (value?: string) =>
   value ? new Date(value).toISOString() : null;
+
+/** The stored id; UTC is stored as null so existing and new UTC schedules look the same. */
+export const toPayloadTimeZone = (timeZone: string): string | null => (timeZone === UTC ? null : timeZone);
+
+/**
+ * A picked `yyyy-MM-dd` as the instant the API stores. UTC keeps today's exact `toIsoOrNull` strings;
+ * another zone sends local 00:00 of that day in the zone.
+ */
+export const toPayloadDate = (value: string | undefined, timeZone: string): string | null => {
+  if (timeZone === UTC) return toIsoOrNull(value);
+  return value ? zonedDateToUtcIso(value, timeZone) : null;
+};
+
+export const TIME_ZONE_NOT_RECOGNISED = "Time zone is not recognised";
+
+/** The server's time zone refusal, to show under the Timezone field; null for any other error. */
+export const timeZoneErrorFrom = (errors?: Record<string, string> | null): string | null =>
+  errors?.validation_failed === TIME_ZONE_NOT_RECOGNISED ? TIME_ZONE_NOT_RECOGNISED : null;
+
+/** A stored instant as the form's `yyyy-MM-dd`, read in the schedule's zone (UTC unchanged). */
+export const toFormDate = (iso: string | null | undefined, timeZone: string): string => {
+  if (!iso) return "";
+  if (timeZone === UTC) return format(parseDateString(iso), "yyyy-MM-dd");
+  return formatInZone(iso, timeZone, "yyyy-MM-dd");
+};
 
 export const webhookHeadersToArray = (
   headers?: Record<string, string> | null,
