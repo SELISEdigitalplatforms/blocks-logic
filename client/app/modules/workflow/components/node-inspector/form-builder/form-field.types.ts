@@ -159,6 +159,8 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
   copyable?: boolean;
   /** `number` only: "blur" reports the value on blur or Enter instead of on every keystroke. */
   commitOn?: "blur";
+  /** `number` only: accept digits only, so a decimal point, sign or exponent can never be typed or pasted. */
+  wholeNumber?: boolean;
   maxLength?: number;
   minLength?: number;
   min?: number;
