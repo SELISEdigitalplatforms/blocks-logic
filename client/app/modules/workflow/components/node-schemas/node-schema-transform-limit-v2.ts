@@ -24,12 +24,12 @@ export const NodeSchemaTransformLimitV2: NodeSchemaDefinition = {
       {
         id: "keep",
         type: "select",
-        label: "Keep Items From",
+        label: "Keep",
         key: "keep",
         defaultValue: "first",
         options: [
-          { value: "first", label: "Start of List" },
-          { value: "last", label: "End of List" },
+          { value: "first", label: "First Items" },
+          { value: "last", label: "Last Items" },
         ],
       },
     ],
