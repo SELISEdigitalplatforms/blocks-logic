@@ -1,6 +1,8 @@
 using Blocks.Genesis;
 using DataAccess.InternalService;
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using Scheduler.DomainService.Dtos;
 using Scheduler.DomainService.Dtos.Responses;
@@ -56,13 +58,44 @@ namespace Scheduler.DomainService.Repositories
 
             long totalCount = await GetCollection().CountDocumentsAsync(scope.Filter);
 
-            var items = await scope.Apply(GetCollection())
+            var find = GetCollection().Find(scope.Filter);
+            var projection = WithTimeZone(scope.Projection);
+            var items = await (projection is null ? find : find.Project<Schedule>(projection))
                 .Skip(pageNumber * pageSize)
                 .Limit(pageSize)
                 .ToListAsync();
 
             return (items.Count > 0 ? scope.ForView(items) : null, totalCount);
         }
+        /// <summary>
+        /// The resolver projects the fields of the tenant's stored "Schedule" schema definition. A definition seeded
+        /// before Genesis added <see cref="Schedule.TimeZone"/> leaves it out, so every list read would return null
+        /// and the edit form would save UTC over the real zone. No column rule can apply to a field the definition
+        /// does not list, so it is added back to an inclusion projection. Drop this once the definitions carry it.
+        /// </summary>
+        internal static ProjectionDefinition<Schedule>? WithTimeZone(ProjectionDefinition<Schedule>? projection)
+        {
+            if (projection is null)
+            {
+                return null;
+            }
+
+            var document = projection.Render(new RenderArgs<Schedule>(
+                BsonSerializer.LookupSerializer<Schedule>(), BsonSerializer.SerializerRegistry));
+            // An exclusion projection already returns the field; it cannot take an inclusion anyway.
+            var isExclusion = document.Elements.Any(e => e.Name != "_id" && IsZero(e.Value));
+            if (isExclusion || document.Contains(nameof(Schedule.TimeZone)))
+            {
+                return projection;
+            }
+
+            document[nameof(Schedule.TimeZone)] = 1;
+            return new BsonDocumentProjectionDefinition<Schedule>(document);
+        }
+
+        private static bool IsZero(BsonValue value) =>
+            (value.IsNumeric && Math.Abs(value.ToDouble()) < double.Epsilon) || (value.IsBoolean && !value.AsBoolean);
+
         public async Task<Schedule?> GetByIdAsync(string scheduleId, string tenantId = "")
         {
             var collection = GetCollection(tenantId);
