@@ -1,5 +1,6 @@
 import { Dialog } from "@/components/ui-kits/dialog/dialog";
 import ConfirmationModal from "@/components/confirmation-modal/confirmation-modal";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface ConfirmationModalProps {
   open: boolean;
@@ -16,13 +17,22 @@ export const PublishConfirmationModal = ({
   isPending,
   isVersion,
 }: ConfirmationModalProps) => {
+  const { t } = useT("logic.workflow");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <ConfirmationModal
         data={{
-          dialogTitle: `Publish ${isVersion ? "version" : "workflow"}`,
-          dialogSubtitle: `Are you sure you want to publish this ${isVersion ? "version" : "workflow"}?`,
-          confirmButton: "Publish",
+          dialogTitle: t(
+            isVersion
+              ? "WORKFLOW_CONFIRMATION_MODALS.PUBLISH_VERSION"
+              : "WORKFLOW_CONFIRMATION_MODALS.PUBLISH_WORKFLOW",
+          ),
+          dialogSubtitle: t(
+            isVersion
+              ? "WORKFLOW_CONFIRMATION_MODALS.PUBLISH_VERSION_CONFIRM"
+              : "WORKFLOW_CONFIRMATION_MODALS.PUBLISH_WORKFLOW_CONFIRM",
+          ),
+          confirmButton: t("WORKFLOW_CONFIRMATION_MODALS.PUBLISH"),
         }}
         onConfirm={onConfirm}
         onCancel={() => onOpenChange(false)}
@@ -39,15 +49,22 @@ export const UnpublishConfirmationModal = ({
   isPending,
   isVersion,
 }: ConfirmationModalProps) => {
+  const { t } = useT("logic.workflow");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <ConfirmationModal
         data={{
-          dialogTitle: `Unpublish ${isVersion ? "version" : "workflow"}`,
-          dialogSubtitle: `Are you sure you want to unpublish this ${
-            isVersion ? "version" : "workflow"
-          }? It will no longer be available for execution.`,
-          confirmButton: "Unpublish",
+          dialogTitle: t(
+            isVersion
+              ? "WORKFLOW_CONFIRMATION_MODALS.UNPUBLISH_VERSION"
+              : "WORKFLOW_CONFIRMATION_MODALS.UNPUBLISH_WORKFLOW",
+          ),
+          dialogSubtitle: t(
+            isVersion
+              ? "WORKFLOW_CONFIRMATION_MODALS.UNPUBLISH_VERSION_CONFIRM"
+              : "WORKFLOW_CONFIRMATION_MODALS.UNPUBLISH_WORKFLOW_CONFIRM",
+          ),
+          confirmButton: t("WORKFLOW_CONFIRMATION_MODALS.UNPUBLISH"),
         }}
         onConfirm={onConfirm}
         onCancel={() => onOpenChange(false)}

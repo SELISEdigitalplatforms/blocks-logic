@@ -24,7 +24,7 @@ import { isErrorWithErrors } from "@/lib/error";
 import { useDuplicateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 import { addCopySuffix } from "@blocks-workflow/utils/add-copy-suffix.util";
 import { useNavigate } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT } from "@seliseblocks/genesis-os";
 
 type DuplicateWorkflowProps = {
   open: boolean;
@@ -39,6 +39,7 @@ export const DuplicateWorkflow = ({
   workflowId,
   name,
 }: DuplicateWorkflowProps) => {
+  const { t } = useT("logic.workflow");
   const { isPending, mutateAsync } = useDuplicateWorkflow();
   const navigate = useNavigate();
   const scoped = useScopedPath();
@@ -59,14 +60,14 @@ export const DuplicateWorkflow = ({
 
       const res = await mutateAsync(payload);
       if (!res.isSuccess) return showErrorToast({ errors: res.errors });
-      showSuccessToast({ description: "Workflow successfully created." });
+      showSuccessToast({ description: t("DUPLICATE_WORKFLOW.WORKFLOW_SUCCESSFULLY_CREATED") });
       form.reset();
       navigate(scoped(`workflow/${res.itemId}`));
       onOpenChange(false);
     } catch (error) {
       if (isErrorWithErrors(error))
         return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to create workflow" });
+      return showErrorToast({ errors: t("DUPLICATE_WORKFLOW.FAILED_TO_CREATE_WORKFLOW") });
     }
   };
 
@@ -81,9 +82,9 @@ export const DuplicateWorkflow = ({
     <Dialog open={open} onOpenChange={handleModalClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Duplicate workflow</DialogTitle>
+          <DialogTitle>{t("DUPLICATE_WORKFLOW.DUPLICATE_WORKFLOW")}</DialogTitle>
           <DialogDescription>
-            Duplicate this workflow to quickly build a similar automation.
+            {t("DUPLICATE_WORKFLOW.DUPLICATE_THIS_WORKFLOW_TO")}
           </DialogDescription>
         </DialogHeader>
 
@@ -97,9 +98,9 @@ export const DuplicateWorkflow = ({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Workflow Name</FormLabel>
+                  <FormLabel>{t("DUPLICATE_WORKFLOW.WORKFLOW_NAME")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter workflow name" {...field} />
+                    <Input placeholder={t("DUPLICATE_WORKFLOW.ENTER_WORKFLOW_NAME")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -112,10 +113,10 @@ export const DuplicateWorkflow = ({
                 onClick={() => handleModalClose(false)}
                 disabled={isPending}
               >
-                Cancel
+                {t("common:CANCEL")}
               </Button>
               <Button type="submit" disabled={isPending}>
-                Confirm
+                {t("common:CONFIRM")}
               </Button>
             </div>
           </form>

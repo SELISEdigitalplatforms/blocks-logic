@@ -11,6 +11,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui-kits/tooltip/tooltip";
 import { WorkflowVersionActionDropdown } from "../workflow-version/workflow-version-action-dropdown";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface VersionHistorySidebarProps {
   onClose?: () => void;
@@ -19,6 +20,7 @@ interface VersionHistorySidebarProps {
 }
 
 export const VersionHistorySidebar = ({ onSelectVersion, selectedVersionId }: VersionHistorySidebarProps) => {
+  const { t } = useT("logic.workflow");
   const { id: workflowId } = useParams<{ id: string }>();
   
   const { data: versionsData, isLoading } = useGetWorkflowVersions({
@@ -45,7 +47,7 @@ export const VersionHistorySidebar = ({ onSelectVersion, selectedVersionId }: Ve
           </div>
         ) : versions.length === 0 ? (
           <div className="text-center text-sm text-muted-foreground py-8">
-            No versions found.
+            {t("VERSION_HISTORY_SIDEBAR.NO_VERSIONS_FOUND")}
           </div>
         ) : (
           versions.map((version: WorkflowVersion) => {
@@ -65,8 +67,8 @@ export const VersionHistorySidebar = ({ onSelectVersion, selectedVersionId }: Ve
                   ) : (
                     <div className="w-2 h-2 rounded-full border-2 border-muted-foreground flex-shrink-0" />
                   )}
-                  <span className="font-medium text-sm truncate">{version.name || "Unnamed Version"}</span>
-                  <span className="font-medium text-sm">{version.isPublished && " (Published)"}</span>
+                  <span className="font-medium text-sm truncate">{version.name || t("VERSION_HISTORY_SIDEBAR.UNNAMED_VERSION")}</span>
+                  <span className="font-medium text-sm">{version.isPublished && t("VERSION_HISTORY_SIDEBAR.PUBLISHED")}</span>
 
                 </div>
                 <WorkflowVersionActionDropdown version={version}>
@@ -96,7 +98,7 @@ export const VersionHistorySidebar = ({ onSelectVersion, selectedVersionId }: Ve
                 </div>
               )}
               <span className="text-xs text-muted-foreground pl-4">
-                {version.lastUpdatedDate ? formatDate(new Date(version.lastUpdatedDate)) : "Unknown date"}
+                {version.lastUpdatedDate ? formatDate(new Date(version.lastUpdatedDate)) : t("VERSION_HISTORY_SIDEBAR.UNKNOWN_DATE")}
               </span>
             </div>
             );

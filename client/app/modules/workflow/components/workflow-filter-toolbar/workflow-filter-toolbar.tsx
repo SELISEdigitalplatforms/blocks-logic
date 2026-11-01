@@ -1,10 +1,12 @@
 "use client";
 import { FilterToolbar } from "@/components/filter-toolbar";
 import { useWorkflowFilterQueryParams } from "@blocks-workflow/hooks";
+import { useT } from "@seliseblocks/genesis-os";
 
 type WorkflowFilter = { search: string; isPublished: string };
 
 export function WorkflowFilterToolBar() {
+  const { t } = useT("logic.workflow");
   const { queryParams, setQueryParams } = useWorkflowFilterQueryParams();
 
   const changeHandler = (key: string, value: unknown) => {
@@ -24,12 +26,12 @@ export function WorkflowFilterToolBar() {
         {
           key: "isPublished",
           type: "Radio",
-          label: "Status",
+          label: t("common:STATUS"),
           props: {
             options: [
-              { label: "All", value: "all" },
-              { label: "Published", value: "1" },
-              { label: "Unpublished", value: "0" },
+              { label: t("common:ALL"), value: "all" },
+              { label: t("WORKFLOW_FILTER_TOOLBAR.PUBLISHED"), value: "1" },
+              { label: t("WORKFLOW_FILTER_TOOLBAR.UNPUBLISHED"), value: "0" },
             ],
           },
         },

@@ -14,6 +14,7 @@ import { WorkflowVersion } from "../../models/workflow.model";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface WorkflowVersionActionDropdownProps {
   version: WorkflowVersion;
@@ -21,6 +22,7 @@ interface WorkflowVersionActionDropdownProps {
 }
 
 export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVersionActionDropdownProps) => {
+  const { t } = useT("logic.workflow");
   const { id: workflowId } = useParams<{ id: string }>();
   const {
     handlePublishUnversioned: publishUnversioned,
@@ -69,17 +71,17 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
     try {
       const response = (await updateWorkflowVersion.mutateAsync({
         versionId: version.itemId,
-        name: editVersionName || "Version Name",
+        name: editVersionName || t("WORKFLOW_VERSION_ACTION_DROPDOWN.VERSION_NAME"),
         description: editDescription,
       })) as unknown as { isSuccess?: boolean; errors?: { Message?: string } };
       if (response && response.isSuccess === false) {
-        showErrorToast({ errors: response.errors?.Message || "Failed to edit workflow version." });
+        showErrorToast({ errors: response.errors?.Message || t("WORKFLOW_VERSION_ACTION_DROPDOWN.FAILED_TO_EDIT_WORKFLOW") });
       } else {
         setIsEditModalOpen(false);
-        showSuccessToast({ description: "Workflow version details successfully updated." });
+        showSuccessToast({ description: t("WORKFLOW_VERSION_ACTION_DROPDOWN.WORKFLOW_VERSION_DETAILS_SUCCESSFULLY") });
       }
     } catch (error) {
-      showErrorToast({ errors: (error instanceof Error ? error.message : "") || "Failed to edit workflow version." });
+      showErrorToast({ errors: (error instanceof Error ? error.message : "") || t("WORKFLOW_VERSION_ACTION_DROPDOWN.FAILED_TO_EDIT_WORKFLOW") });
     }
   };
 
@@ -90,12 +92,12 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
         versionId: version.itemId,
       })) as unknown as { isSuccess?: boolean; errors?: { Message?: string } };
       if (response && response.isSuccess === false) {
-        showErrorToast({ errors: response.errors?.Message || "Failed to restore workflow version." });
+        showErrorToast({ errors: response.errors?.Message || t("WORKFLOW_VERSION_ACTION_DROPDOWN.FAILED_TO_RESTORE_WORKFLOW") });
       } else {
-        showSuccessToast({ description: "Workflow version successfully restored." });
+        showSuccessToast({ description: t("WORKFLOW_VERSION_ACTION_DROPDOWN.WORKFLOW_VERSION_SUCCESSFULLY_RESTORED") });
       }
     } catch (error) {
-      showErrorToast({ errors: (error instanceof Error ? error.message : "") || "Failed to restore workflow version." });
+      showErrorToast({ errors: (error instanceof Error ? error.message : "") || t("WORKFLOW_VERSION_ACTION_DROPDOWN.FAILED_TO_RESTORE_WORKFLOW") });
     }
   };
 
@@ -109,19 +111,19 @@ export const WorkflowVersionActionDropdown = ({ version, children }: WorkflowVer
           <DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
             handleOpenEditModal();
-          }}>Edit version details</DropdownMenuItem>
+          }}>{t("WORKFLOW_VERSION_ACTION_DROPDOWN.EDIT_VERSION_DETAILS")}</DropdownMenuItem>
           <DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
             handleRestore();
-          }}>Restore version</DropdownMenuItem>
+          }}>{t("WORKFLOW_VERSION_ACTION_DROPDOWN.RESTORE_VERSION")}</DropdownMenuItem>
           {!version.isPublished && (<DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
             handleOpenPublishModal();
-          }}>Publish version</DropdownMenuItem>)}
+          }}>{t("WORKFLOW_VERSION_ACTION_DROPDOWN.PUBLISH_VERSION")}</DropdownMenuItem>)}
           {version.isPublished && (<DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
             handleOpenUnpublishModal();
-          }}>Unpublish version</DropdownMenuItem>)}
+          }}>{t("WORKFLOW_VERSION_ACTION_DROPDOWN.UNPUBLISH_VERSION")}</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>
 

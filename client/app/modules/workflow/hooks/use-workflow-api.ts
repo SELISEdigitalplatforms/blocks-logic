@@ -18,6 +18,7 @@ import {
 import { showErrorToast } from "@/hooks/use-toast";
 import { WORKFLOW_EXECUTION_PAGE_SIZE } from "../constants";
 import { WorkflowExecutionStatus } from "../utils/workflow-execution-list.util";
+import { useT } from "@seliseblocks/genesis-os";
 
 export const useGetWorkflows = (options: IGetWorkflowsPayload) => {
   return useQuery({
@@ -228,6 +229,7 @@ export const useUpdateWorkflowVersion = () => {
 };
 
 export const useStepExecutionHandler = () => {
+  const { t } = useT("logic.workflow");
   const queryClient = useQueryClient();
   const { setStepExecutionData } = useWorkflow();
 
@@ -241,7 +243,7 @@ export const useStepExecutionHandler = () => {
         setStepExecutionData(data);
       }
     } catch (e) {
-      showErrorToast({ errors: (e instanceof Error ? e.message : "") || "Failed to fetch step execution" });
+      showErrorToast({ errors: (e instanceof Error ? e.message : "") || t("USE_WORKFLOW_API.FAILED_TO_FETCH_STEP") });
     }
   };
 

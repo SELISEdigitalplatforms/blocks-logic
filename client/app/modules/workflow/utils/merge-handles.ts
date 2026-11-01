@@ -1,4 +1,5 @@
 import type { NodeHandle } from "../models/node.model";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 export const MERGE_TARGET_PREFIX = "merge-handle-target-";
 
@@ -15,7 +16,7 @@ export const mergeInputCount = (numberInputs: unknown): number => {
 export const deriveMergeHandle = (parameters: Record<string, unknown> | undefined): NodeHandle => {
   const count = mergeInputCount(parameters?.numberInputs);
   return {
-    targets: Array.from({ length: count }, (_, i) => ({ key: `${MERGE_TARGET_PREFIX}${i + 1}`, label: `Input ${i + 1}` })),
+    targets: Array.from({ length: count }, (_, i) => ({ key: `${MERGE_TARGET_PREFIX}${i + 1}`, label: tStatic("logic.workflow", "MERGE_HANDLES.INPUT", { value: i + 1 }) })),
     sources: [{ key: "source", label: "" }],
   };
 };
@@ -42,7 +43,7 @@ export const mergeInputCounts = (
     connected[input - 1] = true;
     counts[input - 1] += countsBySource(edge.source)?.[edge.sourceHandle || "source"] ?? 0;
   }
-  return counts.map((count, i) => ({ label: `Input ${i + 1}`, count, connected: connected[i] }));
+  return counts.map((count, i) => ({ label: tStatic("logic.workflow", "MERGE_HANDLES.INPUT", { value: i + 1 }), count, connected: connected[i] }));
 };
 
 /**

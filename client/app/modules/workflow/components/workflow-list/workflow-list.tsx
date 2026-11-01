@@ -48,7 +48,7 @@ import { useWorkflowActions } from "../../hooks/use-workflow-actions";
 import { PublishConfirmationModal, UnpublishConfirmationModal } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT } from "@seliseblocks/genesis-os";
 import { RenameWorkflow } from "../rename-workflow/rename-workflow";
 import { Pen } from "lucide-react";
 import { AddWorkflow } from "../add-workflow";
@@ -72,45 +72,51 @@ const WorkflowListSkeleton = ({ length }: { length: number }) => {
   );
 };
 
-const WorkflowEmptyState = () => (
-  <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
-    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
-      <Workflow className="h-7 w-7" />
+const WorkflowEmptyState = () => {
+  const { t } = useT("logic.workflow");
+  return (
+    <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <Workflow className="h-7 w-7" />
+      </div>
+      <h4 className="mt-5 text-lg font-semibold text-high-emphasis">
+        {t("WORKFLOW_LIST.CREATE_YOUR_FIRST_WORKFLOW")}
+      </h4>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+        {t("WORKFLOW_LIST.START_BUILDING_AN_AUTOMATION")}
+      </p>
+      <div className="mt-6 flex items-center gap-3">
+        <AddWorkflow
+          variant="default"
+          label={t("WORKFLOW_LIST.CREATE_WORKFLOW")}
+          hideLabelOnMobile={false}
+          showIcon={false}
+        />
+        <ImportWorkflow
+          variant="outline"
+          label={t("WORKFLOW_LIST.IMPORT")}
+          hideLabelOnMobile={false}
+          showIcon={false}
+        />
+      </div>
     </div>
-    <h4 className="mt-5 text-lg font-semibold text-high-emphasis">
-      Create your first workflow
-    </h4>
-    <p className="mt-2 max-w-md text-sm text-muted-foreground">
-      Start building an automation flow with triggers, actions, and publish controls.
-    </p>
-    <div className="mt-6 flex items-center gap-3">
-      <AddWorkflow
-        variant="default"
-        label="Create workflow"
-        hideLabelOnMobile={false}
-        showIcon={false}
-      />
-      <ImportWorkflow
-        variant="outline"
-        label="Import"
-        hideLabelOnMobile={false}
-        showIcon={false}
-      />
-    </div>
-  </div>
-);
+  );
+};
 
-const WorkflowNoResultsState = () => (
-  <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
-    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
-      <Search className="h-7 w-7" />
+const WorkflowNoResultsState = () => {
+  const { t } = useT("logic.workflow");
+  return (
+    <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <Search className="h-7 w-7" />
+      </div>
+      <h4 className="mt-5 text-lg font-semibold text-high-emphasis">{t("WORKFLOW_LIST.NO_WORKFLOWS_FOUND")}</h4>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+        {t("WORKFLOW_LIST.NO_WORKFLOWS_MATCH_YOUR")}
+      </p>
     </div>
-    <h4 className="mt-5 text-lg font-semibold text-high-emphasis">No workflows found</h4>
-    <p className="mt-2 max-w-md text-sm text-muted-foreground">
-      No workflows match your search or filter. Try adjusting them.
-    </p>
-  </div>
-);
+  );
+};
 
 type WorkflowListProps = {
   workflow: WorkflowSummary[];
@@ -121,6 +127,7 @@ type WorkflowListProps = {
 };
 
 export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListProps) => {
+  const { t } = useT("logic.workflow");
   const navigate = useNavigate();
   const [modal, setModal] = useState<{
     type: "delete" | "publish" | "publish_new" | "unpublish" | "duplicate" | "rename" | null;
@@ -171,7 +178,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
     () => [
       {
         id: "name",
-        header: () => <div className="font-bold text-medium-emphasis">Name</div>,
+        header: () => <div className="font-bold text-medium-emphasis">{t("common:NAME")}</div>,
         cell: (info) => (
           <div className="w-[180px] truncate font-semibold md:w-[240px]">
             {`${info.row.original.name || ""}`.trim() || "-"}
@@ -180,7 +187,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
       },
       {
         id: "createdDate",
-        header: () => <div className="font-bold text-medium-emphasis">Created on</div>,
+        header: () => <div className="font-bold text-medium-emphasis">{t("WORKFLOW_LIST.CREATED_ON")}</div>,
         cell: (info) => (
           <div className="whitespace-nowrap text-muted-foreground">
             {formatDate(parseDateString(info.row.original.createdDate))}
@@ -189,7 +196,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
       },
       {
         id: "lastUpdatedDate",
-        header: () => <div className="font-bold text-medium-emphasis">Last updated</div>,
+        header: () => <div className="font-bold text-medium-emphasis">{t("WORKFLOW_LIST.LAST_UPDATED")}</div>,
         cell: (info) => (
           <div className="whitespace-nowrap text-muted-foreground">
             {formatDate(parseDateString(info.row.original.lastUpdatedDate))}
@@ -198,14 +205,14 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
       },
       {
         id: "isPublished",
-        header: () => <div className="font-bold text-medium-emphasis">Status</div>,
+        header: () => <div className="font-bold text-medium-emphasis">{t("common:STATUS")}</div>,
         cell: (info) => (
           <div>
             <Badge
               variant={info.row.original.isPublished ? "success" : "error"}
               className="w-fit rounded-md px-3 py-1 text-sm"
             >
-              {info.row.original.isPublished ? "Published" : "Unpublished"}
+              {info.row.original.isPublished ? t("WORKFLOW_LIST.PUBLISHED") : t("WORKFLOW_LIST.UNPUBLISHED")}
             </Badge>
           </div>
         ),
@@ -254,7 +261,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{info.row.original.isPublished ? "Unpublish workflow" : "Publish workflow"}</p>
+                <p>{info.row.original.isPublished ? t("WORKFLOW_LIST.UNPUBLISH_WORKFLOW") : t("WORKFLOW_LIST.PUBLISH_WORKFLOW")}</p>
               </TooltipContent>
             </Tooltip>
             <DropdownMenu>
@@ -279,7 +286,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
                     className="flex w-full items-center"
                   >
                     <ArrowRightFromLine className="mr-2 h-4 w-4" />
-                    <span>Open</span>
+                    <span>{t("WORKFLOW_LIST.OPEN")}</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -293,7 +300,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
                   }}
                 >
                   <Pen className="mr-2 h-4 w-4" />
-                  <span>Rename</span>
+                  <span>{t("WORKFLOW_LIST.RENAME")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
@@ -306,7 +313,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
                   }}
                 >
                   <Copy className="mr-2 h-4 w-4" />
-                  <span>Duplicate</span>
+                  <span>{t("WORKFLOW_LIST.DUPLICATE")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
@@ -317,7 +324,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
                   }}
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  <span>Export</span>
+                  <span>{t("WORKFLOW_LIST.EXPORT")}</span>
                 </DropdownMenuItem>
                 {!(info.row.original.isPublished) && (<DropdownMenuItem
                   className="cursor-pointer"
@@ -341,7 +348,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
                   }}
                 >
                   <Check className="mr-2 h-4 w-4" />
-                  <span>Publish</span>
+                  <span>{t("WORKFLOW_LIST.PUBLISH")}</span>
                 </DropdownMenuItem>)}
 
                 {info.row.original.isPublished && (<DropdownMenuItem
@@ -356,7 +363,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
                   }}
                 >
                   <Ban className="mr-2 h-4 w-4" />
-                  <span>Unpublish</span>
+                  <span>{t("WORKFLOW_LIST.UNPUBLISH")}</span>
                 </DropdownMenuItem>)}
 
                 <DropdownMenuItem
@@ -367,7 +374,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
                   }}
                 >
                   <Trash className="mr-2 h-4 w-4" />
-                  <span>Delete</span>
+                  <span>{t("common:DELETE")}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -375,7 +382,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
         ),
       },
     ],
-    [exportWorkflow, isExporting, scoped],
+    [exportWorkflow, isExporting, scoped, t],
   );
 
   const handleRowClick = useCallback(

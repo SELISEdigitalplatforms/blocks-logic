@@ -8,14 +8,63 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 const nodeTemplates = [
-  { id: "trigger", label: "Trigger", description: "Start the workflow" },
-  { id: "action", label: "Action", description: "Perform an action" },
-  { id: "condition", label: "Condition", description: "Branch based on conditions" },
-  { id: "loop", label: "Loop", description: "Repeat actions" },
-  { id: "delay", label: "Delay", description: "Wait for a period" },
-  { id: "webhook", label: "Webhook", description: "Call external service" },
+  {
+    id: "trigger",
+    get label() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.TRIGGER");
+    },
+    get description() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.START_THE_WORKFLOW");
+    },
+  },
+  {
+    id: "action",
+    get label() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.ACTION");
+    },
+    get description() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.PERFORM_AN_ACTION");
+    },
+  },
+  {
+    id: "condition",
+    get label() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.CONDITION");
+    },
+    get description() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.BRANCH_BASED_ON_CONDITIONS");
+    },
+  },
+  {
+    id: "loop",
+    get label() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.LOOP");
+    },
+    get description() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.REPEAT_ACTIONS");
+    },
+  },
+  {
+    id: "delay",
+    get label() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.DELAY");
+    },
+    get description() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.WAIT_FOR_A_PERIOD");
+    },
+  },
+  {
+    id: "webhook",
+    get label() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.WEBHOOK");
+    },
+    get description() {
+      return tStatic("logic.workflow", "ADD_NODE_MENU.CALL_EXTERNAL_SERVICE");
+    },
+  },
 ];
 
 type AddNodeMenuProps = {
@@ -23,12 +72,13 @@ type AddNodeMenuProps = {
 };
 
 export const AddNodeMenu = ({ onAddNode }: AddNodeMenuProps) => {
+  const { t } = useT("logic.workflow");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
-          Add Step
+          {t("ADD_NODE_MENU.ADD_STEP")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">

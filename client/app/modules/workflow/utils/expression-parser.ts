@@ -1,4 +1,5 @@
 import { EditorNode } from "@blocks-workflow/models/node.model";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 /**
  * Get handle ID for a node based on its category
@@ -147,7 +148,7 @@ export const validateExpression = (
 
   nodeRefs.forEach((nodeName) => {
     if (!nodeNames.has(nodeName)) {
-      errors.push(`Node "${nodeName}" does not exist in the workflow`);
+      errors.push(tStatic("logic.workflow", "EXPRESSION_PARSER.NODE_DOES_NOT_EXIST", { nodeName }));
     }
   });
 

@@ -3,6 +3,7 @@ import { Dialog } from "@/components/ui-kits/dialog/dialog";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
 import { useDeleteWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
+import { useT } from "@seliseblocks/genesis-os";
 
 type DeleteWorkflowProps = {
   workflowId: string;
@@ -17,6 +18,7 @@ export const DeleteWorkflow = ({
   onOpenChange,
   onDeleted,
 }: DeleteWorkflowProps) => {
+  const { t } = useT("logic.workflow");
   const { mutateAsync } = useDeleteWorkflow();
 
   const confirmHandler = async () => {
@@ -25,14 +27,14 @@ export const DeleteWorkflow = ({
         id: workflowId,
       });
       if (!res.isSuccess)
-        return showErrorToast({ errors: res.errors || "Something went wrong" });
-      showSuccessToast({ description: "Workflow deleted successfully" });
+        return showErrorToast({ errors: res.errors || t("DELETE_WORKFLOW.SOMETHING_WENT_WRONG") });
+      showSuccessToast({ description: t("DELETE_WORKFLOW.WORKFLOW_DELETED_SUCCESSFULLY") });
       onOpenChange(false);
       onDeleted?.();
     } catch (error) {
       if (isErrorWithErrors(error))
         return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Something went wrong" });
+      return showErrorToast({ errors: t("DELETE_WORKFLOW.SOMETHING_WENT_WRONG") });
     }
   };
 
@@ -40,8 +42,8 @@ export const DeleteWorkflow = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <ConfirmationModal
         data={{
-          dialogTitle: "Delete Workflow",
-          dialogSubtitle: `Are you sure you want to delete this workflow?`,
+          dialogTitle: t("DELETE_WORKFLOW.DELETE_WORKFLOW"),
+          dialogSubtitle: t("DELETE_WORKFLOW.ARE_YOU_SURE_YOU"),
         }}
         onConfirm={confirmHandler}
         onCancel={() => onOpenChange(false)}

@@ -4,6 +4,7 @@ import { Upload } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { cn } from "@/lib/utils";
 import { useImportWorkflow } from "@blocks-workflow/hooks/use-import-workflow";
+import { useT } from "@seliseblocks/genesis-os";
 
 type ImportWorkflowProps = {
   buttonClassName?: string;
@@ -16,10 +17,11 @@ type ImportWorkflowProps = {
 export const ImportWorkflow = ({
   buttonClassName,
   hideLabelOnMobile = true,
-  label = "Import",
+  label,
   showIcon = true,
   variant = "ghost",
 }: ImportWorkflowProps) => {
+  const { t } = useT("logic.workflow");
   const inputRef = useRef<HTMLInputElement>(null);
   const { importWorkflow, isImporting } = useImportWorkflow();
 
@@ -56,7 +58,7 @@ export const ImportWorkflow = ({
       >
         {showIcon && <Upload className="h-4 w-4" />}
         <span className={cn(hideLabelOnMobile && "sr-only sm:not-sr-only", showIcon && "ml-2.5")}>
-          {label}
+          {label ?? t("IMPORT_WORKFLOW.IMPORT")}
         </span>
       </Button>
     </>

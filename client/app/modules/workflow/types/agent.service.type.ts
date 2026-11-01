@@ -1,3 +1,4 @@
+import { tStatic } from "@seliseblocks/genesis-os";
 export enum AgentResponseStyle {
   CONCISE = "concise",
   BALANCED = "balanced",
@@ -23,11 +24,36 @@ export const AGENT_RESPONSE_STYLES: {
   label: string;
   value: AgentResponseStyle;
 }[] = [
-  { label: "Concise", value: AgentResponseStyle.CONCISE },
-  { label: "Balanced", value: AgentResponseStyle.BALANCED },
-  { label: "Detailed", value: AgentResponseStyle.DETAILED },
-  { label: "Professional", value: AgentResponseStyle.PROFESSIONAL },
-  { label: "Conversational", value: AgentResponseStyle.CONVERSATIONAL },
+  {
+    get label() {
+      return tStatic("logic.workflow", "AGENT_SERVICE_TYPE.CONCISE");
+    },
+    value: AgentResponseStyle.CONCISE,
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow", "AGENT_SERVICE_TYPE.BALANCED");
+    },
+    value: AgentResponseStyle.BALANCED,
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow", "AGENT_SERVICE_TYPE.DETAILED");
+    },
+    value: AgentResponseStyle.DETAILED,
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow", "AGENT_SERVICE_TYPE.PROFESSIONAL");
+    },
+    value: AgentResponseStyle.PROFESSIONAL,
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow", "AGENT_SERVICE_TYPE.CONVERSATIONAL");
+    },
+    value: AgentResponseStyle.CONVERSATIONAL,
+  },
 ];
 export enum WidgetType {
   CHAT = "chat",

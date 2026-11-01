@@ -26,7 +26,7 @@ import { addWorkflowDefaultValues, AddWorkflowFormValues, addWorkflowSchema } fr
 import { isErrorWithErrors } from "@/lib/error";
 import { useCreateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 import { useNavigate } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT, tStatic } from "@seliseblocks/genesis-os";
 import { cn } from "@/lib/utils";
 
 type AddWorkflowProps = {
@@ -40,10 +40,11 @@ type AddWorkflowProps = {
 export const AddWorkflow = ({
   buttonClassName,
   hideLabelOnMobile = true,
-  label = "Add Workflow",
+  label = tStatic("logic.workflow", "ADD_WORKFLOW.ADD_WORKFLOW"),
   showIcon = true,
   variant = "ghost",
 }: AddWorkflowProps) => {
+  const { t } = useT("logic.workflow");
   const [open, onOpenChange] = useState(false);
   const { isPending, mutateAsync } = useCreateWorkflow();
   const scoped = useScopedPath();
@@ -60,13 +61,13 @@ export const AddWorkflow = ({
 
       const res = await mutateAsync(payload);
       if (!res.isSuccess) return showErrorToast({ errors: res.errors });
-      showSuccessToast({ description: "Workflow successfully created." });
+      showSuccessToast({ description: t("ADD_WORKFLOW.WORKFLOW_SUCCESSFULLY_CREATED") });
       form.reset();
       navigate(scoped(`workflow/${res.itemId}`));
       onOpenChange(false);
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to create workflow" });
+      return showErrorToast({ errors: t("ADD_WORKFLOW.FAILED_TO_CREATE_WORKFLOW") });
     }
   };
 
@@ -97,9 +98,9 @@ export const AddWorkflow = ({
 
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Create workflow</DialogTitle>
+          <DialogTitle>{t("ADD_WORKFLOW.CREATE_WORKFLOW")}</DialogTitle>
           <DialogDescription>
-            Set up a new workflow to automate your tasks and processes.
+            {t("ADD_WORKFLOW.SET_UP_A_NEW")}
           </DialogDescription>
         </DialogHeader>
 
@@ -110,9 +111,9 @@ export const AddWorkflow = ({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Workflow Name</FormLabel>
+                  <FormLabel>{t("ADD_WORKFLOW.WORKFLOW_NAME")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter workflow name" {...field} />
+                    <Input placeholder={t("ADD_WORKFLOW.ENTER_WORKFLOW_NAME")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -125,10 +126,10 @@ export const AddWorkflow = ({
                 onClick={() => handleModalClose(false)}
                 disabled={isPending}
               >
-                Cancel
+                {t("common:CANCEL")}
               </Button>
               <Button type="submit" disabled={isPending}>
-                Create
+                {t("common:CREATE")}
               </Button>
             </div>
           </form>

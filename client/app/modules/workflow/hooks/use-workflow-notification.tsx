@@ -4,8 +4,10 @@ import { useWorkflow } from "@blocks-workflow/hooks";
 import { workflowService } from "../services/workflow.service";
 import { EXECUTION_STATUS_COMPLETED, EXECUTION_STATUS_FAILED } from "../constants";
 import { showErrorToast } from "@/hooks/use-toast";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 export const useWorkflowNotification = () => {
+  const { t } = useT("logic.workflow");
   const { isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData,setNextExecutionId } = useWorkflow();
 
   const handleNotification = useCallback(async (data: unknown) => {
@@ -34,7 +36,7 @@ export const useWorkflowNotification = () => {
                 TriggerId: listeningNodeId,
                 EnableListener: false,
               }).catch((err) => {
-                showErrorToast({ errors: err.message || "Failed to disable listener on completion" });
+                showErrorToast({ errors: err.message || tStatic("logic.workflow", "USE_WORKFLOW_NOTIFICATION.FAILED_TO_DISABLE_LISTENER") });
               });
               setIsListening(false);
             }
@@ -50,7 +52,7 @@ export const useWorkflowNotification = () => {
           }
       }
     } catch (error) {
-      showErrorToast({ errors: (error instanceof Error ? error.message : "") || "Failed to parse WorkflowNotification" });
+      showErrorToast({ errors: (error instanceof Error ? error.message : "") || tStatic("logic.workflow", "USE_WORKFLOW_NOTIFICATION.FAILED_TO_PARSE_WORKFLOWNOTIFICATION") });
     }
   }, [isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData, setNextExecutionId]);
 

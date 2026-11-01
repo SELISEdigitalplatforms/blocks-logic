@@ -10,6 +10,8 @@ import { Input } from "@/components/ui-kits/input/input";
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { Label } from "@/components/ui-kits/label/label";
 import { Loader2 } from "lucide-react";
+import { renderRichText } from "@/lib/rich-text";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface PublishWorkflowModalProps {
   open: boolean;
@@ -34,16 +36,17 @@ export const PublishWorkflowModal = ({
   isPublishing,
   mode = "publish",
 }: PublishWorkflowModalProps) => {
+  const { t } = useT("logic.workflow");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{mode === "publish" ? "Publish workflow" : "Edit version details"}</DialogTitle>
+          <DialogTitle>{mode === "publish" ? t("PUBLISH_WORKFLOW_MODAL.PUBLISH_WORKFLOW") : t("PUBLISH_WORKFLOW_MODAL.EDIT_VERSION_DETAILS")}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="version-name">
-              Version name <span className="text-red-500">*</span>
+              {renderRichText(t("PUBLISH_WORKFLOW_MODAL.VERSION_NAME_0_0"), [(children) => <span className="text-red-500">{children}</span>])}
             </Label>
             <Input
               id="version-name"
@@ -53,7 +56,7 @@ export const PublishWorkflowModal = ({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="description">Describe changes (optional)</Label>
+            <Label htmlFor="description">{t("PUBLISH_WORKFLOW_MODAL.DESCRIBE_CHANGES_OPTIONAL")}</Label>
             <Textarea
               id="description"
               value={publishDescription}
@@ -65,14 +68,14 @@ export const PublishWorkflowModal = ({
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common:CANCEL")}
           </Button>
           <Button
             onClick={onPublish}
             disabled={!publishVersionName.trim() || isPublishing}
           >
             {isPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {mode === "publish" ? "Publish" : "Save changes"}
+            {mode === "publish" ? t("PUBLISH_WORKFLOW_MODAL.PUBLISH") : t("common:SAVE_CHANGES")}
           </Button>
         </DialogFooter>
       </DialogContent>

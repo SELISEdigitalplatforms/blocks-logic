@@ -1,5 +1,6 @@
 import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from "./use-workflow-api";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
+import { useT } from "@seliseblocks/genesis-os";
 
 type MutationResult = {
   isSuccess?: boolean;
@@ -10,6 +11,7 @@ const toErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "";
 
 export const useWorkflowActions = () => {
+  const { t } = useT("logic.workflow");
   const { mutateAsync: publishNewWorkflowMutation, isPending: isPublishingNew } = usePublishNewWorkflow();
   const { mutateAsync: publishWorkflowMutation, isPending: isPublishingUnversioned } = usePublishWorkflow();
   const { mutateAsync: unpublishWorkflowMutation, isPending: isUnpublishing } = useUnpublishWorkflow();
@@ -27,13 +29,13 @@ export const useWorkflowActions = () => {
         description,
       })) as unknown as MutationResult;
       if (response && response.isSuccess === false) {
-        showErrorToast({ errors: response.errors?.Message || "Failed to publish workflow." });
+        showErrorToast({ errors: response.errors?.Message || t("USE_WORKFLOW_ACTIONS.FAILED_TO_PUBLISH_WORKFLOW") });
       } else {
         onSuccess?.();
-        showSuccessToast({ description: "Workflow successfully published." });
+        showSuccessToast({ description: t("USE_WORKFLOW_ACTIONS.WORKFLOW_SUCCESSFULLY_PUBLISHED") });
       }
     } catch (error) {
-      showErrorToast({ errors: toErrorMessage(error) || "Failed to publish workflow." });
+      showErrorToast({ errors: toErrorMessage(error) || t("USE_WORKFLOW_ACTIONS.FAILED_TO_PUBLISH_WORKFLOW") });
     }
   };
 
@@ -48,13 +50,13 @@ export const useWorkflowActions = () => {
 
       const response = (await publishWorkflowMutation(payload)) as unknown as MutationResult;
       if (response && response.isSuccess === false) {
-        showErrorToast({ errors: response.errors?.Message || "Failed to publish workflow." });
+        showErrorToast({ errors: response.errors?.Message || t("USE_WORKFLOW_ACTIONS.FAILED_TO_PUBLISH_WORKFLOW") });
       } else {
         onSuccess?.();
-        showSuccessToast({ description: "Workflow successfully published." });
+        showSuccessToast({ description: t("USE_WORKFLOW_ACTIONS.WORKFLOW_SUCCESSFULLY_PUBLISHED") });
       }
     } catch (error) {
-      showErrorToast({ errors: toErrorMessage(error) || "Failed to publish workflow." });
+      showErrorToast({ errors: toErrorMessage(error) || t("USE_WORKFLOW_ACTIONS.FAILED_TO_PUBLISH_WORKFLOW") });
     }
   };
 
@@ -65,13 +67,13 @@ export const useWorkflowActions = () => {
     try {
       const response = (await unpublishWorkflowMutation({ workflowId })) as unknown as MutationResult;
       if (response && response.isSuccess === false) {
-        showErrorToast({ errors: response.errors?.Message || "Failed to unpublish workflow." });
+        showErrorToast({ errors: response.errors?.Message || t("USE_WORKFLOW_ACTIONS.FAILED_TO_UNPUBLISH_WORKFLOW") });
       } else {
         onSuccess?.();
-        showSuccessToast({ description: "Workflow successfully unpublished." });
+        showSuccessToast({ description: t("USE_WORKFLOW_ACTIONS.WORKFLOW_SUCCESSFULLY_UNPUBLISHED") });
       }
     } catch (error) {
-      showErrorToast({ errors: toErrorMessage(error) || "Failed to unpublish workflow." });
+      showErrorToast({ errors: toErrorMessage(error) || t("USE_WORKFLOW_ACTIONS.FAILED_TO_UNPUBLISH_WORKFLOW") });
     }
   };
 
