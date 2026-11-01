@@ -17,7 +17,7 @@ public class WorkflowCreateRequestDto
 
     public List<EdgeEnity> Edges { get; set; } = new();
 
-    public Dictionary<string, string> Settings { get; set; } = new();
+    public WorkflowSettings? Settings { get; set; } = new();
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

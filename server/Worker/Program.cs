@@ -89,6 +89,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             // The event trigger: starts the functions that subscribe to a FunctionEvent (ctx.events.add('FunctionEvent', ...)).
             services.AddSingleton<IConsumer<Functions.DomainService.Events.FunctionEvent>, Functions.DomainService.Consumers.FunctionEventConsumer>();
             services.AddSingleton<IConsumer<PublishScheduleCommand>, SchedulerTriggerConsumer>();
+            services.AddSingleton<IConsumer<ErrorTriggerEvent>, ErrorTriggerConsumer>();
             // Mobile push: genesis senders queue PushRequested; this worker renders and sends it through FCM.
             services.AddSingleton<IConsumer<PushRequested>, PushRequestedConsumer>();
             services.AddBlocksNotifications();

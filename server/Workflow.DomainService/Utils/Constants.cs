@@ -50,6 +50,10 @@ namespace Workflow.DomainService.Utils
         public const string BlocksEventTriggerQueue = BlocksEventTriggerConstants.QueueName;
         /// <summary>Node type of the Blocks Event trigger, on the client and in <c>PublishedMeta.TriggerNodes</c>.</summary>
         public const string BlocksEventNodeType = "blocksEvent";
+        /// <summary>Node type of the Error Trigger, which starts a workflow when another workflow's production run fails.</summary>
+        public const string ErrorTriggerNodeType = "errorTrigger";
+        /// <summary>Failed production runs whose workflow has an alert set; the Worker starts the alert's error workflow.</summary>
+        public const string ErrorTriggerQueue = "blocks_logic_workflow_error_trigger_listener";
         /// <summary>The <c>Category</c> of every trigger node.</summary>
         public const string TriggerCategory = "trigger";
         /// <summary>The execution context key that holds the trigger's items.</summary>
@@ -105,6 +109,7 @@ namespace Workflow.DomainService.Utils
                                              ConsumerSubscription.BindToQueue(DataTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(BlocksEventTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(SchedulerTriggerQueue,10),
+                                             ConsumerSubscription.BindToQueue(ErrorTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(WorkflowImportQueue),
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
                                              // Consumed by the event trigger. It also makes sure the queue exists, which RabbitMQ needs
@@ -131,7 +136,7 @@ namespace Workflow.DomainService.Utils
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, BlocksEventTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, FunctionEventQueueName, CommunicationConstants.MailStatusQueueName, NotificationQueues.Push, .. registry],
+                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, BlocksEventTriggerQueue, SchedulerTriggerQueue, ErrorTriggerQueue, WorkflowImportQueue, LogicMailQueueName, FunctionEventQueueName, CommunicationConstants.MailStatusQueueName, NotificationQueues.Push, .. registry],
                     Topics = [MigrationCompletionTopic],
                     QueuePrefetchCount = 40,
                     MaxConcurrentCalls = 40

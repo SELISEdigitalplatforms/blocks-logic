@@ -1,5 +1,9 @@
+using Workflow.DomainService.Validators;
+using Workflow.DomainService.Dtos;
+using FluentValidation;
 using Workflow.DomainService.BlocksEvents;
 using Workflow.DomainService.Nodes.TriggerBlocksEventV2;
+using Workflow.DomainService.Nodes.TriggerErrorTriggerV2;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using Workflow.DomainService.Import;
@@ -40,6 +44,7 @@ namespace Workflow.DomainService
         public static IServiceCollection AddWorkflowExecutionEngine(this IServiceCollection services)
         {
             // register business services
+            services.AddSingleton<IValidator<WorkflowUpdateSettingsRequestDto>, WorkflowUpdateSettingsValidator>();
             services.AddSingleton<IWorkflowService, WorkflowService>();
             services.TryAddSingleton<IWorkflowImportTenantSlugResolver, NullWorkflowImportTenantSlugResolver>();
             services.AddSingleton<IWorkflowImportService, WorkflowImportService>();
@@ -68,6 +73,7 @@ namespace Workflow.DomainService
             services.AddSingleton<INodeExecutor, TriggerDataV1Node>();
             services.AddSingleton<INodeExecutor, TriggerScheduleV1Node>();
             services.AddSingleton<INodeExecutor, TriggerBlocksEventV2Node>();
+            services.AddSingleton<INodeExecutor, TriggerErrorTriggerV2Node>();
 
             // Logic nodes
             services.AddSingleton<INodeExecutor, LogicIfV1Node>();

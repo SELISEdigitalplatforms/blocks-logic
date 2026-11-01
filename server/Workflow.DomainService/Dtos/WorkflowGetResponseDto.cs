@@ -18,7 +18,7 @@ namespace Workflow.DomainService.Dtos
 
         public List<EdgeEnity> Edges { get; set; } = new();
 
-        public Dictionary<string, string> Settings { get; set; } = new();
+        public WorkflowSettings? Settings { get; set; } = new();
 
         public bool IsPublished { get; set; }
 

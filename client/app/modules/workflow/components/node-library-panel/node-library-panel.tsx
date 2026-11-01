@@ -54,9 +54,14 @@ export const NodeLibraryPanel = ({
       option.description.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  // A workflow can have one Error Trigger.
+  const hasErrorTrigger = nodes.some((n) => n.type === "errorTrigger");
+  const isUnavailable = (node: WorkflowNodeDefinition) =>
+    node.isComingSoon || (node.type === "errorTrigger" && hasErrorTrigger);
+
   const handleSelectOption = useCallback(
     (node: WorkflowNodeDefinition) => {
-      if (node.isComingSoon) return;
+      if (isUnavailable(node)) return;
       const schemaDefinition = NodeSchemasDefinition[`${node.category}${node.type}${node.version}`];
 
       const length = nodes.filter((n) => n.type === node.type).length;
@@ -163,8 +168,10 @@ export const NodeLibraryPanel = ({
                 <div
                   key={option.id}
                   onClick={() => handleSelectOption(option)}
+                  aria-disabled={option.type === "errorTrigger" && hasErrorTrigger ? true : undefined}
                   className={cn(
                     "flex w-full cursor-pointer flex-col gap-1.5 rounded-sm p-4 text-left text-medium-emphasis transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                    option.type === "errorTrigger" && hasErrorTrigger && "cursor-not-allowed opacity-50 hover:bg-transparent",
                   )}
                 >
                   <div className="mt-0.5 flex items-center gap-1">

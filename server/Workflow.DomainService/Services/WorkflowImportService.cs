@@ -105,7 +105,8 @@ namespace Workflow.DomainService.Services
                     TenantId = evt.TenantId,
                     Nodes = remapped.Nodes,
                     Edges = remapped.Edges,
-                    Settings = remapped.Settings,
+                    // Settings are never imported: an alert target belongs to the source tenant.
+                    Settings = new WorkflowSettings(),
                     IsDirty = true,
                     IsPublished = false,
                     PublishedVersionId = null,

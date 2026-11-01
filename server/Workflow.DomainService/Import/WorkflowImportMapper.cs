@@ -18,7 +18,6 @@ namespace Workflow.DomainService.Import
     {
         public List<NodeEntity> Nodes { get; init; } = new();
         public List<EdgeEnity> Edges { get; init; } = new();
-        public Dictionary<string, string> Settings { get; init; } = new();
         public int Issues { get; init; }
     }
 
@@ -156,18 +155,6 @@ namespace Workflow.DomainService.Import
 
             var nodes = survivors.Select(node => RewriteNode(node, idMap)).ToList();
 
-            var settings = new Dictionary<string, string>(StringComparer.Ordinal);
-            if (root.TryGetProperty("settings", out var settingsElement) && settingsElement.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var property in settingsElement.EnumerateObject())
-                {
-                    if (property.Value.ValueKind == JsonValueKind.String)
-                    {
-                        settings[property.Name] = ReplaceIdsInString(property.Value.GetString() ?? string.Empty, idMap);
-                    }
-                }
-            }
-
             var edges = new List<EdgeEnity>();
             var usedEdgeIds = new HashSet<string>(StringComparer.Ordinal);
             var edgeIndex = 0;
@@ -218,7 +205,6 @@ namespace Workflow.DomainService.Import
             {
                 Nodes = nodes,
                 Edges = edges,
-                Settings = settings,
                 Issues = issues,
             };
         }

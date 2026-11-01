@@ -1,3 +1,4 @@
+using FluentValidation;
 using DataAccess.InternalService;
 using Blocks.Genesis.DataAccess.Rules;
 using System.Text.Json;
@@ -29,11 +30,13 @@ namespace Workflow.DomainService.Services
         private readonly IScheduleService _scheduleService;
         private readonly ILogger<WorkflowService> _logger;
         private readonly IBlocksEventCatalogService _blocksEventCatalog;
+        private readonly IValidator<WorkflowUpdateSettingsRequestDto> _updateSettingsValidator;
 
 
 
-        public WorkflowService(IWorkflowRepository workflowRepository, IWorkflowVersionRepository workflowVersionRepository, IScheduleService scheduleService, ILogger<WorkflowService> logger, IBlocksEventCatalogService blocksEventCatalog)
+        public WorkflowService(IWorkflowRepository workflowRepository, IWorkflowVersionRepository workflowVersionRepository, IScheduleService scheduleService, ILogger<WorkflowService> logger, IBlocksEventCatalogService blocksEventCatalog, IValidator<WorkflowUpdateSettingsRequestDto> updateSettingsValidator)
         {
+            _updateSettingsValidator = updateSettingsValidator;
             _blocksEventCatalog = blocksEventCatalog;
             _workflowRepository = workflowRepository;
             _workflowVersionRepository = workflowVersionRepository;
@@ -287,7 +290,8 @@ namespace Workflow.DomainService.Services
                 PublishedVersionId = null,
                 PublishedMeta = null,
                 LastPublishedVersionId = null,
-                Settings = dto.Settings,
+                // Alerts are set only through UpdateSettings.
+                Settings = new WorkflowSettings(),
                 Description = dto.Description,
                 CreatedDate = DateTime.UtcNow,
                 LastUpdatedDate = DateTime.UtcNow,
@@ -344,7 +348,7 @@ namespace Workflow.DomainService.Services
                     Name = dto.Name,
                     Nodes = existingWorkflow.Nodes,
                     Edges = existingWorkflow.Edges,
-                    Settings = existingWorkflow.Settings,
+                    Settings = CopySettings(existingWorkflow.Settings),
                     Description = existingWorkflow.Description,
                     Language = existingWorkflow.Language,
                     OrganizationId = existingWorkflow.OrganizationId,
@@ -384,14 +388,14 @@ namespace Workflow.DomainService.Services
             _logger.LogInformation("Fetching workflows. TenantId: {TenantId}, Page: {PageNumber}, PageSize: {PageSize}, Search: {Search}, IsPublished: {IsPublished}",
                 tenantId, dto.PageNumber, dto.PageSize, dto.Search, dto.IsPublished);
 
-            var workflows = await _workflowRepository.GetAllWorkflowsAsync(tenantId, dto.PageSize, dto.PageNumber, dto.Search, dto.IsPublished);
-            var totalCount = await _workflowRepository.GetWorkflowsCountAsync(tenantId, dto.Search, dto.IsPublished);
+            var workflows = await _workflowRepository.GetAllWorkflowsAsync(tenantId, dto.PageSize, dto.PageNumber, dto.Search, dto.IsPublished, dto.HasErrorTrigger, dto.ExcludeItemId);
+            var totalCount = await _workflowRepository.GetWorkflowsCountAsync(tenantId, dto.Search, dto.IsPublished, dto.HasErrorTrigger, dto.ExcludeItemId);
 
             var workflowDtos = workflows.Select(w => new WorkflowListItemDto
             {
                 ItemId = w.ItemId,
                 Name = w.Name,
-                Settings = w.Settings ?? new Dictionary<string, string>(),
+                Settings = w.Settings ?? new WorkflowSettings(),
                 CreatedDate = w.CreatedDate,
                 LastUpdatedDate = w.LastUpdatedDate,
                 CreatedBy = w.CreatedBy,
@@ -486,7 +490,7 @@ namespace Workflow.DomainService.Services
                 TenantId = workflow.TenantId,
                 Nodes = nodes,
                 Edges = workflow.Edges,
-                Settings = workflow.Settings ?? new Dictionary<string, string>(),
+                Settings = workflow.Settings ?? new WorkflowSettings(),
                 IsPublished = workflow.IsPublished,
                 Description = workflow.Description,
                 LastUpdatedDate = workflow.LastUpdatedDate,
@@ -560,6 +564,37 @@ namespace Workflow.DomainService.Services
                 ItemId = workflow.ItemId,
                 Errors = null
             };
+        }
+
+        public async Task<BaseMutationResponse> UpdateSettingsAsync(string tenantId, WorkflowUpdateSettingsRequestDto dto)
+        {
+            var validation = await _updateSettingsValidator.ValidateAsync(dto);
+            if (!validation.IsValid)
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    ItemId = null,
+                    Errors = validation.Errors
+                        .GroupBy(e => e.PropertyName)
+                        .ToDictionary(g => g.Key, g => g.First().ErrorMessage)
+                };
+            }
+
+            var settings = dto.Settings ?? new WorkflowSettings();
+            var userId = BlocksContext.GetContext().UserId ?? "system";
+            if (!await _workflowRepository.UpdateWorkflowSettingsAsync(tenantId, dto.ItemId, settings, userId))
+            {
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    ItemId = null,
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } }
+                };
+            }
+
+            _logger.LogInformation("Updated settings of workflow {WorkflowId}", dto.ItemId);
+            return new BaseMutationResponse { IsSuccess = true, ItemId = dto.ItemId, Errors = null };
         }
 
 
@@ -932,7 +967,7 @@ namespace Workflow.DomainService.Services
                     PinData = BsonJsonConverter.ToJsonElementOrNull(n.PinData),
                 }).ToList(),
                 Edges = snapShot.Edges,
-                Settings = snapShot.Settings ?? new Dictionary<string, string>(),
+                Settings = snapShot.Settings ?? new WorkflowSettings(),
                 IsPublished = workflow.IsPublished,
                 Description = snapShot.Description,
                 LastUpdatedDate = snapShot.LastUpdatedDate,
@@ -1042,6 +1077,20 @@ namespace Workflow.DomainService.Services
 
             return ids;
 
+        }
+
+        private static WorkflowSettings CopySettings(WorkflowSettings? settings)
+        {
+            var alert = settings?.Alert;
+            return new WorkflowSettings
+            {
+                Alert = alert is null ? null : new WorkflowAlert
+                {
+                    IsEnabled = alert.IsEnabled,
+                    Mode = alert.Mode,
+                    WorkflowId = alert.WorkflowId,
+                },
+            };
         }
     }
 

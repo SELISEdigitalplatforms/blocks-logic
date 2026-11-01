@@ -243,4 +243,27 @@ describe("NodeLibraryPanel Merge (SPEC3)", () => {
     const edges = Object.values(store.getState().edgesMap) as Array<Record<string, unknown>>;
     expect(edges.map((e) => [e.source, e.targetHandle]).sort()).toEqual([["a", "merge-handle-target-1"], ["b", "merge-handle-target-1"]]);
   });
+
+  it("SPEC8 H13/C14: adds one v2 Error Trigger, then disables its row", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<NodeLibraryPanel />, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (s: any) => {
+        store = s;
+        s.getState().openNodeLibraryPanel();
+      },
+    });
+    fireEvent.click(screen.getByText("Error Trigger"));
+    const nodes = () => Object.values(store.getState().nodesMap) as Record<string, unknown>[];
+    expect(nodes()).toHaveLength(1);
+    expect(nodes()[0]).toMatchObject({ type: "errorTrigger", category: "trigger", version: "v2", name: "Error Trigger" });
+    expect(nodes()[0].handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [] });
+
+    act(() => store.getState().openNodeLibraryPanel());
+    const row = screen.getByText("Error Trigger").closest("[aria-disabled]");
+    expect(row?.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(screen.getByText("Error Trigger"));
+    expect(nodes().filter((n) => n.type === "errorTrigger")).toHaveLength(1);
+  });
 });

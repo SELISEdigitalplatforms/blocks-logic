@@ -17,6 +17,7 @@ namespace Workflow.DomainService.Services
     public class WorkflowEngineService : IWorkflowEngineService
     {
         private readonly IWorkflowExecutionRepository _workflowExecutionRepository;
+        private readonly IWorkflowRepository _workflowRepository;
         private readonly NodeExecutorRegistry _nodeExecutors;
         private readonly IMessageClient _messageClient;
 
@@ -32,11 +33,13 @@ namespace Workflow.DomainService.Services
             ILogger<WorkflowEngineService> logger,
             IWorkflowNotificationService workflowNotificationService,
             IServiceProvider serviceProvider,
-            IWorkflowExecutionLogger executionLogger
+            IWorkflowExecutionLogger executionLogger,
+            IWorkflowRepository workflowRepository
             )
         {
             _executionLogger = executionLogger;
             _workflowExecutionRepository = workflowExecutionRepository;
+            _workflowRepository = workflowRepository;
             _nodeExecutors = new NodeExecutorRegistry(nodeExecutors);
             _messageClient = messageClient;
             _logger = logger;
@@ -837,6 +840,8 @@ namespace Workflow.DomainService.Services
                 .GroupBy(o => o.Branch)
                 .ToDictionary(g => g.Key, g => g.Count());
 
+            // Read before this failure is applied: a run another branch already failed has already alerted.
+            var wasAlreadyFailed = execution.Status == WorkflowExecutionStatus.Failed;
             execution.Status = WorkflowExecutionStatus.Failed;
             execution.ErrorMessage = error;
             execution.FinishedAt = DateTime.UtcNow;
@@ -872,6 +877,56 @@ namespace Workflow.DomainService.Services
 
             await _workflowExecutionRepository.AtomicCompleteNodeAsync(
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
+
+            if (!wasAlreadyFailed)
+                await SendErrorTriggerAsync(execution, node, error);
+        }
+
+        /// <summary>
+        /// Sends one ErrorTriggerEvent when a production run fails and its workflow has an enabled alert.
+        /// Nothing is sent (and nothing is read) for test runs or runs an Error Trigger started (no loops).
+        /// A failure here is logged and never changes the failed run.
+        /// </summary>
+        private async Task SendErrorTriggerAsync(WorkflowExecutionEntity execution, NodeEntity node, string error)
+        {
+            if (execution.ExecutionMode != WorkflowExecutionMode.Production) return;
+            if (execution.TriggerMetadata?.TriggerType == LogicConstants.ErrorTriggerNodeType) return;
+
+            try
+            {
+                // The live settings, not the published snapshot's: an alert takes effect without republishing.
+                var alert = (await _workflowRepository.GetWorkflowSettingsAsync(execution.TenantId, execution.WorkflowId))?.Alert;
+                if (alert is not { IsEnabled: true, Mode: WorkflowAlertMode.Workflow } || string.IsNullOrWhiteSpace(alert.WorkflowId))
+                    return;
+
+                await _messageClient.SendToConsumerAsync(new ConsumerMessage<ErrorTriggerEvent>
+                {
+                    ConsumerName = LogicConstants.ErrorTriggerQueue,
+                    Payload = new ErrorTriggerEvent
+                    {
+                        TenantId = execution.TenantId,
+                        FailedWorkflowId = execution.WorkflowId,
+                        FailedExecutionId = execution.Id!,
+                        AttemptNumber = execution.AttemptNumber,
+                        ExecutionMode = execution.ExecutionMode,
+                        StartedAt = execution.StartedAt,
+                        FinishedAt = execution.FinishedAt,
+                        Error = new ErrorTriggerEventError
+                        {
+                            Message = error,
+                            NodeId = node.Id,
+                            NodeName = node.Name,
+                            NodeType = node.Type,
+                        },
+                        Alert = new ErrorTriggerEventAlert { Mode = alert.Mode, WorkflowId = alert.WorkflowId },
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not send the failure alert for execution {ExecutionId} of workflow {WorkflowId}.",
+                    execution.Id, execution.WorkflowId);
+            }
         }
 
         public const string UnexpectedErrorMessage =

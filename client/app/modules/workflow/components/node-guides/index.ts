@@ -13,6 +13,7 @@ export { NodeGuideTransformCodeV1 } from "./node-guide-transform-code-v1";
 export { NodeGuideTransformSetFieldV1 } from "./node-guide-transform-setfield-v1";
 export { NodeGuideTriggerDataGatewayV1 } from "./node-guide-trigger-dataGateway-v1";
 export { NodeGuideTriggerBlocksEventV2 } from "./node-guide-trigger-blocksEvent-v2";
+export { NodeGuideTriggerErrorTriggerV2 } from "./node-guide-trigger-errorTrigger-v2";
 export { NodeGuideTriggerEmailV1 } from "./node-guide-trigger-email-v1";
 export { NodeGuideTriggerScheduleV1 } from "./node-guide-trigger-schedule-v1";
 export { NodeGuideTriggerWebhookV1 } from "./node-guide-trigger-webhook-v1";

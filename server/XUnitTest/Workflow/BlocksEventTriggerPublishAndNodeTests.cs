@@ -36,7 +36,8 @@ namespace XUnitTest.Workflow
             TestBlocksContext.Set(Tenant, "user-wf");
             _catalog.Setup(c => c.IsEnabledForWorkflowAsync(Tenant, "UserMutationEvent")).ReturnsAsync(true);
             _service = new WorkflowService(_workflows.Object, _versions.Object, _schedules.Object,
-                Mock.Of<ILogger<WorkflowService>>(), _catalog.Object);
+                Mock.Of<ILogger<WorkflowService>>(), _catalog.Object,
+                Mock.Of<FluentValidation.IValidator<global::Workflow.DomainService.Dtos.WorkflowUpdateSettingsRequestDto>>());
         }
 
         public void Dispose() => TestBlocksContext.Clear();

@@ -90,6 +90,19 @@ namespace Utilities.Api.Controllers
         }
 
         /// <summary>
+        /// <c>PUT</c> — replaces the workflow's settings (the failure alert) and marks the workflow dirty, without
+        /// touching its graph or publish state. Takes effect for the next failure, no republish needed.
+        /// </summary>
+        [HttpPut]
+        [ProtectedEndPoint("blocks-logic::workflow::manage")]
+        public async Task<IActionResult> UpdateSettings([FromBody] WorkflowUpdateSettingsRequestDto dto)
+        {
+            var tenantId = GetTenantId();
+            var result = await _workflowService.UpdateSettingsAsync(tenantId, dto);
+            return Ok(result);
+        }
+
+        /// <summary>
         /// <c>POST</c> — enqueues a workflow import. The file must already be in storage.
         /// Returns immediately; completion is delivered via the <c>workflow-import</c> notification.
         /// </summary>

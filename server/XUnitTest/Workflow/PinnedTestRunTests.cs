@@ -73,7 +73,8 @@ namespace XUnitTest.Workflow
 
             var engine = new WorkflowEngineService(repository.Object, [executor], Mock.Of<IMessageClient>(),
                 NullLogger<WorkflowEngineService>.Instance, Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
+                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
+                Mock.Of<IWorkflowRepository>());
             return new Harness(engine, execution, items, () => error);
         }
 

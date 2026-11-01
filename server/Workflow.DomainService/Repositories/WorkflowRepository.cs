@@ -45,60 +45,61 @@ namespace Workflow.DomainService.Repositories
             await collection.InsertOneAsync(workflow, null);
         }
 
-        public async Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished)
+        public async Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished, bool? hasErrorTrigger, string? excludeItemId)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowEntity>.Filter.Empty;
-            if (!string.IsNullOrEmpty(search))
-            {
-                filter &= Builders<WorkflowEntity>.Filter.Regex(w => w.Name, new MongoDB.Bson.BsonRegularExpression(search, "i"));
-            }
-            if (isPublished.HasValue)
-            {
-                if (isPublished.Value)
-                {
-                    filter &= Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, true);
-                }
-                else
-                {
-                    filter &= Builders<WorkflowEntity>.Filter.Or(
-                        Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, false),
-                        Builders<WorkflowEntity>.Filter.Exists(w => w.IsPublished, false)
-                    );
-                }
-            }
+            var filter = ListFilter(search, isPublished, hasErrorTrigger, excludeItemId);
             var scope = await ReadAsync(tenantId, filter, "GetWorkflowsCount");
             return scope.Granted ? await collection.CountDocumentsAsync(scope.Filter) : 0;
         }
 
-        public async Task<List<WorkflowEntity>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished)
+        public async Task<List<WorkflowEntity>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished, bool? hasErrorTrigger, string? excludeItemId)
         {
             var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowEntity>.Filter.Empty;
-            if (!string.IsNullOrEmpty(search))
-            {
-                filter &= Builders<WorkflowEntity>.Filter.Regex(w => w.Name, new MongoDB.Bson.BsonRegularExpression(search, "i"));
-            }
-            if (isPublished.HasValue)
-            {
-                if (isPublished.Value)
-                {
-                    filter &= Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, true);
-                }
-                else
-                {
-                    filter &= Builders<WorkflowEntity>.Filter.Or(
-                        Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, false),
-                        Builders<WorkflowEntity>.Filter.Exists(w => w.IsPublished, false)
-                    );
-                }
-            }
+            var filter = ListFilter(search, isPublished, hasErrorTrigger, excludeItemId);
             var scope = await ReadAsync(tenantId, filter, "GetAllWorkflows");
             if (!scope.Granted) return [];
             return scope.ForView(await scope.Apply(collection)
                 .SortByDescending(x => x.CreatedDate)
                 .Skip(pageNumber * pageSize)
                 .Limit(pageSize).ToListAsync());
+        }
+
+        private static FilterDefinition<WorkflowEntity> ListFilter(string? search, bool? isPublished, bool? hasErrorTrigger, string? excludeItemId)
+        {
+            var filter = Builders<WorkflowEntity>.Filter.Empty;
+            if (!string.IsNullOrEmpty(search))
+            {
+                filter &= Builders<WorkflowEntity>.Filter.Regex(w => w.Name, new MongoDB.Bson.BsonRegularExpression(search, "i"));
+            }
+            if (isPublished.HasValue)
+            {
+                if (isPublished.Value)
+                {
+                    filter &= Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, true);
+                }
+                else
+                {
+                    filter &= Builders<WorkflowEntity>.Filter.Or(
+                        Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, false),
+                        Builders<WorkflowEntity>.Filter.Exists(w => w.IsPublished, false)
+                    );
+                }
+            }
+            if (hasErrorTrigger == true)
+            {
+                // The published graph, not the draft: an Error Trigger only runs once it is published.
+                var errorTrigger = Builders<NodeEntity>.Filter.And(
+                    Builders<NodeEntity>.Filter.Eq("Type", LogicConstants.ErrorTriggerNodeType),
+                    Builders<NodeEntity>.Filter.Eq(nameof(NodeEntity.Category), LogicConstants.TriggerCategory));
+                filter &= Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, true)
+                    & Builders<WorkflowEntity>.Filter.ElemMatch(w => w.PublishedMeta.TriggerNodes, errorTrigger);
+            }
+            if (!string.IsNullOrEmpty(excludeItemId))
+            {
+                filter &= Builders<WorkflowEntity>.Filter.Ne(w => w.ItemId, excludeItemId);
+            }
+            return filter;
         }
 
         public async Task<WorkflowEntity> GetWorkflowAsync(string tenantId, string workflowId)
@@ -265,6 +266,33 @@ namespace Workflow.DomainService.Repositories
             {
                 throw new KeyNotFoundException($"Workflow with ItemId '{workflow.ItemId}' not found");
             }
+        }
+
+        public async Task<WorkflowSettings?> GetWorkflowSettingsAsync(string tenantId, string workflowId)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = Builders<WorkflowEntity>.Filter.Eq(w => w.ItemId, workflowId);
+            var scope = await ReadAsync(tenantId, filter, "GetWorkflowSettings", useProjection: false);
+            if (!scope.Granted) return null;
+            var workflow = await collection.Find(scope.Filter)
+                .Project<WorkflowEntity>(Builders<WorkflowEntity>.Projection.Include(w => w.Settings))
+                .FirstOrDefaultAsync();
+            return workflow?.Settings;
+        }
+
+        public async Task<bool> UpdateWorkflowSettingsAsync(string tenantId, string workflowId, WorkflowSettings settings, string userId)
+        {
+            var collection = GetCollection(tenantId);
+            var filter = await _dataAccess.EditFilterAsync(LogicSchemas.WorkflowEntity,
+                Builders<WorkflowEntity>.Filter.Eq(w => w.ItemId, workflowId), "WorkflowRepository.UpdateWorkflowSettings", tenantId);
+            if (filter is null) return false;
+            var update = Builders<WorkflowEntity>.Update
+                .Set(w => w.Settings, settings)
+                .Set(w => w.IsDirty, true)
+                .Set(w => w.LastUpdatedDate, DateTime.UtcNow)
+                .Set(w => w.LastUpdatedBy, userId);
+            var result = await collection.UpdateOneAsync(filter, update);
+            return result.MatchedCount > 0;
         }
 
         public async Task DeleteWorkflowAsync(string tenantId, string workflowId)

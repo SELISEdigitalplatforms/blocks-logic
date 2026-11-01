@@ -7,7 +7,9 @@ namespace Workflow.DomainService.Repositories
     {
         Task CreateWorkflowAsync(WorkflowEntity workflow);
 
-        Task<List<WorkflowEntity>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished);
+        /// <param name="hasErrorTrigger">True: only published workflows whose published trigger nodes include an Error Trigger.</param>
+        /// <param name="excludeItemId">When set, this workflow is left out.</param>
+        Task<List<WorkflowEntity>> GetAllWorkflowsAsync(string tenantId, int pageSize, int pageNumber, string? search, bool? isPublished, bool? hasErrorTrigger, string? excludeItemId);
 
         /// <summary>
         /// Workflows whose draft OR published trigger nodes (PublishedMeta.TriggerNodes, published only) use the
@@ -23,7 +25,7 @@ namespace Workflow.DomainService.Repositories
         /// <summary>How many published workflows <see cref="GetPublishWorkflowsByBlocksEventAsync"/> would return.</summary>
         Task<long> CountPublishWorkflowsByBlocksEventAsync(string tenantId, string eventName);
 
-        Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished);
+        Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished, bool? hasErrorTrigger, string? excludeItemId);
 
         /// <summary>
         /// Workflows with a function step pointing at <paramref name="functionId"/>, so deleting a
@@ -37,6 +39,15 @@ namespace Workflow.DomainService.Repositories
         Task<WorkflowEntity> GetWorkflowForViewAsync(string tenantId, string workflowId);
 
         Task UpdateWorkflowAsync(WorkflowEntity workflow);
+
+        /// <summary>The workflow's live settings only (projected); null when the workflow is not found.</summary>
+        Task<WorkflowSettings?> GetWorkflowSettingsAsync(string tenantId, string workflowId);
+
+        /// <summary>
+        /// Replaces only <c>Settings</c> (and sets IsDirty and the last-updated fields) with a targeted update, so it never races with a
+        /// whole-document save of the graph. False when the workflow is not found or not editable.
+        /// </summary>
+        Task<bool> UpdateWorkflowSettingsAsync(string tenantId, string workflowId, WorkflowSettings settings, string userId);
 
         Task DeleteWorkflowAsync(string tenantId, string workflowId);
     }
