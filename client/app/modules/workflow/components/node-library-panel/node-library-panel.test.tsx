@@ -153,6 +153,50 @@ describe("NodeLibraryPanel Switch (SPEC6)", () => {
   });
 });
 
+describe("NodeLibraryPanel Filter (SPEC9)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const open = (): any => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<NodeLibraryPanel />, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (s: any) => {
+        store = s;
+        s.getState().openNodeLibraryPanel();
+      },
+    });
+    return store;
+  };
+
+  it("H1: lists Filter as a logic node with the Filter icon and its description", () => {
+    open();
+    const option = screen.getByText("Filter").closest("div.cursor-pointer") as HTMLElement;
+    expect(option.textContent).toContain("Keep only the items that match the conditions.");
+    expect(option.querySelector("svg.lucide-filter")?.getAttribute("class")).toContain("text-success");
+    expect(NodeDefinitions.find((d) => d.type === "filter")).toMatchObject({ category: "logic", version: "v2" });
+  });
+
+  it("H2/H3: creates a v2 Filter named Filter with one target, one source and its default parameters", () => {
+    const store = open();
+    fireEvent.click(screen.getByText("Filter"));
+    const created = Object.values(store.getState().nodesMap)[0] as Record<string, unknown>;
+    expect(created).toMatchObject({ name: "Filter", type: "filter", category: "logic", version: "v2" });
+    expect(created.handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [{ key: "target", label: "" }] });
+    expect(created.parameters).toEqual({ conditionType: "and", conditions: [{ left: "", operator: "equals", right: "", type: "string" }] });
+  });
+
+  it("C11: two new Filter nodes never share parameters", () => {
+    const store = open();
+    fireEvent.click(screen.getByText("Filter"));
+    act(() => store.getState().openNodeLibraryPanel());
+    fireEvent.click(screen.getByText("Filter"));
+    const [a, b] = Object.values(store.getState().nodesMap) as Array<Record<string, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(b.name).toBe("Filter2");
+    expect(a.parameters).not.toBe(b.parameters);
+    expect(a.parameters.conditions).not.toBe(b.parameters.conditions);
+  });
+});
+
 describe("NodeLibraryPanel Split Out (SPEC2)", () => {
   it("H10: lists Split Out and creates a v2 node with one target and one source", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
