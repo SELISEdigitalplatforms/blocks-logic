@@ -406,13 +406,12 @@ namespace Blocks.FunctionRunner.Options
         /// <summary>
         /// Lets a run be served by a warm, reused sandbox, as <c>RUNNER__SandboxReuse</c>.
         /// <para>
-        /// Off by default, and off means exactly the old path: one fresh sandbox per run. On, a run
-        /// still uses the old path unless its own entry carries <c>reuse=1</c> — the function opted
-        /// in. Two keys on purpose: the tenant decides whether its code tolerates living on between
-        /// calls, and the operator decides whether this host does reuse at all.
+        /// On by default. Off means exactly the old path: one fresh sandbox per run. On, a run
+        /// still uses the old path unless its own entry carries <c>reuse=1</c> — every deployed,
+        /// non-test run does. The operator turns a host off with <c>RUNNER__SandboxReuse=false</c>.
         /// </para>
         /// </summary>
-        public bool SandboxReuse { get; set; }
+        public bool SandboxReuse { get; set; } = true;
 
         /// <summary>
         /// How long the one kept warm sandbox of a function may sit idle (paused) before it is

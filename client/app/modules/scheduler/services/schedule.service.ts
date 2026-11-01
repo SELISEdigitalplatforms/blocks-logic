@@ -5,8 +5,14 @@ import {
   IBaseResponse,
   ICreateSchedulePayload,
   IDeleteSchedulePayload,
+  IGetScheduleExecutionPayload,
+  IGetScheduleExecutionResponse,
+  IGetScheduleExecutionsPayload,
+  IGetScheduleExecutionsResponse,
   IGetSchedulesPayload,
   IGetSchedulesResponse,
+  IPreviewScheduleRunsPayload,
+  IPreviewScheduleRunsResponse,
   IUpdateSchedulePayload,
 } from "../types/schedule.service.type";
 
@@ -27,6 +33,22 @@ export class ScheduleService {
 
   deleteSchedule = (payload: IDeleteSchedulePayload): Promise<IBaseResponse> => {
     return this.logicHttpClient.post(SCHEDULER_ENDPOINTS.DELETE, payload);
+  };
+
+  getScheduleExecutions = (
+    payload: IGetScheduleExecutionsPayload,
+  ): Promise<IGetScheduleExecutionsResponse> => {
+    return this.logicHttpClient.post(SCHEDULER_ENDPOINTS.GET_EXECUTIONS, payload);
+  };
+
+  getScheduleExecution = (
+    payload: IGetScheduleExecutionPayload,
+  ): Promise<IGetScheduleExecutionResponse> => {
+    return this.logicHttpClient.post(SCHEDULER_ENDPOINTS.GET_EXECUTION, payload);
+  };
+
+  previewScheduleRuns = (payload: IPreviewScheduleRunsPayload): Promise<IPreviewScheduleRunsResponse> => {
+    return this.logicHttpClient.post(SCHEDULER_ENDPOINTS.PREVIEW_RUNS, payload);
   };
 }
 

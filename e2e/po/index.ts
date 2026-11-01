@@ -20,3 +20,4 @@ export { WorkflowEditorPage } from "./pages/workflow-editor.page";
 export type { ExportedWorkflow, ExportedWorkflowNode } from "./pages/workflow-editor.page";
 export { WorkflowExecutionsPage } from "./pages/workflow-executions.page";
 export { WorkflowListPage } from "./pages/workflow-list.page";
+export { EventTriggersPage } from "./pages/event-triggers.page";

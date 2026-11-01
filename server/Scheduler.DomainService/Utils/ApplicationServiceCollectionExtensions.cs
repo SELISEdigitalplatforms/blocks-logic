@@ -18,6 +18,8 @@ namespace Scheduler.DomainService.Utils
         {
             services.AddSingleton<IScheduleRepository, ScheduleRepository>();
             services.AddSingleton<IScheduleService, ScheduleService>();
+            services.AddSingleton<IScheduleExecutionRepository, ScheduleExecutionRepository>();
+            services.AddSingleton<IScheduleExecutionQueryService, ScheduleExecutionQueryService>();
             return services;
         }
 
@@ -27,6 +29,8 @@ namespace Scheduler.DomainService.Utils
             services.AddHangfire(c => c.UseMemoryStorage());
             services.AddHangfireServer();
             services.TryAddSingleton(TimeProvider.System);
+            services.AddOptions<ScheduleExecutionHistoryOptions>().BindConfiguration(ScheduleExecutionHistoryOptions.SectionName);
+            services.AddSingleton<IScheduleExecutionRecorder, ScheduleExecutionRecorder>();
             services.AddSingleton<SchedulePublisherService>();
             services.AddSingleton<IScheduleJobRegistry, ScheduleJobRegistry>();
             services.AddSingleton<IConsumer<ScheduleJobUpsertedEvent>, ScheduleJobUpsertedConsumer>();
