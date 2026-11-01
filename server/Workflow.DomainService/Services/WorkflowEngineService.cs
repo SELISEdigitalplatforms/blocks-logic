@@ -878,25 +878,29 @@ namespace Workflow.DomainService.Services
             await _workflowExecutionRepository.AtomicCompleteNodeAsync(
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
 
-            if (!wasAlreadyFailed)
+            if (!wasAlreadyFailed && ShouldSendErrorTrigger(execution))
                 await SendErrorTriggerAsync(execution, node, error);
         }
 
-        // "Execute workflow" in the editor; a step test ("Test step") always names the node it stops at.
-        private static bool IsFullTestRun(WorkflowExecutionEntity execution) =>
-            execution.ExecutionMode == WorkflowExecutionMode.Test
-            && string.IsNullOrWhiteSpace(execution.WorkflowSnapshot?.TestMeta?.CompletionNodeId);
+        /// <summary>
+        /// Whether a failed run may send a failure alert: a production run, or a test run started with
+        /// "Execute workflow". Never a step test ("Test step" always names the node it stops at), and never
+        /// a run an Error Trigger started (no loops).
+        /// </summary>
+        private static bool ShouldSendErrorTrigger(WorkflowExecutionEntity execution)
+        {
+            if (execution.TriggerMetadata?.TriggerType == LogicConstants.ErrorTriggerNodeType) return false;
+            if (execution.ExecutionMode == WorkflowExecutionMode.Production) return true;
+            return execution.ExecutionMode == WorkflowExecutionMode.Test
+                && string.IsNullOrWhiteSpace(execution.WorkflowSnapshot?.TestMeta?.CompletionNodeId);
+        }
 
         /// <summary>
-        /// Sends one ErrorTriggerEvent when a production run or a full test run fails and its workflow has an
-        /// enabled alert. Nothing is sent (and nothing is read) for step tests or runs an Error Trigger started (no loops).
+        /// Sends one ErrorTriggerEvent when the failed run's workflow has an enabled alert.
         /// A failure here is logged and never changes the failed run.
         /// </summary>
         private async Task SendErrorTriggerAsync(WorkflowExecutionEntity execution, NodeEntity node, string error)
         {
-            if (execution.ExecutionMode != WorkflowExecutionMode.Production && !IsFullTestRun(execution)) return;
-            if (execution.TriggerMetadata?.TriggerType == LogicConstants.ErrorTriggerNodeType) return;
-
             try
             {
                 // The live settings, not the published snapshot's: an alert takes effect without republishing.

@@ -7,7 +7,8 @@ namespace Workflow.DomainService.Nodes.TriggerErrorTriggerV2
 {
     /// <summary>
     /// Trigger node executor for the Error Trigger.
-    /// Runs when another workflow's production run fails and that workflow's alert names this workflow;
+    /// Runs when another workflow's run fails and that workflow's alert names this workflow (a test run only
+    /// when Run on test mode is on);
     /// outputs the one failure item ErrorTriggerStartAsync put in the execution's Input.
     /// </summary>
     public class TriggerErrorTriggerV2Node : NodeExecutorBase<TriggerErrorTriggerV2Parameters>, INodeExecutor
