@@ -167,7 +167,14 @@ export const NodeLibraryPanel = ({
               {filteredOptions.map((option) => (
                 <div
                   key={option.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleSelectOption(option)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    handleSelectOption(option);
+                  }}
                   aria-disabled={option.type === "errorTrigger" && hasErrorTrigger ? true : undefined}
                   className={cn(
                     "flex w-full cursor-pointer flex-col gap-1.5 rounded-sm p-4 text-left text-medium-emphasis transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",

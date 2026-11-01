@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { useGetWorkflowById, useGetWorkflows } from "@blocks-workflow/hooks/use-workflow-api";
 
 // The list's `search` is a server-side regex: typed text must match itself only.
-const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (text: string) => text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 
 type Props = {
   id?: string;
@@ -43,11 +43,13 @@ export const ErrorWorkflowPicker = ({ id, currentWorkflowId, value, onChange }: 
   const { data: selected, isLoading: isLoadingSelected } = useGetWorkflowById({ id: value });
   const options = list?.data ?? [];
 
-  const selectedName = !value
-    ? ""
-    : (options.find((w) => w.itemId === value)?.name ??
-      selected?.data?.name ??
-      (isLoadingSelected ? "" : "Unavailable workflow"));
+  const getSelectedName = () => {
+    if (!value) return "";
+    const name = options.find((w) => w.itemId === value)?.name ?? selected?.data?.name;
+    if (name) return name;
+    return isLoadingSelected ? "" : "Unavailable workflow";
+  };
+  const selectedName = getSelectedName();
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
