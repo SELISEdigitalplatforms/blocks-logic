@@ -15,6 +15,11 @@ namespace Mail.DomainService.Services
         /// of a user of the project; any other address is left out.
         /// </summary>
         Task<List<string>> GetPhoneEmailAddressesOfUsers(IEnumerable<string> addresses);
+
+        /// <summary>
+        /// The email of the user with this id in this tenant's <c>Users</c>, or null when there is none.
+        /// </summary>
+        Task<string?> GetUserEmailAsync(string tenantId, string userId);
         Task<MailServerConfiguration> GetMailServerConfigurationByTenantId(string tenantId);
         Task<List<MailServerConfigurationSummary>> GetMailServerConfigurationSummariesAsync();
         Task<EmailTemplate> GetEmailTemplateByPurpose(string purpose, string language, string organizationId);

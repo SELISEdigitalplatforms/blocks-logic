@@ -36,15 +36,16 @@ describe("ScheduleExecutionSheet", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("fetches once and shows the five sections for a webhook run", async () => {
+  it("fetches once and shows the four sections for a webhook run", async () => {
     const spy = getExecution().mockResolvedValue({ isSuccess: true, data: execution() });
     open();
 
     const dialog = await screen.findByRole("dialog");
     await within(dialog).findByRole("region", { name: "Overview" });
-    for (const name of ["Response", "Request sent", "Schedule at fire time", "Raw snapshot"]) {
+    for (const name of ["Response", "Request sent", "Schedule at fire time"]) {
       expect(within(dialog).getByRole("region", { name })).toBeTruthy();
     }
+    expect(within(dialog).queryByRole("region", { name: "Raw snapshot" })).toBeNull();
     expect(within(dialog).getByText("https://hooks.example.com/x?k=1")).toBeTruthy();
     expect(within(dialog).getByText("Signed (x-signature-sha256)")).toBeTruthy();
     expect(spy).toHaveBeenCalledTimes(1);
@@ -67,12 +68,11 @@ describe("ScheduleExecutionSheet", () => {
     expect(screen.queryByRole("region", { name: "Raw snapshot" })).toBeNull();
   });
 
-  it("shows an invalid snapshot as raw text, expanded", async () => {
+  it("treats an invalid snapshot as unavailable", async () => {
     getExecution().mockResolvedValue({ isSuccess: true, data: execution({ snapshot: "{oops", body: null }) });
     open();
     expect(await screen.findByText("Schedule snapshot unavailable for this run.")).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Raw snapshot" })).toBeTruthy();
-    expect(screen.getByDisplayValue("{oops")).toBeTruthy();
+    expect(screen.queryByDisplayValue("{oops")).toBeNull();
     expect(screen.queryByRole("region", { name: "Request sent" })).toBeNull();
   });
 

@@ -5,7 +5,6 @@ import { IScheduleExecution } from "../../../types/schedule.service.type";
 import { ParsedSnapshot, parseSnapshot } from "../parse-snapshot";
 import { sheetStatusLabel } from "../status-label";
 import { ExecutionOverviewSection } from "./execution-overview-section";
-import { ExecutionRawSnapshotSection } from "./execution-raw-snapshot-section";
 import { ExecutionRequestSection } from "./execution-request-section";
 import { ExecutionResponseSection } from "./execution-response-section";
 import { ExecutionScheduleSection } from "./execution-schedule-section";
@@ -22,20 +21,11 @@ interface ScheduleExecutionSheetProps {
 }
 
 const SnapshotSections = ({ parsed }: Readonly<{ parsed: ParsedSnapshot }>) => {
-  if (parsed.kind === "none") return <SnapshotUnavailable />;
-  if (parsed.kind === "invalid") {
-    return (
-      <>
-        <SnapshotUnavailable />
-        <ExecutionRawSnapshotSection value={parsed.raw} invalid />
-      </>
-    );
-  }
+  if (parsed.kind !== "ok") return <SnapshotUnavailable />;
   return (
     <>
       <ExecutionRequestSection snapshot={parsed.snapshot} />
       <ExecutionScheduleSection snapshot={parsed.snapshot} />
-      <ExecutionRawSnapshotSection value={parsed.pretty} />
     </>
   );
 };
