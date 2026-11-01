@@ -83,7 +83,7 @@ namespace Workflow.DomainService.Services
 
             var (execution, node, nodeExecution) = prepared.Value;
             var log = _executionLogger.For(execution).ForNode(node.Id, nodeExecution.RunIndex);
-            var completionNodeId = execution.ExecutionMode == WorkflowExecutionMode.Test ? execution.WorkflowSnapshot.TestMeta.CompletionNodeId : null;
+            var completionNodeId = execution.ExecutionMode == WorkflowExecutionMode.Test ? execution.WorkflowSnapshot.TestMeta?.CompletionNodeId : null;
             // Here, not in the step-test path only: a test that waits for its webhook / email / mock-data
             // event runs this same pipeline, and used to call a pinned action node for real (WF-40).
             var (postProcessResult, runInstead) = PinBehavior(execution, node);

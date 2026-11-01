@@ -43,7 +43,8 @@ namespace XUnitTest.Workflow
             WorkflowExecutionStatus statusBefore = WorkflowExecutionStatus.Running,
             string triggerType = "webhook",
             bool sendThrows = false,
-            string? completionNodeId = null)
+            string? completionNodeId = null,
+            bool hasTestMeta = true)
         {
             var execution = new WorkflowExecutionEntity
             {
@@ -61,7 +62,7 @@ namespace XUnitTest.Workflow
                     TenantId = "t1",
                     Nodes = [new NodeEntity { Id = "n1", Name = "Postgres", Category = "action", Type = "fn", Version = "v1", Position = new Position() }],
                     Edges = [],
-                    TestMeta = new TestWorkflowMeta { UserIds = ["user-1"], CompletionNodeId = completionNodeId },
+                    TestMeta = hasTestMeta ? new TestWorkflowMeta { UserIds = ["user-1"], CompletionNodeId = completionNodeId } : null,
                     Settings = settings,
                 },
             };
@@ -144,6 +145,18 @@ namespace XUnitTest.Workflow
 
             h.Sent.Should().ContainSingle();
             h.Sent[0].FailedExecutionId.Should().Be("exec-1");
+        }
+
+        [Fact]
+        public async Task C2a_ATestRunWithoutTestSettings_RunsAndAlerts()
+        {
+            // An error workflow's test run uses its saved draft, which has no TestMeta unless someone is listening.
+            var h = Build(mode: WorkflowExecutionMode.Test, settings: EnabledAlert, hasTestMeta: false);
+
+            await Run(h);
+
+            h.StoredError().Should().Be("timeout");
+            h.Sent.Should().ContainSingle();
         }
 
         [Fact]
