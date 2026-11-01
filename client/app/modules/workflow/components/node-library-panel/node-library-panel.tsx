@@ -165,37 +165,29 @@ export const NodeLibraryPanel = ({
           <div className="flex-1 overflow-y-auto px-6 pb-6">
             <div className="space-y-2">
               {filteredOptions.map((option) => (
-                <div
+                <button
                   key={option.id}
-                  role="button"
-                  tabIndex={0}
+                  type="button"
                   onClick={() => handleSelectOption(option)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return;
-                    event.preventDefault();
-                    handleSelectOption(option);
-                  }}
                   aria-disabled={option.type === "errorTrigger" && hasErrorTrigger ? true : undefined}
                   className={cn(
                     "flex w-full cursor-pointer flex-col gap-1.5 rounded-sm p-4 text-left text-medium-emphasis transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
                     option.type === "errorTrigger" && hasErrorTrigger && "cursor-not-allowed opacity-50 hover:bg-transparent",
                   )}
                 >
-                  <div className="mt-0.5 flex items-center gap-1">
+                  <span className="mt-0.5 flex w-full items-center gap-1">
                     {option.icon}
-                    <h4 className="text-sm font-medium text-high-emphasis">{option.title}</h4>
+                    <span className="text-sm font-medium text-high-emphasis">{option.title}</span>
                     {option.isComingSoon && (
                       <Badge variant="info" className="ml-auto h-fit w-fit">
                         Coming soon
                       </Badge>
                     )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      {option.description}
-                    </p>
-                  </div>
-                </div>
+                  </span>
+                  <span className="flex-1 text-xs leading-relaxed text-muted-foreground">
+                    {option.description}
+                  </span>
+                </button>
               ))}
               {filteredOptions.length === 0 && (
                 <div className="py-8 text-center text-sm text-muted-foreground">

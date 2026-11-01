@@ -170,7 +170,7 @@ describe("NodeLibraryPanel Filter (SPEC9)", () => {
 
   it("H1: lists Filter as a logic node with the Filter icon and its description", () => {
     open();
-    const option = screen.getByText("Filter").closest("div.cursor-pointer") as HTMLElement;
+    const option = screen.getByText("Filter").closest("button") as HTMLElement;
     expect(option.textContent).toContain("Keep only the items that match the conditions.");
     expect(option.querySelector("svg.lucide-filter")?.getAttribute("class")).toContain("text-success");
     expect(NodeDefinitions.find((d) => d.type === "filter")).toMatchObject({ category: "logic", version: "v2" });
