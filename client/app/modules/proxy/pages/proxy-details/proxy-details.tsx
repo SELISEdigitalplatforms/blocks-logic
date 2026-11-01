@@ -365,8 +365,8 @@ const ProxyDetailsSkeleton = () => {
         <div className="space-y-4">
           <Skeleton className="h-10 w-full sm:hidden" />
           <div className="hidden gap-1 rounded-md bg-muted p-1 sm:inline-flex">
-            {Array.from({ length: proxyDetailTabs.length }).map((_, index) => (
-              <Skeleton key={index} className="h-8 w-20 bg-background/70" />
+            {proxyDetailTabs.map((tab) => (
+              <Skeleton key={tab.value} className="h-8 w-20 bg-background/70" />
             ))}
           </div>
           <ProxyOverviewSkeleton />

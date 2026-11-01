@@ -218,8 +218,8 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 	{
 		id: "logic-filter-v2",
 		icon: <Filter className="h-5 w-5 text-success" />,
-		title: "Filter",
-		description: "Keep only the items that match the conditions.",
+		get title() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.FILTER"); },
+		get description() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.KEEP_ONLY_THE_ITEMS_THAT"); },
 		type: "filter",
 		category: "logic",
 		version: "v2",

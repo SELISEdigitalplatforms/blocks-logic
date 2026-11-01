@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@seliseblocks/genesis-os";
 import { FieldProps } from "../form-field.types";
 import type { Condition } from "./conditions-field";
 import { SwitchConditionList } from "./switch-condition-list";
@@ -67,6 +68,7 @@ export const isOrConditionType = (value: unknown): boolean => {
  * the toggle is used.
  */
 export const FilterConditionsField = ({ field, onChange, readOnly, data }: FieldProps<FilterConditionsValue>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const conditions = Array.isArray(data.conditions) ? (data.conditions as Condition[]) : [];
   const conditionType = data.conditionType;
 
@@ -74,7 +76,7 @@ export const FilterConditionsField = ({ field, onChange, readOnly, data }: Field
     <SwitchConditionList
       // The schema field has no label (the list shows its own heading); the variable picker names its
       // target from the label, so give it the heading instead of the internal key.
-      field={{ ...field, label: field.label || "Conditions" }}
+      field={{ ...field, label: field.label || t("FILTER_CONDITIONS_FIELD.CONDITIONS") }}
       idPrefix={field.id}
       conditions={conditions}
       conditionType={isOrConditionType(conditionType) ? "or" : "and"}

@@ -398,11 +398,11 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
               <th colSpan={5} className="p-0 text-left font-medium">
                 <div className={cn("grid gap-4 px-4 py-2", logTableGridClass)}>
                   <span aria-hidden="true" />
-                  <span role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_TIME")}</span>
-                  <span role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_METHOD")}</span>
-                  <span role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_PATH")}</span>
-                  <span role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_STATUS")}</span>
-                  <span role="columnheader">{t("PROXY_LOGS_TAB.LATENCY")}</span>
+                  <span /* NOSONAR: CSS-grid header */ role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_TIME")}</span>
+                  <span /* NOSONAR: CSS-grid header */ role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_METHOD")}</span>
+                  <span /* NOSONAR: CSS-grid header */ role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_PATH")}</span>
+                  <span /* NOSONAR: CSS-grid header */ role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_STATUS")}</span>
+                  <span /* NOSONAR: CSS-grid header */ role="columnheader">{t("PROXY_LOGS_TAB.LATENCY")}</span>
                 </div>
               </th>
             </tr>

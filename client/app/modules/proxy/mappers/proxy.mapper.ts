@@ -76,9 +76,13 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
   get 504() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.GATEWAY_TIMEOUT"); },
 };
 
-const statusText = (status: number) =>
-  HTTP_STATUS_TEXT[status] ??
-  (status >= 500 ? tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.SERVER_ERROR") : status >= 400 ? tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.REQUEST_ERROR") : "OK");
+const fallbackStatusText = (status: number): string => {
+  if (status >= 500) return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.SERVER_ERROR");
+  if (status >= 400) return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.REQUEST_ERROR");
+  return "OK";
+};
+
+const statusText = (status: number) => HTTP_STATUS_TEXT[status] ?? fallbackStatusText(status);
 
 // ---------------------------------------------------------------------------
 // Filters

@@ -136,7 +136,7 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium">{tr("SWITCH_CONDITION_LIST.CONDITIONS")}</span>
-        <div role="group" aria-label={tr("SWITCH_CONDITION_LIST.MATCH")} className="inline-flex overflow-hidden rounded-md border text-xs">
+        <div /* NOSONAR: toggle group */ role="group" aria-label={tr("SWITCH_CONDITION_LIST.MATCH")} className="inline-flex overflow-hidden rounded-md border text-xs">
           {(["all", "or"] as const).map((value) => {
             const active = value === "or" ? useOr : !useOr;
             return (

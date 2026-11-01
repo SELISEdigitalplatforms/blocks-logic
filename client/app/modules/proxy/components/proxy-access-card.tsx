@@ -113,6 +113,10 @@ export const AccessRulePicker = ({
     !rule.values.includes(trimmedQuery) &&
     !options.some((option) => option.value === trimmedQuery);
 
+  const noMatchKey = isRole ? "PROXY_ACCESS_CARD.NO_ROLE_MATCHES" : "PROXY_ACCESS_CARD.NO_PERMISSION_MATCHES";
+  const noneFoundKey = isRole ? "PROXY_ACCESS_CARD.NO_ROLES_FOUND" : "PROXY_ACCESS_CARD.NO_PERMISSIONS_FOUND";
+  const emptyMessage = trimmedQuery ? t(noMatchKey, { trimmedQuery }) : t(noneFoundKey);
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -179,7 +183,7 @@ export const AccessRulePicker = ({
                   </div>
                 ) : (
                   <CommandEmpty className="px-3 py-3 text-xs text-muted-foreground">
-                    {trimmedQuery ? t(isRole ? "PROXY_ACCESS_CARD.NO_ROLE_MATCHES" : "PROXY_ACCESS_CARD.NO_PERMISSION_MATCHES", { trimmedQuery }) : t(isRole ? "PROXY_ACCESS_CARD.NO_ROLES_FOUND" : "PROXY_ACCESS_CARD.NO_PERMISSIONS_FOUND")}
+                    {emptyMessage}
                   </CommandEmpty>
                 )}
                 {queryIsNew ? (

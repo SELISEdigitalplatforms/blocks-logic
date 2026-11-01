@@ -109,16 +109,16 @@ export const RunsTable = ({
           role="row"
         >
           <span /* NOSONAR: CSS-grid table */ role="columnheader">{t("RUNS_TABLE.RUN")}</span>
-          <span role="columnheader">{t("common:STATUS")}</span>
+          <span /* NOSONAR: CSS-grid table */ role="columnheader">{t("common:STATUS")}</span>
           <span /* NOSONAR: CSS-grid table */ role="columnheader" className="whitespace-nowrap">
             {t("RUNS_TABLE.TRIGGERED_BY")}
           </span>
           <span /* NOSONAR: CSS-grid table */ role="columnheader">{t("RUNS_TABLE.DURATION")}</span>
-          <span role="columnheader" className="whitespace-nowrap">
+          <span /* NOSONAR: CSS-grid table */ role="columnheader" className="whitespace-nowrap">
             {t("RUNS_TABLE.PEAK_MEM")}
           </span>
-          <span role="columnheader">{t("RUNS_TABLE.VERSION")}</span>
-          <span role="columnheader" aria-label={t("RUNS_TABLE.ROW_ACTIONS")} />
+          <span /* NOSONAR: CSS-grid table */ role="columnheader">{t("RUNS_TABLE.VERSION")}</span>
+          <span /* NOSONAR: CSS-grid table */ role="columnheader" aria-label={t("RUNS_TABLE.ROW_ACTIONS")} />
         </div>
 
         {isLoading &&
