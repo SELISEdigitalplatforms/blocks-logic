@@ -10,6 +10,7 @@ import { SelectField } from "./select-field";
 import { cn } from "@/lib/utils";
 import { ExpressionHighlighter, VariablePickerConfig } from "../utils/expression-highlighter";
 import { pickerTarget, showsVariablePicker } from "./secret-picker";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 export type Condition = {
   left: string;
@@ -19,65 +20,65 @@ export type Condition = {
 };
 
 const OPERATORS = [
-  { value: "equals", label: "Equals" },
-  { value: "not_equals", label: "Not equals" },
-  { value: "contains", label: "Contains" },
-  { value: "not_contains", label: "Not contains" },
-  { value: "greater_than", label: "Greater than" },
-  { value: "less_than", label: "Less than" },
-  { value: "greater_or_equal", label: "Greater or equal" },
-  { value: "less_or_equal", label: "Less or equal" },
-  { value: "is_true", label: "Is true" },
-  { value: "is_false", label: "Is false" },
+  { value: "equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS"); } },
+  { value: "not_equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_EQUALS"); } },
+  { value: "contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.CONTAINS"); } },
+  { value: "not_contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_CONTAINS"); } },
+  { value: "greater_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.GREATER_THAN"); } },
+  { value: "less_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.LESS_THAN"); } },
+  { value: "greater_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.GREATER_OR_EQUAL"); } },
+  { value: "less_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.LESS_OR_EQUAL"); } },
+  { value: "is_true", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.IS_TRUE"); } },
+  { value: "is_false", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.IS_FALSE"); } },
 ];
 
 const TYPE_OPTIONS = [
-  { value: "string", label: "String" },
-  { value: "number", label: "Number" },
-  { value: "array", label: "Array" },
-  { value: "boolean", label: "Boolean" },
-  { value: "date_time", label: "Date & Time" },
+  { value: "string", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.STRING"); } },
+  { value: "number", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NUMBER"); } },
+  { value: "array", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.ARRAY"); } },
+  { value: "boolean", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.BOOLEAN"); } },
+  { value: "date_time", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.DATE_TIME"); } },
 ];
 
 export const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> = {
   string: [
-    { value: "equals", label: "Equals" },
-    { value: "not_equals", label: "Not equals" },
-    { value: "contains", label: "Contains" },
-    { value: "not_contains", label: "Not contains" },
+    { value: "equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS"); } },
+    { value: "not_equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_EQUALS"); } },
+    { value: "contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.CONTAINS"); } },
+    { value: "not_contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_CONTAINS"); } },
     // Server: the left value exactly equals (case-sensitive) one entry of the right list. Empty list = false.
-    { value: "in", label: "Equals one of (list)" },
-    { value: "not_in", label: "Equals none of (list)" },
+    { value: "in", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS_ONE_OF_LIST"); } },
+    { value: "not_in", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS_NONE_OF_LIST"); } },
   ],
   number: [
-    { value: "equals", label: "Equals" },
-    { value: "not_equals", label: "Not equals" },
-    { value: "greater_than", label: "Greater than" },
-    { value: "less_than", label: "Less than" },
-    { value: "greater_or_equal", label: "Greater or equal" },
-    { value: "less_or_equal", label: "Less or equal" },
+    { value: "equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS"); } },
+    { value: "not_equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_EQUALS"); } },
+    { value: "greater_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.GREATER_THAN"); } },
+    { value: "less_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.LESS_THAN"); } },
+    { value: "greater_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.GREATER_OR_EQUAL"); } },
+    { value: "less_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.LESS_OR_EQUAL"); } },
   ],
   array: [
     // The server compares the two lists: "contains" is true when they share at least one value.
-    { value: "contains", label: "Shares any value with" },
-    { value: "not_contains", label: "Shares no value with" },
+    { value: "contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.SHARES_ANY_VALUE_WITH"); } },
+    { value: "not_contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.SHARES_NO_VALUE_WITH"); } },
     // Server: every left value is in the right list (subset). An empty left list = false.
-    { value: "in", label: "All values are in (list)" },
-    { value: "not_in", label: "Not all values are in (list)" },
+    { value: "in", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.ALL_VALUES_ARE_IN"); } },
+    { value: "not_in", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_ALL_VALUES_ARE"); } },
   ],
   boolean: [
-    { value: "is_true", label: "Is true" },
-    { value: "is_false", label: "Is false" },
-    { value: "equals", label: "Equals" },
-    { value: "not_equals", label: "Not equals" },
+    { value: "is_true", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.IS_TRUE"); } },
+    { value: "is_false", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.IS_FALSE"); } },
+    { value: "equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS"); } },
+    { value: "not_equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_EQUALS"); } },
   ],
   date_time: [
-    { value: "equals", label: "Equals" },
-    { value: "not_equals", label: "Not equals" },
-    { value: "greater_than", label: "After" },
-    { value: "less_than", label: "Before" },
-    { value: "greater_or_equal", label: "On or after" },
-    { value: "less_or_equal", label: "On or before" },
+    { value: "equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS"); } },
+    { value: "not_equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_EQUALS"); } },
+    { value: "greater_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.AFTER"); } },
+    { value: "less_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.BEFORE"); } },
+    { value: "greater_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.ON_OR_AFTER"); } },
+    { value: "less_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.ON_OR_BEFORE"); } },
   ],
 };
 
@@ -130,6 +131,7 @@ export const ConditionsField = ({
   className,
   variablePicker,
 }: FieldProps<Condition[]>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const initial: Condition[] = Array.isArray(value) ? (value as Condition[]) : [];
 
   const [conditions, setConditions] = useState<Condition[]>(() =>
@@ -196,7 +198,7 @@ export const ConditionsField = ({
           <div className="flex-1">
                         <div className="flex flex-col gap-2">
               <div className="flex flex-col gap-1">
-                <Label className="text-[12px] text-muted-foreground">Left Operand</Label>
+                <Label className="text-[12px] text-muted-foreground">{t("CONDITIONS_FIELD.LEFT_OPERAND")}</Label>
                 <DroppableConditionInput
                   id={`${field.id}-left-${idx}`}
                   value={cond.left || ""}
@@ -243,7 +245,7 @@ export const ConditionsField = ({
 
               {cond.operator !== "is_true" && cond.operator !== "is_false" && (
                 <div className="flex flex-col gap-1">
-                  <Label className="text-[12px] text-muted-foreground">Right Operand</Label>
+                  <Label className="text-[12px] text-muted-foreground">{t("CONDITIONS_FIELD.RIGHT_OPERAND")}</Label>
                   <DroppableConditionInput
                     id={`${field.id}-right-${idx}`}
                     placeholder={LIST_OPERATORS.has(cond.operator) ? LIST_HINT : undefined}
@@ -266,7 +268,7 @@ export const ConditionsField = ({
         className="h-14 w-full rounded border border-dashed text-primary"
         onClick={() => handleAdd()}
       >
-        <Plus className="mr-2 h-4 w-4" /> Add Condition
+        <Plus className="mr-2 h-4 w-4" /> {t("CONDITIONS_FIELD.ADD_CONDITION")}
       </Button>
     </div>
   );

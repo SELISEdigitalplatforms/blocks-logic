@@ -16,6 +16,7 @@ import { useSecrets } from "@/hooks/use-secrets";
 import { buildVarToken } from "@/lib/var-token";
 import { cn } from "@/lib/utils";
 import { FieldSchema } from "../form-field.types";
+import { useT } from "@seliseblocks/genesis-os";
 
 /**
  * Whether `field`'s inputs show the in-field `{{$VAR.name}}` key button: on by default for every
@@ -45,6 +46,7 @@ type Props = {
  * Each picker calls `useSecrets()` itself; react-query shares the one fetch between them.
  */
 export const SecretPicker = ({ onPick, target, onOpenChange, className }: Props) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const [open, setOpen] = useState(false);
   const { data, isLoading, isError } = useSecrets();
   const secrets = data ?? [];
@@ -55,10 +57,10 @@ export const SecretPicker = ({ onPick, target, onOpenChange, className }: Props)
   };
 
   const status = isError
-    ? "Unable to load secret keys"
+    ? t("SECRET_PICKER.UNABLE_TO_LOAD_SECRET")
     : isLoading
-      ? "Loading secret keys…"
-      : "No secret keys — add one in Secret management";
+      ? t("SECRET_PICKER.LOADING_SECRET_KEYS")
+      : t("SECRET_PICKER.NO_SECRET_KEYS_ADD");
 
   return (
     <Popover open={open} onOpenChange={changeOpen}>
@@ -67,8 +69,8 @@ export const SecretPicker = ({ onPick, target, onOpenChange, className }: Props)
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={`Insert a configuration variable into ${target}`}
-          title="Insert a configuration variable"
+          aria-label={t("SECRET_PICKER.INSERT_A_CONFIGURATION_VARIABLE", { target })}
+          title={t("SECRET_PICKER.INSERT_A_CONFIGURATION_VARIABLE_2")}
           // Keep the caret where it is: the pick is inserted there.
           onMouseDown={(event) => event.preventDefault()}
           className={cn(
@@ -82,11 +84,13 @@ export const SecretPicker = ({ onPick, target, onOpenChange, className }: Props)
       </PopoverTrigger>
       <PopoverContent align="end" className="w-60 p-0">
         <Command>
-          {secrets.length > 5 ? <CommandInput placeholder="Search variables…" /> : null}
+          {secrets.length > 5 ? (
+            <CommandInput placeholder={t("SECRET_PICKER.SEARCH_VARIABLES")} />
+          ) : null}
           <CommandList className="max-h-60">
-            <CommandEmpty>{secrets.length ? "No match" : status}</CommandEmpty>
+            <CommandEmpty>{secrets.length ? t("SECRET_PICKER.NO_MATCH") : status}</CommandEmpty>
             {secrets.length ? (
-              <CommandGroup heading="Configuration variables">
+              <CommandGroup heading={t("SECRET_PICKER.CONFIGURATION_VARIABLES")}>
                 {secrets.map((secret) => (
                   <CommandItem
                     key={secret.id}

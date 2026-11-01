@@ -8,6 +8,7 @@ import { useWorkflow } from "@blocks-workflow/hooks";
 import { InputPanel } from "../shared/input-panel/input-panel";
 import { OutputPanel } from "../shared/output-panel/output-panel";
 import { NodeGuidePanel } from "../shared";
+import { useT } from "@seliseblocks/genesis-os";
 
 type LayoutWithIOProps = {
   schema: NodeSchema | null;
@@ -15,6 +16,7 @@ type LayoutWithIOProps = {
 };
 
 export const LayoutWithIO = ({ schema, guide }: LayoutWithIOProps) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const { selectedNode, updateNode, updateNodeParameters } = useWorkflow();
   const [activeTab, setActiveTab] = useState<"parameters" | "settings">("parameters");
   const [isInputCollapsed, setIsInputCollapsed] = useState(false);
@@ -54,8 +56,8 @@ export const LayoutWithIO = ({ schema, guide }: LayoutWithIOProps) => {
           >
             {/* Tabs Header */}
             <TabsList className="mb-4 w-fit shrink-0">
-              <TabsTrigger value="parameters">Parameters</TabsTrigger>
-              <TabsTrigger value="settings">Settings</TabsTrigger>
+              <TabsTrigger value="parameters">{t("LAYOUT_WITH_IO.PARAMETERS")}</TabsTrigger>
+              <TabsTrigger value="settings">{t("common:SETTINGS")}</TabsTrigger>
             </TabsList>
 
             {/* Parameters */}

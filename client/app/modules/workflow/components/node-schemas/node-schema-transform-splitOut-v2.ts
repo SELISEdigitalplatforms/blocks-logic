@@ -1,5 +1,6 @@
 import { NodeGuideTransformSplitOutV2 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 export const NodeSchemaTransformSplitOutV2: NodeSchemaDefinition = {
   guide: NodeGuideTransformSplitOutV2,
@@ -11,30 +12,30 @@ export const NodeSchemaTransformSplitOutV2: NodeSchemaDefinition = {
       {
         id: "fields",
         type: "split-out-fields",
-        label: "Fields To Split Out",
-        info: "The input fields to break out into separate items, each with an optional output field name.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.FIELDS_TO_SPLIT_OUT"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.THE_INPUT_FIELDS_TO"); },
         key: "fields",
         required: true,
       },
       {
         id: "include",
         type: "select-with-description",
-        label: "Include",
-        info: "Whether to copy any other fields into the new items.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.INCLUDE"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.WHETHER_TO_COPY_ANY"); },
         key: "include",
         defaultValue: "noOtherFields",
         options: [
-          { label: "No other fields", value: "noOtherFields", description: "Each new item holds only the split value" },
-          { label: "All other fields", value: "allOtherFields", description: "Each new item also keeps every other field of the input item" },
-          { label: "Selected other fields", value: "selectedOtherFields", description: "Each new item also keeps the fields you list" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.NO_OTHER_FIELDS"); }, value: "noOtherFields", get description() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.EACH_NEW_ITEM_HOLDS"); } },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.ALL_OTHER_FIELDS"); }, value: "allOtherFields", get description() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.EACH_NEW_ITEM_ALSO"); } },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.SELECTED_OTHER_FIELDS"); }, value: "selectedOtherFields", get description() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.EACH_NEW_ITEM_ALSO_2"); } },
         ],
       },
       {
         id: "fieldsToInclude",
         type: "comma-list",
-        label: "Fields To Include",
-        info: "Fields of the input item to copy into each new item, separated by commas.",
-        placeholder: "e.g. email, name",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.FIELDS_TO_INCLUDE"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.FIELDS_OF_THE_INPUT"); },
+        get placeholder() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.E_G_EMAIL_NAME"); },
         key: "fieldsToInclude",
         defaultValue: [],
         dependsOn: { key: "include", value: "selectedOtherFields" },
@@ -42,8 +43,8 @@ export const NodeSchemaTransformSplitOutV2: NodeSchemaDefinition = {
       {
         id: "disableDotNotation",
         type: "switch",
-        label: "Disable Dot Notation",
-        info: "Whether to disallow referencing child fields using parent.child in the field name.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.DISABLE_DOT_NOTATION"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SPLIT_OUT_V2.WHETHER_TO_DISALLOW_REFERENCING"); },
         key: "disableDotNotation",
         defaultValue: false,
       },

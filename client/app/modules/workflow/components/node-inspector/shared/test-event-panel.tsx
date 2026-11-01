@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Play, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui-kits/alert/alert";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface TestEventPanelProps {
   nodeId: string;
@@ -13,6 +14,7 @@ interface TestEventPanelProps {
 }
 
 export const TestEventPanel = ({ onTest, testInstructions }: TestEventPanelProps) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -25,13 +27,13 @@ export const TestEventPanel = ({ onTest, testInstructions }: TestEventPanelProps
         await onTest();
         setTestResult({
           success: true,
-          message: "Test completed successfully",
+          message: t("TEST_EVENT_PANEL.TEST_COMPLETED_SUCCESSFULLY"),
         });
       }
     } catch (error) {
       setTestResult({
         success: false,
-        message: error instanceof Error ? error.message : "Test failed",
+        message: error instanceof Error ? error.message : t("TEST_EVENT_PANEL.TEST_FAILED"),
       });
     } finally {
       setIsTesting(false);
@@ -41,22 +43,21 @@ export const TestEventPanel = ({ onTest, testInstructions }: TestEventPanelProps
   return (
     <div className="space-y-4">
       <div className="rounded-lg border bg-muted/20 p-6">
-        <h3 className="mb-2 text-sm font-medium">Test This Node</h3>
+        <h3 className="mb-2 text-sm font-medium">{t("TEST_EVENT_PANEL.TEST_THIS_NODE")}</h3>
         <p className="mb-4 text-sm text-muted-foreground">
-          {testInstructions ||
-            "Execute this node with test data to verify it works as expected before running the full workflow."}
+          {testInstructions || t("TEST_EVENT_PANEL.EXECUTE_THIS_NODE_WITH")}
         </p>
 
         <Button onClick={handleTest} disabled={isTesting} className="gap-2">
           {isTesting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Testing...
+              {t("TEST_EVENT_PANEL.TESTING")}
             </>
           ) : (
             <>
               <Play className="h-4 w-4" />
-              Run Test
+              {t("TEST_EVENT_PANEL.RUN_TEST")}
             </>
           )}
         </Button>

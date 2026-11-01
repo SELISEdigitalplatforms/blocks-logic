@@ -1,5 +1,6 @@
 import { NodeGuideTransformSetFieldV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
   guide: NodeGuideTransformSetFieldV1,
@@ -11,19 +12,44 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
       {
         id: "mode",
         type: "select",
-        label: "Mode",
-        info: "The mode of setting the value",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.MODE");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.THE_MODE_OF_SETTING",
+          );
+        },
         key: "mode",
         options: [
-          { label: "Manual Mapping", value: "manual_mapping" },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.MANUAL_MAPPING",
+              );
+            },
+            value: "manual_mapping",
+          },
           { label: "JSON", value: "json" },
         ],
       },
       {
         id: "set-fields",
         type: "key-type-value-pairs",
-        label: "Set Fields",
-        info: "Set fields",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.SET_FIELDS",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.SET_FIELDS_2",
+          );
+        },
         key: "manualMappingFields",
         dependsOn: {
           key: "mode",
@@ -37,22 +63,52 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
           key: "mode",
           value: "json",
         },
-        label: "JSON Code",
-        info: "Enter a JSON object. {{$json.field}} reads a field of the current item (same as {{$json.output.field}}); values inside quotes are escaped automatically. If it is not valid JSON after that, the step fails.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.JSON_CODE",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.ENTER_A_JSON_OBJECT",
+          );
+        },
         key: "jsonCode",
       },
       {
         id: "includeOtherFields",
         type: "switch",
-        label: "Include Other Input Fields",
-        info: "Include other input fields",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.INCLUDE_OTHER_INPUT_FIELDS",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.INCLUDE_OTHER_INPUT_FIELDS_2",
+          );
+        },
         key: "includeOtherFields",
       },
       {
         id: "otherFieldsMode",
         type: "select-with-description",
-        label: "Input Fields to Include",
-        info: "How to select the fields you want to include in your output items",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.INPUT_FIELDS_TO_INCLUDE",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.HOW_TO_SELECT_THE",
+          );
+        },
 
         key: "otherFieldsMode",
         dependsOn: {
@@ -61,27 +117,67 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         },
         options: [
           {
-            label: "All Fields",
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.ALL_FIELDS",
+              );
+            },
             value: "all",
-            description: "Include all fields from the input items",
+            get description() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.INCLUDE_ALL_FIELDS_FROM",
+              );
+            },
           },
           {
-            label: "Specific Fields",
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.SPECIFIC_FIELDS",
+              );
+            },
             value: "include",
-            description: "Include specific fields from the input items",
+            get description() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.INCLUDE_SPECIFIC_FIELDS_FROM",
+              );
+            },
           },
           {
-            label: "Exclude Fields",
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.EXCLUDE_FIELDS",
+              );
+            },
             value: "exclude",
-            description: "Exclude specific fields from the input items",
+            get description() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.EXCLUDE_SPECIFIC_FIELDS_FROM",
+              );
+            },
           },
         ],
       },
       {
         id: "include-fields",
         type: "text",
-        label: "Fields to Include",
-        info: "Fields to include in the output items",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.FIELDS_TO_INCLUDE",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.FIELDS_TO_INCLUDE_IN",
+          );
+        },
         key: "includedFields",
         dependsOn: {
           key: "otherFieldsMode",
@@ -91,8 +187,18 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
       {
         id: "exclude-fields",
         type: "text",
-        label: "Fields to Exclude",
-        info: "Fields to exclude from the output items",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.FIELDS_TO_EXCLUDE",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.FIELDS_TO_EXCLUDE_FROM",
+          );
+        },
         key: "excludeFields",
         dependsOn: {
           key: "otherFieldsMode",

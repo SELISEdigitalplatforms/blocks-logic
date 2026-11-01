@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ConditionalMultiselectValue, FieldProps, SelectOption } from "../form-field.types";
+import { useT } from "@seliseblocks/genesis-os";
 
 const DEFAULT_VALUE: ConditionalMultiselectValue = { mode: "and", values: [] };
 
@@ -50,6 +51,7 @@ export const ConditionalMultiselectField = ({
   data,
   config,
 }: FieldProps<ConditionalMultiselectValue>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const currentValue = normalizeValue(value);
 
   const isStaticOptions = Array.isArray(field.options);
@@ -126,7 +128,7 @@ export const ConditionalMultiselectField = ({
             >
               <span className="flex items-center gap-1.5 truncate">
                 {isLoading ? (
-                  <span className="text-muted-foreground">Loading...</span>
+                  <span className="text-muted-foreground">{t("common:LOADING")}</span>
                 ) : currentValue.values.length > 0 ? (
                   <>
                     {previewItems.map((v) => (
@@ -163,7 +165,7 @@ export const ConditionalMultiselectField = ({
                   </>
                 ) : (
                   <span className="text-muted-foreground">
-                    {field.placeholder || "Select..."}
+                    {field.placeholder || t("CONDITIONAL_MULTISELECT_FIELD.SELECT")}
                   </span>
                 )}
                 {isLoading && <Loader2 className="h-4 w-4 animate-spin opacity-50" />}
@@ -181,8 +183,8 @@ export const ConditionalMultiselectField = ({
             disabled={disabled}
             onClick={toggleMode}
             aria-pressed={currentValue.mode === "and"}
-            aria-label={`Match ${matchLabel.toLowerCase()}. Click to switch.`}
-            title={`Match ${matchLabel.toLowerCase()} of the selected items`}
+            aria-label={t("CONDITIONAL_MULTISELECT_FIELD.MATCH_CLICK_TO_SWITCH", { value: matchLabel.toLowerCase() })}
+            title={t("CONDITIONAL_MULTISELECT_FIELD.MATCH_OF_THE_SELECTED", { value: matchLabel.toLowerCase() })}
             className={cn(
               "inline-flex shrink-0 items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide transition-colors",
               "min-w-[4.25rem]",
@@ -200,9 +202,9 @@ export const ConditionalMultiselectField = ({
 
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
           <Command shouldFilter={typeof field.options === "function" ? false : undefined}>
-            <CommandInput placeholder={field.placeholder || "Search..."} className="h-9" />
+            <CommandInput placeholder={field.placeholder || t("CONDITIONAL_MULTISELECT_FIELD.SEARCH")} className="h-9" />
             <CommandList>
-              <CommandEmpty>No results found.</CommandEmpty>
+              <CommandEmpty>{t("CONDITIONAL_MULTISELECT_FIELD.NO_RESULTS_FOUND")}</CommandEmpty>
               <CommandGroup>
                 {options.map((option) => {
                   const optionValue = String(option.value);

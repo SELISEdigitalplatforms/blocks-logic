@@ -1,5 +1,5 @@
 import React from "react";
-import { useProjectStore } from "@seliseblocks/genesis-os";
+import { useProjectStore, tStatic } from "@seliseblocks/genesis-os";
 import { NodeGuideActionDataActionV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import type { WorkflowStore } from "@blocks-workflow/store";
@@ -12,6 +12,7 @@ import {
 import { dataService } from "../../services/data.service";
 import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 import { authClientService } from "../../services/iam.service";
+import { renderRichText } from "@/lib/rich-text";
 
 export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
   guide: NodeGuideActionDataActionV1,
@@ -25,48 +26,36 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         type: "callout-accordion-display",
         key: "queryModeNotes",
         displayValue: () => ({
-          title: "Notes on query fields",
-          description: React.createElement(
-            "span",
-            null,
-            React.createElement(
-              "code",
-              {
-                className:
-                  "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
-              },
-              "Raw Query",
-            ),
-            " is recommended for new nodes.",
-          ),
+          title: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.NOTES_ON_QUERY_FIELDS"),
+          description: React.createElement("span", null, ...renderRichText(tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.RAW_QUERY_IS_RECOMMENDED"), [(text: string) => React.createElement("code", { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" }, text)])),
         }),
       },
       {
         id: "rawQueryMode",
         type: "switch",
-        label: "Raw Query Mode",
-        info: "Enter a raw GraphQL query instead of building one from collection fields",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.RAW_QUERY_MODE"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ENTER_A_RAW_GRAPHQL"); },
         key: "rawQueryMode",
       },
       {
         id: "authenticationType",
         type: "select",
-        label: "Authentication",
-        info: "Select how to authenticate with the Data Gateway API",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.AUTHENTICATION"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.SELECT_HOW_TO_AUTHENTICATE"); },
         key: "authenticationType",
         required: false,
         options: [
-          { label: "None", value: "" },
-          { label: "Client Credential", value: "clientCredential" },
-          { label: "Blocks Authentication", value: "blocksAuthentication" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.NONE"); }, value: "" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.CLIENT_CREDENTIAL"); }, value: "clientCredential" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.BLOCKS_AUTHENTICATION"); }, value: "blocksAuthentication" },
           // { label: "Trigger Node Cookie", value: "triggerNodeCookie" },
         ],
       },
       {
         id: "clientCredential",
         type: "select",
-        label: "Client Credential",
-        info: "Select a client credential for authenticating with the Data Gateway API",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.CLIENT_CREDENTIAL"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.SELECT_A_CLIENT_CREDENTIAL"); },
         key: "clientId",
         required: false,
         searchable: true,
@@ -91,8 +80,8 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       {
         id: "rawQuery",
         type: "graphql-code-editor",
-        label: "Raw Query",
-        info: "Enter the raw GraphQL query to send to the Data Gateway API. {{$json.field}} reads a field of the current item (same as {{$json.output.field}}); values inside \"…\" strings are escaped automatically.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.RAW_QUERY"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ENTER_THE_RAW_GRAPHQL"); },
         key: "rawQuery",
         dependsOn: {
           key: "rawQueryMode",
@@ -103,8 +92,8 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       {
         id: "collection",
         type: "select",
-        label: "Collection",
-        info: "Select the data collection to operate on",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.COLLECTION"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.SELECT_THE_DATA_COLLECTION"); },
         key: "collectionName_composite",
         required: true,
         searchable: true,
@@ -175,27 +164,27 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       {
         id: "actionType",
         type: "select",
-        label: "Action Type",
-        info: "The type of data operation to perform",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ACTION_TYPE"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.THE_TYPE_OF_DATA"); },
         key: "actionType",
         required: true,
         options: [
-          { label: "Get Data", value: "getData" },
-          { label: "Insert Data", value: "insertData" },
-          { label: "Update Data", value: "updateData" },
-          { label: "Delete Data", value: "deleteData" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.GET_DATA"); }, value: "getData" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.INSERT_DATA"); }, value: "insertData" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.UPDATE_DATA"); }, value: "updateData" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.DELETE_DATA"); }, value: "deleteData" },
         ],
         hidden: (data: Record<string, unknown>) => data.rawQueryMode === true,
       },
       {
         id: "filter",
         type: "key-value-pairs",
-        label: "Filter",
-        info: "Key-value filter conditions for querying, updating, or deleting data",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "common:FILTER"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.KEY_VALUE_FILTER_CONDITIONS"); },
         key: "filter",
-        keyLabel: "Field",
-        valueLabel: "Value",
-        addButtonText: "Add Filter",
+        get keyLabel() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELD"); },
+        get valueLabel() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.VALUE"); },
+        get addButtonText() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ADD_FILTER"); },
         dependsOn: {
           key: "actionType",
           value: "insertData",
@@ -206,8 +195,8 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       {
         id: "fieldMapping",
         type: "schema-fields",
-        label: "Field Mapping",
-        info: "Field values for insert or update operations. Auto-populated from collection schema.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELD_MAPPING"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELD_VALUES_FOR_INSERT"); },
         key: "fieldMapping",
         hidden: (data: Record<string, unknown>) => {
           const actionType = data.actionType as string;
@@ -220,8 +209,8 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       {
         id: "getFields",
         type: "schema-field-picker",
-        label: "Fields",
-        info: "Fields to fetch from the collection. Auto-populated when you select a collection. Remove fields you don't need.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELDS"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELDS_TO_FETCH_FROM"); },
         key: "getFields",
         dependsOn: {
           key: "actionType",

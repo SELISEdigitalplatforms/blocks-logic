@@ -1,21 +1,25 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideLogicSwitchV2 = () => (
-  <GuideContent
-    title="Switch"
-    description="Use this node to send each item to one of many paths. Every output has its own conditions."
-    steps={[
-      "Add one routing rule per output. Rules are checked from top to bottom and the item goes to the first one that matches.",
-      "In each rule, pick the type and operator, then the value to compare with. Use AND or OR to choose whether all conditions or any one must be true.",
-      "Turn on Rename Output to give an output a name. Without a name it shows its number: 0, 1, 2.",
-      "Choose what happens to items that match no rule: drop them, send them to an extra Fallback output, or send them to one of the rules' outputs.",
-      "Connect the following nodes to the outputs.",
-    ]}
-    notes={[
-      "Conditions work exactly like the If node, with the same types and operators. Text comparisons are case-sensitive.",
-      "A value that is not a valid number, date or true/false makes its condition not match.",
-      "Renaming or deleting an output never moves the connections of the other outputs. Deleting an output removes its connections.",
-      "An item whose conditions cannot be evaluated fails the step.",
-    ]}
-  />
-);
+export const NodeGuideLogicSwitchV2 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_LOGIC_SWITCH_V2.SWITCH")}
+      description={t("NODE_GUIDE_LOGIC_SWITCH_V2.USE_THIS_NODE_TO")}
+      steps={[
+        t("NODE_GUIDE_LOGIC_SWITCH_V2.ADD_ONE_ROUTING_RULE"),
+        t("NODE_GUIDE_LOGIC_SWITCH_V2.IN_EACH_RULE_PICK"),
+        t("NODE_GUIDE_LOGIC_SWITCH_V2.TURN_ON_RENAME_OUTPUT"),
+        t("NODE_GUIDE_LOGIC_SWITCH_V2.CHOOSE_WHAT_HAPPENS_TO"),
+        t("NODE_GUIDE_LOGIC_SWITCH_V2.CONNECT_THE_FOLLOWING_NODES"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_LOGIC_SWITCH_V2.CONDITIONS_WORK_EXACTLY_LIKE"),
+        t("NODE_GUIDE_LOGIC_SWITCH_V2.A_VALUE_THAT_IS"),
+        t("NODE_GUIDE_LOGIC_SWITCH_V2.RENAMING_OR_DELETING_AN"),
+        t("NODE_GUIDE_LOGIC_SWITCH_V2.AN_ITEM_WHOSE_CONDITIONS"),
+      ]}
+    />
+  );
+};

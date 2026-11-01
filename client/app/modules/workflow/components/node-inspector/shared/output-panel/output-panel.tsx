@@ -16,26 +16,30 @@ import { CopyValueButton } from "../copy-value-button";
 import { itemCountLabel, outputBranchGroups, showsBranchHeaders, type OutputBranchGroup } from "@blocks-workflow/utils/output-branches";
 import { fieldsNotFound } from "@blocks-workflow/utils/split-out";
 import { mergeInputCounts, mergeInputsWithoutData } from "@blocks-workflow/utils/merge-handles";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 type BranchGroup = OutputBranchGroup & {
   schema: ReturnType<typeof inferSchemaFromRuntimeRows>;
 };
 
 /** A branch's name (its output's label, not its key), item count, and a copy button for the key. */
-const BranchHeader = ({ group, className = "" }: { group: BranchGroup; className?: string }) => (
-  <div className={`group/branch flex min-w-0 items-center gap-2 ${className}`}>
-    <span title={group.key} className="truncate text-xs font-semibold text-high-emphasis">
-      {group.title}
-    </span>
-    <span className="shrink-0 text-xs text-low-emphasis">{itemCountLabel(group.rows.length)}</span>
-    <CopyValueButton
-      value={group.key}
-      label={`Copy branch key of ${group.title}`}
-      className="-my-0.5 ml-auto h-5 shrink-0 px-1 opacity-0 focus-visible:opacity-100 group-hover/branch:opacity-100"
-      iconClassName="h-3.5 w-3.5"
-    />
-  </div>
-);
+const BranchHeader = ({ group, className = "" }: { group: BranchGroup; className?: string }) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
+  return (
+    <div className={`group/branch flex min-w-0 items-center gap-2 ${className}`}>
+      <span title={group.key} className="truncate text-xs font-semibold text-high-emphasis">
+        {group.title}
+      </span>
+      <span className="shrink-0 text-xs text-low-emphasis">{itemCountLabel(group.rows.length)}</span>
+      <CopyValueButton
+        value={group.key}
+        label={t("OUTPUT_PANEL.COPY_BRANCH_KEY_OF", { title: group.title })}
+        className="-my-0.5 ml-auto h-5 shrink-0 px-1 opacity-0 focus-visible:opacity-100 group-hover/branch:opacity-100"
+        iconClassName="h-3.5 w-3.5"
+      />
+    </div>
+  );
+};
 
 export const OutputPanel = ({
   isCollapsed,
@@ -44,6 +48,7 @@ export const OutputPanel = ({
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 } = {}) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const [tab, setTab] = useState("schema");
   const [isEditingMock, setIsEditingMock] = useState(false);
   const [mockDataInput, setMockDataInput] = useState("");
@@ -175,7 +180,7 @@ export const OutputPanel = ({
     try {
       newPinData = JSON.parse(mockDataInput);
     } catch {
-      showErrorToast({ errors: "Invalid JSON format" });
+      showErrorToast({ errors: tStatic("logic.workflow.nodes.inspector", "OUTPUT_PANEL.INVALID_JSON_FORMAT") });
       return;
     }
     if (!Array.isArray(newPinData)) {
@@ -196,17 +201,17 @@ export const OutputPanel = ({
     <div className={`flex w-full flex-col overflow-hidden ${isCollapsed ? 'h-fit shrink-0' : 'h-full flex-1'}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="font-medium text-high-emphasis">Output</h3>
+          <h3 className="font-medium text-high-emphasis">{t("OUTPUT_PANEL.OUTPUT")}</h3>
           {hasMockData && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Badge variant="warning" className="gap-1 px-1.5 py-0.5 text-[11px]">
                   <Pin className="h-3 w-3" aria-hidden="true" />
-                  Mock data
+                  {t("OUTPUT_PANEL.MOCK_DATA")}
                 </Badge>
               </TooltipTrigger>
               <TooltipContent className="text-xs">
-                Showing mock data. Runs use it as this step&apos;s output instead of running the step.
+                {t("OUTPUT_PANEL.SHOWING_MOCK_DATA_RUNS")}
               </TooltipContent>
             </Tooltip>
           )}
@@ -214,7 +219,7 @@ export const OutputPanel = ({
         <div className="flex items-center gap-2">
           {!isEditingMock && editorMode === "editor" && !hasMockData && (
             <Button variant="outline" size="xs" onClick={handleSetMockDataClick}>
-              Set mock data
+              {t("OUTPUT_PANEL.SET_MOCK_DATA")}
             </Button>
           )}
           {!isEditingMock && editorMode === "editor" && hasMockData && (
@@ -226,13 +231,13 @@ export const OutputPanel = ({
                     variant="ghost"
                     size="xxs"
                     className="h-7 px-2 text-low-emphasis"
-                    aria-label="Edit mock data"
+                    aria-label={t("OUTPUT_PANEL.EDIT_MOCK_DATA")}
                     onClick={handleSetMockDataClick}
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="text-xs">Edit mock data</TooltipContent>
+                <TooltipContent className="text-xs">{t("OUTPUT_PANEL.EDIT_MOCK_DATA")}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -241,21 +246,21 @@ export const OutputPanel = ({
                     variant="ghost"
                     size="xxs"
                     className="h-7 px-2 text-low-emphasis"
-                    aria-label="Remove mock data"
+                    aria-label={t("OUTPUT_PANEL.REMOVE_MOCK_DATA")}
                     onClick={handleRemoveMockData}
                   >
                     <PinOff className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="text-xs">Remove mock data</TooltipContent>
+                <TooltipContent className="text-xs">{t("OUTPUT_PANEL.REMOVE_MOCK_DATA")}</TooltipContent>
               </Tooltip>
             </>
           )}
           {!isEditingMock && (
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList>
-                <TabsTrigger value="schema">Schema</TabsTrigger>
-                <TabsTrigger value="table">Table</TabsTrigger>
+                <TabsTrigger value="schema">{t("OUTPUT_PANEL.SCHEMA")}</TabsTrigger>
+                <TabsTrigger value="table">{t("OUTPUT_PANEL.TABLE")}</TabsTrigger>
                 <TabsTrigger value="json">JSON</TabsTrigger>
               </TabsList>
             </Tabs>
@@ -263,7 +268,7 @@ export const OutputPanel = ({
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
-              aria-label={isCollapsed ? "Expand output" : "Collapse output"}
+              aria-label={isCollapsed ? t("OUTPUT_PANEL.EXPAND_OUTPUT") : t("OUTPUT_PANEL.COLLAPSE_OUTPUT")}
               className="text-low-emphasis hover:bg-surface-hover rounded p-1 transition-colors"
             >
               {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
@@ -285,12 +290,12 @@ export const OutputPanel = ({
       {splitOutSummary && !isEditingMock && (
         <div className="mt-2 flex shrink-0 flex-col gap-1.5">
           <p className="text-xs text-medium-emphasis">
-            {countItems(splitOutSummary.inputCount)} in → {countItems(splitOutSummary.outputCount)} out
+            {t("OUTPUT_PANEL.IN_OUT", { value: countItems(splitOutSummary.inputCount), value2: countItems(splitOutSummary.outputCount) })}
           </p>
           {splitOutSummary.notFound.map((field) => (
             <output key={field} className="flex gap-2 rounded border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
               <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <span className="break-words">The field &apos;{field}&apos; wasn&apos;t found in any input item</span>
+              <span className="break-words">{t("OUTPUT_PANEL.THE_FIELD_WASN_T", { field })}</span>
             </output>
           ))}
         </div>
@@ -299,7 +304,7 @@ export const OutputPanel = ({
       {limitSummary && !isEditingMock && (
         <div className="mt-2 flex shrink-0 flex-col gap-1.5">
           <p className="text-xs text-medium-emphasis">
-            {countItems(limitSummary.inputCount)} in → {countItems(limitSummary.outputCount)} out
+            {t("OUTPUT_PANEL.IN_OUT", { value: countItems(limitSummary.inputCount), value2: countItems(limitSummary.outputCount) })}
           </p>
         </div>
       )}
@@ -313,7 +318,7 @@ export const OutputPanel = ({
             <output className="flex gap-2 rounded border border-warning-200 bg-warning-50 p-2 text-xs text-warning-800">
               <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="break-words">
-                Run When is All: {mergeSummary.withoutData.join(", ")} brought no items, so nothing was output.
+                {t("OUTPUT_PANEL.RUN_WHEN_IS_ALL", { value: mergeSummary.withoutData.join(", ") })}
               </span>
             </output>
           )}
@@ -323,7 +328,7 @@ export const OutputPanel = ({
       {isEditingMock ? (
         <div className="mt-2 flex flex-1 flex-col gap-2 overflow-hidden rounded bg-surface-app p-2">
           <p className="text-[11px] text-low-emphasis">
-            Data from last successful execution is inserted here. You can edit it below.
+            {t("OUTPUT_PANEL.DATA_FROM_LAST_SUCCESSFUL")}
           </p>
           <Textarea
             className="flex-1 resize-none font-mono text-xs"
@@ -332,10 +337,10 @@ export const OutputPanel = ({
           />
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={handleCancelMockData}>
-              Cancel
+              {t("common:CANCEL")}
             </Button>
             <Button size="sm" onClick={handleSaveMockData}>
-              Save
+              {t("common:SAVE")}
             </Button>
           </div>
         </div>
@@ -344,14 +349,14 @@ export const OutputPanel = ({
           {!isCollapsed && tab === "schema" && (
             <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
           {runtimeOutputRows.length === 0 ? (
-            <p className="text-xs text-low-emphasis">No runtime output schema available.</p>
+            <p className="text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_RUNTIME_OUTPUT_SCHEMA")}</p>
           ) : (
             <div className="flex flex-col gap-3">
               {runtimeOutputByBranch.map((group) => (
                 <div key={group.key} className="flex flex-col gap-2">
                   {hasMultipleBranches && <BranchHeader group={group} className="px-1" />}
                   {hasMultipleBranches && group.rows.length === 0 && (
-                    <p className="rounded border border-dashed border-border/60 px-2 py-1.5 text-xs text-low-emphasis">No items went to this output.</p>
+                    <p className="rounded border border-dashed border-border/60 px-2 py-1.5 text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_ITEMS_WENT_TO")}</p>
                   )}
                   {group.rows.map((row, index) => (
                     <div
@@ -359,7 +364,7 @@ export const OutputPanel = ({
                       className="rounded border border-border/60 p-2"
                     >
                       <p className="mb-1 text-xs font-semibold text-medium-emphasis">
-                        item {index + 1}:
+                        {t("OUTPUT_PANEL.ITEM", { value: index + 1 })}
                       </p>
                       {isRecord(row) && group.schema.length > 0 ? (
                         <div className="flex flex-col gap-1">
@@ -374,7 +379,7 @@ export const OutputPanel = ({
                               </span>
                               <CopyValueButton
                                 value={toCopyText(row[field.key])}
-                                label={`Copy value of ${field.key}`}
+                                label={t("OUTPUT_PANEL.COPY_VALUE_OF", { key: field.key })}
                                 className="-my-0.5 h-5 px-1 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
                                 iconClassName="h-3.5 w-3.5"
                               />
@@ -403,7 +408,7 @@ export const OutputPanel = ({
                 <div key={group.key} className="rounded border border-border/60 p-2">
                   <BranchHeader group={group} className="mb-2" />
                   {group.rows.length === 0 ? (
-                    <p className="text-xs text-low-emphasis">No items went to this output.</p>
+                    <p className="text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_ITEMS_WENT_TO")}</p>
                   ) : (
                     <RuntimeTable rows={group.rows} />
                   )}
@@ -424,7 +429,7 @@ export const OutputPanel = ({
                 <div key={group.key} className="rounded border border-border/60">
                   <BranchHeader group={group} className="border-b border-border/60 px-3 py-2" />
                   {group.rows.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-low-emphasis">No items went to this output.</p>
+                    <p className="px-3 py-2 text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_ITEMS_WENT_TO")}</p>
                   ) : (
                     <RuntimeJson rows={group.rows} />
                   )}
@@ -443,8 +448,9 @@ export const OutputPanel = ({
 };
 
 function RuntimeTable({ rows }: { rows: unknown[] }) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   if (rows.length === 0) {
-    return <p className="text-xs text-low-emphasis">No runtime output data available.</p>;
+    return <p className="text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_RUNTIME_OUTPUT_DATA")}</p>;
   }
 
   const primitiveColumn = "(value)";
@@ -501,15 +507,16 @@ function RuntimeTable({ rows }: { rows: unknown[] }) {
 }
 
 function RuntimeJson({ rows }: { rows: unknown[] }) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   if (rows.length === 0) {
-    return <p className="p-3 text-xs text-low-emphasis">No runtime output data available.</p>;
+    return <p className="p-3 text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_RUNTIME_OUTPUT_DATA")}</p>;
   }
 
   const json = JSON.stringify(rows, null, 2);
 
   return (
     <div className="relative">
-      <CopyValueButton value={json} label="Copy output JSON" className="absolute right-2 top-2" />
+      <CopyValueButton value={json} label={t("OUTPUT_PANEL.COPY_OUTPUT_JSON")} className="absolute right-2 top-2" />
       <pre className="whitespace-pre-wrap p-3 pr-12 text-xs leading-relaxed text-high-emphasis [overflow-wrap:anywhere]">
         <code>{json}</code>
       </pre>
@@ -535,7 +542,7 @@ function latestRunError(executedNodes: ExecutedNode[] | null | undefined, nodeId
   if (!latest || latest.status !== NodeExecutionStatus.Failed) return null;
 
   const message = (latest.error ?? "").split(/\r?\n\s+at /)[0].replace(/^System\.Exception:\s*/, "").trim();
-  return message || "This step failed.";
+  return message || tStatic("logic.workflow.nodes.inspector", "OUTPUT_PANEL.THIS_STEP_FAILED");
 }
 
 function formatCellValue(value: unknown): string {

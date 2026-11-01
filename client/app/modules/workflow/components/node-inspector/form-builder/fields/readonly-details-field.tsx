@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT } from "@seliseblocks/genesis-os";
 import { ExternalLink } from "lucide-react";
 import { Label } from "@/components/ui-kits/label/label";
 import { FieldProps, ReadonlyDetailField } from "../form-field.types";
@@ -26,11 +26,12 @@ const LockedField = ({
   data: FieldProps["data"];
   config: FieldProps["config"];
 }) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   if (isEmptyValue(entry.value)) {
     return (
       <div className="space-y-3">
         <Label>{entry.field.label}</Label>
-        <p className="text-xs text-muted-foreground">None</p>
+        <p className="text-xs text-muted-foreground">{t("READONLY_DETAILS_FIELD.NONE")}</p>
       </div>
     );
   }
@@ -56,6 +57,7 @@ const LockedField = ({
  * loader returns now, and re-runs when a key in `detailsDependencies` changes.
  */
 export const ReadonlyDetailsField = ({ field, data, config }: FieldProps<unknown>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const scoped = useScopedPath();
   const dependencyValues = (field.detailsDependencies ?? []).map((key) => data[key]);
 
@@ -73,7 +75,7 @@ export const ReadonlyDetailsField = ({ field, data, config }: FieldProps<unknown
   if (isLoading) {
     return (
       <div className="flex h-24 w-full items-center justify-center rounded border border-dashed text-sm text-muted-foreground">
-        Loading details...
+        {t("READONLY_DETAILS_FIELD.LOADING_DETAILS")}
       </div>
     );
   }
@@ -81,7 +83,7 @@ export const ReadonlyDetailsField = ({ field, data, config }: FieldProps<unknown
   if (isError || !details) {
     return (
       <div className="flex h-24 w-full items-center justify-center rounded border border-dashed px-4 text-center text-sm text-muted-foreground">
-        Could not load these details.
+        {t("READONLY_DETAILS_FIELD.COULD_NOT_LOAD_THESE")}
       </div>
     );
   }

@@ -7,6 +7,7 @@ import { FieldProps } from "../form-field.types";
 import { ExpressionHighlighter, VariablePickerConfig } from "../utils/expression-highlighter";
 import { cn } from "@/lib/utils";
 import { pickerTarget, showsVariablePicker } from "./secret-picker";
+import { useT } from "@seliseblocks/genesis-os";
 
 const toRecord = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -63,6 +64,7 @@ export const FixedKeyValuePairsField = ({
   config,
   variablePicker,
 }: FieldProps<Record<string, unknown>>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const initialKeys = useMemo(
     () => (Array.isArray(field.fixedKeys) ? field.fixedKeys : []),
     [field.fixedKeys],
@@ -162,7 +164,7 @@ export const FixedKeyValuePairsField = ({
   if (isLoading) {
     return (
       <div className="flex h-24 w-full items-center justify-center rounded border border-dashed text-sm text-muted-foreground">
-        Loading template fields...
+        {t("FIXED_KEY_VALUE_PAIRS_FIELD.LOADING_TEMPLATE_FIELDS")}
       </div>
     );
   }
@@ -170,7 +172,7 @@ export const FixedKeyValuePairsField = ({
   if (!keys.length) {
     return (
       <div className="flex h-24 w-full items-center justify-center rounded border border-dashed px-4 text-center text-sm text-muted-foreground">
-        Select a template with dynamic fields to map body values.
+        {t("FIXED_KEY_VALUE_PAIRS_FIELD.SELECT_A_TEMPLATE_WITH")}
       </div>
     );
   }
@@ -188,7 +190,7 @@ export const FixedKeyValuePairsField = ({
           <div className="flex items-start">
             <DroppableValueTextarea
               id={`${field.id}-val-${key}`}
-              placeholder={field.placeholder || "Value"}
+              placeholder={field.placeholder || t("FIXED_KEY_VALUE_PAIRS_FIELD.VALUE")}
               value={String(currentValue[key] ?? "")}
               onChange={readOnly ? () => {} : (v) => handleValueChange(key, v)}
               readOnly={readOnly}

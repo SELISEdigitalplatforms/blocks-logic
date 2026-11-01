@@ -4,6 +4,7 @@ import { NodeSchemaDefinition } from "./node-schema.type";
 import { emailService } from "@blocks-workflow/services/email.services";
 import { IEmailTemplate } from "../../models/email";
 import { extractTemplateBodyKeys } from "../../utils/extract-template-keys";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 // ── Shared template cache ──────────────────────────────────────────────
 // Both the template select `options` and the body-map `fixedKeys` resolve
@@ -43,8 +44,8 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
       {
         id: "template",
         type: "select",
-        label: "Template",
-        info: "Choose the email template to use",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.TEMPLATE"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.CHOOSE_THE_EMAIL_TEMPLATE"); },
         key: "EmailTemplate",
         required: true,
         options: (_data, config) => {
@@ -67,8 +68,8 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
       {
         id: "laguage",
         type: "select",
-        label: "Language",
-        info: "Choose language for the email template",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.LANGUAGE"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.CHOOSE_LANGUAGE_FOR_THE"); },
         key: "Language",
         required: true,
         options: (_data, _config) => {
@@ -91,19 +92,19 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
       {
         id: "to-email",
         type: "text",
-        label: "To Email",
-        info: "Email address of the recipient.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.TO_EMAIL"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.EMAIL_ADDRESS_OF_THE"); },
         key: "To",
         required: true,
       },
       {
         id: "map-body-dynmaic",
         type: "fixed-key-value-pairs",
-        label: "Map (Body)",
-        info: "Map dynamic value",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.MAP_BODY"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.MAP_DYNAMIC_VALUE"); },
         key: "BodyDataContext",
-        keyLabel: "Template key",
-        valueLabel: "Mapped value",
+        get keyLabel() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.TEMPLATE_KEY"); },
+        get valueLabel() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.MAPPED_VALUE"); },
         fixedKeysDependencies: ["EmailTemplate"],
         fixedKeys: (data, config) => {
           const emailTemplate = data.EmailTemplate;
@@ -119,12 +120,12 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
       {
         id: "attachments",
         type: "expression-list",
-        label: "Attachments",
-        info: 'Storage File IDs to attach. Use a literal File ID, or an expression such as {{$json.fileId}} or {{$node["NodeName"].json.output.fileId}} to resolve it per run.',
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.ATTACHMENTS"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.STORAGE_FILE_IDS_TO"); },
         key: "Attachments",
         required: false,
         placeholder: "File ID or {{ expression }}",
-        addButtonText: "Add attachment",
+        get addButtonText() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_SEND_MAIL_V1.ADD_ATTACHMENT"); },
       },
     ],
     settings: [],

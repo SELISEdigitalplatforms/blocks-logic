@@ -19,6 +19,7 @@ import { cloneHandle, findNodeDefinition } from "../../utils/node-upgraders";
 import { NodeSchemasDefinition } from "../node-schemas";
 import { v4 as uuidv4 } from "uuid";
 import { findFreePosition } from "../../utils/find-free-position";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 type NodeLibraryPanelProps = {
   title?: string;
@@ -26,9 +27,10 @@ type NodeLibraryPanelProps = {
 };
 
 export const NodeLibraryPanel = ({
-  title = "Start your workflow",
-  description = "Select how this workflow should start.",
+  title = tStatic("logic.workflow.nodes.inspector", "NODE_LIBRARY_PANEL.START_YOUR_WORKFLOW"),
+  description = tStatic("logic.workflow.nodes.inspector", "NODE_LIBRARY_PANEL.SELECT_HOW_THIS_WORKFLOW"),
 }: NodeLibraryPanelProps) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const {
     isPanelOpen,
     closeNodeLibraryPanel,
@@ -150,7 +152,7 @@ export const NodeLibraryPanel = ({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search"
+                placeholder={t("common:SEARCH")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -172,7 +174,7 @@ export const NodeLibraryPanel = ({
                     <h4 className="text-sm font-medium text-high-emphasis">{option.title}</h4>
                     {option.isComingSoon && (
                       <Badge variant="info" className="ml-auto h-fit w-fit">
-                        Coming soon
+                        {t("NODE_LIBRARY_PANEL.COMING_SOON")}
                       </Badge>
                     )}
                   </div>
@@ -185,7 +187,7 @@ export const NodeLibraryPanel = ({
               ))}
               {filteredOptions.length === 0 && (
                 <div className="py-8 text-center text-sm text-muted-foreground">
-                  No triggers found matching &quot;{searchQuery}&quot;
+                  {t("NODE_LIBRARY_PANEL.NO_TRIGGERS_FOUND_MATCHING", { searchQuery })}
                 </div>
               )}
             </div>

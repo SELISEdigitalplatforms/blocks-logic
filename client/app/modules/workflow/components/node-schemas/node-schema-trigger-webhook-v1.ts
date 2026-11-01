@@ -4,6 +4,7 @@ import { NodeSchemaDefinition } from "./node-schema.type";
 import { WorkflowExecutionMode } from "../../models/workflow.model";
 import { iamService } from "../../services/iam.service";
 import { ConditionalMultiselectValue } from "../node-inspector/form-builder/form-field.types";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 const AUTHORIZATION_DEPENDENCY = {
   key: "authType",
@@ -52,13 +53,36 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       {
         id: "webhook-url",
         type: "tab-with-text",
-        label: "Webhook URL",
-        info: "Copy this URL to trigger the workflow. Send the x-blocks-key header.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.WEBHOOK_URL",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.COPY_THIS_URL_TO",
+          );
+        },
         key: "executionMode",
         transient: true,
         options: [
-          { label: "Test", value: String(WorkflowExecutionMode.Test) },
-          { label: "Production", value: String(WorkflowExecutionMode.Production) },
+          {
+            get label() {
+              return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TEST");
+            },
+            value: String(WorkflowExecutionMode.Test),
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.PRODUCTION",
+              );
+            },
+            value: String(WorkflowExecutionMode.Production),
+          },
         ],
         displayValue: (data: Record<string, unknown>, config) => {
           const currentMode =
@@ -73,13 +97,36 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       {
         id: "webhook-url-deprecated",
         type: "tab-with-text",
-        label: "Deprecated Webhook URL",
-        info: "Legacy URL with the x-blocks-key value in the path. Prefer Webhook URL above.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.DEPRECATED_WEBHOOK_URL",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.LEGACY_URL_WITH_THE",
+          );
+        },
         key: "executionMode",
         transient: true,
         options: [
-          { label: "Test", value: String(WorkflowExecutionMode.Test) },
-          { label: "Production", value: String(WorkflowExecutionMode.Production) },
+          {
+            get label() {
+              return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TEST");
+            },
+            value: String(WorkflowExecutionMode.Test),
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.PRODUCTION",
+              );
+            },
+            value: String(WorkflowExecutionMode.Production),
+          },
         ],
         displayValue: (data: Record<string, unknown>, config) => {
           const currentMode =
@@ -97,8 +144,18 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         // unchanged. Display-only and transient, so nothing new is written to the node.
         id: "http-method",
         type: "display",
-        label: "HTTP Method",
-        info: "Webhooks accept POST requests only.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.HTTP_METHOD",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.WEBHOOKS_ACCEPT_POST_REQUESTS",
+          );
+        },
         key: "httpMethodInfo",
         transient: true,
         displayValue: () => "POST",
@@ -106,24 +163,65 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       {
         id: "auth-type",
         type: "select",
-        label: "Authentication Type",
-        info: "Select the authentication method",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.AUTHENTICATION_TYPE",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.SELECT_THE_AUTHENTICATION_METHOD",
+          );
+        },
         key: "authType",
         options: [
-          { label: "None", value: "none" },
-          { label: "Blocks Authentication", value: "blocksAuthentication" },
-          { label: "Blocks Authorization", value: "blocksAuthorization" },
+          {
+            get label() {
+              return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NONE");
+            },
+            value: "none",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.BLOCKS_AUTHENTICATION",
+              );
+            },
+            value: "blocksAuthentication",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.BLOCKS_AUTHORIZATION",
+              );
+            },
+            value: "blocksAuthorization",
+          },
         ],
         defaultValue: "none",
       },
       {
         id: "organization",
         type: "select",
-        label: "Organization",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ORGANIZATION",
+          );
+        },
         info: "",
         key: "organizationId",
         defaultValue: "",
-        placeholder: "Select an organization",
+        get placeholder() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.SELECT_AN_ORGANIZATION",
+          );
+        },
         dependsOn: AUTHORIZATION_DEPENDENCY,
         options: () =>
           iamService
@@ -131,42 +229,124 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
             .then((response) => {
               const orgs = response.organizations ?? [];
               if (orgs.length === 0) {
-                return [{ label: "None", value: "" }];
+                return [
+                  {
+                    label: tStatic(
+                      "logic.workflow.nodes.schemas",
+                      "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NONE",
+                    ),
+                    value: "",
+                  },
+                ];
               }
               return [
-                { label: "None", value: "" },
-                { label: "Default", value: "default" },
+                {
+                  label: tStatic(
+                    "logic.workflow.nodes.schemas",
+                    "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NONE",
+                  ),
+                  value: "",
+                },
+                {
+                  label: tStatic(
+                    "logic.workflow.nodes.schemas",
+                    "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.DEFAULT",
+                  ),
+                  value: "default",
+                },
                 ...orgs.map((org) => ({
                   label: org.name,
                   value: org.itemId,
                 })),
               ];
             })
-            .catch(() => [{ label: "None", value: "" }]),
+            .catch(() => [
+              {
+                label: tStatic(
+                  "logic.workflow.nodes.schemas",
+                  "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NONE",
+                ),
+                value: "",
+              },
+            ]),
       },
       {
         id: "authorizationMode",
         type: "select",
-        label: "Authorization Mode",
-        info: "Choose which rule(s) the caller must satisfy. RolesOnly: only the Roles list applies. PermissionsOnly: only the Permissions list applies. RolesAndPermissions: caller must satisfy both. RolesOrPermissions: caller must satisfy either.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.AUTHORIZATION_MODE",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.CHOOSE_WHICH_RULE_S",
+          );
+        },
         key: "authorizationMode",
         defaultValue: "",
         dependsOn: AUTHORIZATION_DEPENDENCY,
         options: [
-          { label: "Roles only", value: "RolesOnly" },
-          { label: "Permissions only", value: "PermissionsOnly" },
-          { label: "Roles and Permissions", value: "RolesAndPermissions" },
-          { label: "Roles or Permissions", value: "RolesOrPermissions" },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES_ONLY",
+              );
+            },
+            value: "RolesOnly",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.PERMISSIONS_ONLY",
+              );
+            },
+            value: "PermissionsOnly",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES_AND_PERMISSIONS",
+              );
+            },
+            value: "RolesAndPermissions",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES_OR_PERMISSIONS",
+              );
+            },
+            value: "RolesOrPermissions",
+          },
         ],
       },
       {
         id: "roles",
         type: "conditional-multiselect",
-        label: "Roles",
-        info: "Roles the caller must hold. AND = all listed roles required, OR = at least one.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES_THE_CALLER_MUST",
+          );
+        },
         key: "roles",
         hidden: isNotAuthorization,
-        placeholder: "Search roles...",
+        get placeholder() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.SEARCH_ROLES",
+          );
+        },
         dependsOn: {
           key: "authorizationMode",
           value: ["RolesOnly", "RolesAndPermissions", "RolesOrPermissions"],
@@ -182,11 +362,26 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       {
         id: "permissions",
         type: "conditional-multiselect",
-        label: "Permissions",
-        info: "Permissions the caller must hold. Constrained by the selected roles. AND = all listed permissions required, OR = at least one.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.PERMISSIONS",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.PERMISSIONS_THE_CALLER_MUST",
+          );
+        },
         key: "permissions",
         hidden: isNotAuthorization,
-        placeholder: "Search permissions...",
+        get placeholder() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.SEARCH_PERMISSIONS",
+          );
+        },
         dependsOn: {
           key: "authorizationMode",
           value: ["PermissionsOnly", "RolesAndPermissions", "RolesOrPermissions"],
@@ -205,20 +400,53 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       {
         id: "http-response-mode",
         type: "select",
-        label: "Response",
-        info: "When and how to respond to the webhook",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.RESPONSE");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.WHEN_AND_HOW_TO",
+          );
+        },
         key: "httpResponseMode",
         required: true,
         options: [
-          { label: "Immediately", value: "immediate" },
-          { label: "After Last Node Completion", value: "last" },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.IMMEDIATELY",
+              );
+            },
+            value: "immediate",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.AFTER_LAST_NODE_COMPLETION",
+              );
+            },
+            value: "last",
+          },
         ],
       },
       {
         id: "http-response-data",
         type: "select",
-        label: "Response Data",
-        info: "What data should be returned. If it should return all items as an array or only the first item as object.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.RESPONSE_DATA",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.WHAT_DATA_SHOULD_BE",
+          );
+        },
         key: "httpResponseData",
         required: true,
         dependsOn: {
@@ -226,9 +454,33 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           value: "last",
         },
         options: [
-          { label: "All Entries", value: "all" },
-          { label: "First Entry", value: "first" },
-          { label: "No Response Body", value: "none" },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ALL_ENTRIES",
+              );
+            },
+            value: "all",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.FIRST_ENTRY",
+              );
+            },
+            value: "first",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NO_RESPONSE_BODY",
+              );
+            },
+            value: "none",
+          },
         ],
         defaultValue: "all",
       },

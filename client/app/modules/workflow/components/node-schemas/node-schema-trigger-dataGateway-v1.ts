@@ -2,6 +2,8 @@ import React from "react";
 import { NodeGuideTriggerDataGatewayV1 } from "../node-guides";
 import { dataService } from "../../services/data.service";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { tStatic } from "@seliseblocks/genesis-os";
+import { renderRichText } from "@/lib/rich-text";
 
 export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
   guide: NodeGuideTriggerDataGatewayV1,
@@ -15,37 +17,57 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
         type: "callout-accordion-display",
         key: "executionNotes",
         displayValue: () => ({
-          title: "Notes of editor execution",
+          title: tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.NOTES_OF_EDITOR_EXECUTION",
+          ),
           description: React.createElement(
             "span",
             null,
-            "A data change runs the draft workflow in test mode only when every record in it has a ",
-            React.createElement(
-              "code",
-              {
-                className:
-                  "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
-              },
-              "Tags",
+            ...renderRichText(
+              tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.A_DATA_CHANGE_RUNS",
+              ),
+              [
+                (text: string) =>
+                  React.createElement(
+                    "code",
+                    {
+                      className:
+                        "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
+                    },
+                    text,
+                  ),
+                (text: string) =>
+                  React.createElement(
+                    "code",
+                    {
+                      className:
+                        "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
+                    },
+                    text,
+                  ),
+              ],
             ),
-            " array that contains ",
-            React.createElement(
-              "code",
-              {
-                className:
-                  "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
-              },
-              "mock-data",
-            ),
-            ". This works for Inserted and Deleted only; Updated changes carry no Tags and always use the published workflow. Tagged changes never run the published workflow.",
           ),
         }),
       },
       {
         id: "collection",
         type: "select",
-        label: "Collection",
-        info: "Select the data collection to monitor for changes",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.COLLECTION",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.SELECT_THE_DATA_COLLECTION",
+          );
+        },
         key: "collectionName_composite",
         required: true,
         searchable: true,
@@ -81,14 +103,48 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
       {
         id: "operation",
         type: "select",
-        label: "Operation",
-        info: "The data operation that should trigger this workflow",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.OPERATION",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.THE_DATA_OPERATION_THAT",
+          );
+        },
         key: "operation",
         required: true,
         options: [
-          { label: "Inserted", value: "Inserted" },
-          { label: "Updated", value: "Updated" },
-          { label: "Deleted", value: "Deleted" },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.INSERTED",
+              );
+            },
+            value: "Inserted",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.UPDATED",
+              );
+            },
+            value: "Updated",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.DELETED",
+              );
+            },
+            value: "Deleted",
+          },
         ],
       },
       // {
@@ -103,8 +159,18 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
       {
         id: "output",
         type: "display",
-        label: "Output",
-        info: "Structure of the trigger output data",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.OUTPUT",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.STRUCTURE_OF_THE_TRIGGER",
+          );
+        },
         key: "output",
         displayValue: (data) => {
           return `\`\`\`json

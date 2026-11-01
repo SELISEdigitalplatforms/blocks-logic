@@ -9,6 +9,7 @@ import { PROXY_QUERY_KEY } from "@/modules/proxy/constants";
 import { proxyService } from "@/modules/proxy/services/proxy.service";
 import { Proxy, ProxyMethod } from "@/modules/proxy/types";
 import { resolveEffectiveRoute, trimRoutePath } from "@/modules/proxy/utils";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 /**
  * Separator for the composite picker values. Both dropdowns carry more than one field, and `:::`
@@ -100,12 +101,33 @@ const locked = (
 });
 
 const ACCESS_OPTIONS = [
-  { value: "blocksToken", label: "Blocks token" },
-  { value: "public", label: "Public" },
+  {
+    value: "blocksToken",
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.BLOCKS_TOKEN");
+    },
+  },
+  {
+    value: "public",
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.PUBLIC");
+    },
+  },
 ];
 
-const ruleLabel = (list: string, mode: string) =>
-  `${list} (caller needs ${mode === "all" ? "all" : "any"})`;
+const ruleLabel = (kind: "roles" | "permissions", mode: string) => {
+  const all = mode === "all";
+  if (kind === "roles") {
+    return tStatic(
+      "logic.workflow.nodes.schemas",
+      all ? "NODE_SCHEMA_ACTION_PROXY.ROLES_ALL" : "NODE_SCHEMA_ACTION_PROXY.ROLES_ANY",
+    );
+  }
+  return tStatic(
+    "logic.workflow.nodes.schemas",
+    all ? "NODE_SCHEMA_ACTION_PROXY.PERMISSIONS_ALL" : "NODE_SCHEMA_ACTION_PROXY.PERMISSIONS_ANY",
+  );
+};
 
 /**
  * The selected endpoint's effective configuration, one locked form field per setting. Values are
@@ -118,19 +140,35 @@ export const buildProxyRouteDetails = (
 ): ReadonlyDetails => {
   const route = findRoute(proxy, method, path);
   if (route === undefined) {
-    return { fields: [], message: "This endpoint no longer exists on the proxy." };
+    return {
+      fields: [],
+      message: tStatic(
+        "logic.workflow.nodes.schemas",
+        "NODE_SCHEMA_ACTION_PROXY.THIS_ENDPOINT_NO_LONGER",
+      ),
+    };
   }
 
   const effective = resolveEffectiveRoute(proxy, method as ProxyMethod, route);
   const access = proxy.access;
   const fields: ReadonlyDetailField[] = [
-    locked({ id: "method", type: "text", label: "Method" }, method),
+    locked(
+      {
+        id: "method",
+        type: "text",
+        label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.METHOD"),
+      },
+      method,
+    ),
     locked(
       {
         id: "upstream",
         type: "text",
-        label: "Forwards to",
-        info: "The upstream URL this endpoint calls.",
+        label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.FORWARDS_TO"),
+        info: tStatic(
+          "logic.workflow.nodes.schemas",
+          "NODE_SCHEMA_ACTION_PROXY.THE_UPSTREAM_URL_THIS",
+        ),
         copyable: true,
       },
       joinUpstream(effective.upstreamUrl, route?.upstreamPath ?? path),
@@ -139,8 +177,8 @@ export const buildProxyRouteDetails = (
       {
         id: "access",
         type: "radio",
-        label: "Authentication",
-        info: "Who may call this proxy over HTTP. Blocks token: the caller must send a valid Blocks access token, and meet the role and permission rules below. Public: anyone can call it. Workflow steps are not checked against these rules.",
+        label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.AUTHENTICATION"),
+        info: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.WHO_MAY_CALL_THIS"),
         options: ACCESS_OPTIONS,
       },
       access?.kind ?? "blocksToken",
@@ -150,14 +188,14 @@ export const buildProxyRouteDetails = (
   if (access && access.kind !== "public") {
     fields.push(
       locked(
-        { id: "roles", type: "expression-list", label: ruleLabel("Roles", access.roles.mode) },
+        { id: "roles", type: "expression-list", label: ruleLabel("roles", access.roles.mode) },
         access.roles.values,
       ),
       locked(
         {
           id: "permissions",
           type: "expression-list",
-          label: ruleLabel("Permissions", access.permissions.mode),
+          label: ruleLabel("permissions", access.permissions.mode),
         },
         access.permissions.values,
       ),
@@ -168,10 +206,25 @@ export const buildProxyRouteDetails = (
           {
             id: "combine",
             type: "radio",
-            label: "Roles and permissions",
+            label: tStatic(
+              "logic.workflow.nodes.schemas",
+              "NODE_SCHEMA_ACTION_PROXY.ROLES_AND_PERMISSIONS",
+            ),
             options: [
-              { value: "or", label: "Either list is enough" },
-              { value: "and", label: "Both lists must match" },
+              {
+                value: "or",
+                label: tStatic(
+                  "logic.workflow.nodes.schemas",
+                  "NODE_SCHEMA_ACTION_PROXY.EITHER_LIST_IS_ENOUGH",
+                ),
+              },
+              {
+                value: "and",
+                label: tStatic(
+                  "logic.workflow.nodes.schemas",
+                  "NODE_SCHEMA_ACTION_PROXY.BOTH_LISTS_MUST_MATCH",
+                ),
+              },
             ],
           },
           access.combine,
@@ -185,10 +238,13 @@ export const buildProxyRouteDetails = (
       {
         id: "headers",
         type: "key-value-pairs",
-        label: "Headers added",
-        info: "Sent with every call to this endpoint: the connection's headers, with the endpoint's own rows replacing same-name ones.",
-        keyLabel: "Header",
-        valueLabel: "Value",
+        label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.HEADERS_ADDED"),
+        info: tStatic(
+          "logic.workflow.nodes.schemas",
+          "NODE_SCHEMA_ACTION_PROXY.SENT_WITH_EVERY_CALL",
+        ),
+        keyLabel: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.HEADER"),
+        valueLabel: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.VALUE"),
       },
       toRecord(effective.headers),
     ),
@@ -200,8 +256,14 @@ export const buildProxyRouteDetails = (
       {
         id: "responseSelect",
         type: "switch",
-        label: "Return selected fields only",
-        info: "Off: the whole upstream response is returned.",
+        label: tStatic(
+          "logic.workflow.nodes.schemas",
+          "NODE_SCHEMA_ACTION_PROXY.RETURN_SELECTED_FIELDS_ONLY",
+        ),
+        info: tStatic(
+          "logic.workflow.nodes.schemas",
+          "NODE_SCHEMA_ACTION_PROXY.OFF_THE_WHOLE_UPSTREAM",
+        ),
       },
       selects,
     ),
@@ -212,8 +274,14 @@ export const buildProxyRouteDetails = (
         {
           id: "responseInclude",
           type: "path-list",
-          label: "Response fields",
-          info: "The only fields returned in the response body. Nested fields are written with dots.",
+          label: tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.RESPONSE_FIELDS",
+          ),
+          info: tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.THE_ONLY_FIELDS_RETURNED",
+          ),
         },
         effective.responseInclude,
       ),
@@ -233,8 +301,15 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
       {
         id: "proxy",
         type: "select",
-        label: "Proxy",
-        info: "The proxy to call. Only enabled proxies are listed. The upstream URL, injected headers, credentials and response shaping all stay in the proxy.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.PROXY");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.THE_PROXY_TO_CALL",
+          );
+        },
         key: "proxy_composite",
         required: true,
         searchable: true,
@@ -265,8 +340,15 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
       {
         id: "route",
         type: "select",
-        label: "Endpoint",
-        info: "The endpoint to call. This is the proxy's declared route allowlist — the gateway refuses any path that is not on it, so only these are callable.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.ENDPOINT");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.THE_ENDPOINT_TO_CALL",
+          );
+        },
         key: "route_composite",
         required: true,
         searchable: true,
@@ -310,8 +392,18 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
       {
         id: "routeConfig",
         type: "readonly-details",
-        label: "Endpoint configuration",
-        info: "What the proxy adds to this call, read live from the proxy. Edit the proxy to change it.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.ENDPOINT_CONFIGURATION",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.WHAT_THE_PROXY_ADDS",
+          );
+        },
         key: "routeConfig",
         // Display only: nothing is saved on the node, so it always shows the proxy's current config.
         transient: true,
@@ -325,7 +417,14 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
           const proxyId = String(data.proxyId ?? "");
           if (!proxyId) return { fields: [] };
           const proxy = await getProxyCached(proxyId);
-          if (!proxy) return { fields: [], message: "This proxy no longer exists." };
+          if (!proxy)
+            return {
+              fields: [],
+              message: tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_ACTION_PROXY.THIS_PROXY_NO_LONGER",
+              ),
+            };
           return buildProxyRouteDetails(
             proxy,
             String(data.routeMethod ?? ""),
@@ -336,12 +435,26 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
       {
         id: "pathParams",
         type: "fixed-key-value-pairs",
-        label: "Path parameters",
-        info: "Values for the {name} segments of the selected endpoint. Each matches exactly one path segment and accepts expressions.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.PATH_PARAMETERS",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.VALUES_FOR_THE_NAME",
+          );
+        },
         key: "pathParams",
         defaultValue: {},
-        keyLabel: "Parameter",
-        valueLabel: "Value",
+        get keyLabel() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.PARAMETER");
+        },
+        get valueLabel() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.VALUE");
+        },
         dependsOn: {
           key: "hasPathParams",
           value: true,
@@ -353,8 +466,18 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
       {
         id: "haveQuery",
         type: "switch",
-        label: "Send Query Parameters",
-        info: "Whether the call carries query-string parameters. Always on when the proxy config adds query parameters to this endpoint.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.SEND_QUERY_PARAMETERS",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.WHETHER_THE_CALL_CARRIES",
+          );
+        },
         key: "haveQuery",
         locked: async (data) => Object.keys(await configQuery(data)).length > 0,
         lockedDependencies: ENDPOINT_KEYS,
@@ -371,8 +494,18 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
           key: "haveQuery",
           value: true,
         },
-        label: "Query Parameters",
-        info: "Sent with the call as the query string. Locked rows come from the proxy config and can't be changed here; add your own below them. Values accept expressions; a key whose value resolves to empty is dropped.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.QUERY_PARAMETERS",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.SENT_WITH_THE_CALL",
+          );
+        },
         key: "queryParams",
         locked: configQuery,
         lockedDependencies: ENDPOINT_KEYS,
@@ -381,8 +514,15 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
       {
         id: "haveBody",
         type: "switch",
-        label: "Send Body",
-        info: "Whether the request carries a JSON body. Always on when the proxy config merges body fields into this endpoint.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.SEND_BODY");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.WHETHER_THE_REQUEST_CARRIES",
+          );
+        },
         key: "havebody",
         locked: async (data) => Object.keys(await configBody(data)).length > 0,
         lockedDependencies: ENDPOINT_KEYS,
@@ -399,8 +539,15 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
           key: "havebody",
           value: true,
         },
-        label: "Body",
-        info: "JSON body forwarded to the upstream. Keys from the proxy config are prefilled and locked; add your own fields around them. Must be a JSON object when the proxy config merges body fields. {{$json.field}} reads a field of the current item (same as {{$json.output.field}}); values inside quotes are escaped automatically. If the body is not valid JSON after that, the step fails.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.BODY");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_PROXY.JSON_BODY_FORWARDED_TO",
+          );
+        },
         key: "body",
         locked: configBody,
         lockedDependencies: ENDPOINT_KEYS,

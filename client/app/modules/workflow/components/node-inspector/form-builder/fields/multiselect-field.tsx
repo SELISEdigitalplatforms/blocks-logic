@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/po
 import { cn } from "@/lib/utils";
 
 import { FieldProps, SelectOption } from "../form-field.types";
+import { useT } from "@seliseblocks/genesis-os";
 
 const normalizeValue = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((x) => typeof x === "string") : [];
@@ -28,6 +29,7 @@ export const MultiselectField = ({
   data,
   config,
 }: FieldProps<string[]>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const selected = normalizeValue(value);
 
   const isStaticOptions = Array.isArray(field.options);
@@ -76,11 +78,11 @@ export const MultiselectField = ({
           >
             <span className="flex items-center gap-2 truncate">
               {isLoading ? (
-                <span className="text-muted-foreground">Loading...</span>
+                <span className="text-muted-foreground">{t("common:LOADING")}</span>
               ) : selected.length > 0 ? (
-                <span>{selected.length} selected</span>
+                <span>{t("MULTISELECT_FIELD.SELECTED", { length: selected.length })}</span>
               ) : (
-                <span className="text-muted-foreground">{field.placeholder || "Select..."}</span>
+                <span className="text-muted-foreground">{field.placeholder || t("MULTISELECT_FIELD.SELECT")}</span>
               )}
               {isLoading && <Loader2 className="h-4 w-4 animate-spin opacity-50" />}
             </span>
@@ -88,9 +90,9 @@ export const MultiselectField = ({
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
           <Command shouldFilter={typeof field.options === "function" ? false : undefined}>
-            <CommandInput placeholder={field.placeholder || "Search..."} className="h-9" />
+            <CommandInput placeholder={field.placeholder || t("MULTISELECT_FIELD.SEARCH")} className="h-9" />
             <CommandList>
-              <CommandEmpty>No results found.</CommandEmpty>
+              <CommandEmpty>{t("MULTISELECT_FIELD.NO_RESULTS_FOUND")}</CommandEmpty>
               <CommandGroup>
                 {options.map((option) => {
                   const optionValue = String(option.value);

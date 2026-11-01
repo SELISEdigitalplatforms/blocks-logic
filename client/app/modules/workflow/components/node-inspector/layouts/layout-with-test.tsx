@@ -6,6 +6,7 @@ import { NodeSchema } from "../../node-schemas/node-schema.type";
 import { FormBuilder } from "../form-builder/form-builder";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { NodeGuidePanel, TestEventPanel } from "../shared";
+import { useT } from "@seliseblocks/genesis-os";
 
 type LayoutWithTestProps = {
   schema: NodeSchema | null;
@@ -13,6 +14,7 @@ type LayoutWithTestProps = {
 };
 
 export const LayoutWithTest = ({ schema, guide }: LayoutWithTestProps) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const { selectedNode, updateNode, updateNodeParameters } = useWorkflow();
   const [activeTab, setActiveTab] = useState("parameters");
   const [isGuideOpen, setIsGuideOpen] = useState(false);
@@ -33,8 +35,8 @@ export const LayoutWithTest = ({ schema, guide }: LayoutWithTestProps) => {
             className="flex flex-1 flex-col overflow-hidden"
           >
             <TabsList className="mb-5 shrink-0">
-              <TabsTrigger value="parameters">Parameters</TabsTrigger>
-              <TabsTrigger value="settings">Settings</TabsTrigger>
+              <TabsTrigger value="parameters">{t("LAYOUT_WITH_TEST.PARAMETERS")}</TabsTrigger>
+              <TabsTrigger value="settings">{t("common:SETTINGS")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="parameters" className="flex-1 overflow-y-auto pr-6">
@@ -66,7 +68,7 @@ export const LayoutWithTest = ({ schema, guide }: LayoutWithTestProps) => {
             <TestEventPanel
               nodeId={selectedNode.id}
               nodeType={selectedNode.type}
-              testInstructions="Test this node with sample data to ensure it's configured correctly."
+              testInstructions={t("LAYOUT_WITH_TEST.TEST_THIS_NODE_WITH")}
             />
           )}
         </div>

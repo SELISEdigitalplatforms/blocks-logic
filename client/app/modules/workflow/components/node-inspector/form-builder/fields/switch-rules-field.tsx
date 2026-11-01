@@ -11,6 +11,7 @@ import { FieldProps } from "../form-field.types";
 import type { Condition } from "./conditions-field";
 import { SwitchConditionList, conditionsSummary } from "./switch-condition-list";
 import { newSwitchRule, usedSwitchKeys, type SwitchRule } from "@blocks-workflow/utils/switch-handles";
+import { useT } from "@seliseblocks/genesis-os";
 
 /** What an output is called: its name, or its 0-based number. */
 export const outputLabel = (handleLabel: string | undefined, index: number) => handleLabel || String(index);
@@ -20,6 +21,7 @@ export const outputLabel = (handleLabel: string | undefined, index: number) => h
  * they cannot be reordered. Which cards are open is editor state only and is never saved.
  */
 export const SwitchRulesField = ({ field, value, onChange, readOnly, data }: FieldProps<SwitchRule[]>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const rules: SwitchRule[] = Array.isArray(value) ? value.filter(Boolean) : [];
   const locked = readOnly || !!field.disabled;
 
@@ -49,7 +51,7 @@ export const SwitchRulesField = ({ field, value, onChange, readOnly, data }: Fie
       {rules.map((rule, index) => {
         const isOpen = open.has(rule.handleKey);
         const isRenaming = renaming.has(rule.handleKey) || !!rule.handleLabel;
-        const title = `Routing Rule ${index + 1}`;
+        const title = t("SWITCH_RULES_FIELD.ROUTING_RULE_N", { number: index + 1 });
         const conditions = (rule.conditions ?? []) as Condition[];
         const bodyId = `${field.id}.${rule.handleKey}.body`;
         return (
@@ -68,10 +70,10 @@ export const SwitchRulesField = ({ field, value, onChange, readOnly, data }: Fie
                 <span className="sr-only">, </span>
                 <span className="truncate text-xs text-muted-foreground">{conditionsSummary(conditions, rule.conditionType)}</span>
               </button>
-              <span title="Output" className="max-w-[8rem] shrink-0 truncate rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[11px] text-primary">
+              <span title={t("SWITCH_RULES_FIELD.OUTPUT")} className="max-w-[8rem] shrink-0 truncate rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[11px] text-primary">
                 {outputLabel(rule.handleLabel, index)}
               </span>
-              <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${title}`} disabled={locked}
+              <Button type="button" variant="ghost" size="icon" aria-label={t("SWITCH_RULES_FIELD.DELETE", { title })} disabled={locked}
                 className="h-8 w-8 hover:text-destructive" onClick={() => onChange(rules.filter((_, i) => i !== index))}>
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -100,11 +102,11 @@ export const SwitchRulesField = ({ field, value, onChange, readOnly, data }: Fie
                       if (!on && rule.handleLabel) update(index, { handleLabel: "" });
                     }}
                   />
-                  <Label htmlFor={`${field.id}.${rule.handleKey}.rename`}>Rename Output</Label>
+                  <Label htmlFor={`${field.id}.${rule.handleKey}.rename`}>{t("SWITCH_RULES_FIELD.RENAME_OUTPUT")}</Label>
                 </div>
                 {isRenaming && (
                   <div className="space-y-1">
-                    <Label htmlFor={`${field.id}.${rule.handleKey}.handleLabel`}>Output Name</Label>
+                    <Label htmlFor={`${field.id}.${rule.handleKey}.handleLabel`}>{t("SWITCH_RULES_FIELD.OUTPUT_NAME")}</Label>
                     <Input
                       id={`${field.id}.${rule.handleKey}.handleLabel`}
                       value={rule.handleLabel ?? ""}
@@ -122,7 +124,7 @@ export const SwitchRulesField = ({ field, value, onChange, readOnly, data }: Fie
       })}
       <Button type="button" variant="outline" size="sm" disabled={locked} onClick={addRule}>
         <Plus className="mr-1 h-4 w-4" />
-        Add Routing Rule
+        {t("SWITCH_RULES_FIELD.ADD_ROUTING_RULE")}
       </Button>
     </div>
   );

@@ -21,6 +21,7 @@ import {
   ChipsInputField,
   ChipsInputList,
 } from "@/components/chip-input/chips-input";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 interface KeyTypeValue {
   key: string;
@@ -29,11 +30,11 @@ interface KeyTypeValue {
 }
 
 const DATA_TYPES = [
-  { label: "String", value: "string" },
-  { label: "Number", value: "number" },
-  { label: "Array", value: "array" },
-  { label: "Boolean", value: "boolean" },
-  { label: "Date & Time", value: "datetime" },
+  { get label() { return tStatic("logic.workflow.nodes.inspector", "KEY_TYPE_VALUE_FIELD.STRING"); }, value: "string" },
+  { get label() { return tStatic("logic.workflow.nodes.inspector", "KEY_TYPE_VALUE_FIELD.NUMBER"); }, value: "number" },
+  { get label() { return tStatic("logic.workflow.nodes.inspector", "KEY_TYPE_VALUE_FIELD.ARRAY"); }, value: "array" },
+  { get label() { return tStatic("logic.workflow.nodes.inspector", "KEY_TYPE_VALUE_FIELD.BOOLEAN"); }, value: "boolean" },
+  { get label() { return tStatic("logic.workflow.nodes.inspector", "KEY_TYPE_VALUE_FIELD.DATE_TIME"); }, value: "datetime" },
 ];
 
 export const KeyTypeValueField = ({
@@ -45,6 +46,7 @@ export const KeyTypeValueField = ({
   config,
   variablePicker,
 }: FieldProps<KeyTypeValue[]>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   // Use array directly
   const pairs: KeyTypeValue[] = Array.isArray(value) ? value : [];
 
@@ -106,7 +108,7 @@ export const KeyTypeValueField = ({
     return (
       <div className="flex h-32 w-full items-center justify-center rounded border border-dashed">
         <Button variant="ghost" className="text-primary" onClick={handleAddPair}>
-          Add Field
+          {t("KEY_TYPE_VALUE_FIELD.ADD_FIELD")}
         </Button>
       </div>
     );
@@ -137,7 +139,7 @@ export const KeyTypeValueField = ({
                 }
               >
                 <Input
-                  placeholder={field.keyLabel || "Key"}
+                  placeholder={field.keyLabel || t("KEY_TYPE_VALUE_FIELD.KEY")}
                   value={pair.key}
                   onChange={(e) => handleKeyChange(index, e.target.value)}
                   readOnly={readOnly}
@@ -154,7 +156,7 @@ export const KeyTypeValueField = ({
                 disabled={field.disabled as boolean || readOnly}
               >
                 <SelectTrigger className="border-0 focus:ring-0 focus:ring-offset-0 bg-transparent w-full rounded-none">
-                  <SelectValue placeholder="Type" />
+                  <SelectValue placeholder={t("common:TYPE")} />
                 </SelectTrigger>
                 <SelectContent>
                   {DATA_TYPES.map((type) => (
@@ -178,14 +180,14 @@ export const KeyTypeValueField = ({
                 </ChipsInput>
               ) : (
                 <ExpressionInputField
-                  placeholder={field.keyLabel || "Value"}
+                  placeholder={field.keyLabel || t("KEY_TYPE_VALUE_FIELD.VALUE")}
                   value={pair.value as string}
                   onChange={(value) => handleValueChange(index, value)}
                   readOnly={readOnly}
                   data={data}
                   config={config}
                   field={field}
-                  pickerLabel={`row ${index + 1} value`}
+                  pickerLabel={t("KEY_TYPE_VALUE_FIELD.ROW_VALUE", { value: index + 1 })}
                   variablePicker={variablePicker}
                   className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent min-h-[40px]"
                 />
@@ -200,7 +202,7 @@ export const KeyTypeValueField = ({
         onClick={handleAddPair}
         disabled={field.disabled as boolean}
       >
-        Add Field
+        {t("KEY_TYPE_VALUE_FIELD.ADD_FIELD")}
       </Button>
     </div>
   );

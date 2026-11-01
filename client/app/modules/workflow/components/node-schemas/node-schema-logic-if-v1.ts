@@ -1,5 +1,6 @@
 import { NodeGuideLogicIfV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
   guide: NodeGuideLogicIfV1,
@@ -11,20 +12,50 @@ export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
       {
         id: "conditionType",
         type: "select",
-        label: "Condition type",
-        info: "Select the type of condition to evaluate.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_IF_V1.CONDITION_TYPE");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_LOGIC_IF_V1.SELECT_THE_TYPE_OF",
+          );
+        },
         key: "conditionType",
         options: [
-          { value: "all", label: "All conditions (AND)" },
-          { value: "or", label: "Any condition (OR)" },
+          {
+            value: "all",
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_LOGIC_IF_V1.ALL_CONDITIONS_AND",
+              );
+            },
+          },
+          {
+            value: "or",
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_LOGIC_IF_V1.ANY_CONDITION_OR",
+              );
+            },
+          },
         ],
         defaultValue: "all",
       },
       {
         id: "conditions",
         type: "conditions",
-        label: "Conditions",
-        info: "Add conditions to evaluate and determine the execution path.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_IF_V1.CONDITIONS");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_LOGIC_IF_V1.ADD_CONDITIONS_TO_EVALUATE",
+          );
+        },
         key: "conditions",
       },
     ],

@@ -1,22 +1,26 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideLogicIfV1 = () => (
-  <GuideContent
-    title="If logic"
-    description="Use this node to choose a workflow path based on conditions. Each input item is evaluated separately and then sent unchanged to either the true or false branch."
-    steps={[
-      "Use All conditions (AND) when every condition must be true.",
-      "Use Any condition (OR) when one matching condition should be enough, then test both branches with sample data.",
-      "Add the conditions that should be evaluated against data from earlier nodes.",
-      "Connect the following nodes to the appropriate branch for the result you expect.",
-    ]}
-    notes={[
-      "Condition values are resolved as expressions before comparison.",
-      "Number, boolean, date/time, and array comparisons are parsed by the selected condition type.",
-      "The node starts with All conditions (AND) and no conditions.",
-      "Equals one of (list) checks that the value exactly equals one entry of the list (case-sensitive). All values are in (list) checks that every value of the left list is in the right list. Write the list as a JSON array or comma-separated values. An empty list makes these false, and their \"not\" versions true.",
-      "An item whose condition cannot be evaluated (for example, an unknown operator or one that does not fit the type) fails the step.",
-      "Empty or incomplete conditions may not route the workflow the way you expect, so test both passing and failing cases.",
-    ]}
-  />
-);
+export const NodeGuideLogicIfV1 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_LOGIC_IF_V1.IF_LOGIC")}
+      description={t("NODE_GUIDE_LOGIC_IF_V1.USE_THIS_NODE_TO")}
+      steps={[
+        t("NODE_GUIDE_LOGIC_IF_V1.USE_ALL_CONDITIONS_AND"),
+        t("NODE_GUIDE_LOGIC_IF_V1.USE_ANY_CONDITION_OR"),
+        t("NODE_GUIDE_LOGIC_IF_V1.ADD_THE_CONDITIONS_THAT"),
+        t("NODE_GUIDE_LOGIC_IF_V1.CONNECT_THE_FOLLOWING_NODES"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_LOGIC_IF_V1.CONDITION_VALUES_ARE_RESOLVED"),
+        t("NODE_GUIDE_LOGIC_IF_V1.NUMBER_BOOLEAN_DATE_TIME"),
+        t("NODE_GUIDE_LOGIC_IF_V1.THE_NODE_STARTS_WITH"),
+        t("NODE_GUIDE_LOGIC_IF_V1.EQUALS_ONE_OF_LIST"),
+        t("NODE_GUIDE_LOGIC_IF_V1.AN_ITEM_WHOSE_CONDITION"),
+        t("NODE_GUIDE_LOGIC_IF_V1.EMPTY_OR_INCOMPLETE_CONDITIONS"),
+      ]}
+    />
+  );
+};

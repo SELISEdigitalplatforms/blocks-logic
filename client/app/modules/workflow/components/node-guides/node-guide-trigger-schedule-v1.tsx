@@ -1,20 +1,24 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideTriggerScheduleV1 = () => (
-  <GuideContent
-    title="Schedule trigger"
-    description="Use this trigger to start a workflow on a time schedule. The guided interval fields generate a 5-field cron expression, and Custom lets you enter the cron expression yourself."
-    steps={[
-      "Choose a Trigger Interval: minutes, hours, days, weeks, or custom cron.",
-      "Fill the timing fields that appear for the selected interval, such as minute, hour, weekday, or day of month.",
-      "Use Cron Preview to confirm the generated expression.",
-      "Choose Custom (Cron) only when you want to type the 5-field cron expression directly.",
-    ]}
-    notes={[
-      "The saved parameters are normalized to triggerInterval and cronExpression; the helper timing fields are transient.",
-      "Published schedule runs receive output fields such as WorkflowId, TriggerId, TenantId, CronExpression, and FiredAt.",
-      "Schedules run on UTC time, so hours and the cron expression are in UTC.",
-      "Hourly schedules use cron stepping, so intervals that do not divide 24 evenly run on matching clock hours rather than exact elapsed-hour spacing.",
-    ]}
-  />
-);
+export const NodeGuideTriggerScheduleV1 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_TRIGGER_SCHEDULE_V1.SCHEDULE_TRIGGER")}
+      description={t("NODE_GUIDE_TRIGGER_SCHEDULE_V1.USE_THIS_TRIGGER_TO")}
+      steps={[
+        t("NODE_GUIDE_TRIGGER_SCHEDULE_V1.CHOOSE_A_TRIGGER_INTERVAL"),
+        t("NODE_GUIDE_TRIGGER_SCHEDULE_V1.FILL_THE_TIMING_FIELDS"),
+        t("NODE_GUIDE_TRIGGER_SCHEDULE_V1.USE_CRON_PREVIEW_TO"),
+        t("NODE_GUIDE_TRIGGER_SCHEDULE_V1.CHOOSE_CUSTOM_CRON_ONLY"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_TRIGGER_SCHEDULE_V1.THE_SAVED_PARAMETERS_ARE"),
+        t("NODE_GUIDE_TRIGGER_SCHEDULE_V1.PUBLISHED_SCHEDULE_RUNS_RECEIVE"),
+        t("NODE_GUIDE_TRIGGER_SCHEDULE_V1.SCHEDULES_RUN_ON_UTC"),
+        t("NODE_GUIDE_TRIGGER_SCHEDULE_V1.HOURLY_SCHEDULES_USE_CRON"),
+      ]}
+    />
+  );
+};

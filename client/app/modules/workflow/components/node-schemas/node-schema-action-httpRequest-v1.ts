@@ -1,6 +1,7 @@
 import { NodeGuideActionHttpRequestV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { authClientService } from "../../services/iam.service";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
   guide: NodeGuideActionHttpRequestV1,
@@ -12,8 +13,8 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
       {
         id: "http-method",
         type: "select",
-        label: "Method",
-        info: "The request method to use",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.METHOD"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.THE_REQUEST_METHOD_TO"); },
         key: "httpMethod",
         required: true,
         options: [
@@ -28,14 +29,14 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
         id: "url",
         type: "text",
         label: "URL",
-        info: "The URL to make the request to",
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.THE_URL_TO_MAKE"); },
         key: "url",
       },
       {
         id: "haveQueryParameters",
         type: "switch",
-        label: "Send Query Parameters",
-        info: "Whether the request has query params or not",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SEND_QUERY_PARAMETERS"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.WHETHER_THE_REQUEST_HAS"); },
         key: "haveQueryParameters",
       },
       {
@@ -45,15 +46,15 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
           key: "haveQueryParameters",
           value: true,
         },
-        label: "Query Parameters",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.QUERY_PARAMETERS"); },
         key: "queryParameters",
         defaultValue: {},
       },
       {
         id: "haveHeaders",
         type: "switch",
-        label: "Send Headers",
-        info: "Whether the request has headers or not",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SEND_HEADERS"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.WHETHER_THE_REQUEST_HAS_2"); },
         key: "haveHeaders",
       },
       {
@@ -63,27 +64,27 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
           key: "haveHeaders",
           value: true,
         },
-        label: "Header Parameters",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.HEADER_PARAMETERS"); },
         key: "headers",
       },
       {
         id: "authenticationType",
         type: "select",
-        label: "Authentication",
-        info: "Attaches a bearer token to the Authorization header. Blocks Authentication uses the run's delegated token, or the caller's own token if there is none; if neither exists, no token is sent. Client Credential exchanges an IAM credential.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.AUTHENTICATION"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.ATTACHES_A_BEARER_TOKEN"); },
         key: "authenticationType",
         required: false,
         options: [
-          { label: "None", value: "" },
-          { label: "Blocks Authentication", value: "blocksAuthentication" },
-          { label: "Client Credential", value: "clientCredential" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.NONE"); }, value: "" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.BLOCKS_AUTHENTICATION"); }, value: "blocksAuthentication" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.CLIENT_CREDENTIAL"); }, value: "clientCredential" },
         ],
       },
       {
         id: "clientCredential",
         type: "select",
-        label: "Client Credential",
-        info: "Select a client credential for authenticating the outbound request",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.CLIENT_CREDENTIAL"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SELECT_A_CLIENT_CREDENTIAL"); },
         key: "clientId",
         required: false,
         searchable: true,
@@ -108,8 +109,8 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
       {
         id: "haveBody",
         type: "switch",
-        label: "Send Body",
-        info: "Whether the request has a body or not",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SEND_BODY"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.WHETHER_THE_REQUEST_HAS_3"); },
         key: "havebody",
       },
       {
@@ -120,8 +121,8 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
           value: true,
         },
         options: [{ label: "JSON", value: "json" }],
-        label: "Body Content Type",
-        info: "Content-Type to use to send body parameters",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.BODY_CONTENT_TYPE"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.CONTENT_TYPE_TO_USE"); },
         key: "bodyContentType",
       },
       {
@@ -131,8 +132,8 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
           key: "bodyContentType",
           value: "json",
         },
-        label: "Body",
-        info: "JSON body sent with the request. Expressions are resolved for each item: {{$json.field}} reads a field of the current item (same as {{$json.output.field}}). Values inside quotes are escaped automatically. If the body is not valid JSON after that, the step fails.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.BODY"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.JSON_BODY_SENT_WITH"); },
         key: "body",
       },
     ],

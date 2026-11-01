@@ -2,6 +2,8 @@ import React from "react";
 import { NodeGuideTriggerEmailV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { emailService } from "@blocks-workflow/services/email.services";
+import { tStatic } from "@seliseblocks/genesis-os";
+import { renderRichText } from "@/lib/rich-text";
 
 export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
   guide: NodeGuideTriggerEmailV1,
@@ -15,37 +17,15 @@ export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
         type: "callout-accordion-display",
         key: "executionNotes",
         displayValue: () => ({
-          title: "Notes of editor execution",
-          description: React.createElement(
-            "span",
-            null,
-            "If an inbound email's ",
-            React.createElement(
-              "code",
-              {
-                className:
-                  "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
-              },
-              "Subject",
-            ),
-            " exactly matches ",
-            React.createElement(
-              "code",
-              {
-                className:
-                  "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold",
-              },
-              "Test Subject",
-            ),
-            " (case-insensitive), this execution runs in Test mode against the current draft workflow. Other inbound mail uses the published version, but only while the draft still uses the same mailbox.",
-          ),
+          title: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.NOTES_OF_EDITOR_EXECUTION"),
+          description: React.createElement("span", null, ...renderRichText(tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.IF_AN_INBOUND_EMAIL"), [(text: string) => React.createElement("code", { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" }, text), (text: string) => React.createElement("code", { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" }, text)])),
         }),
       },
       {
         id: "mailbox",
         type: "select",
-        label: "Mailbox",
-        info: "Select the mailbox to monitor for incoming emails",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.MAILBOX"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.SELECT_THE_MAILBOX_TO"); },
         key: "mailbox_composite",
         required: true,
         options: (_data, config) => {
@@ -74,8 +54,8 @@ export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
       {
         id: "test-subject",
         type: "text",
-        label: "Test Subject",
-        info: "If an inbound email's Subject exactly matches this value (case-insensitive), this execution runs in Test mode against the current draft workflow instead of the published version.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.TEST_SUBJECT"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.IF_AN_INBOUND_EMAIL_2"); },
         key: "testSubject",
         required: false,
       },

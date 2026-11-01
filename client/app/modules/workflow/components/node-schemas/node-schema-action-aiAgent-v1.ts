@@ -2,6 +2,7 @@ import { API_BASES } from "@/constants/endpoint.constant";
 import { agentService } from "@/modules/workflow/services/agent.service";
 import { NodeGuideActionAiAgentV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
   guide: NodeGuideActionAiAgentV1,
@@ -13,8 +14,15 @@ export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
       {
         id: "agent",
         type: "select",
-        label: "Agent",
-        info: "The AI agent this step sends the message to.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_AI_AGENT_V1.AGENT");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_AI_AGENT_V1.THE_AI_AGENT_THIS",
+          );
+        },
         key: "agent",
         required: true,
         options: (_data, config) => {
@@ -47,11 +55,23 @@ export const NodeSchemaActionAiAgentV1: NodeSchemaDefinition = {
       {
         id: "path",
         type: "textarea",
-        label: "Input",
-        info: "Enter your message to the agent",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_AI_AGENT_V1.INPUT");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_AI_AGENT_V1.ENTER_YOUR_MESSAGE_TO",
+          );
+        },
         key: "input",
         required: true,
-        placeholder: "Enter your message to the agent",
+        get placeholder() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_ACTION_AI_AGENT_V1.ENTER_YOUR_MESSAGE_TO",
+          );
+        },
       },
     ],
     settings: [],

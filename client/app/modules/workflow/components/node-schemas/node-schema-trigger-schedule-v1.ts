@@ -1,14 +1,40 @@
 import { NodeGuideTriggerScheduleV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 // "months" is not offered. A legacy node stored as "months" still loads: its stored cron is kept,
 // and an hour/minute edit regenerates it from that cron (day of month and month step preserved).
 const TRIGGER_INTERVAL_OPTIONS = [
-  { label: "Minutes", value: "minutes" },
-  { label: "Hours", value: "hours" },
-  { label: "Days", value: "days" },
-  { label: "Weeks", value: "weeks" },
-  { label: "Custom (Cron)", value: "custom" },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MINUTES");
+    },
+    value: "minutes",
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.HOURS");
+    },
+    value: "hours",
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.DAYS");
+    },
+    value: "days",
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.WEEKS");
+    },
+    value: "weeks",
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.CUSTOM_CRON");
+    },
+    value: "custom",
+  },
 ];
 
 const HOUR_OPTIONS = [
@@ -39,13 +65,48 @@ const HOUR_OPTIONS = [
 ];
 
 const WEEKDAY_OPTIONS = [
-  { label: "Sunday", value: "0" },
-  { label: "Monday", value: "1" },
-  { label: "Tuesday", value: "2" },
-  { label: "Wednesday", value: "3" },
-  { label: "Thursday", value: "4" },
-  { label: "Friday", value: "5" },
-  { label: "Saturday", value: "6" },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.SUNDAY");
+    },
+    value: "0",
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MONDAY");
+    },
+    value: "1",
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TUESDAY");
+    },
+    value: "2",
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.WEDNESDAY");
+    },
+    value: "3",
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.THURSDAY");
+    },
+    value: "4",
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.FRIDAY");
+    },
+    value: "5",
+  },
+  {
+    get label() {
+      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.SATURDAY");
+    },
+    value: "6",
+  },
 ];
 
 const clamp = (value: number, min: number, max: number): number => {
@@ -257,8 +318,18 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
       {
         id: "triggerInterval",
         type: "select",
-        label: "Trigger Interval",
-        info: "Select how often the scheduler should run.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TRIGGER_INTERVAL",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.SELECT_HOW_OFTEN_THE",
+          );
+        },
         key: "triggerInterval",
         required: true,
         options: TRIGGER_INTERVAL_OPTIONS,
@@ -269,8 +340,18 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
       {
         id: "minutesBetweenTriggers",
         type: "number",
-        label: "Minutes Between Triggers",
-        info: "Must be in range 1-59",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MINUTES_BETWEEN_TRIGGERS",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MUST_BE_IN_RANGE",
+          );
+        },
         key: "minutesBetweenTriggers",
         min: 1,
         max: 59,
@@ -290,8 +371,18 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
       {
         id: "hoursBetweenTriggers",
         type: "number",
-        label: "Hours Between Triggers",
-        info: "Must be in range 1-23. Note: cron stepping fires at clock hours divisible by the interval when it does not divide 24 evenly.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.HOURS_BETWEEN_TRIGGERS",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MUST_BE_IN_RANGE_2",
+          );
+        },
         key: "hoursBetweenTriggers",
         min: 1,
         max: 23,
@@ -311,7 +402,12 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
       {
         id: "cronExpression",
         type: "text",
-        label: "Cron Expression",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.CRON_EXPRESSION",
+          );
+        },
         info: "5-field cron expression (minute-based), e.g. */10 * * * *",
         key: "cronExpression",
         required: true,
@@ -325,8 +421,18 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
       {
         id: "triggerAtWeekdays",
         type: "multiselect",
-        label: "Trigger at Weekdays",
-        info: "Days of the week to trigger on.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TRIGGER_AT_WEEKDAYS",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.DAYS_OF_THE_WEEK",
+          );
+        },
         key: "triggerAtWeekdays",
         required: true,
         options: WEEKDAY_OPTIONS,
@@ -345,8 +451,18 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
       {
         id: "triggerAtHour",
         type: "select",
-        label: "Trigger at Hour (UTC)",
-        info: "Hour of the day, in UTC. Schedules run on UTC time.",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TRIGGER_AT_HOUR_UTC",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.HOUR_OF_THE_DAY",
+          );
+        },
         key: "triggerAtHour",
         required: true,
         options: HOUR_OPTIONS,
@@ -364,8 +480,18 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
       {
         id: "triggerAtMinute",
         type: "number",
-        label: "Trigger at Minute",
-        info: "Must be in range 0-59",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TRIGGER_AT_MINUTE",
+          );
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MUST_BE_IN_RANGE_3",
+          );
+        },
         key: "triggerAtMinute",
         min: 0,
         max: 59,
@@ -384,7 +510,12 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
       {
         id: "output",
         type: "display",
-        label: "Cron Preview",
+        get label() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.CRON_PREVIEW",
+          );
+        },
         key: "output",
         displayValue: (data) => `${String(data.cronExpression || "")}`,
       },

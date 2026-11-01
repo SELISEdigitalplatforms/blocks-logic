@@ -1,19 +1,23 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideActionAiAgentV1 = () => (
-  <GuideContent
-    title="AI Agent action"
-    description="Use this node to send a message into one of the project's AI agents and continue the workflow with the agent result."
-    steps={[
-      "Choose the Agent that should handle the request.",
-      "Write the Input message the agent should receive. You can include expressions from the current item or earlier nodes.",
-      "Test the node with representative input before using the result in later steps.",
-    ]}
-    notes={[
-      "The node calls the agent once for each input item.",
-      "The output is the message returned by the agent chat response. If the agent call fails, the output is empty and no error is raised.",
-      "The agent list is loaded from the current project, so the selected project affects which agents are available.",
-      "The node stores agent identifiers behind the scenes when you select an agent; reselect the agent if you move or recreate it.",
-    ]}
-  />
-);
+export const NodeGuideActionAiAgentV1 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_ACTION_AI_AGENT_V1.AI_AGENT_ACTION")}
+      description={t("NODE_GUIDE_ACTION_AI_AGENT_V1.USE_THIS_NODE_TO")}
+      steps={[
+        t("NODE_GUIDE_ACTION_AI_AGENT_V1.CHOOSE_THE_AGENT_THAT"),
+        t("NODE_GUIDE_ACTION_AI_AGENT_V1.WRITE_THE_INPUT_MESSAGE"),
+        t("NODE_GUIDE_ACTION_AI_AGENT_V1.TEST_THE_NODE_WITH"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_ACTION_AI_AGENT_V1.THE_NODE_CALLS_THE"),
+        t("NODE_GUIDE_ACTION_AI_AGENT_V1.THE_OUTPUT_IS_THE"),
+        t("NODE_GUIDE_ACTION_AI_AGENT_V1.THE_AGENT_LIST_IS"),
+        t("NODE_GUIDE_ACTION_AI_AGENT_V1.THE_NODE_STORES_AGENT"),
+      ]}
+    />
+  );
+};

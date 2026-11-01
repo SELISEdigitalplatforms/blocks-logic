@@ -4,6 +4,7 @@ import {
   type FieldReferenceTarget,
   type PathSegment,
 } from "../utils/field-reference.util";
+import { useT } from "@seliseblocks/genesis-os";
 
 type DraggableReferenceProps = Readonly<{
   segments: PathSegment[];
@@ -44,6 +45,7 @@ export function DraggableProperty({
   isDraggable = true,
   showColon = true,
 }: DraggableReferenceProps) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const expression = getReference({
     segments,
     nodeName,
@@ -68,7 +70,7 @@ export function DraggableProperty({
       }}
       className={`group flex shrink-0 items-center gap-2 rounded px-2 py-1 text-xs touch-none select-none disabled:cursor-default disabled:opacity-100 ${isDraggable ? "cursor-pointer hover:bg-surface-hover" : ""} `}
       style={{ marginLeft: `${depth * 1}rem` }}
-      title={isDraggable ? `Drag to use: ${expression}` : undefined}
+      title={isDraggable ? t("DRAGGABLE_PROPERTY.DRAG_TO_USE", { expression }) : undefined}
     >
       <span
         className={`font-mono flex items-center ${isDraggable ? "cursor-grab active:cursor-grabbing text-high-emphasis" : "text-medium-emphasis"}`}
@@ -96,6 +98,7 @@ export function DraggableArrayIndex({
   isDraggable = true,
   showColon = true,
 }: DraggableReferenceProps) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const expression = getReference({
     segments,
     nodeName,
@@ -118,7 +121,7 @@ export function DraggableArrayIndex({
       }}
       className={`group flex shrink-0 items-center gap-2 rounded px-2 py-1 text-xs touch-none select-none disabled:cursor-default disabled:opacity-100 ${isDraggable ? "cursor-pointer hover:bg-surface-hover" : ""} `}
       style={{ marginLeft: `${depth * 1}rem` }}
-      title={isDraggable ? `Drag to use: ${expression}` : undefined}
+      title={isDraggable ? t("DRAGGABLE_PROPERTY.DRAG_TO_USE", { expression }) : undefined}
     >
       <span
         className={`font-mono flex items-center ${isDraggable ? "cursor-grab active:cursor-grabbing text-high-emphasis" : "text-medium-emphasis"}`}

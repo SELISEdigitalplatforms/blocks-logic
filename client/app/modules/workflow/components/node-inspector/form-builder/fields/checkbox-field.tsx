@@ -3,8 +3,10 @@
 import { Checkbox } from "@/components/ui-kits/checkbox/checkbox";
 import { Label } from "@/components/ui-kits/label/label";
 import { FieldProps } from "../form-field.types";
+import { useT } from "@seliseblocks/genesis-os";
 
 export const CheckboxField = ({ field, value, onChange, readOnly }: FieldProps<boolean>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   return (
     <div className="flex items-center space-x-2">
       <Checkbox
@@ -14,7 +16,7 @@ export const CheckboxField = ({ field, value, onChange, readOnly }: FieldProps<b
         disabled={field.disabled as boolean}
       />
       <Label htmlFor={field.id} className="cursor-pointer font-normal">
-        {field.placeholder || "Enable"}
+        {field.placeholder || t("CHECKBOX_FIELD.ENABLE")}
       </Label>
     </div>
   );

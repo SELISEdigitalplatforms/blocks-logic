@@ -15,16 +15,17 @@ import { cn } from "@/lib/utils";
 import { FieldSchema } from "../form-field.types";
 import { DroppableConditionInput, LIST_OPERATORS, TYPE_OPERATORS, type Condition } from "./conditions-field";
 import { pickerTarget, showsVariablePicker } from "./secret-picker";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 type ConditionType = NonNullable<Condition["type"]>;
 
 /** The condition types the server evaluates, in menu order. Operators come from TYPE_OPERATORS only. */
 export const SWITCH_CONDITION_TYPES: { value: ConditionType; label: string }[] = [
-  { value: "string", label: "String" },
-  { value: "number", label: "Number" },
-  { value: "date_time", label: "Date & Time" },
-  { value: "boolean", label: "Boolean" },
-  { value: "array", label: "Array" },
+  { value: "string", get label() { return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.STRING"); } },
+  { value: "number", get label() { return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.NUMBER"); } },
+  { value: "date_time", get label() { return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.DATE_TIME"); } },
+  { value: "boolean", get label() { return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.BOOLEAN"); } },
+  { value: "array", get label() { return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.ARRAY"); } },
 ];
 
 const typeOf = (condition: Condition): ConditionType => condition.type || "string";
@@ -51,7 +52,7 @@ export const comparePlaceholder = (condition: Condition): string => {
     case "array":
       return "a, b, c";
     default:
-      return "Text to compare";
+      return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.TEXT_TO_COMPARE");
   }
 };
 
@@ -73,7 +74,7 @@ export const literalProblem = (condition: Condition, side: "left" | "right"): st
       // without a single digit is certainly unreadable.
       return /\d/.test(text) ? "" : `Not a ${typeOf(condition) === "number" ? "number" : "date"}, so this condition never matches.`;
     case "boolean":
-      return /^(true|false)$/i.test(text) ? "" : "Not true or false, so this condition never matches.";
+      return /^(true|false)$/i.test(text) ? "" : tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.NOT_TRUE_OR_FALSE");
     default:
       return "";
   }
@@ -82,11 +83,16 @@ export const literalProblem = (condition: Condition, side: "left" | "right"): st
 /** One line for a collapsed rule: its first condition, and how many more there are. */
 export const conditionsSummary = (conditions: Condition[], conditionType: string): string => {
   const first = conditions[0];
-  if (!first || (!first.left && !first.right)) return "No conditions yet";
+  if (!first || (!first.left && !first.right)) return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.NO_CONDITIONS_YET");
   const right = isUnaryOperator(first.operator) ? "" : ` ${first.right || "…"}`;
   const text = `${first.left || "…"} ${operatorLabel(first).toLowerCase()}${right}`;
   const more = conditions.length - 1;
-  return more > 0 ? `${text} ${conditionType === "or" ? "or" : "and"} ${more} more` : text;
+  if (more <= 0) return text;
+  return tStatic(
+    "logic.workflow.nodes.inspector",
+    conditionType === "or" ? "SWITCH_CONDITION_LIST.SUMMARY_OR_MORE" : "SWITCH_CONDITION_LIST.SUMMARY_AND_MORE",
+    { text, more },
+  );
 };
 
 type Props = {
@@ -106,6 +112,7 @@ type Props = {
  * Saves the same { left, operator, right, type } as the If node.
  */
 export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType, onChange, onConditionTypeChange, readOnly, locked }: Props) => {
+  const { t: tr } = useT("logic.workflow.nodes.inspector");
   const useOr = conditionType === "or";
   const picker = showsVariablePicker(field, readOnly);
 
@@ -125,8 +132,8 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">Conditions</span>
-        <div role="group" aria-label="Match" className="inline-flex overflow-hidden rounded-md border text-xs">
+        <span className="text-sm font-medium">{tr("SWITCH_CONDITION_LIST.CONDITIONS")}</span>
+        <div role="group" aria-label={tr("SWITCH_CONDITION_LIST.MATCH")} className="inline-flex overflow-hidden rounded-md border text-xs">
           {(["all", "or"] as const).map((value) => {
             const active = value === "or" ? useOr : !useOr;
             return (
@@ -164,9 +171,9 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
               <div className="px-1">
                 <DroppableConditionInput
                   id={`${idPrefix}.${index}.left`}
-                  ariaLabel={`Condition ${index + 1} value to check`}
+                  ariaLabel={tr("SWITCH_CONDITION_LIST.CONDITION_VALUE_TO_CHECK", { value: index + 1 })}
                   value={condition.left || ""}
-                  placeholder="Value to check, e.g. {{ $json.status }}"
+                  placeholder={tr("SWITCH_CONDITION_LIST.VALUE_TO_CHECK_PLACEHOLDER")}
                   onChange={(left) => update(index, { left })}
                   readOnly={readOnly}
                   disabled={locked}
@@ -179,7 +186,7 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
                         type="button"
                         variant="ghost"
                         size="icon"
-                        aria-label={`Remove condition ${index + 1}`}
+                        aria-label={tr("SWITCH_CONDITION_LIST.REMOVE_CONDITION", { value: index + 1 })}
                         disabled={locked}
                         onClick={() => onChange(conditions.filter((_, i) => i !== index))}
                         className="h-7 w-7 opacity-0 hover:text-destructive group-focus-within:opacity-100 group-hover:opacity-100"
@@ -197,7 +204,7 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
                 <DropdownMenuTrigger asChild disabled={locked}>
                   <button
                     type="button"
-                    aria-label={`Condition ${index + 1} type and operator`}
+                    aria-label={tr("SWITCH_CONDITION_LIST.CONDITION_TYPE_AND_OPERATOR", { value: index + 1 })}
                     className="flex h-9 w-full items-center gap-2 border-y bg-muted/40 px-3 text-left text-sm disabled:cursor-not-allowed"
                   >
                     <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -233,7 +240,7 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
                 <div className="px-1">
                   <DroppableConditionInput
                     id={`${idPrefix}.${index}.right`}
-                    ariaLabel={`Condition ${index + 1} value to compare with`}
+                    ariaLabel={tr("SWITCH_CONDITION_LIST.CONDITION_VALUE_TO_COMPARE", { value: index + 1 })}
                     value={condition.right || ""}
                     placeholder={comparePlaceholder(condition)}
                     onChange={(right) => update(index, { right })}
@@ -259,7 +266,7 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
         onClick={() => onChange([...conditions, newSwitchCondition()])}
         className="border border-dashed text-primary"
       >
-        <Plus className="mr-1 h-4 w-4" /> Add condition
+        <Plus className="mr-1 h-4 w-4" /> {tr("SWITCH_CONDITION_LIST.ADD_CONDITION")}
       </Button>
     </div>
   );

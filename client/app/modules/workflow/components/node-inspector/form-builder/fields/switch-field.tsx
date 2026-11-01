@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { Switch } from "@/components/ui-kits/switch/switch";
 import { FieldProps } from "../form-field.types";
 import { useLockedValue } from "../utils/use-locked-value";
+import { useT } from "@seliseblocks/genesis-os";
 
 export const SwitchField = ({
   field,
@@ -12,6 +13,7 @@ export const SwitchField = ({
   data,
   config,
 }: FieldProps<boolean>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   // `locked` resolving to true forces the switch on, e.g. when a proxy's config always sends rows.
   const { locked } = useLockedValue<boolean>(field, data, config);
   const forced = locked === true;
@@ -29,7 +31,7 @@ export const SwitchField = ({
       checked={forced || (value as boolean)}
       onCheckedChange={readOnly || forced ? undefined : (checked) => onChange(checked)}
       disabled={(field.disabled as boolean) || forced}
-      title={forced ? "Always on" : undefined}
+      title={forced ? t("SWITCH_FIELD.ALWAYS_ON") : undefined}
     />
   );
 };

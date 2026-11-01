@@ -5,6 +5,8 @@ import { IBlocksEventWorkflowOption } from "@/modules/event-triggers/types/event
 import { ManageBlocksEventsLink } from "@/modules/event-triggers/components/manage-blocks-events-link/manage-blocks-events-link";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { ReadonlyDetails, SelectOption } from "../node-inspector/form-builder/form-field.types";
+import { tStatic } from "@seliseblocks/genesis-os";
+import { renderRichText } from "@/lib/rich-text";
 
 export const DISABLED_EVENT_WARNING =
   "This event is disabled for workflows. Enable it with Manage events. The published workflow will not run until then.";
@@ -44,7 +46,7 @@ export const buildEventOptions = (
     description: event.description,
   }));
   if (savedEventName && !events.some((event) => event.eventName === savedEventName)) {
-    options.unshift({ value: savedEventName, label: `${savedEventName} (disabled for workflows)` });
+    options.unshift({ value: savedEventName, label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.DISABLED_FOR_WORKFLOWS", { savedEventName }) });
   }
   return options;
 };
@@ -76,13 +78,12 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
         type: "callout-accordion-display",
         key: "executionNotes",
         displayValue: () => ({
-          title: "Notes",
+          title: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.NOTES"),
           description: React.createElement(
             "span",
             null,
-            "Runs the ",
-            React.createElement("code", { className: codeClass }, "published"),
-            " workflow only. Events are delivered once per published workflow that uses them. ",
+            ...renderRichText(tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.RUNS_THE"), [(text: string) => React.createElement("code", { className: codeClass }, text)]),
+            " ",
             React.createElement(ManageBlocksEventsLink),
           ),
         }),
@@ -90,12 +91,12 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
       {
         id: "event",
         type: "select",
-        label: "Event",
-        info: "The platform event that starts this workflow. Only events enabled for workflows are listed.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.EVENT"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.THE_PLATFORM_EVENT_THAT"); },
         key: "eventName",
         required: true,
         searchable: true,
-        placeholder: "Select an event",
+        get placeholder() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.SELECT_AN_EVENT"); },
         // The list can change in the Event Triggers tab; returning here picks the change up.
         refetchOnWindowFocus: true,
         options: (data) => loadWorkflowEvents().then((events) => buildEventOptions(events, eventNameOf(data))),
@@ -112,8 +113,8 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
       {
         id: "output",
         type: "display",
-        label: "Output",
-        info: "Structure of the trigger output data",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.OUTPUT"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.STRUCTURE_OF_THE_TRIGGER"); },
         key: "output",
         displayValue: (data) => `\`\`\`json
 {

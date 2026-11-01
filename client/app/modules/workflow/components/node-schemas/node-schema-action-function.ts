@@ -3,6 +3,8 @@ import { functionService } from "@blocks-functions/services/function.service";
 import { NodeGuideActionFunction } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { SelectOption } from "../node-inspector/form-builder/form-field.types";
+import { tStatic } from "@seliseblocks/genesis-os";
+import { renderRichText } from "@/lib/rich-text";
 
 /** One page is enough for a picker; the list is sorted by name so it is scannable. */
 const FUNCTION_PICKER_PAGE_SIZE = 200;
@@ -41,7 +43,7 @@ const loadFunctionOptions = async (): Promise<SelectOption[]> => {
 
     return (response.data ?? []).map((fn) => ({
       value: fn.id,
-      label: fn.workflowEnabled ? fn.name : `${fn.name} — workflow trigger off`,
+      label: fn.workflowEnabled ? fn.name : tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.WORKFLOW_TRIGGER_OFF", { name: fn.name }),
       disabled: !fn.workflowEnabled,
     }));
   } catch {
@@ -59,11 +61,10 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
       {
         id: "functionId",
         type: "select",
-        label: "Function",
-        info:
-          "The deployed function this step runs. Only Live functions are listed, and not always all of them. One whose workflow trigger is turned off is shown greyed out until that trigger is enabled in the function's settings.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.FUNCTION"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.THE_DEPLOYED_FUNCTION_THIS"); },
         key: "functionId",
-        placeholder: "Select a deployed function",
+        get placeholder() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.SELECT_A_DEPLOYED_FUNCTION"); },
         required: true,
         searchable: true,
         options: loadFunctionOptions,
@@ -71,13 +72,12 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
       {
         id: "inputMode",
         type: "select",
-        label: "Input",
-        info:
-          "What the function receives as its input. \"Previous step's output\" forwards the incoming item as-is; \"Custom JSON\" lets you compose the payload, pulling values from earlier steps.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.INPUT"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.WHAT_THE_FUNCTION_RECEIVES"); },
         key: "inputMode",
         options: [
-          { label: "Previous step's output", value: "item" },
-          { label: "Custom JSON", value: "expression" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.PREVIOUS_STEP_S_OUTPUT"); }, value: "item" },
+          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.CUSTOM_JSON"); }, value: "expression" },
         ],
       },
       {
@@ -89,29 +89,15 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
         transient: true,
         dependsOn: { key: "inputMode", value: "expression" },
         displayValue: () => ({
-          title: "How to build the input",
-          description: React.createElement(
-            "span",
-            null,
-            "Write the JSON the function should receive. Insert values from earlier steps with ",
-            code("{{$json.field}}"),
-            " for a field of the incoming item (same as ",
-            code("{{$json.output.field}}"),
-            "), ",
-            code('{{$node["Step name"].json.output.field}}'),
-            " for any earlier step, or ",
-            code("{{$context.Input}}"),
-            " for the trigger data. Without quotes a value keeps its type: text, number, true/false or object. Inside quotes (",
-            code('"Hi {{$json.name}}"'),
-            ") it becomes part of the text and is escaped automatically. If the input is not valid JSON after the values are filled in, the step fails. When testing this step on its own with nothing connected, the incoming item is empty.",
-          ),
+          title: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.HOW_TO_BUILD_THE"),
+          description: React.createElement("span", null, ...renderRichText(tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.WRITE_THE_JSON_THE"), [code, code, code, code, code])),
         }),
       },
       {
         id: "inputExpression",
         type: "json-code-editor",
-        label: "Input JSON",
-        info: "The payload handed to the function as its input. Placeholders in {{ }} are resolved when the step runs; values inside quotes are escaped automatically. Must be valid JSON after that, or the step fails.",
+        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.INPUT_JSON"); },
+        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.THE_PAYLOAD_HANDED_TO"); },
         key: "inputExpression",
         placeholder: INPUT_JSON_PLACEHOLDER,
         height: 168,

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui-kits/collapsible/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/popover/popover";
 import { buildEmptyFieldMapping } from "@blocks-workflow/utils/resolve-schema-fields";
+import { useT } from "@seliseblocks/genesis-os";
 
 // ─── Flat dot-path helpers ────────────────────────────────────────────────────
 
@@ -137,6 +138,7 @@ function SchemaFieldRow({
   readOnly,
   disabled,
 }: SchemaFieldRowProps) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const [open, setOpen] = useState(true);
   const isEntity = !!(schemaField.fields && schemaField.fields.length > 0);
 
@@ -237,8 +239,7 @@ function SchemaFieldRow({
                   onClick={() => onAddArrayItem(pathPrefix, schemaField)}
                 >
                   <Plus className="mr-1 h-4 w-4" />
-                  Add {schemaField.name}
-                </Button>
+                  {t("SCHEMA_FIELDS_FIELD.ADD", { name: schemaField.name })}</Button>
               )}
             </div>
           </CollapsibleContent>
@@ -359,6 +360,7 @@ function AddFieldPopover({
   onRestore: (prefix: string, schema: ResolvedSchemaField) => void;
   disabled?: boolean;
 }) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const [popoverOpen, setPopoverOpen] = useState(false);
 
   if (disabled || missingChildren.length === 0) return null;
@@ -371,7 +373,7 @@ function AddFieldPopover({
           className="h-8 w-full rounded border border-dashed text-xs text-muted-foreground hover:text-primary"
         >
           <Plus className="mr-1 h-3.5 w-3.5" />
-          Add field ({missingChildren.length} available)
+          {t("SCHEMA_FIELDS_FIELD.ADD_FIELD_AVAILABLE", { length: missingChildren.length })}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-1" align="start">
@@ -409,6 +411,7 @@ export const SchemaFieldsField = ({
   data,
   config,
 }: FieldProps<Record<string, unknown>>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const schemaFields = useMemo(
     () => (data.schemaFields ?? []) as ResolvedSchemaField[],
     [data.schemaFields],
@@ -447,7 +450,7 @@ export const SchemaFieldsField = ({
   if (!schemaFields.length) {
     return (
       <div className="flex h-32 w-full items-center justify-center rounded border border-dashed">
-        <p className="text-sm text-muted-foreground">Select a collection to auto-populate fields</p>
+        <p className="text-sm text-muted-foreground">{t("SCHEMA_FIELDS_FIELD.SELECT_A_COLLECTION_TO")}</p>
       </div>
     );
   }

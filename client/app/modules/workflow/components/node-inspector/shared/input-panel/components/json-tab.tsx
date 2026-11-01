@@ -6,6 +6,7 @@ import {
   type FieldReferenceTarget,
   type PathSegment,
 } from "../utils/field-reference.util";
+import { useT } from "@seliseblocks/genesis-os";
 
 type RecursiveJsonViewerProps = Readonly<{
   data: unknown;
@@ -46,6 +47,7 @@ function RecursiveJsonViewer({
   target,
   isDraggable = true,
 }: RecursiveJsonViewerProps) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const referenceProps = { nodeName, isDirectParent, itemIndex, itemIsObject, target };
 
   if (typeof data !== "object" || data === null) {
@@ -55,7 +57,7 @@ function RecursiveJsonViewer({
           <DraggableProperty
             segments={[]}
             {...referenceProps}
-            label="(value)"
+            label={t("JSON_TAB.VALUE")}
             isDraggable={isDraggable}
           />
           <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] py-1.5 text-green-600 dark:text-green-400">{formatCellValue(data)}</span>
@@ -132,8 +134,9 @@ export function JsonTab({
   target,
   isDraggable = true,
 }: JsonTabProps) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   if (rows.length === 0) {
-    return <p className="text-xs text-low-emphasis">No runtime input data available.</p>;
+    return <p className="text-xs text-low-emphasis">{t("JSON_TAB.NO_RUNTIME_INPUT_DATA")}</p>;
   }
 
   const json = JSON.stringify(rows, null, 2);
@@ -141,11 +144,11 @@ export function JsonTab({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-end">
-        <CopyValueButton value={json} label="Copy input JSON" />
+        <CopyValueButton value={json} label={t("JSON_TAB.COPY_INPUT_JSON")} />
       </div>
       {rows.map((row, index) => (
         <div key={`json-row-${getRowKey(row)}`} className="rounded border border-border/60 p-2">
-          <p className="mb-1 text-xs font-semibold text-medium-emphasis">item {index + 1}:</p>
+          <p className="mb-1 text-xs font-semibold text-medium-emphasis">{t("JSON_TAB.ITEM", { value: index + 1 })}</p>
           <RecursiveJsonViewer
             data={row}
             nodeName={nodeName}

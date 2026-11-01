@@ -1,5 +1,6 @@
 import { NodeGuideTransformCodeV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
   guide: NodeGuideTransformCodeV1,
@@ -11,30 +12,76 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
       {
         id: "mode",
         type: "select",
-        label: "Mode",
-        info: "Run the script once for all items or once per item.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_CODE_V1.MODE");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_CODE_V1.RUN_THE_SCRIPT_ONCE",
+          );
+        },
         key: "mode",
         options: [
-          { label: "Run Once for All Items", value: "all" },
-          { label: "Run Once for Each Item", value: "each" },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRANSFORM_CODE_V1.RUN_ONCE_FOR_ALL",
+              );
+            },
+            value: "all",
+          },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRANSFORM_CODE_V1.RUN_ONCE_FOR_EACH",
+              );
+            },
+            value: "each",
+          },
         ],
       },
       {
         id: "language",
         type: "select",
-        label: "Language",
-        info: "Select the programming language for the script.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_CODE_V1.LANGUAGE");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_CODE_V1.SELECT_THE_PROGRAMMING_LANGUAGE",
+          );
+        },
         key: "language",
         options: [
           { label: "JavaScript", value: "js" },
-          { label: "Python", value: "py", disabled: true },
+          {
+            get label() {
+              return tStatic(
+                "logic.workflow.nodes.schemas",
+                "NODE_SCHEMA_TRANSFORM_CODE_V1.PYTHON",
+              );
+            },
+            value: "py",
+            disabled: true,
+          },
         ],
       },
       {
         id: "script",
         type: "code-editor",
-        label: "Script",
-        info: "Write your transformation script here. Use the provided variables to access input data.",
+        get label() {
+          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_CODE_V1.SCRIPT");
+        },
+        get info() {
+          return tStatic(
+            "logic.workflow.nodes.schemas",
+            "NODE_SCHEMA_TRANSFORM_CODE_V1.WRITE_YOUR_TRANSFORMATION_SCRIPT",
+          );
+        },
         key: "script",
         language: "javascript",
         height: 280,

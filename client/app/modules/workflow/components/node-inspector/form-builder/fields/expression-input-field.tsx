@@ -8,6 +8,7 @@ import { EditorNode } from "@blocks-workflow/models/node.model";
 import { cn } from "@/lib/utils";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
 import { pickerTarget, showsVariablePicker } from "./secret-picker";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface AncestorNode {
   id: string;
@@ -95,6 +96,7 @@ export const ExpressionInputField = ({
   /** Accessible-name suffix for the picker, e.g. "row 2 value". */
   pickerLabel?: string;
 }) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -223,7 +225,7 @@ export const ExpressionInputField = ({
           })
           .map((node) => ({
             type: "handle",
-            label: `nodes.${node.name}.${node.handle}`, // What user sees
+            label: t("EXPRESSION_INPUT_FIELD.NODES", { name: node.name, handle: node.handle }), // What user sees
             value: `node_${node.id}_${node.handle}`, // What we store
             description: `${node.name} (${node.type})`,
           }));
@@ -237,9 +239,9 @@ export const ExpressionInputField = ({
           return [
             {
               type: "property",
-              label: `nodes.${handleName}.keys`, // Display
+              label: t("EXPRESSION_INPUT_FIELD.NODES_KEYS", { handleName: handleName ?? "" }), // Display
               value: `node_${node.id}_${handleName}.keys`, // Storage
-              description: "Webhook keys",
+              description: t("EXPRESSION_INPUT_FIELD.WEBHOOK_KEYS"),
             },
           ];
         }

@@ -10,6 +10,7 @@ import {
 import { FieldProps, SelectOption } from "../form-field.types";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { Loader2 } from "lucide-react";
+import { useT } from "@seliseblocks/genesis-os";
 
 /** `refetchOnWindowFocus` reloads at most this often. */
 export const REFETCH_ON_FOCUS_THROTTLE_MS = 2000;
@@ -31,6 +32,7 @@ export const SelectField = ({
   data,
   config,
 }: FieldProps<string>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const isStaticOptions = Array.isArray(field.options);
   const staticOptions = isStaticOptions ? (field.options as SelectOption[]) : [];
   const [asyncOptions, setAsyncOptions] = useState<SelectOption[]>([]);
@@ -125,7 +127,7 @@ export const SelectField = ({
     >
       <SelectTrigger id={field.id}>
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden [&>span]:truncate">
-          <SelectValue placeholder={field.placeholder || "Select an option"} />
+          <SelectValue placeholder={field.placeholder || t("SELECT_FIELD.SELECT_AN_OPTION")} />
           {isLoading && <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-50" />}
         </div>
       </SelectTrigger>
