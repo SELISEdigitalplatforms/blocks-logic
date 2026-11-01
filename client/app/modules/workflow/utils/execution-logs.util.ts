@@ -2,12 +2,14 @@ import type { ExecutedNode } from "../models/workflow.model";
 import type { ExecutionLogEntry, ExecutionLogLevel } from "../types/workflow.service.type";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_MODULE = "logic.workflow";
+
 export const EXECUTION_LOG_LEVELS: ExecutionLogLevel[] = ["Information", "Warning", "Error"];
 
 export const EXECUTION_LOG_LEVEL_LABELS: Record<ExecutionLogLevel, string> = {
-  get Information() { return tStatic("logic.workflow", "EXECUTION_LOGS_UTIL.INFO"); },
-  get Warning() { return tStatic("logic.workflow", "EXECUTION_LOGS_UTIL.WARNING"); },
-  get Error() { return tStatic("logic.workflow", "common:ERROR"); },
+  get Information() { return tStatic(LOGIC_WORKFLOW_MODULE, "EXECUTION_LOGS_UTIL.INFO"); },
+  get Warning() { return tStatic(LOGIC_WORKFLOW_MODULE, "EXECUTION_LOGS_UTIL.WARNING"); },
+  get Error() { return tStatic(LOGIC_WORKFLOW_MODULE, "common:ERROR"); },
 };
 
 /** Node filter values: every line, only execution-level lines, one node (all runs), or one run of a node. */
@@ -101,8 +103,8 @@ export const buildNodeFilterOptions = (
   nodeExecutions.forEach((ne) => add(ne.nodeId, ne.nodeName, ne.runIndex));
 
   const options: NodeFilterOption[] = [
-    { value: NODE_FILTER_ALL, label: tStatic("logic.workflow", "EXECUTION_LOGS_UTIL.ALL_NODES") },
-    { value: NODE_FILTER_WORKFLOW, label: tStatic("logic.workflow", "EXECUTION_LOGS_UTIL.WORKFLOW_ONLY") },
+    { value: NODE_FILTER_ALL, label: tStatic(LOGIC_WORKFLOW_MODULE, "EXECUTION_LOGS_UTIL.ALL_NODES") },
+    { value: NODE_FILTER_WORKFLOW, label: tStatic(LOGIC_WORKFLOW_MODULE, "EXECUTION_LOGS_UTIL.WORKFLOW_ONLY") },
   ];
   order.forEach((nodeId) => {
     const name = names.get(nodeId)!;
@@ -110,7 +112,7 @@ export const buildNodeFilterOptions = (
     const nodeRuns = [...runs.get(nodeId)!].sort((a, b) => a - b);
     if (nodeRuns.length > 1) {
       nodeRuns.forEach((run) =>
-        options.push({ value: nodeFilterValue(nodeId, run), label: tStatic("logic.workflow", "EXECUTION_LOGS_UTIL.RUN", { name, run }) }),
+        options.push({ value: nodeFilterValue(nodeId, run), label: tStatic(LOGIC_WORKFLOW_MODULE, "EXECUTION_LOGS_UTIL.RUN", { name, run }) }),
       );
     }
   });

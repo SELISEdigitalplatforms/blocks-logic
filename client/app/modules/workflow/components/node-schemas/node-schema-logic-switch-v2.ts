@@ -8,6 +8,8 @@ import {
 } from "../../utils/switch-handles";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 const rulesOf = (data: Record<string, unknown>): SwitchRule[] =>
   Array.isArray(data.rules) ? (data.rules as SwitchRule[]).filter(Boolean) : [];
 
@@ -24,8 +26,8 @@ export const NodeSchemaLogicSwitchV2: NodeSchemaDefinition = {
       {
         id: "rules",
         type: "switch-rules",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_SWITCH_V2.ROUTING_RULES"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_SWITCH_V2.RULES_ARE_CHECKED_FROM"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_SWITCH_V2.ROUTING_RULES"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_SWITCH_V2.RULES_ARE_CHECKED_FROM"); },
         key: "rules",
         // A deleted rule that was the fallback target resets the fallback to None.
         onChange: (value, data) => {
@@ -40,23 +42,23 @@ export const NodeSchemaLogicSwitchV2: NodeSchemaDefinition = {
       {
         id: "options.fallbackOutput",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_SWITCH_V2.FALLBACK_OUTPUT"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_SWITCH_V2.WHERE_ITEMS_THAT_MATCH"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_SWITCH_V2.FALLBACK_OUTPUT"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_SWITCH_V2.WHERE_ITEMS_THAT_MATCH"); },
         key: "options.fallbackOutput",
         defaultValue: "none",
         optionsDependencies: ["rules"],
         options: async (data) => [
-          { value: "none", label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_SWITCH_V2.NONE_DROP_THE_ITEM") },
-          { value: "extra", label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_SWITCH_V2.EXTRA_OUTPUT") },
-          ...rulesOf(data).map((rule, index) => ({ value: rule.handleKey, label: rule.handleLabel || tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_SWITCH_V2.OUTPUT", { index }) })),
+          { value: "none", label: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_SWITCH_V2.NONE_DROP_THE_ITEM") },
+          { value: "extra", label: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_SWITCH_V2.EXTRA_OUTPUT") },
+          ...rulesOf(data).map((rule, index) => ({ value: rule.handleKey, label: rule.handleLabel || tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_SWITCH_V2.OUTPUT", { index }) })),
         ],
       },
       {
         id: "options.renameFallbackOutput",
         type: "text",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_SWITCH_V2.RENAME_FALLBACK_OUTPUT"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_SWITCH_V2.RENAME_FALLBACK_OUTPUT"); },
         key: "options.renameFallbackOutput",
-        get placeholder() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_SWITCH_V2.FALLBACK"); },
+        get placeholder() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_SWITCH_V2.FALLBACK"); },
         hidden: (data) => optionsOf(data).fallbackOutput !== "extra",
       },
     ],

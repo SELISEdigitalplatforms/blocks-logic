@@ -11,6 +11,8 @@ import { Proxy, ProxyMethod } from "@/modules/proxy/types";
 import { resolveEffectiveRoute, trimRoutePath } from "@/modules/proxy/utils";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 /**
  * Separator for the composite picker values. Both dropdowns carry more than one field, and `:::`
  * matches the existing client-credential composite in the HTTP Request schema.
@@ -104,13 +106,13 @@ const ACCESS_OPTIONS = [
   {
     value: "blocksToken",
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.BLOCKS_TOKEN");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.BLOCKS_TOKEN");
     },
   },
   {
     value: "public",
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.PUBLIC");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.PUBLIC");
     },
   },
 ];
@@ -119,12 +121,12 @@ const ruleLabel = (kind: "roles" | "permissions", mode: string) => {
   const all = mode === "all";
   if (kind === "roles") {
     return tStatic(
-      "logic.workflow.nodes.schemas",
+      LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
       all ? "NODE_SCHEMA_ACTION_PROXY.ROLES_ALL" : "NODE_SCHEMA_ACTION_PROXY.ROLES_ANY",
     );
   }
   return tStatic(
-    "logic.workflow.nodes.schemas",
+    LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
     all ? "NODE_SCHEMA_ACTION_PROXY.PERMISSIONS_ALL" : "NODE_SCHEMA_ACTION_PROXY.PERMISSIONS_ANY",
   );
 };
@@ -143,7 +145,7 @@ export const buildProxyRouteDetails = (
     return {
       fields: [],
       message: tStatic(
-        "logic.workflow.nodes.schemas",
+        LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
         "NODE_SCHEMA_ACTION_PROXY.THIS_ENDPOINT_NO_LONGER",
       ),
     };
@@ -156,7 +158,7 @@ export const buildProxyRouteDetails = (
       {
         id: "method",
         type: "text",
-        label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.METHOD"),
+        label: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.METHOD"),
       },
       method,
     ),
@@ -164,9 +166,9 @@ export const buildProxyRouteDetails = (
       {
         id: "upstream",
         type: "text",
-        label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.FORWARDS_TO"),
+        label: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.FORWARDS_TO"),
         info: tStatic(
-          "logic.workflow.nodes.schemas",
+          LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
           "NODE_SCHEMA_ACTION_PROXY.THE_UPSTREAM_URL_THIS",
         ),
         copyable: true,
@@ -177,8 +179,8 @@ export const buildProxyRouteDetails = (
       {
         id: "access",
         type: "radio",
-        label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.AUTHENTICATION"),
-        info: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.WHO_MAY_CALL_THIS"),
+        label: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.AUTHENTICATION"),
+        info: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.WHO_MAY_CALL_THIS"),
         options: ACCESS_OPTIONS,
       },
       access?.kind ?? "blocksToken",
@@ -207,21 +209,21 @@ export const buildProxyRouteDetails = (
             id: "combine",
             type: "radio",
             label: tStatic(
-              "logic.workflow.nodes.schemas",
+              LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
               "NODE_SCHEMA_ACTION_PROXY.ROLES_AND_PERMISSIONS",
             ),
             options: [
               {
                 value: "or",
                 label: tStatic(
-                  "logic.workflow.nodes.schemas",
+                  LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                   "NODE_SCHEMA_ACTION_PROXY.EITHER_LIST_IS_ENOUGH",
                 ),
               },
               {
                 value: "and",
                 label: tStatic(
-                  "logic.workflow.nodes.schemas",
+                  LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                   "NODE_SCHEMA_ACTION_PROXY.BOTH_LISTS_MUST_MATCH",
                 ),
               },
@@ -238,13 +240,13 @@ export const buildProxyRouteDetails = (
       {
         id: "headers",
         type: "key-value-pairs",
-        label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.HEADERS_ADDED"),
+        label: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.HEADERS_ADDED"),
         info: tStatic(
-          "logic.workflow.nodes.schemas",
+          LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
           "NODE_SCHEMA_ACTION_PROXY.SENT_WITH_EVERY_CALL",
         ),
-        keyLabel: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.HEADER"),
-        valueLabel: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.VALUE"),
+        keyLabel: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.HEADER"),
+        valueLabel: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.VALUE"),
       },
       toRecord(effective.headers),
     ),
@@ -257,11 +259,11 @@ export const buildProxyRouteDetails = (
         id: "responseSelect",
         type: "switch",
         label: tStatic(
-          "logic.workflow.nodes.schemas",
+          LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
           "NODE_SCHEMA_ACTION_PROXY.RETURN_SELECTED_FIELDS_ONLY",
         ),
         info: tStatic(
-          "logic.workflow.nodes.schemas",
+          LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
           "NODE_SCHEMA_ACTION_PROXY.OFF_THE_WHOLE_UPSTREAM",
         ),
       },
@@ -275,11 +277,11 @@ export const buildProxyRouteDetails = (
           id: "responseInclude",
           type: "path-list",
           label: tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.RESPONSE_FIELDS",
           ),
           info: tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.THE_ONLY_FIELDS_RETURNED",
           ),
         },
@@ -302,11 +304,11 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         id: "proxy",
         type: "select",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.PROXY");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.PROXY");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.THE_PROXY_TO_CALL",
           );
         },
@@ -341,11 +343,11 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         id: "route",
         type: "select",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.ENDPOINT");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.ENDPOINT");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.THE_ENDPOINT_TO_CALL",
           );
         },
@@ -394,13 +396,13 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         type: "readonly-details",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.ENDPOINT_CONFIGURATION",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.WHAT_THE_PROXY_ADDS",
           );
         },
@@ -421,7 +423,7 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
             return {
               fields: [],
               message: tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_ACTION_PROXY.THIS_PROXY_NO_LONGER",
               ),
             };
@@ -437,23 +439,23 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         type: "fixed-key-value-pairs",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.PATH_PARAMETERS",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.VALUES_FOR_THE_NAME",
           );
         },
         key: "pathParams",
         defaultValue: {},
         get keyLabel() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.PARAMETER");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.PARAMETER");
         },
         get valueLabel() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.VALUE");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.VALUE");
         },
         dependsOn: {
           key: "hasPathParams",
@@ -468,13 +470,13 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         type: "switch",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.SEND_QUERY_PARAMETERS",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.WHETHER_THE_CALL_CARRIES",
           );
         },
@@ -496,13 +498,13 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         },
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.QUERY_PARAMETERS",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.SENT_WITH_THE_CALL",
           );
         },
@@ -515,11 +517,11 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
         id: "haveBody",
         type: "switch",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.SEND_BODY");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.SEND_BODY");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.WHETHER_THE_REQUEST_CARRIES",
           );
         },
@@ -540,11 +542,11 @@ export const NodeSchemaActionProxy: NodeSchemaDefinition = {
           value: true,
         },
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_PROXY.BODY");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_PROXY.BODY");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_ACTION_PROXY.JSON_BODY_FORWARDED_TO",
           );
         },

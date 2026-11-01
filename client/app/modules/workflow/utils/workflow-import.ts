@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from "uuid";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_MODULE = "logic.workflow";
+
 export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
 export type ImportErrorCode =
@@ -14,14 +16,14 @@ export type ImportErrorCode =
   | "UPLOAD_FAILED";
 
 export const IMPORT_ERROR_MESSAGES: Record<ImportErrorCode, string> = {
-  get IMPORT_TOO_LARGE() { return tStatic("logic.workflow", "WORKFLOW_IMPORT.THIS_FILE_IS_TOO"); },
-  get IMPORT_NOT_JSON() { return tStatic("logic.workflow", "WORKFLOW_IMPORT.THIS_FILE_IS_NOT"); },
-  get IMPORT_BAD_SHAPE() { return tStatic("logic.workflow", "WORKFLOW_IMPORT.THIS_FILE_IS_NOT_2"); },
-  get CREATE_FAILED() { return tStatic("logic.workflow", "WORKFLOW_IMPORT.COULD_NOT_CREATE_THE"); },
-  get UPDATE_FAILED() { return tStatic("logic.workflow", "WORKFLOW_IMPORT.THE_WORKFLOW_WAS_CREATED"); },
-  get EXPORT_FAILED() { return tStatic("logic.workflow", "WORKFLOW_IMPORT.COULD_NOT_EXPORT_THIS"); },
-  get ENQUEUE_FAILED() { return tStatic("logic.workflow", "WORKFLOW_IMPORT.COULD_NOT_START_THE"); },
-  get UPLOAD_FAILED() { return tStatic("logic.workflow", "WORKFLOW_IMPORT.COULD_NOT_UPLOAD_THE"); },
+  get IMPORT_TOO_LARGE() { return tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.THIS_FILE_IS_TOO"); },
+  get IMPORT_NOT_JSON() { return tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.THIS_FILE_IS_NOT"); },
+  get IMPORT_BAD_SHAPE() { return tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.THIS_FILE_IS_NOT_2"); },
+  get CREATE_FAILED() { return tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.COULD_NOT_CREATE_THE"); },
+  get UPDATE_FAILED() { return tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.THE_WORKFLOW_WAS_CREATED"); },
+  get EXPORT_FAILED() { return tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.COULD_NOT_EXPORT_THIS"); },
+  get ENQUEUE_FAILED() { return tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.COULD_NOT_START_THE"); },
+  get UPLOAD_FAILED() { return tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.COULD_NOT_UPLOAD_THE"); },
 };
 
 export const IMPORT_SUCCESS_MESSAGE = "Workflow imported.";
@@ -33,7 +35,7 @@ export const IMPORT_SLOW_MESSAGE =
 
 export const importSuccessMessage = (issues: number): string =>
   issues > 0
-    ? tStatic("logic.workflow", "WORKFLOW_IMPORT.WORKFLOW_IMPORTED_ITEM_S", { issues })
+    ? tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.WORKFLOW_IMPORTED_ITEM_S", { issues })
     : IMPORT_SUCCESS_MESSAGE;
 
 export interface WorkflowImportRoot {

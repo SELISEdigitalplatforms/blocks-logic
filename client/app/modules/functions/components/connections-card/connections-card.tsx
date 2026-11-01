@@ -29,6 +29,8 @@ import {
 import { renderRichText } from "@/lib/rich-text";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 type ConnectionsCardProps = {
   indexJs: string;
   packageJson: string;
@@ -54,7 +56,7 @@ export const ConnectionsCard = ({
   onEditVariables,
   blocksApiHost,
 }: ConnectionsCardProps) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const [openId, setOpenId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   // The npm lookup is async: merge into what the editor holds when it answers, not what it held
@@ -201,8 +203,7 @@ export const ConnectionsCard = ({
         </div>
 
         {hasIssues && (
-          <div
-            role="status"
+          <output
             aria-label={t("CONNECTIONS_CARD.SETUP_CHECK")}
             className="flex flex-col gap-2 rounded-md border border-warning-200 bg-warning-50 p-2.5 text-xs"
           >
@@ -292,7 +293,7 @@ export const ConnectionsCard = ({
                 </button>
               </SetupIssue>
             )}
-          </div>
+          </output>
         )}
 
         <div className="flex flex-col">
@@ -319,27 +320,7 @@ export const ConnectionsCard = ({
                     {preset.packageName}
                   </code>
                 </span>
-                {available ? (
-                  <Badge
-                    variant="info"
-                    className="gap-1"
-                    title={`${available.from} → ${available.to}`}
-                  >
-                    <ArrowUpCircle className="h-3 w-3" />
-                    {t("common:UPDATE")}
-                  </Badge>
-                ) : status === "added" ? (
-                  <Badge variant="success" className="gap-1">
-                    <Check className="h-3 w-3" />
-                    {t("CONNECTIONS_CARD.ADDED")}
-                  </Badge>
-                ) : status === "partial" ? (
-                  <Badge variant="warning">{t("CONNECTIONS_CARD.INCOMPLETE")}</Badge>
-                ) : (
-                  <span className="text-xs font-semibold text-primary">
-                    {t("CONNECTIONS_CARD.SET_UP_2")}
-                  </span>
-                )}
+                <PresetStatusBadge status={status} available={available} />
               </button>
             );
           })}
@@ -372,10 +353,40 @@ export const ConnectionsCard = ({
 
 const statusLabel = (status: "added" | "partial" | "none") => {
   if (status === "added")
-    return tStatic("logic.functions.components", "CONNECTIONS_CARD.STATUS_ADDED");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "CONNECTIONS_CARD.STATUS_ADDED");
   if (status === "partial")
-    return tStatic("logic.functions.components", "CONNECTIONS_CARD.STATUS_INCOMPLETE");
-  return tStatic("logic.functions.components", "CONNECTIONS_CARD.STATUS_NOT_SET_UP");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "CONNECTIONS_CARD.STATUS_INCOMPLETE");
+  return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "CONNECTIONS_CARD.STATUS_NOT_SET_UP");
+};
+
+const PresetStatusBadge = ({
+  status,
+  available,
+}: {
+  status: "added" | "partial" | "none";
+  available: { from: string; to: string } | null;
+}) => {
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
+  if (available) {
+    return (
+      <Badge variant="info" className="gap-1" title={`${available.from} → ${available.to}`}>
+        <ArrowUpCircle className="h-3 w-3" />
+        {t("common:UPDATE")}
+      </Badge>
+    );
+  }
+  if (status === "added") {
+    return (
+      <Badge variant="success" className="gap-1">
+        <Check className="h-3 w-3" />
+        {t("CONNECTIONS_CARD.ADDED")}
+      </Badge>
+    );
+  }
+  if (status === "partial") {
+    return <Badge variant="warning">{t("CONNECTIONS_CARD.INCOMPLETE")}</Badge>;
+  }
+  return <span className="text-xs font-semibold text-primary">{t("CONNECTIONS_CARD.SET_UP_2")}</span>;
 };
 
 const SetupIssue = ({ children }: { children: React.ReactNode }) => (
@@ -407,7 +418,7 @@ const ConnectionDialogBody = ({
   isAdding,
   blocksApiHost,
 }: ConnectionDialogBodyProps) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const [copied, setCopied] = useState(false);
   const status = presetStatus(preset, dependencies, variables);
   const keys = new Set(variables.map((variable) => variable.key));
@@ -417,6 +428,13 @@ const ConnectionDialogBody = ({
       ? ""
       : fillKnownValues([{ key: variable.key, value: "" }], { blocksApiHost }).variables[0].value;
   const listed = dependencies[preset.packageName];
+  const listedNote =
+    listed === undefined
+      ? t("CONNECTIONS_CARD.TODAY_S_LATEST_PINNED")
+      : t("CONNECTIONS_CARD.IN_PACKAGE_JSON_LEFT");
+  let addLabel = t("CONNECTIONS_CARD.ADD_TO_FUNCTION");
+  if (status === "added") addLabel = t("CONNECTIONS_CARD.ALREADY_SET_UP");
+  else if (isAdding) addLabel = t("CONNECTIONS_CARD.CHECKING_NPM");
 
   const copy = async () => {
     try {
@@ -455,14 +473,8 @@ const ConnectionDialogBody = ({
                 {t("CONNECTIONS_CARD.UPDATE_TO", { to: update.to })}
               </Button>
             </span>
-          ) : listed !== undefined ? (
-            <span className="text-xs text-medium-emphasis">
-              {t("CONNECTIONS_CARD.IN_PACKAGE_JSON_LEFT")}
-            </span>
           ) : (
-            <span className="text-xs text-medium-emphasis">
-              {t("CONNECTIONS_CARD.TODAY_S_LATEST_PINNED")}
-            </span>
+            <span className="text-xs text-medium-emphasis">{listedNote}</span>
           )}
         </div>
         {update?.breaking && (
@@ -537,11 +549,7 @@ const ConnectionDialogBody = ({
           className="gap-1.5"
         >
           {isAdding && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {status === "added"
-            ? t("CONNECTIONS_CARD.ALREADY_SET_UP")
-            : isAdding
-              ? t("CONNECTIONS_CARD.CHECKING_NPM")
-              : t("CONNECTIONS_CARD.ADD_TO_FUNCTION")}
+          {addLabel}
         </Button>
       </DialogFooter>
     </DialogContent>

@@ -3,6 +3,8 @@ import { Switch } from "@/components/ui-kits/switch/switch";
 import { ITriggerConfig } from "../../types/function.types";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 type TriggerWorkflowCardProps = {
   value: ITriggerConfig;
   onChange: (value: ITriggerConfig) => void;
@@ -10,16 +12,16 @@ type TriggerWorkflowCardProps = {
 
 const NODES = [
   {
-    get title() { return tStatic("logic.functions.components", "TRIGGER_WORKFLOW_CARD.PREVIOUS_NODE"); },
+    get title() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_WORKFLOW_CARD.PREVIOUS_NODE"); },
     body: "Its output becomes this function's input",
     isFunction: false,
   },
-  { get title() { return tStatic("logic.functions.components", "TRIGGER_WORKFLOW_CARD.FUNCTION_NODE"); }, body: "Runs handler(input, ctx) in its sandbox", isFunction: true },
-  { get title() { return tStatic("logic.functions.components", "TRIGGER_WORKFLOW_CARD.NEXT_NODE"); }, body: "Receives the value the handler returns", isFunction: false },
+  { get title() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_WORKFLOW_CARD.FUNCTION_NODE"); }, body: "Runs handler(input, ctx) in its sandbox", isFunction: true },
+  { get title() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_WORKFLOW_CARD.NEXT_NODE"); }, body: "Receives the value the handler returns", isFunction: false },
 ];
 
 export const TriggerWorkflowCard = ({ value, onChange }: TriggerWorkflowCardProps) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 p-5">

@@ -49,6 +49,8 @@ import { VariableTokenField, varNameRef } from "@/components/variable-picker";
 import { renderRichText } from "@/lib/rich-text";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_PROXY_COMPONENTS_MODULE = "logic.proxy.components";
+
 type VariablePickerProps = {
   variables?: SecretListItem[];
   variablesLoading?: boolean;
@@ -94,19 +96,19 @@ type RowOverrideName = "bodyMerge" | "headers" | "query";
  */
 const OVERRIDE_LABELS: Record<RowOverrideName, { title: string; on: string; off: string }> = {
   bodyMerge: {
-    get title() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.BODY_FIELDS"); },
-    get on() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.MERGED_INTO_THE_JSON"); },
-    get off() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.THE_BODY_IS_FORWARDED"); },
+    get title() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ROUTES_CARD.BODY_FIELDS"); },
+    get on() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ROUTES_CARD.MERGED_INTO_THE_JSON"); },
+    get off() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ROUTES_CARD.THE_BODY_IS_FORWARDED"); },
   },
   headers: {
-    get title() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.EXTRA_HEADERS"); },
-    get on() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.SENT_IN_ADDITION_TO"); },
-    get off() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.SENDS_ONLY_THE_CONNECTION"); },
+    get title() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ROUTES_CARD.EXTRA_HEADERS"); },
+    get on() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ROUTES_CARD.SENT_IN_ADDITION_TO"); },
+    get off() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ROUTES_CARD.SENDS_ONLY_THE_CONNECTION"); },
   },
   query: {
-    get title() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.EXTRA_QUERY_PARAMETERS"); },
-    get on() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.SENT_IN_ADDITION_TO_2"); },
-    get off() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.SENDS_THE_CONNECTION_S"); },
+    get title() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ROUTES_CARD.EXTRA_QUERY_PARAMETERS"); },
+    get on() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ROUTES_CARD.SENT_IN_ADDITION_TO_2"); },
+    get off() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ROUTES_CARD.SENDS_THE_CONNECTION_S"); },
   },
 };
 
@@ -150,7 +152,7 @@ export const ProxyRoutesCard = ({
   variablesLoading,
   variablesError,
 }: Props) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const { watch, setValue, getValues, formState } = useFormContext<ProxyFormValues>();
   const routes = watch("routes") ?? [];
   // The connection's rows, split by where they are sent. `credentials` is the form's source of truth
@@ -335,18 +337,25 @@ export const ProxyRoutesCard = ({
             ? t("PROXY_ROUTES_CARD.REPLACES_QUERY_PARAMS", { count: replacedQuery })
             : null,
         ].filter(Boolean);
-        const sendsSummary = sends.length
-          ? [...sends, ...replacesSummary].join(" · ")
-          : hasBody(route.method)
-            ? t("PROXY_ROUTES_CARD.BODY_AS_YOUR_CLIENT")
-            : t("PROXY_ROUTES_CARD.THE_CONNECTION_S_HEADERS");
+        let sendsSummary = hasBody(route.method)
+          ? t("PROXY_ROUTES_CARD.BODY_AS_YOUR_CLIENT")
+          : t("PROXY_ROUTES_CARD.THE_CONNECTION_S_HEADERS");
+        if (sends.length) sendsSummary = [...sends, ...replacesSummary].join(" · ");
         const included = (route.responseInclude ?? []).map((path) => path.trim()).filter(Boolean);
-        const returnsSummary =
-          route.responseMode === "select"
-            ? included.length
-              ? t("PROXY_ROUTES_CARD.ONLY_FIELDS", { fields: included.join(", ") })
-              : t("PROXY_ROUTES_CARD.ONLY_THE_LISTED_FIELDS")
-            : t("PROXY_ROUTES_CARD.WHOLE_RESPONSE");
+        let returnsSummary = t("PROXY_ROUTES_CARD.WHOLE_RESPONSE");
+        if (route.responseMode === "select") {
+          returnsSummary = included.length
+            ? t("PROXY_ROUTES_CARD.ONLY_FIELDS", { fields: included.join(", ") })
+            : t("PROXY_ROUTES_CARD.ONLY_THE_LISTED_FIELDS");
+        }
+        let resilienceNote = t("PROXY_ROUTES_CARD.THIS_ENDPOINT_IGNORES_THE");
+        if (!route.resilience) {
+          resilienceNote = t("PROXY_ROUTES_CARD.USES_THE_CONNECTION_S", {
+            value: describeResilience(connectionResilience).toLowerCase(),
+          });
+        } else if (describeResilience(route.resilience) === "Not configured") {
+          resilienceNote = t("PROXY_ROUTES_CARD.NOTHING_SET_YET_SO");
+        }
 
         return (
           <div key={`route-${index}`} className="rounded-md border p-3">
@@ -648,11 +657,7 @@ export const ProxyRoutesCard = ({
                     <div className="min-w-0">
                       <p className="text-xs font-medium">{t("PROXY_ROUTES_CARD.ITS_OWN_TIMEOUTS_AND")}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        {!route.resilience
-                          ? t("PROXY_ROUTES_CARD.USES_THE_CONNECTION_S", { value: describeResilience(connectionResilience).toLowerCase() })
-                          : describeResilience(route.resilience) === "Not configured"
-                            ? t("PROXY_ROUTES_CARD.NOTHING_SET_YET_SO")
-                            : t("PROXY_ROUTES_CARD.THIS_ENDPOINT_IGNORES_THE")}
+                        {resilienceNote}
                       </p>
                     </div>
                     <Switch
@@ -767,7 +772,7 @@ const RouteValueCell = ({
   variablesLoading,
   variablesError,
 }: RouteValueCellProps) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   return (
     <div className="min-w-0 flex-1">
       <VariableTokenField
@@ -800,7 +805,7 @@ const OverrideRows = ({
   variablesLoading,
   variablesError,
 }: OverrideRowsProps) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   // A route read from an older payload may omit the key entirely; treat a missing override
   // exactly like an explicit null, i.e. inherit.
   const rows = route[name] ?? null;

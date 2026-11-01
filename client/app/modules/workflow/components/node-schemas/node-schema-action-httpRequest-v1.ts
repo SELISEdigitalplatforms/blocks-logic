@@ -3,6 +3,8 @@ import { NodeSchemaDefinition } from "./node-schema.type";
 import { authClientService } from "../../services/iam.service";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
   guide: NodeGuideActionHttpRequestV1,
   schema: {
@@ -13,8 +15,8 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
       {
         id: "http-method",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.METHOD"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.THE_REQUEST_METHOD_TO"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.METHOD"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.THE_REQUEST_METHOD_TO"); },
         key: "httpMethod",
         required: true,
         options: [
@@ -29,14 +31,14 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
         id: "url",
         type: "text",
         label: "URL",
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.THE_URL_TO_MAKE"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.THE_URL_TO_MAKE"); },
         key: "url",
       },
       {
         id: "haveQueryParameters",
         type: "switch",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SEND_QUERY_PARAMETERS"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.WHETHER_THE_REQUEST_HAS"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SEND_QUERY_PARAMETERS"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.WHETHER_THE_REQUEST_HAS"); },
         key: "haveQueryParameters",
       },
       {
@@ -46,15 +48,15 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
           key: "haveQueryParameters",
           value: true,
         },
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.QUERY_PARAMETERS"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.QUERY_PARAMETERS"); },
         key: "queryParameters",
         defaultValue: {},
       },
       {
         id: "haveHeaders",
         type: "switch",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SEND_HEADERS"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.WHETHER_THE_REQUEST_HAS_2"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SEND_HEADERS"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.WHETHER_THE_REQUEST_HAS_2"); },
         key: "haveHeaders",
       },
       {
@@ -64,27 +66,27 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
           key: "haveHeaders",
           value: true,
         },
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.HEADER_PARAMETERS"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.HEADER_PARAMETERS"); },
         key: "headers",
       },
       {
         id: "authenticationType",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.AUTHENTICATION"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.ATTACHES_A_BEARER_TOKEN"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.AUTHENTICATION"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.ATTACHES_A_BEARER_TOKEN"); },
         key: "authenticationType",
         required: false,
         options: [
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.NONE"); }, value: "" },
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.BLOCKS_AUTHENTICATION"); }, value: "blocksAuthentication" },
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.CLIENT_CREDENTIAL"); }, value: "clientCredential" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.NONE"); }, value: "" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.BLOCKS_AUTHENTICATION"); }, value: "blocksAuthentication" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.CLIENT_CREDENTIAL"); }, value: "clientCredential" },
         ],
       },
       {
         id: "clientCredential",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.CLIENT_CREDENTIAL"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SELECT_A_CLIENT_CREDENTIAL"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.CLIENT_CREDENTIAL"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SELECT_A_CLIENT_CREDENTIAL"); },
         key: "clientId",
         required: false,
         searchable: true,
@@ -109,8 +111,8 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
       {
         id: "haveBody",
         type: "switch",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SEND_BODY"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.WHETHER_THE_REQUEST_HAS_3"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.SEND_BODY"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.WHETHER_THE_REQUEST_HAS_3"); },
         key: "havebody",
       },
       {
@@ -121,8 +123,8 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
           value: true,
         },
         options: [{ label: "JSON", value: "json" }],
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.BODY_CONTENT_TYPE"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.CONTENT_TYPE_TO_USE"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.BODY_CONTENT_TYPE"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.CONTENT_TYPE_TO_USE"); },
         key: "bodyContentType",
       },
       {
@@ -132,8 +134,8 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
           key: "bodyContentType",
           value: "json",
         },
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.BODY"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.JSON_BODY_SENT_WITH"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.BODY"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_HTTP_REQUEST_V1.JSON_BODY_SENT_WITH"); },
         key: "body",
       },
     ],

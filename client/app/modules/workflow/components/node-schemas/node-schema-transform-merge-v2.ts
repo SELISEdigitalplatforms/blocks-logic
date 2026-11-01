@@ -3,6 +3,8 @@ import { NodeSchemaDefinition } from "./node-schema.type";
 import { deriveMergeHandle, MERGE_MAX_INPUTS, MERGE_MIN_INPUTS, mergeInputCount } from "../../utils/merge-handles";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 const DEFAULT_PARAMETERS = { mode: "append", numberInputs: 2, runWhen: "all" };
 
 export const NodeSchemaTransformMergeV2: NodeSchemaDefinition = {
@@ -15,16 +17,16 @@ export const NodeSchemaTransformMergeV2: NodeSchemaDefinition = {
       {
         id: "mode",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_MERGE_V2.MODE"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_MERGE_V2.APPEND_OUTPUTS_THE_ITEMS"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.MODE"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.APPEND_OUTPUTS_THE_ITEMS"); },
         key: "mode",
         defaultValue: "append",
-        options: [{ value: "append", get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_MERGE_V2.APPEND"); } }],
+        options: [{ value: "append", get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.APPEND"); } }],
       },
       {
         id: "numberInputs",
         type: "number",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_MERGE_V2.NUMBER_OF_INPUTS"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.NUMBER_OF_INPUTS"); },
         info: "2 to 10. Applies when you leave the field or press Enter. Lowering it removes the connections on the removed inputs.",
         key: "numberInputs",
         min: MERGE_MIN_INPUTS,
@@ -42,13 +44,13 @@ export const NodeSchemaTransformMergeV2: NodeSchemaDefinition = {
       {
         id: "runWhen",
         type: "select-with-description",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_MERGE_V2.RUN_WHEN"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_MERGE_V2.WHETHER_MERGE_NEEDS_DATA"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.RUN_WHEN"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.WHETHER_MERGE_NEEDS_DATA"); },
         key: "runWhen",
         defaultValue: "all",
         options: [
-          { value: "all", get label() { return tStatic("logic.workflow.nodes.schemas", "common:ALL"); }, get description() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_MERGE_V2.OUTPUT_ONLY_WHEN_EVERY"); } },
-          { value: "any", get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_MERGE_V2.ANY"); }, get description() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_MERGE_V2.OUTPUT_THE_DATA_FROM"); } },
+          { value: "all", get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "common:ALL"); }, get description() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.OUTPUT_ONLY_WHEN_EVERY"); } },
+          { value: "any", get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.ANY"); }, get description() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.OUTPUT_THE_DATA_FROM"); } },
         ],
       },
     ],

@@ -6,6 +6,9 @@ import { iamService } from "../../services/iam.service";
 import { ConditionalMultiselectValue } from "../node-inspector/form-builder/form-field.types";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+const NODE_SCHEMA_TRIGGER_WEBHOOK_V1_NONE = "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NONE";
+
 const AUTHORIZATION_DEPENDENCY = {
   key: "authType",
   value: "blocksAuthorization",
@@ -55,13 +58,13 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         type: "tab-with-text",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.WEBHOOK_URL",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.COPY_THIS_URL_TO",
           );
         },
@@ -70,14 +73,14 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         options: [
           {
             get label() {
-              return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TEST");
+              return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TEST");
             },
             value: String(WorkflowExecutionMode.Test),
           },
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.PRODUCTION",
               );
             },
@@ -99,13 +102,13 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         type: "tab-with-text",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.DEPRECATED_WEBHOOK_URL",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.LEGACY_URL_WITH_THE",
           );
         },
@@ -114,14 +117,14 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         options: [
           {
             get label() {
-              return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TEST");
+              return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TEST");
             },
             value: String(WorkflowExecutionMode.Test),
           },
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.PRODUCTION",
               );
             },
@@ -146,13 +149,13 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         type: "display",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.HTTP_METHOD",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.WEBHOOKS_ACCEPT_POST_REQUESTS",
           );
         },
@@ -165,13 +168,13 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         type: "select",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.AUTHENTICATION_TYPE",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.SELECT_THE_AUTHENTICATION_METHOD",
           );
         },
@@ -179,14 +182,14 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         options: [
           {
             get label() {
-              return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NONE");
+              return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, NODE_SCHEMA_TRIGGER_WEBHOOK_V1_NONE);
             },
             value: "none",
           },
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.BLOCKS_AUTHENTICATION",
               );
             },
@@ -195,7 +198,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.BLOCKS_AUTHORIZATION",
               );
             },
@@ -209,7 +212,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         type: "select",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ORGANIZATION",
           );
         },
@@ -218,7 +221,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         defaultValue: "",
         get placeholder() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.SELECT_AN_ORGANIZATION",
           );
         },
@@ -232,8 +235,8 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
                 return [
                   {
                     label: tStatic(
-                      "logic.workflow.nodes.schemas",
-                      "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NONE",
+                      LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+                      NODE_SCHEMA_TRIGGER_WEBHOOK_V1_NONE,
                     ),
                     value: "",
                   },
@@ -242,14 +245,14 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
               return [
                 {
                   label: tStatic(
-                    "logic.workflow.nodes.schemas",
-                    "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NONE",
+                    LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+                    NODE_SCHEMA_TRIGGER_WEBHOOK_V1_NONE,
                   ),
                   value: "",
                 },
                 {
                   label: tStatic(
-                    "logic.workflow.nodes.schemas",
+                    LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                     "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.DEFAULT",
                   ),
                   value: "default",
@@ -263,8 +266,8 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
             .catch(() => [
               {
                 label: tStatic(
-                  "logic.workflow.nodes.schemas",
-                  "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NONE",
+                  LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+                  NODE_SCHEMA_TRIGGER_WEBHOOK_V1_NONE,
                 ),
                 value: "",
               },
@@ -275,13 +278,13 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         type: "select",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.AUTHORIZATION_MODE",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.CHOOSE_WHICH_RULE_S",
           );
         },
@@ -292,7 +295,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES_ONLY",
               );
             },
@@ -301,7 +304,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.PERMISSIONS_ONLY",
               );
             },
@@ -310,7 +313,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES_AND_PERMISSIONS",
               );
             },
@@ -319,7 +322,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES_OR_PERMISSIONS",
               );
             },
@@ -331,11 +334,11 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         id: "roles",
         type: "conditional-multiselect",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ROLES_THE_CALLER_MUST",
           );
         },
@@ -343,7 +346,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         hidden: isNotAuthorization,
         get placeholder() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.SEARCH_ROLES",
           );
         },
@@ -364,13 +367,13 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         type: "conditional-multiselect",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.PERMISSIONS",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.PERMISSIONS_THE_CALLER_MUST",
           );
         },
@@ -378,7 +381,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         hidden: isNotAuthorization,
         get placeholder() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.SEARCH_PERMISSIONS",
           );
         },
@@ -401,11 +404,11 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         id: "http-response-mode",
         type: "select",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.RESPONSE");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.RESPONSE");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.WHEN_AND_HOW_TO",
           );
         },
@@ -415,7 +418,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.IMMEDIATELY",
               );
             },
@@ -424,7 +427,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.AFTER_LAST_NODE_COMPLETION",
               );
             },
@@ -437,13 +440,13 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         type: "select",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.RESPONSE_DATA",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.WHAT_DATA_SHOULD_BE",
           );
         },
@@ -457,7 +460,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ALL_ENTRIES",
               );
             },
@@ -466,7 +469,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.FIRST_ENTRY",
               );
             },
@@ -475,7 +478,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.NO_RESPONSE_BODY",
               );
             },

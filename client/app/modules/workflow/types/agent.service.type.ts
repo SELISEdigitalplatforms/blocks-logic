@@ -1,4 +1,6 @@
 import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_WORKFLOW_MODULE = "logic.workflow";
 export enum AgentResponseStyle {
   CONCISE = "concise",
   BALANCED = "balanced",
@@ -26,31 +28,31 @@ export const AGENT_RESPONSE_STYLES: {
 }[] = [
   {
     get label() {
-      return tStatic("logic.workflow", "AGENT_SERVICE_TYPE.CONCISE");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "AGENT_SERVICE_TYPE.CONCISE");
     },
     value: AgentResponseStyle.CONCISE,
   },
   {
     get label() {
-      return tStatic("logic.workflow", "AGENT_SERVICE_TYPE.BALANCED");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "AGENT_SERVICE_TYPE.BALANCED");
     },
     value: AgentResponseStyle.BALANCED,
   },
   {
     get label() {
-      return tStatic("logic.workflow", "AGENT_SERVICE_TYPE.DETAILED");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "AGENT_SERVICE_TYPE.DETAILED");
     },
     value: AgentResponseStyle.DETAILED,
   },
   {
     get label() {
-      return tStatic("logic.workflow", "AGENT_SERVICE_TYPE.PROFESSIONAL");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "AGENT_SERVICE_TYPE.PROFESSIONAL");
     },
     value: AgentResponseStyle.PROFESSIONAL,
   },
   {
     get label() {
-      return tStatic("logic.workflow", "AGENT_SERVICE_TYPE.CONVERSATIONAL");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "AGENT_SERVICE_TYPE.CONVERSATIONAL");
     },
     value: AgentResponseStyle.CONVERSATIONAL,
   },

@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { useFunctionsFilterQueryParams } from "../../hooks/use-functions-filter-query-params";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 /**
  * Segmented status filter, per FEATURES-AND-UI §4.1 — "" is All. `Paused` is not in the spec's
  * list but is a real server status (FunctionEnums.FunctionStatus), so it gets a chip: without one
@@ -19,25 +21,25 @@ import { useT, tStatic } from "@seliseblocks/genesis-os";
 const STATUS_OPTIONS = [
   {
     get label() {
-      return tStatic("logic.functions.components", "common:ALL");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "common:ALL");
     },
     value: "",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "FUNCTIONS_FILTER_TOOLBAR.LIVE");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "FUNCTIONS_FILTER_TOOLBAR.LIVE");
     },
     value: "Live",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "FUNCTIONS_FILTER_TOOLBAR.DRAFT");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "FUNCTIONS_FILTER_TOOLBAR.DRAFT");
     },
     value: "Draft",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "FUNCTIONS_FILTER_TOOLBAR.PAUSED");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "FUNCTIONS_FILTER_TOOLBAR.PAUSED");
     },
     value: "Paused",
   },
@@ -50,20 +52,20 @@ const STATUS_OPTIONS = [
 const SORT_OPTIONS = [
   {
     get label() {
-      return tStatic("logic.functions.components", "FUNCTIONS_FILTER_TOOLBAR.RECENTLY_UPDATED");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "FUNCTIONS_FILTER_TOOLBAR.RECENTLY_UPDATED");
     },
     value: "Updated",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "common:NAME");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "common:NAME");
     },
     value: "Name",
   },
 ];
 
 export const FunctionsFilterToolBar = () => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const { queryParams, setQueryParams } = useFunctionsFilterQueryParams();
 
   const patch = (partial: Record<string, unknown>) =>
@@ -86,9 +88,8 @@ export const FunctionsFilterToolBar = () => {
         />
       </div>
 
-      <div
-        className="flex overflow-hidden rounded-md border"
-        role="group"
+      <fieldset
+        className="m-0 flex min-w-0 overflow-hidden rounded-md border p-0"
         aria-label={t("common:STATUS")}
       >
         {STATUS_OPTIONS.map((option) => (
@@ -108,7 +109,7 @@ export const FunctionsFilterToolBar = () => {
             {option.label}
           </button>
         ))}
-      </div>
+      </fieldset>
 
       <Select
         value={queryParams.sort || "Updated"}

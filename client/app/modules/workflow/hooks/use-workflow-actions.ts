@@ -2,6 +2,8 @@ import { usePublishNewWorkflow, usePublishWorkflow, useUnpublishWorkflow } from 
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { useT } from "@seliseblocks/genesis-os";
 
+const USE_WORKFLOW_ACTIONS_FAILED_TO_PUBLISH_WORKFLOW = "USE_WORKFLOW_ACTIONS.FAILED_TO_PUBLISH_WORKFLOW";
+
 type MutationResult = {
   isSuccess?: boolean;
   errors?: { Message?: string };
@@ -29,13 +31,13 @@ export const useWorkflowActions = () => {
         description,
       })) as unknown as MutationResult;
       if (response && response.isSuccess === false) {
-        showErrorToast({ errors: response.errors?.Message || t("USE_WORKFLOW_ACTIONS.FAILED_TO_PUBLISH_WORKFLOW") });
+        showErrorToast({ errors: response.errors?.Message || t(USE_WORKFLOW_ACTIONS_FAILED_TO_PUBLISH_WORKFLOW) });
       } else {
         onSuccess?.();
         showSuccessToast({ description: t("USE_WORKFLOW_ACTIONS.WORKFLOW_SUCCESSFULLY_PUBLISHED") });
       }
     } catch (error) {
-      showErrorToast({ errors: toErrorMessage(error) || t("USE_WORKFLOW_ACTIONS.FAILED_TO_PUBLISH_WORKFLOW") });
+      showErrorToast({ errors: toErrorMessage(error) || t(USE_WORKFLOW_ACTIONS_FAILED_TO_PUBLISH_WORKFLOW) });
     }
   };
 
@@ -50,13 +52,13 @@ export const useWorkflowActions = () => {
 
       const response = (await publishWorkflowMutation(payload)) as unknown as MutationResult;
       if (response && response.isSuccess === false) {
-        showErrorToast({ errors: response.errors?.Message || t("USE_WORKFLOW_ACTIONS.FAILED_TO_PUBLISH_WORKFLOW") });
+        showErrorToast({ errors: response.errors?.Message || t(USE_WORKFLOW_ACTIONS_FAILED_TO_PUBLISH_WORKFLOW) });
       } else {
         onSuccess?.();
         showSuccessToast({ description: t("USE_WORKFLOW_ACTIONS.WORKFLOW_SUCCESSFULLY_PUBLISHED") });
       }
     } catch (error) {
-      showErrorToast({ errors: toErrorMessage(error) || t("USE_WORKFLOW_ACTIONS.FAILED_TO_PUBLISH_WORKFLOW") });
+      showErrorToast({ errors: toErrorMessage(error) || t(USE_WORKFLOW_ACTIONS_FAILED_TO_PUBLISH_WORKFLOW) });
     }
   };
 

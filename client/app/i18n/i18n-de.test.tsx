@@ -5,6 +5,9 @@ import { ProxyStatusBadge } from "@/modules/proxy/components/proxy-status-badge"
 import { buildNavigationMenus } from "@/constants/navigation-menus";
 import "./index";
 
+const LOGIC_SHARED_MODULE = "logic.shared";
+const OVERVIEW_KEY = "NAVIGATION_MENUS.OVERVIEW";
+
 const German = { "PROXY_STATUS_BADGE.LIVE": "Live", "PROXY_STATUS_BADGE.PAUSED": "Pausiert" };
 
 describe("German text", () => {
@@ -25,19 +28,19 @@ describe("German text", () => {
   });
 
   it("falls back to English for a key the German file does not have", () => {
-    useI18nStore.getState().setRemote("de", "logic.shared", {});
+    useI18nStore.getState().setRemote("de", LOGIC_SHARED_MODULE, {});
     act(() => useAppSettingsStore.getState().setSettings({ language: "de" }));
-    expect(tStatic("logic.shared", "NAVIGATION_MENUS.OVERVIEW")).toBe("Overview");
+    expect(tStatic(LOGIC_SHARED_MODULE, OVERVIEW_KEY)).toBe("Overview");
   });
 
   it("translates outside React and picks the plural form", () => {
-    useI18nStore.getState().setRemote("de", "logic.shared", {
-      "NAVIGATION_MENUS.OVERVIEW": "Übersicht",
+    useI18nStore.getState().setRemote("de", LOGIC_SHARED_MODULE, {
+      [OVERVIEW_KEY]: "Übersicht",
       TABLE_PAGINATION_items_one: "x",
     });
     act(() => useAppSettingsStore.getState().setSettings({ language: "de" }));
-    expect(tStatic("logic.shared", "NAVIGATION_MENUS.OVERVIEW")).toBe("Übersicht");
-    const menus = buildNavigationMenus((key) => tStatic("logic.shared", key));
+    expect(tStatic(LOGIC_SHARED_MODULE, OVERVIEW_KEY)).toBe("Übersicht");
+    const menus = buildNavigationMenus((key) => tStatic(LOGIC_SHARED_MODULE, key));
     expect(menus.some((menu) => menu.type === "menu" && menu.name === "Übersicht")).toBe(true);
   });
 });

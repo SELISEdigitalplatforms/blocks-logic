@@ -1,10 +1,12 @@
 import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_SHARED_MODULE = "logic.shared";
 export const getErrorMessage = (
   error: Record<string, string | string[]>,
   messageMap: Record<string, string> = {},
 ): string | string[] => {
   if (!error || Object.keys(error).length === 0) {
-    return tStatic("logic.shared", "ERROR.SOMETHING_WENT_WRONG");
+    return tStatic(LOGIC_SHARED_MODULE, "ERROR.SOMETHING_WENT_WRONG");
   }
 
   const messages: string[] = [];
@@ -24,7 +26,7 @@ export const getErrorMessage = (
     }
   }
 
-  return messages.length ? messages : tStatic("logic.shared", "ERROR.SOMETHING_WENT_WRONG");
+  return messages.length ? messages : tStatic(LOGIC_SHARED_MODULE, "ERROR.SOMETHING_WENT_WRONG");
 };
 
 export const isErrorWithErrors = (
@@ -48,5 +50,5 @@ export const handleErrorMessages = (
     return getErrorMessage(errors as Record<string, string | string[]>, customMessages);
   }
 
-  return tStatic("logic.shared", "ERROR.AN_UNEXPECTED_ERROR_OCCURRED");
+  return tStatic(LOGIC_SHARED_MODULE, "ERROR.AN_UNEXPECTED_ERROR_OCCURRED");
 };

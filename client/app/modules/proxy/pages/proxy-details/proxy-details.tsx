@@ -41,6 +41,11 @@ import { DeleteProxyDialog } from "../../components/delete-proxy-dialog";
 import { VariablesButton } from "../../components/variables-button";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_PROXY_MODULE = "logic.proxy";
+const COMMON_EDIT = "common:EDIT";
+const PROXY_DETAILS_EXPORT = "PROXY_DETAILS.EXPORT";
+const COMMON_DELETE = "common:DELETE";
+
 const KeyValueRows = ({
   title,
   rows,
@@ -120,7 +125,7 @@ const EndpointRow = ({
   /** Proxy-wide body merge and response filter. Inherited field by field, as the gateway reads it. */
   proxyWide: Pick<Proxy, "bodyMerge" | "responseMode" | "responseInclude">;
 }) => {
-  const { t } = useT("logic.proxy");
+  const { t } = useT(LOGIC_PROXY_MODULE);
   const forwardPath = (route.upstreamPath ?? route.path).replace(/^\/+|\/+$/g, "");
   const forwardsTo = forwardPath
     ? `${upstreamUrl.replace(/\/+$/, "")}/${forwardPath}`
@@ -139,6 +144,28 @@ const EndpointRow = ({
     route.query?.length ? t("PROXY_DETAILS.EXTRA_QUERY_PARAMS", { count: route.query.length }) : null,
   ].filter(Boolean);
 
+  let returns: ReactNode;
+  if (filters && paths.length) {
+    returns = (
+      <div className="space-y-1">
+        <span>
+          {t("PROXY_DETAILS.ONLY_FIELDS", { count: paths.length })}
+          {filterFromProxy ? (
+            <span className="text-muted-foreground"> {t("PROXY_DETAILS.FROM_THE_PROXY_WIDE")}</span>
+          ) : null}
+        </span>
+        <ResponseFilterTree nodes={tree} />
+      </div>
+    );
+  } else if (filters) {
+    returns = renderRichText(
+      t(filterFromProxy ? "PROXY_DETAILS.EMPTY_OBJECT_FROM_PROXY" : "PROXY_DETAILS.EMPTY_OBJECT"),
+      [(text: string) => <code>{text}</code>],
+    );
+  } else {
+    returns = t("PROXY_DETAILS.THE_VENDOR_S_STATUS");
+  }
+
   return (
     <li className="rounded-lg border bg-card p-4 text-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -153,28 +180,7 @@ const EndpointRow = ({
         <dt className="text-muted-foreground">{t("PROXY_DETAILS.SENDS")}</dt>
         <dd>{extras.length ? extras.join(" · ") : t("PROXY_DETAILS.THE_CONNECTION_S_HEADERS")}</dd>
         <dt className="text-muted-foreground">{t("PROXY_DETAILS.RETURNS")}</dt>
-        <dd>
-          {!filters ? (
-            t("PROXY_DETAILS.THE_VENDOR_S_STATUS")
-          ) : paths.length ? (
-            <div className="space-y-1">
-              <span>
-                {t("PROXY_DETAILS.ONLY_FIELDS", { count: paths.length })}
-                {filterFromProxy ? (
-                  <span className="text-muted-foreground"> {t("PROXY_DETAILS.FROM_THE_PROXY_WIDE")}</span>
-                ) : null}
-              </span>
-              <ResponseFilterTree nodes={tree} />
-            </div>
-          ) : (
-            <>
-              {renderRichText(
-                t(filterFromProxy ? "PROXY_DETAILS.EMPTY_OBJECT_FROM_PROXY" : "PROXY_DETAILS.EMPTY_OBJECT"),
-                [(text: string) => <code>{text}</code>],
-              )}
-            </>
-          )}
-        </dd>
+        <dd>{returns}</dd>
         <dt className="text-muted-foreground">{t("PROXY_DETAILS.IF_IT_FAILS")}</dt>
         <dd>
           {describeResilience(route.resilience ?? inherited)}
@@ -194,7 +200,7 @@ const EndpointsSection = ({
   proxy: Proxy;
   clientUrlFor: (routePath: string) => string;
 }) => {
-  const { t } = useT("logic.proxy");
+  const { t } = useT(LOGIC_PROXY_MODULE);
   // A saved proxy with no routes is callable at its base path only; show that as the one endpoint
   // rather than an empty list that reads as "cannot be called".
   const routes: ProxyRoute[] = proxy.routes.length
@@ -335,9 +341,9 @@ const ProxyOverviewSkeleton = () => (
 );
 
 const ProxyDetailsSkeleton = () => {
-  const { t } = useT("logic.proxy");
+  const { t } = useT(LOGIC_PROXY_MODULE);
   return (
-    <div role="status" aria-label={t("PROXY_DETAILS.LOADING_PROXY_DETAILS")} className="flex min-h-screen flex-col">
+    <output aria-label={t("PROXY_DETAILS.LOADING_PROXY_DETAILS")} className="flex min-h-screen flex-col">
       <div className="px-6 pb-2 pt-4">
         <Skeleton className="h-5 w-full max-w-xs" />
       </div>
@@ -366,7 +372,7 @@ const ProxyDetailsSkeleton = () => {
           <ProxyOverviewSkeleton />
         </div>
       </div>
-    </div>
+    </output>
   );
 };
 
@@ -397,7 +403,7 @@ const ConfigurationStepCard = ({
  * right after an import. The server computes it on every read; adding the secret is the whole fix.
  */
 const NeedsSecretBanner = ({ missing, duplicates }: { missing: string[]; duplicates: string[] }) => {
-  const { t } = useT("logic.proxy");
+  const { t } = useT(LOGIC_PROXY_MODULE);
   const absent = missing.filter((name) => !duplicates.includes(name));
   return (
     <div
@@ -426,14 +432,14 @@ const NeedsSecretBanner = ({ missing, duplicates }: { missing: string[]; duplica
 };
 
 const proxyDetailTabs = [
-  { value: "overview", get label() { return tStatic("logic.proxy", "PROXY_DETAILS.OVERVIEW"); } },
-  { value: "test", get label() { return tStatic("logic.proxy", "PROXY_DETAILS.TEST"); } },
-  { value: "logs", get label() { return tStatic("logic.proxy", "PROXY_DETAILS.LOGS"); } },
-  { value: "history", get label() { return tStatic("logic.proxy", "PROXY_DETAILS.HISTORY"); } },
+  { value: "overview", get label() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_DETAILS.OVERVIEW"); } },
+  { value: "test", get label() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_DETAILS.TEST"); } },
+  { value: "logs", get label() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_DETAILS.LOGS"); } },
+  { value: "history", get label() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_DETAILS.HISTORY"); } },
 ];
 
 export const ProxyDetails = () => {
-  const { t } = useT("logic.proxy");
+  const { t } = useT(LOGIC_PROXY_MODULE);
   const navigate = useNavigate();
   const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
@@ -453,7 +459,7 @@ export const ProxyDetails = () => {
 
   useEffect(() => {
     if (proxyId && isFetched && !isLoading && !proxy) {
-      showErrorToast({ errors: tStatic("logic.proxy", "PROXY_DETAILS.PROXY_NOT_FOUND") });
+      showErrorToast({ errors: tStatic(LOGIC_PROXY_MODULE, "PROXY_DETAILS.PROXY_NOT_FOUND") });
       navigate(scoped("proxy"));
     } else if (proxy?.name) {
       BREADCRUMB_CUSTOM_TITLES[pathname] = proxy.name;
@@ -542,7 +548,7 @@ export const ProxyDetails = () => {
                   onClick={() => navigate(scoped(`proxy/${proxy.id}/edit`))}
                 >
                   <Pen className="mr-2 h-4 w-4" />
-                  <span>{t("common:EDIT")}</span>
+                  <span>{t(COMMON_EDIT)}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
@@ -550,7 +556,7 @@ export const ProxyDetails = () => {
                   onClick={handleExport}
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  <span>{t("PROXY_DETAILS.EXPORT")}</span>
+                  <span>{t(PROXY_DETAILS_EXPORT)}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer text-destructive focus:text-destructive"
@@ -558,7 +564,7 @@ export const ProxyDetails = () => {
                   onClick={() => setIsDeleteOpen(true)}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  <span>{t("common:DELETE")}</span>
+                  <span>{t(COMMON_DELETE)}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -582,18 +588,18 @@ export const ProxyDetails = () => {
               {toggleProxy.isPending ? pendingToggleLabel : toggleLabel}
             </Button>
             <Button
-              aria-label={t("common:EDIT")}
-              title={t("common:EDIT")}
+              aria-label={t(COMMON_EDIT)}
+              title={t(COMMON_EDIT)}
               onClick={() => navigate(scoped(`proxy/${proxy.id}/edit`))}
             >
               <Pen className="mr-2 h-4 w-4" />
-              {t("common:EDIT")}
+              {t(COMMON_EDIT)}
             </Button>
             <Button
               type="button"
               variant="outline"
               disabled={exportProxy.isPending}
-              aria-label={t("PROXY_DETAILS.EXPORT")}
+              aria-label={t(PROXY_DETAILS_EXPORT)}
               title={t("PROXY_DETAILS.DOWNLOAD_THIS_PROXY_AS")}
               onClick={handleExport}
             >
@@ -602,19 +608,19 @@ export const ProxyDetails = () => {
               ) : (
                 <Download className="mr-2 h-4 w-4" />
               )}
-              {t("PROXY_DETAILS.EXPORT")}
+              {t(PROXY_DETAILS_EXPORT)}
             </Button>
             <Button
               type="button"
               variant="outline"
               className="gap-2 text-destructive hover:text-destructive"
               disabled={toggleProxy.isPending}
-              aria-label={t("common:DELETE")}
-              title={t("common:DELETE")}
+              aria-label={t(COMMON_DELETE)}
+              title={t(COMMON_DELETE)}
               onClick={() => setIsDeleteOpen(true)}
             >
               <Trash2 className="h-4 w-4" />
-              {t("common:DELETE")}
+              {t(COMMON_DELETE)}
             </Button>
           </div>
         </div>

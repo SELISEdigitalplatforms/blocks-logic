@@ -18,6 +18,8 @@ import { EventEditDialog } from "../event-edit-dialog";
 import { renderRichText } from "@/lib/rich-text";
 import { useT } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 type EventsCardProps = {
   functionId: string;
   /** The function's HTTP trigger is anonymous. */
@@ -29,7 +31,7 @@ type DialogTarget = { index: number | null } | null;
 const ADDING: DialogTarget = { index: null };
 
 const CopySnippetButton = ({ event }: Readonly<{ event: IFunctionEvent }>) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const [copied, setCopied] = useState(false);
 
   // The clipboard API rejects without a secure context or permission; say so instead of
@@ -62,7 +64,7 @@ type EventRowProps = {
 };
 
 const EventRow = ({ event, catalog, errors, disabled, onEdit, onRemove }: Readonly<EventRowProps>) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const name = event.type === "FunctionEvent" ? payloadName(event.payload) : null;
   return (
     <div className="flex flex-col gap-1.5 border-b px-4 py-3 last:border-b-0">
@@ -94,7 +96,7 @@ const EventRow = ({ event, catalog, errors, disabled, onEdit, onRemove }: Readon
 
 /** The Events tab: the events this function may send, each added from the catalog. */
 export const EventsCard = ({ functionId, isPublic }: Readonly<EventsCardProps>) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const { data: catalog } = useGetEventCatalog();
   const { data: settings, isLoading } = useGetEventSettings(functionId);
   const { mutateAsync: save, isPending } = useSaveEventSettings(functionId);

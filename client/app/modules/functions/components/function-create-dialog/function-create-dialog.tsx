@@ -32,6 +32,8 @@ import { FUNCTION_TEMPLATES } from "../../constants/templates";
 import { FunctionTemplate } from "../../types/function.types";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 // Every template the picker shows, so a new one cannot be offered and then refused by the form (FN-12).
 const TEMPLATE_VALUES = FUNCTION_TEMPLATES.map((t) => t.value) as [FunctionTemplate, ...FunctionTemplate[]];
 
@@ -41,11 +43,11 @@ const createFunctionFormSchema = () =>
   z.object({
     name: z
       .string()
-      .min(2, tStatic("logic.functions.components", "FUNCTION_CREATE_DIALOG.NAME_TOO_SHORT"))
-      .max(64, tStatic("logic.functions.components", "FUNCTION_CREATE_DIALOG.NAME_TOO_LONG")),
+      .min(2, tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "FUNCTION_CREATE_DIALOG.NAME_TOO_SHORT"))
+      .max(64, tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "FUNCTION_CREATE_DIALOG.NAME_TOO_LONG")),
     description: z
       .string()
-      .max(200, tStatic("logic.functions.components", "FUNCTION_CREATE_DIALOG.DESCRIPTION_TOO_LONG"))
+      .max(200, tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "FUNCTION_CREATE_DIALOG.DESCRIPTION_TOO_LONG"))
       .optional(),
     template: z.enum(TEMPLATE_VALUES),
   });
@@ -58,7 +60,7 @@ type FunctionCreateDialogProps = {
 };
 
 export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialogProps) => {
-  const { t: tr } = useT("logic.functions.components");
+  const { t: tr } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { mutateAsync, isPending } = useCreateFunction();

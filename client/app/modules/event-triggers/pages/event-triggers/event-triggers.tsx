@@ -24,8 +24,10 @@ import {
 } from "../../utils/filter-events";
 import { useT } from "@seliseblocks/genesis-os";
 
+const LOGIC_EVENT_TRIGGERS_MODULE = "logic.event-triggers";
+
 const LoadError = ({ onRetry }: { onRetry: () => void }) => {
-  const { t } = useT("logic.event-triggers");
+  const { t } = useT(LOGIC_EVENT_TRIGGERS_MODULE);
   return (
     <Alert variant="destructive">
       <AlertCircle className="h-4 w-4" />
@@ -41,7 +43,7 @@ const LoadError = ({ onRetry }: { onRetry: () => void }) => {
 };
 
 const NotSeeded = () => {
-  const { t } = useT("logic.event-triggers");
+  const { t } = useT(LOGIC_EVENT_TRIGGERS_MODULE);
   return (
     <Alert>
       <AlertCircle className="h-4 w-4" />
@@ -63,7 +65,7 @@ type CatalogBodyProps = {
 
 /** The table, or why there are no rows. */
 const CatalogBody = ({ items, visible, isLoading, isFiltered, canManage, pending, onToggle }: CatalogBodyProps) => {
-  const { t } = useT("logic.event-triggers");
+  const { t } = useT(LOGIC_EVENT_TRIGGERS_MODULE);
   if (isLoading || visible.length > 0) {
     return (
       <EventTriggerList items={visible} isLoading={isLoading} canManage={canManage} pending={pending} onToggle={onToggle} />
@@ -75,7 +77,7 @@ const CatalogBody = ({ items, visible, isLoading, isFiltered, canManage, pending
 };
 
 export const EventTriggers = () => {
-  const { t } = useT("logic.event-triggers");
+  const { t } = useT(LOGIC_EVENT_TRIGGERS_MODULE);
   const { data, isLoading, isError, refetch } = useGetEventTriggers();
   const { canManage, isLoading: isCheckingAccess } = useCanManageEventTriggers();
   const { pending, optimistic, pendingDisable, cancelDisable, handleToggle, confirmDisable } =

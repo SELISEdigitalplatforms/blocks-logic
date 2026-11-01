@@ -14,6 +14,8 @@ import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 import { authClientService } from "../../services/iam.service";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
   guide: NodeGuideActionDataActionV1,
   schema: {
@@ -26,36 +28,36 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         type: "callout-accordion-display",
         key: "queryModeNotes",
         displayValue: () => ({
-          title: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.NOTES_ON_QUERY_FIELDS"),
-          description: React.createElement("span", null, ...renderRichText(tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.RAW_QUERY_IS_RECOMMENDED"), [(text: string) => React.createElement("code", { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" }, text)])),
+          title: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.NOTES_ON_QUERY_FIELDS"),
+          description: React.createElement("span", null, ...renderRichText(tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.RAW_QUERY_IS_RECOMMENDED"), [(text: string) => React.createElement("code", { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" }, text)])),
         }),
       },
       {
         id: "rawQueryMode",
         type: "switch",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.RAW_QUERY_MODE"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ENTER_A_RAW_GRAPHQL"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.RAW_QUERY_MODE"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ENTER_A_RAW_GRAPHQL"); },
         key: "rawQueryMode",
       },
       {
         id: "authenticationType",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.AUTHENTICATION"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.SELECT_HOW_TO_AUTHENTICATE"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.AUTHENTICATION"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.SELECT_HOW_TO_AUTHENTICATE"); },
         key: "authenticationType",
         required: false,
         options: [
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.NONE"); }, value: "" },
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.CLIENT_CREDENTIAL"); }, value: "clientCredential" },
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.BLOCKS_AUTHENTICATION"); }, value: "blocksAuthentication" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.NONE"); }, value: "" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.CLIENT_CREDENTIAL"); }, value: "clientCredential" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.BLOCKS_AUTHENTICATION"); }, value: "blocksAuthentication" },
           // { label: "Trigger Node Cookie", value: "triggerNodeCookie" },
         ],
       },
       {
         id: "clientCredential",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.CLIENT_CREDENTIAL"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.SELECT_A_CLIENT_CREDENTIAL"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.CLIENT_CREDENTIAL"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.SELECT_A_CLIENT_CREDENTIAL"); },
         key: "clientId",
         required: false,
         searchable: true,
@@ -80,8 +82,8 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       {
         id: "rawQuery",
         type: "graphql-code-editor",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.RAW_QUERY"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ENTER_THE_RAW_GRAPHQL"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.RAW_QUERY"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ENTER_THE_RAW_GRAPHQL"); },
         key: "rawQuery",
         dependsOn: {
           key: "rawQueryMode",
@@ -92,8 +94,8 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       {
         id: "collection",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.COLLECTION"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.SELECT_THE_DATA_COLLECTION"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.COLLECTION"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.SELECT_THE_DATA_COLLECTION"); },
         key: "collectionName_composite",
         required: true,
         searchable: true,
@@ -164,27 +166,27 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       {
         id: "actionType",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ACTION_TYPE"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.THE_TYPE_OF_DATA"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ACTION_TYPE"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.THE_TYPE_OF_DATA"); },
         key: "actionType",
         required: true,
         options: [
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.GET_DATA"); }, value: "getData" },
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.INSERT_DATA"); }, value: "insertData" },
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.UPDATE_DATA"); }, value: "updateData" },
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.DELETE_DATA"); }, value: "deleteData" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.GET_DATA"); }, value: "getData" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.INSERT_DATA"); }, value: "insertData" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.UPDATE_DATA"); }, value: "updateData" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.DELETE_DATA"); }, value: "deleteData" },
         ],
         hidden: (data: Record<string, unknown>) => data.rawQueryMode === true,
       },
       {
         id: "filter",
         type: "key-value-pairs",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "common:FILTER"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.KEY_VALUE_FILTER_CONDITIONS"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "common:FILTER"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.KEY_VALUE_FILTER_CONDITIONS"); },
         key: "filter",
-        get keyLabel() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELD"); },
-        get valueLabel() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.VALUE"); },
-        get addButtonText() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ADD_FILTER"); },
+        get keyLabel() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELD"); },
+        get valueLabel() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.VALUE"); },
+        get addButtonText() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.ADD_FILTER"); },
         dependsOn: {
           key: "actionType",
           value: "insertData",
@@ -195,8 +197,8 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       {
         id: "fieldMapping",
         type: "schema-fields",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELD_MAPPING"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELD_VALUES_FOR_INSERT"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELD_MAPPING"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELD_VALUES_FOR_INSERT"); },
         key: "fieldMapping",
         hidden: (data: Record<string, unknown>) => {
           const actionType = data.actionType as string;
@@ -209,8 +211,8 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
       {
         id: "getFields",
         type: "schema-field-picker",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELDS"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELDS_TO_FETCH_FROM"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELDS"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_DATA_ACTION_V1.FIELDS_TO_FETCH_FROM"); },
         key: "getFields",
         dependsOn: {
           key: "actionType",

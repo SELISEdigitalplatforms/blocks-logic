@@ -5,6 +5,8 @@ import { NodeSchemaDefinition } from "./node-schema.type";
 import { tStatic } from "@seliseblocks/genesis-os";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
   guide: NodeGuideTriggerDataGatewayV1,
   schema: {
@@ -18,7 +20,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
         key: "executionNotes",
         displayValue: () => ({
           title: tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.NOTES_OF_EDITOR_EXECUTION",
           ),
           description: React.createElement(
@@ -26,7 +28,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
             null,
             ...renderRichText(
               tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.A_DATA_CHANGE_RUNS",
               ),
               [
@@ -58,13 +60,13 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
         type: "select",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.COLLECTION",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.SELECT_THE_DATA_COLLECTION",
           );
         },
@@ -105,13 +107,13 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
         type: "select",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.OPERATION",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.THE_DATA_OPERATION_THAT",
           );
         },
@@ -121,7 +123,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.INSERTED",
               );
             },
@@ -130,7 +132,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.UPDATED",
               );
             },
@@ -139,7 +141,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.DELETED",
               );
             },
@@ -161,13 +163,13 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
         type: "display",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.OUTPUT",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.STRUCTURE_OF_THE_TRIGGER",
           );
         },

@@ -32,6 +32,8 @@ import {
 } from "../utils";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_PROXY_COMPONENTS_MODULE = "logic.proxy.components";
+
 type Props = {
   control: Control<ProxyFormValues>;
 };
@@ -44,14 +46,14 @@ const KIND_OPTIONS: Array<{
 }> = [
   {
     value: "blocksToken",
-    get title() { return tStatic("logic.proxy.components", "PROXY_ACCESS_CARD.BLOCKS_TOKEN"); },
-    get description() { return tStatic("logic.proxy.components", "PROXY_ACCESS_CARD.THE_CALLER_SENDS_A"); },
+    get title() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ACCESS_CARD.BLOCKS_TOKEN"); },
+    get description() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ACCESS_CARD.THE_CALLER_SENDS_A"); },
     icon: KeyRound,
   },
   {
     value: "public",
-    get title() { return tStatic("logic.proxy.components", "PROXY_ACCESS_CARD.PUBLIC"); },
-    get description() { return tStatic("logic.proxy.components", "PROXY_ACCESS_CARD.ANYONE_WITH_THE_URL"); },
+    get title() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ACCESS_CARD.PUBLIC"); },
+    get description() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_ACCESS_CARD.ANYONE_WITH_THE_URL"); },
     icon: Globe,
   },
 ];
@@ -81,7 +83,7 @@ export const AccessRulePicker = ({
   showValue?: boolean;
   onChange: (rule: ProxyAccessRule) => void;
 }) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const isRole = kind === "role";
@@ -233,7 +235,7 @@ export const AccessRulePicker = ({
  * clears any chips, since the server refuses a public policy that still names roles or permissions.
  */
 export const ProxyAccessCard = ({ control }: Props) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const { field, fieldState } = useController({ control, name: "access" });
   const access: ProxyAccess = field.value ?? defaultProxyAccess();
   const update = (patch: Partial<ProxyAccess>) => field.onChange({ ...access, ...patch });

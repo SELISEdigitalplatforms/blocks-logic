@@ -2,36 +2,38 @@ import { NodeGuideTriggerScheduleV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 // "months" is not offered. A legacy node stored as "months" still loads: its stored cron is kept,
 // and an hour/minute edit regenerates it from that cron (day of month and month step preserved).
 const TRIGGER_INTERVAL_OPTIONS = [
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MINUTES");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MINUTES");
     },
     value: "minutes",
   },
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.HOURS");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.HOURS");
     },
     value: "hours",
   },
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.DAYS");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.DAYS");
     },
     value: "days",
   },
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.WEEKS");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.WEEKS");
     },
     value: "weeks",
   },
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.CUSTOM_CRON");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.CUSTOM_CRON");
     },
     value: "custom",
   },
@@ -67,43 +69,43 @@ const HOUR_OPTIONS = [
 const WEEKDAY_OPTIONS = [
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.SUNDAY");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.SUNDAY");
     },
     value: "0",
   },
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MONDAY");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MONDAY");
     },
     value: "1",
   },
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TUESDAY");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TUESDAY");
     },
     value: "2",
   },
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.WEDNESDAY");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.WEDNESDAY");
     },
     value: "3",
   },
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.THURSDAY");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.THURSDAY");
     },
     value: "4",
   },
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.FRIDAY");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.FRIDAY");
     },
     value: "5",
   },
   {
     get label() {
-      return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.SATURDAY");
+      return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.SATURDAY");
     },
     value: "6",
   },
@@ -320,13 +322,13 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
         type: "select",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TRIGGER_INTERVAL",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.SELECT_HOW_OFTEN_THE",
           );
         },
@@ -342,13 +344,13 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
         type: "number",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MINUTES_BETWEEN_TRIGGERS",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MUST_BE_IN_RANGE",
           );
         },
@@ -373,13 +375,13 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
         type: "number",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.HOURS_BETWEEN_TRIGGERS",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MUST_BE_IN_RANGE_2",
           );
         },
@@ -404,7 +406,7 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
         type: "text",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.CRON_EXPRESSION",
           );
         },
@@ -423,13 +425,13 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
         type: "multiselect",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TRIGGER_AT_WEEKDAYS",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.DAYS_OF_THE_WEEK",
           );
         },
@@ -453,13 +455,13 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
         type: "select",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TRIGGER_AT_HOUR_UTC",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.HOUR_OF_THE_DAY",
           );
         },
@@ -482,13 +484,13 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
         type: "number",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.TRIGGER_AT_MINUTE",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.MUST_BE_IN_RANGE_3",
           );
         },
@@ -512,7 +514,7 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
         type: "display",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.CRON_PREVIEW",
           );
         },

@@ -19,6 +19,8 @@ import { buttonVariants } from "@/components/ui-kits/button/button";
 import { showErrorToast } from "@/hooks/use-toast";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_SHARED_MODULE = "logic.shared";
+
 type DirectionOptions = "rtl" | "ltr" | undefined;
 
 type FileUploaderContextType = {
@@ -71,7 +73,7 @@ export const FileUploader = forwardRef<
     },
     ref,
   ) => {
-  const { t } = useT("logic.shared");
+  const { t } = useT(LOGIC_SHARED_MODULE);
     const [isFileTooBig, setIsFileTooBig] = useState(false);
     const [isLOF, setIsLOF] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
@@ -98,7 +100,7 @@ export const FileUploader = forwardRef<
 
     useEffect(() => {
       if (isFileTooBig) {
-        showErrorToast({ errors: tStatic("logic.shared", "FILE_UPLOADER.FILE_SIZE_MORE_THAN_5MB") });
+        showErrorToast({ errors: tStatic(LOGIC_SHARED_MODULE, "FILE_UPLOADER.FILE_SIZE_MORE_THAN_5MB") });
       }
     }, [isFileTooBig]);
 
@@ -266,7 +268,7 @@ FileUploader.displayName = "FileUploader";
 // eslint-disable-next-line no-undef
 export const FileUploaderContent = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ children, className, ...props }, ref) => {
-  const { t } = useT("logic.shared");
+  const { t } = useT(LOGIC_SHARED_MODULE);
     const { orientation } = useFileUpload();
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -295,7 +297,7 @@ export const FileUploaderItem = forwardRef<
   // eslint-disable-next-line no-undef
   { index: number } & React.HTMLAttributes<HTMLDivElement>
 >(({ className, index, children, ...props }, ref) => {
-  const { t } = useT("logic.shared");
+  const { t } = useT(LOGIC_SHARED_MODULE);
   const { removeFileFromSet, activeIndex, direction } = useFileUpload();
   const isSelected = index === activeIndex;
   return (

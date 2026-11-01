@@ -5,6 +5,8 @@ import { Button } from "@/components/ui-kits/button/button";
 import { cn } from "@/lib/utils";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_PROXY_COMPONENTS_MODULE = "logic.proxy.components";
+
 /*
  * The small pieces both import dialogs are built from. Functions keeps its own identical copy
  * (`functions/components/function-import-dialog/import-parts.tsx`): Functions and Proxy do not
@@ -13,7 +15,7 @@ import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 /** Where the user is: 0 choose a file, 1 review the preview, 2 imported. */
 export const ImportSteps = ({ current }: { current: 0 | 1 | 2 }) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const steps = [
     t("PROXY_IMPORT_PARTS.CHOOSE_FILE"),
     t("PROXY_IMPORT_PARTS.REVIEW_CHANGES"),
@@ -62,7 +64,7 @@ type DropZoneProps = {
 
 /** Drag a file here, or click / press Enter or Space to browse. */
 export const ImportDropZone = ({ disabled, onBrowse, onDropFiles }: DropZoneProps) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const [dragging, setDragging] = useState(false);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -139,7 +141,7 @@ export const ImportFileCard = ({
   onReplace,
   onRemove,
 }: FileCardProps) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   return (
     <div className="flex items-center gap-3 rounded-lg border p-3" data-testid="import-file-card">
       <FileJson className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
@@ -173,25 +175,25 @@ export const ImportFileCard = ({
 const STATUS_CHIPS = {
   new: {
     get label() {
-      return tStatic("logic.proxy.components", "PROXY_IMPORT_PARTS.NEW");
+      return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.NEW");
     },
     variant: "info",
   },
   same: {
     get label() {
-      return tStatic("logic.proxy.components", "PROXY_IMPORT_PARTS.SAME");
+      return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.SAME");
     },
     variant: "secondary",
   },
   changed: {
     get label() {
-      return tStatic("logic.proxy.components", "PROXY_IMPORT_PARTS.CHANGED");
+      return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.CHANGED");
     },
     variant: "warning",
   },
   blocked: {
     get label() {
-      return tStatic("logic.proxy.components", "PROXY_IMPORT_PARTS.BLOCKED");
+      return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.BLOCKED");
     },
     variant: "error",
   },
@@ -217,12 +219,11 @@ export const ImportChoiceToggle = ({
   value: "mine" | "incoming";
   onChange: (value: "mine" | "incoming") => void;
 }) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   return (
-    <div
-      role="group"
+    <fieldset
       aria-label={t("PROXY_IMPORT_PARTS.USE_FOR", { label })}
-      className="inline-flex rounded-md border"
+      className="m-0 inline-flex min-w-0 rounded-md border p-0"
     >
       {(["mine", "incoming"] as const).map((choice) => (
         <button
@@ -241,7 +242,7 @@ export const ImportChoiceToggle = ({
           {choice === "mine" ? t("PROXY_IMPORT_PARTS.MINE") : t("PROXY_IMPORT_PARTS.INCOMING")}
         </button>
       ))}
-    </div>
+    </fieldset>
   );
 };
 
@@ -255,7 +256,7 @@ type ChangeRowProps = {
 
 /** One difference: its name, the Mine / Incoming switch, and an expandable detail. */
 export const ImportChangeRow = ({ label, value, onChange, children }: ChangeRowProps) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-lg border" data-testid="import-change-row">
@@ -291,7 +292,7 @@ export const ImportValuePair = ({
   mine: string | null | undefined;
   incoming: string | null | undefined;
 }) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   return (
     <div className="grid gap-3 text-xs sm:grid-cols-2">
       {(
@@ -331,7 +332,7 @@ export const ImportSecretChecklist = ({
   unresolved = [],
   unchecked,
 }: SecretChecklistProps) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   if (!missing.length && !duplicate.length && !unresolved.length && !unchecked) return null;
   const rows = [
     ...missing.map((name) => ({

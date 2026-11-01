@@ -23,6 +23,8 @@ import {
 } from "@/components/chip-input/chips-input";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
+
 interface KeyTypeValue {
   key: string;
   type: string;
@@ -30,11 +32,11 @@ interface KeyTypeValue {
 }
 
 const DATA_TYPES = [
-  { get label() { return tStatic("logic.workflow.nodes.inspector", "KEY_TYPE_VALUE_FIELD.STRING"); }, value: "string" },
-  { get label() { return tStatic("logic.workflow.nodes.inspector", "KEY_TYPE_VALUE_FIELD.NUMBER"); }, value: "number" },
-  { get label() { return tStatic("logic.workflow.nodes.inspector", "KEY_TYPE_VALUE_FIELD.ARRAY"); }, value: "array" },
-  { get label() { return tStatic("logic.workflow.nodes.inspector", "KEY_TYPE_VALUE_FIELD.BOOLEAN"); }, value: "boolean" },
-  { get label() { return tStatic("logic.workflow.nodes.inspector", "KEY_TYPE_VALUE_FIELD.DATE_TIME"); }, value: "datetime" },
+  { get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "KEY_TYPE_VALUE_FIELD.STRING"); }, value: "string" },
+  { get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "KEY_TYPE_VALUE_FIELD.NUMBER"); }, value: "number" },
+  { get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "KEY_TYPE_VALUE_FIELD.ARRAY"); }, value: "array" },
+  { get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "KEY_TYPE_VALUE_FIELD.BOOLEAN"); }, value: "boolean" },
+  { get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "KEY_TYPE_VALUE_FIELD.DATE_TIME"); }, value: "datetime" },
 ];
 
 export const KeyTypeValueField = ({
@@ -46,7 +48,7 @@ export const KeyTypeValueField = ({
   config,
   variablePicker,
 }: FieldProps<KeyTypeValue[]>) => {
-  const { t } = useT("logic.workflow.nodes.inspector");
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   // Use array directly
   const pairs: KeyTypeValue[] = Array.isArray(value) ? value : [];
 

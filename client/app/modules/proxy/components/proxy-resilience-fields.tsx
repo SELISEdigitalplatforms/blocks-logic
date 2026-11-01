@@ -22,6 +22,8 @@ import {
 } from "../utils";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_PROXY_COMPONENTS_MODULE = "logic.proxy.components";
+
 /** Errors keyed the way `resilienceIssues` paths read: `timeoutSeconds`, `retry.attempts`, … */
 export type ResilienceErrors = Record<string, string | undefined>;
 
@@ -44,9 +46,9 @@ const numberValue = (value: number) => (value === 0 ? "" : String(value));
 const toNumber = (raw: string) => (raw.trim() === "" ? 0 : Number.parseInt(raw, 10) || 0);
 
 const BACKOFF_LABELS: Array<{ value: ProxyBackoff; label: string; hint: string }> = [
-  { value: "exponential", get label() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.BACK_OFF"); }, get hint() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.DOUBLE_THE_WAIT_EACH"); } },
-  { value: "fixed", get label() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.FIXED_WAIT"); }, get hint() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.THE_SAME_WAIT_BEFORE"); } },
-  { value: "none", get label() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.IMMEDIATELY"); }, get hint() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.NO_WAIT_BETWEEN_ATTEMPTS"); } },
+  { value: "exponential", get label() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_RESILIENCE_FIELDS.BACK_OFF"); }, get hint() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_RESILIENCE_FIELDS.DOUBLE_THE_WAIT_EACH"); } },
+  { value: "fixed", get label() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_RESILIENCE_FIELDS.FIXED_WAIT"); }, get hint() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_RESILIENCE_FIELDS.THE_SAME_WAIT_BEFORE"); } },
+  { value: "none", get label() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_RESILIENCE_FIELDS.IMMEDIATELY"); }, get hint() { return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_RESILIENCE_FIELDS.NO_WAIT_BETWEEN_ATTEMPTS"); } },
 ];
 
 /**
@@ -96,7 +98,7 @@ const FieldError = ({ message }: { message?: string }) =>
  * saved as if it had been chosen.
  */
 export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, errors }: Props) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const limits = PROXY_RESILIENCE_LIMITS;
   const retry = value?.retry ?? null;
   const breaker = value?.breaker ?? null;

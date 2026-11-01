@@ -28,6 +28,8 @@ import {
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_PROXY_COMPONENTS_MODULE = "logic.proxy.components";
+
 type Choice = "mine" | "incoming";
 
 type Props = {
@@ -41,27 +43,48 @@ const VERSION_CONFLICT = "PROXY_VERSION_CONFLICT";
 
 const STATUS_TEXT: Record<ProxyImportResult["status"], string> = {
   get new() {
-    return tStatic("logic.proxy.components", "PROXY_IMPORT_DIALOG.NOT_IN_THIS_ENVIRONMENT");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_DIALOG.NOT_IN_THIS_ENVIRONMENT");
   },
   get same() {
-    return tStatic("logic.proxy.components", "PROXY_IMPORT_DIALOG.THIS_ENVIRONMENT_ALREADY_HAS");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_DIALOG.THIS_ENVIRONMENT_ALREADY_HAS");
   },
   get changed() {
-    return tStatic("logic.proxy.components", "PROXY_IMPORT_DIALOG.THIS_PROXY_IS_ALREADY");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_DIALOG.THIS_PROXY_IS_ALREADY");
   },
   get blocked() {
-    return tStatic("logic.proxy.components", "PROXY_IMPORT_DIALOG.THIS_FILE_CANNOT_BE");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_DIALOG.THIS_FILE_CANNOT_BE");
   },
 };
 
 type Done = { itemId: string; applied: boolean; status: ProxyImportResult["status"] };
+
+const importToastText = (done: Done) => {
+  const module = LOGIC_PROXY_COMPONENTS_MODULE;
+  if (!done.applied) return tStatic(module, "PROXY_IMPORT_DIALOG.NOTHING_TO_CHANGE_THE");
+  if (done.status === "new") return tStatic(module, "PROXY_IMPORT_DIALOG.PROXY_IMPORTED");
+  return tStatic(module, "PROXY_IMPORT_DIALOG.PROXY_UPDATED_FROM_THE");
+};
+
+const importResultText = (done: Done, name: string) => {
+  const module = LOGIC_PROXY_COMPONENTS_MODULE;
+  if (!done.applied) return tStatic(module, "PROXY_IMPORT_DIALOG.ALREADY_MATCHES_THE_FILE", { name });
+  if (done.status === "new") return tStatic(module, "PROXY_IMPORT_DIALOG.IMPORTED", { name });
+  return tStatic(module, "PROXY_IMPORT_DIALOG.UPDATED", { name });
+};
+
+const confirmLabel = (status: Done["status"] | undefined, takeCount: number) => {
+  const module = LOGIC_PROXY_COMPONENTS_MODULE;
+  if (status !== "changed") return tStatic(module, "PROXY_IMPORT_DIALOG.IMPORT");
+  if (!takeCount) return tStatic(module, "PROXY_IMPORT_DIALOG.NOTHING_TO_APPLY");
+  return `Apply ${takeCount} ${takeCount === 1 ? "change" : "changes"}`;
+};
 
 /**
  * Import one proxy from an export file. The preview writes nothing; Apply sends the same file back and
  * the server checks everything again, so what the dialog shows is advice, never the authority.
  */
 export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const inputRef = useRef<HTMLInputElement>(null);
   // Bumped on every pick and every reset: an answer that arrives for an older file is dropped.
   const ticket = useRef(0);
@@ -167,11 +190,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
     if (response.ok) {
       const written = response.result;
       showSuccessToast({
-        description: !written.applied
-          ? t("PROXY_IMPORT_DIALOG.NOTHING_TO_CHANGE_THE")
-          : status === "new"
-            ? t("PROXY_IMPORT_DIALOG.PROXY_IMPORTED")
-            : t("PROXY_IMPORT_DIALOG.PROXY_UPDATED_FROM_THE"),
+        description: importToastText({ itemId: written.itemId, applied: !!written.applied, status }),
       });
       setDone({ itemId: written.itemId, applied: !!written.applied, status });
       return;
@@ -406,11 +425,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true" />
                 <span className="text-sm font-semibold">
-                  {!done.applied
-                    ? t("PROXY_IMPORT_DIALOG.ALREADY_MATCHES_THE_FILE", { name: result.name })
-                    : done.status === "new"
-                      ? t("PROXY_IMPORT_DIALOG.IMPORTED", { name: result.name })
-                      : t("PROXY_IMPORT_DIALOG.UPDATED", { name: result.name })}
+                  {importResultText(done, result.name)}
                 </span>
               </div>
               <ImportSecretChecklist
@@ -446,11 +461,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
               </Button>
               <Button type="button" disabled={!canApply || busy} onClick={confirm}>
                 {apply.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {result?.status === "changed"
-                  ? takeCount
-                    ? `Apply ${takeCount} ${takeCount === 1 ? "change" : "changes"}`
-                    : t("PROXY_IMPORT_DIALOG.NOTHING_TO_APPLY")
-                  : t("PROXY_IMPORT_DIALOG.IMPORT")}
+                {confirmLabel(result?.status, takeCount)}
               </Button>
             </>
           )}

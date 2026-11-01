@@ -10,6 +10,9 @@ type Props = {
 
 export const ProxyFormHeader = ({ isEdit, isPending, onCancel }: Props) => {
   const { t } = useT("logic.proxy.components");
+  let submitIcon = <Plus className="h-4 w-4" />;
+  if (isPending) submitIcon = <Loader2 className="h-4 w-4 animate-spin" />;
+  else if (isEdit) submitIcon = <Save className="h-4 w-4" />;
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
@@ -32,13 +35,7 @@ export const ProxyFormHeader = ({ isEdit, isPending, onCancel }: Props) => {
           {t("common:CANCEL")}
         </Button>
         <Button type="submit" className="gap-2" disabled={isPending}>
-          {isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : isEdit ? (
-            <Save className="h-4 w-4" />
-          ) : (
-            <Plus className="h-4 w-4" />
-          )}
+          {submitIcon}
           {t("common:SAVE")}
         </Button>
       </div>

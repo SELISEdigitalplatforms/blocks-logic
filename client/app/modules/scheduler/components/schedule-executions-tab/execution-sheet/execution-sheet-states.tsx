@@ -2,8 +2,10 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { useT } from "@seliseblocks/genesis-os";
 
+const LOGIC_SCHEDULER_MODULE = "logic.scheduler";
+
 export const ExecutionSheetLoading = () => {
-  const { t } = useT("logic.scheduler");
+  const { t } = useT(LOGIC_SCHEDULER_MODULE);
   return (
     // <output> carries the "status" role natively.
     <output className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground">
@@ -19,7 +21,7 @@ interface ExecutionSheetErrorProps {
 }
 
 export const ExecutionSheetError = ({ notFound = false, onRetry }: Readonly<ExecutionSheetErrorProps>) => {
-  const { t } = useT("logic.scheduler");
+  const { t } = useT(LOGIC_SCHEDULER_MODULE);
   return (
     <div className="space-y-3 px-4 py-8 text-sm" role="alert">
       <p className="text-foreground">
@@ -35,7 +37,7 @@ export const ExecutionSheetError = ({ notFound = false, onRetry }: Readonly<Exec
 };
 
 export const SnapshotUnavailable = () => {
-  const { t } = useT("logic.scheduler");
+  const { t } = useT(LOGIC_SCHEDULER_MODULE);
   return (
     <p className="text-xs text-muted-foreground">{t("EXECUTION_SHEET_STATES.SCHEDULE_SNAPSHOT_UNAVAILABLE_FOR")}</p>
   );

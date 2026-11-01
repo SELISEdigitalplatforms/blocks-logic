@@ -42,6 +42,8 @@ import {
 } from "../types";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_PROXY_MODULE = "logic.proxy";
+
 const VALID_METHODS: ProxyMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 const isMethod = (value: unknown): value is ProxyMethod =>
@@ -56,27 +58,27 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
   200: "OK",
   201: "Created",
   202: "Accepted",
-  get 204() { return tStatic("logic.proxy", "PROXY_MAPPER.NO_CONTENT"); },
-  get 301() { return tStatic("logic.proxy", "PROXY_MAPPER.MOVED_PERMANENTLY"); },
+  get 204() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.NO_CONTENT"); },
+  get 301() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.MOVED_PERMANENTLY"); },
   302: "Found",
-  get 304() { return tStatic("logic.proxy", "PROXY_MAPPER.NOT_MODIFIED"); },
-  get 400() { return tStatic("logic.proxy", "PROXY_MAPPER.BAD_REQUEST"); },
+  get 304() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.NOT_MODIFIED"); },
+  get 400() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.BAD_REQUEST"); },
   401: "Unauthorized",
   403: "Forbidden",
-  get 404() { return tStatic("logic.proxy", "PROXY_MAPPER.NOT_FOUND"); },
-  get 405() { return tStatic("logic.proxy", "PROXY_MAPPER.METHOD_NOT_ALLOWED"); },
+  get 404() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.NOT_FOUND"); },
+  get 405() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.METHOD_NOT_ALLOWED"); },
   409: "Conflict",
-  get 413() { return tStatic("logic.proxy", "PROXY_MAPPER.PAYLOAD_TOO_LARGE"); },
-  get 429() { return tStatic("logic.proxy", "PROXY_MAPPER.TOO_MANY_REQUESTS"); },
-  get 500() { return tStatic("logic.proxy", "PROXY_MAPPER.INTERNAL_SERVER_ERROR"); },
-  get 502() { return tStatic("logic.proxy", "PROXY_MAPPER.BAD_GATEWAY"); },
-  get 503() { return tStatic("logic.proxy", "PROXY_MAPPER.SERVICE_UNAVAILABLE"); },
-  get 504() { return tStatic("logic.proxy", "PROXY_MAPPER.GATEWAY_TIMEOUT"); },
+  get 413() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.PAYLOAD_TOO_LARGE"); },
+  get 429() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.TOO_MANY_REQUESTS"); },
+  get 500() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.INTERNAL_SERVER_ERROR"); },
+  get 502() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.BAD_GATEWAY"); },
+  get 503() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.SERVICE_UNAVAILABLE"); },
+  get 504() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.GATEWAY_TIMEOUT"); },
 };
 
 const statusText = (status: number) =>
   HTTP_STATUS_TEXT[status] ??
-  (status >= 500 ? tStatic("logic.proxy", "PROXY_MAPPER.SERVER_ERROR") : status >= 400 ? tStatic("logic.proxy", "PROXY_MAPPER.REQUEST_ERROR") : "OK");
+  (status >= 500 ? tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.SERVER_ERROR") : status >= 400 ? tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.REQUEST_ERROR") : "OK");
 
 // ---------------------------------------------------------------------------
 // Filters
@@ -529,7 +531,7 @@ export const mapProxyVersionDtoToHistory = (
 ): ProxyVersionHistory => ({
   id: dto.itemId,
   proxyId,
-  versionLabel: dto.versionLabel || tStatic("logic.proxy", "PROXY_MAPPER.V", { versionNumber: dto.versionNumber }),
+  versionLabel: dto.versionLabel || tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.V", { versionNumber: dto.versionNumber }),
   versionNumber: Number(dto.versionNumber ?? 0),
   kind: VERSION_KIND[dto.kind] ?? "edit",
   summary: dto.changeSummary ?? "",

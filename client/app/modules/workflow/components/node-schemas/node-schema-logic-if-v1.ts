@@ -2,6 +2,8 @@ import { NodeGuideLogicIfV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
   guide: NodeGuideLogicIfV1,
   schema: {
@@ -13,11 +15,11 @@ export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
         id: "conditionType",
         type: "select",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_IF_V1.CONDITION_TYPE");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_IF_V1.CONDITION_TYPE");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_LOGIC_IF_V1.SELECT_THE_TYPE_OF",
           );
         },
@@ -27,7 +29,7 @@ export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
             value: "all",
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_LOGIC_IF_V1.ALL_CONDITIONS_AND",
               );
             },
@@ -36,7 +38,7 @@ export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
             value: "or",
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_LOGIC_IF_V1.ANY_CONDITION_OR",
               );
             },
@@ -48,11 +50,11 @@ export const NodeSchemaLogicIfV1: NodeSchemaDefinition = {
         id: "conditions",
         type: "conditions",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_LOGIC_IF_V1.CONDITIONS");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_LOGIC_IF_V1.CONDITIONS");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_LOGIC_IF_V1.ADD_CONDITIONS_TO_EVALUATE",
           );
         },

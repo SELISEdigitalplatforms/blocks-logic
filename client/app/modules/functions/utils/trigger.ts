@@ -2,6 +2,8 @@ import { HttpTriggerVerb, ITriggerConfig, TriggerResponseMode } from "../types/f
 import { FUNCTION_HTTP_VERBS } from "../constants/endpoint.constant";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
+
 /** The values a trigger has for the reuse / response / verbs settings when the server sent none. */
 export const TRIGGER_REUSE_DEFAULTS: Pick<
   ITriggerConfig,
@@ -39,30 +41,30 @@ export const withTriggerDefaults = (trigger: ITriggerConfig): ITriggerConfig => 
 
 /** Leftover work, by the async resource name the sandbox reports, in plain words. */
 const LEFTOVER_LABELS: Array<{ match: RegExp; label: string }> = [
-  { match: /^(timeout|interval|immediate)$/i, get label() { return tStatic("logic.functions", "TRIGGER.A_TIMER"); } },
-  { match: /^(httpclientrequest|httpincomingmessage|fetch)$/i, get label() { return tStatic("logic.functions", "TRIGGER.AN_HTTP_REQUEST"); } },
-  { match: /^(fsreq|filehandle|statwatcher|fsevent)/i, get label() { return tStatic("logic.functions", "TRIGGER.A_FILE_OPERATION"); } },
-  { match: /^(getaddrinfo|getnameinfo|querywrap)/i, get label() { return tStatic("logic.functions", "TRIGGER.A_DNS_LOOKUP"); } },
-  { match: /^(tcpconnect|pipeconnect|shutdownwrap|writewrap)/i, get label() { return tStatic("logic.functions", "TRIGGER.A_NETWORK_CONNECTION"); } },
-  { match: /^processwrap$/i, get label() { return tStatic("logic.functions", "TRIGGER.A_CHILD_PROCESS"); } },
-  { match: /^worker$/i, get label() { return tStatic("logic.functions", "TRIGGER.A_WORKER_THREAD"); } },
+  { match: /^(timeout|interval|immediate)$/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_TIMER"); } },
+  { match: /^(httpclientrequest|httpincomingmessage|fetch)$/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.AN_HTTP_REQUEST"); } },
+  { match: /^(fsreq|filehandle|statwatcher|fsevent)/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_FILE_OPERATION"); } },
+  { match: /^(getaddrinfo|getnameinfo|querywrap)/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_DNS_LOOKUP"); } },
+  { match: /^(tcpconnect|pipeconnect|shutdownwrap|writewrap)/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_NETWORK_CONNECTION"); } },
+  { match: /^processwrap$/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_CHILD_PROCESS"); } },
+  { match: /^worker$/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_WORKER_THREAD"); } },
   {
     match: /^waituntil$/i,
     get label() {
-      return tStatic("logic.functions", "TRIGGER.WAITUNTIL_WORK_UNFINISHED");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.WAITUNTIL_WORK_UNFINISHED");
     },
   },
 ];
 
 const OTHER_DISCARD_REASONS: Record<string, string> = {
-  get timeout() { return tStatic("logic.functions", "TRIGGER.THE_CALL_OR_WORK"); },
-  get drain() { return tStatic("logic.functions", "TRIGGER.A_NEWER_VERSION_WENT"); },
-  get cancelled() { return tStatic("logic.functions", "TRIGGER.THE_RUN_WAS_CANCELLED"); },
-  get crash() { return tStatic("logic.functions", "TRIGGER.THE_SANDBOX_CRASHED_DURING"); },
-  get maxcalls() { return tStatic("logic.functions", "TRIGGER.THE_SANDBOX_REACHED_ITS"); },
-  get maxage() { return tStatic("logic.functions", "TRIGGER.THE_SANDBOX_REACHED_ITS_2"); },
-  get memory() { return tStatic("logic.functions", "TRIGGER.THE_SANDBOX_S_MEMORY"); },
-  get protocol() { return tStatic("logic.functions", "TRIGGER.THE_SANDBOX_SENT_SOMETHING"); },
+  get timeout() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_CALL_OR_WORK"); },
+  get drain() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_NEWER_VERSION_WENT"); },
+  get cancelled() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_RUN_WAS_CANCELLED"); },
+  get crash() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_SANDBOX_CRASHED_DURING"); },
+  get maxcalls() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_SANDBOX_REACHED_ITS"); },
+  get maxage() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_SANDBOX_REACHED_ITS_2"); },
+  get memory() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_SANDBOX_S_MEMORY"); },
+  get protocol() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_SANDBOX_SENT_SOMETHING"); },
 };
 
 /**
@@ -88,12 +90,14 @@ export const explainDiscardReason = (reason?: string | null): string | null => {
     );
     // `late`: code that an EARLIER call left behind ran during this one — a different message.
     const late = leftovers.some((item) => /^late$/i.test(item));
-    const what = labels.length > 0 ? labels.join(", ") : late ? null : "some work";
+    let what: string | null = "some work";
+    if (labels.length > 0) what = labels.join(", ");
+    else if (late) what = null;
     const parts: string[] = [];
-    if (what) parts.push(tStatic("logic.functions", "TRIGGER.THE_FUNCTION_LEFT_RUNNING", { what }));
-    if (late) parts.push(tStatic("logic.functions", "TRIGGER.CODE_LEFT_RUNNING_BY"));
+    if (what) parts.push(tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_FUNCTION_LEFT_RUNNING", { what }));
+    if (late) parts.push(tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.CODE_LEFT_RUNNING_BY"));
     parts.push(
-      tStatic("logic.functions", "TRIGGER.AWAIT_EVERY_CALL_OR"),
+      tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.AWAIT_EVERY_CALL_OR"),
     );
     return parts.join(" ");
   }

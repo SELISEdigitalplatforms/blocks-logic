@@ -36,6 +36,8 @@ import { triggeredByLabel } from "../../utils/events";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 const LOG_LEVEL_FILTERS = ["All", "Info", "Warn", "Error"] as const;
 
 /** Log lines loaded for the viewer and the download; a run may store more. */
@@ -48,22 +50,35 @@ const LOG_LEVEL_CLASS: Record<string, string> = {
   debug: "text-low-emphasis",
 };
 
+const outputResultLabel = (result: { ok: boolean; statusCode?: number | null }) => {
+  const module = LOGIC_FUNCTIONS_COMPONENTS_MODULE;
+  if (result.ok) return tStatic(module, "RUN_DETAIL.SENT");
+  if (result.statusCode == null) return tStatic(module, "RUN_DETAIL.SKIPPED");
+  return tStatic(module, "RUN_DETAIL.FAILED");
+};
+
+const outputResultTone = (result: { ok: boolean; statusCode?: number | null }) => {
+  if (result.ok) return "bg-success/15 text-success";
+  if (result.statusCode == null) return "bg-surface-app text-medium-emphasis";
+  return "bg-error/10 text-error";
+};
+
 const TRIGGER_LABELS: Record<string, string> = {
   Http: "HTTP",
   get Workflow() {
-    return tStatic("logic.functions.components", "RUN_DETAIL.WORKFLOW");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.WORKFLOW");
   },
   get Test() {
-    return tStatic("logic.functions.components", "RUN_DETAIL.TEST");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.TEST");
   },
   get Replay() {
-    return tStatic("logic.functions.components", "RUN_DETAIL.REPLAY");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.REPLAY");
   },
   get Schedule() {
-    return tStatic("logic.functions.components", "RUN_DETAIL.SCHEDULE");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.SCHEDULE");
   },
   get Event() {
-    return tStatic("logic.functions.components", "RUN_DETAIL.EVENT");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.EVENT");
   },
 };
 
@@ -78,12 +93,12 @@ const buildStages = (run: IRunDetail) => {
   ];
   if (run.startedAt)
     stages.push({
-      label: tStatic("logic.functions.components", "RUN_DETAIL.RUNNING"),
+      label: tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.RUNNING"),
       at: run.startedAt,
     });
   if (run.outputResults.length > 0)
     stages.push({
-      label: tStatic("logic.functions.components", "RUN_DETAIL.OUTPUTS"),
+      label: tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.OUTPUTS"),
       at: run.completedAt,
     });
   if (TERMINAL_RUN_STATUSES.includes(run.status)) {
@@ -109,7 +124,7 @@ const JsonPane = ({
   emptyText: string;
   onUseAsTestInput?: (value: string) => void;
 }) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const [isPretty, setIsPretty] = useState(false);
 
   // Not every value is valid JSON (or even present) — fall back to the raw string rather than
@@ -195,7 +210,7 @@ export const RunDetail = ({
   onUseAsTestInput,
   onBack,
 }: RunDetailProps) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const { data: run, isLoading } = useGetRun({ runId });
   const { data: logsData, isLoading: isLogsLoading } = useGetRunLogs(runId, 0, LOG_PAGE_SIZE);
   const { mutateAsync: replayAsync, isPending: isReplaying } = useReplayRun();
@@ -291,8 +306,9 @@ export const RunDetail = ({
         description: t("RUN_DETAIL.REPLAYED_AS_A_NEW"),
       });
     } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: t("RUN_DETAIL.FAILED_TO_REPLAY_RUN") });
+      showErrorToast({
+        errors: isErrorWithErrors(error) ? error.errors : t("RUN_DETAIL.FAILED_TO_REPLAY_RUN"),
+      });
     }
   };
 
@@ -301,8 +317,9 @@ export const RunDetail = ({
       await cancelAsync(run.id);
       showSuccessToast({ description: t("RUN_DETAIL.CANCEL_REQUESTED") });
     } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: t("RUN_DETAIL.FAILED_TO_CANCEL_RUN") });
+      showErrorToast({
+        errors: isErrorWithErrors(error) ? error.errors : t("RUN_DETAIL.FAILED_TO_CANCEL_RUN"),
+      });
     }
   };
 
@@ -482,9 +499,9 @@ export const RunDetail = ({
               <RunStatusChip status={attempt.status} />
               <span className="min-w-0 flex-1 break-words text-xs text-medium-emphasis">
                 {attempt.errorMessage ??
-                  (attempt.durationMs != null
-                    ? t("RUN_DETAIL.FINISHED_IN", { value: formatDuration(attempt.durationMs) })
-                    : "—")}
+                  (attempt.durationMs == null
+                    ? "—"
+                    : t("RUN_DETAIL.FINISHED_IN", { value: formatDuration(attempt.durationMs) }))}
               </span>
             </div>
           ))}
@@ -635,18 +652,10 @@ export const RunDetail = ({
               <span
                 className={cn(
                   "w-fit rounded px-2 py-0.5 text-[10px] font-semibold uppercase",
-                  outputResult.ok
-                    ? "bg-success/15 text-success"
-                    : outputResult.statusCode == null
-                      ? "bg-surface-app text-medium-emphasis"
-                      : "bg-error/10 text-error",
+                  outputResultTone(outputResult),
                 )}
               >
-                {outputResult.ok
-                  ? t("RUN_DETAIL.SENT")
-                  : outputResult.statusCode == null
-                    ? t("RUN_DETAIL.SKIPPED")
-                    : t("RUN_DETAIL.FAILED")}
+                {outputResultLabel(outputResult)}
               </span>
               <span className="truncate whitespace-nowrap text-xs text-medium-emphasis">
                 {outputResult.statusCode

@@ -38,6 +38,8 @@ import { cn, formatDate, parseDateString } from "@/lib/utils";
 import { ISchedule, ScheduleKind } from "../../types/schedule.service.type";
 import { DeleteScheduleDialog } from "../delete-schedule";
 
+const LOGIC_SCHEDULER_MODULE = "logic.scheduler";
+
 const ScheduleListSkeleton = ({ length }: { length: number }) => {
   return (
     <>
@@ -70,7 +72,7 @@ type ScheduleListProps = {
 };
 
 const ScheduleEmptyState = ({ onCreateSchedule }: { onCreateSchedule: () => void }) => {
-  const { t } = useT("logic.scheduler");
+  const { t } = useT(LOGIC_SCHEDULER_MODULE);
   return (
     <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -90,7 +92,7 @@ const ScheduleEmptyState = ({ onCreateSchedule }: { onCreateSchedule: () => void
 };
 
 const ScheduleNoResultsState = () => {
-  const { t } = useT("logic.scheduler");
+  const { t } = useT(LOGIC_SCHEDULER_MODULE);
   return (
     <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -110,7 +112,7 @@ export const ScheduleList = ({
   onCreateSchedule,
   isFiltered,
 }: ScheduleListProps) => {
-  const { t } = useT("logic.scheduler");
+  const { t } = useT(LOGIC_SCHEDULER_MODULE);
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const [modal, setModal] = useState<ModalState>({ type: null, schedule: null });

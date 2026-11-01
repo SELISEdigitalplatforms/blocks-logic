@@ -13,6 +13,8 @@ import {
 } from "../types";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_PROXY_MODULE = "logic.proxy";
+
 // ---------------------------------------------------------------------------
 // "Who can call it"
 // ---------------------------------------------------------------------------
@@ -41,17 +43,17 @@ const listClause = (kind: "role" | "permission", rule: ProxyAccessRule) => {
   const list = rule.values.join(", ");
   if (rule.values.length === 1) {
     return kind === "role"
-      ? tStatic("logic.proxy", "PROXY_UTILS.LIST_ONE_ROLE", { value: list })
-      : tStatic("logic.proxy", "PROXY_UTILS.LIST_ONE_PERMISSION", { value: list });
+      ? tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.LIST_ONE_ROLE", { value: list })
+      : tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.LIST_ONE_PERMISSION", { value: list });
   }
   if (kind === "role") {
     return rule.mode === "all"
-      ? tStatic("logic.proxy", "PROXY_UTILS.LIST_ALL_ROLES", { values: list })
-      : tStatic("logic.proxy", "PROXY_UTILS.LIST_ANY_ROLES", { values: list });
+      ? tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.LIST_ALL_ROLES", { values: list })
+      : tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.LIST_ANY_ROLES", { values: list });
   }
   return rule.mode === "all"
-    ? tStatic("logic.proxy", "PROXY_UTILS.LIST_ALL_PERMISSIONS", { values: list })
-    : tStatic("logic.proxy", "PROXY_UTILS.LIST_ANY_PERMISSIONS", { values: list });
+    ? tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.LIST_ALL_PERMISSIONS", { values: list })
+    : tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.LIST_ANY_PERMISSIONS", { values: list });
 };
 
 /**
@@ -60,32 +62,32 @@ const listClause = (kind: "role" | "permission", rule: ProxyAccessRule) => {
  */
 export const describeProxyAccess = (access: ProxyAccess): string => {
   if (access.kind === "public") {
-    return tStatic("logic.proxy", "PROXY_UTILS.ANYONE_WITH_THE_URL");
+    return tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.ANYONE_WITH_THE_URL");
   }
 
   const hasRoles = access.roles.values.length > 0;
   const hasPermissions = access.permissions.values.length > 0;
   if (!hasRoles && !hasPermissions) {
-    return tStatic("logic.proxy", "PROXY_UTILS.NO_EXTRA_RESTRICTION_ANY");
+    return tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.NO_EXTRA_RESTRICTION_ANY");
   }
 
   const roles = hasRoles ? listClause("role", access.roles) : null;
   const permissions = hasPermissions ? listClause("permission", access.permissions) : null;
   if (roles && permissions) {
     return tStatic(
-      "logic.proxy",
+      LOGIC_PROXY_MODULE,
       access.combine === "and" ? "PROXY_UTILS.MUST_HOLD_BOTH_AND" : "PROXY_UTILS.MUST_HOLD_BOTH_OR",
       { roles, permissions },
     );
   }
-  return tStatic("logic.proxy", "PROXY_UTILS.MUST_HOLD", { clause: roles ?? permissions ?? "" });
+  return tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.MUST_HOLD", { clause: roles ?? permissions ?? "" });
 };
 
 /** Problems the form must block on before the server does. `null` when the policy is saveable. */
 export const validateProxyAccess = (access: ProxyAccess): string | null => {
   if (access.kind === "public") {
     return access.roles.values.length || access.permissions.values.length
-      ? tStatic("logic.proxy", "PROXY_UTILS.A_PUBLIC_ENDPOINT_CANNOT")
+      ? tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.A_PUBLIC_ENDPOINT_CANNOT")
       : null;
   }
   const rules: Array<[string, ProxyAccessRule]> = [
@@ -93,12 +95,12 @@ export const validateProxyAccess = (access: ProxyAccess): string | null => {
     ["permission", access.permissions],
   ];
   for (const [label, rule] of rules) {
-    if (rule.values.length > MAX_ACCESS_VALUES) return tStatic("logic.proxy", "PROXY_UTILS.TOO_MANY_ENTRIES", { label });
+    if (rule.values.length > MAX_ACCESS_VALUES) return tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.TOO_MANY_ENTRIES", { label });
     if (rule.values.some((value) => value.length > MAX_ACCESS_VALUE_LENGTH)) {
-      return tStatic("logic.proxy", "PROXY_UTILS.A_ENTRY_IS_TOO", { label });
+      return tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.A_ENTRY_IS_TOO", { label });
     }
     if (rule.values.some((value) => value.includes(","))) {
-      return tStatic("logic.proxy", "PROXY_UTILS.A_ENTRY_MAY_NOT", { label });
+      return tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.A_ENTRY_MAY_NOT", { label });
     }
   }
   return null;
@@ -143,8 +145,8 @@ const keyValueSchema = z
     const blankRows = rows.filter((row) => !row.key.trim() && !row.value.trim());
     if (blankRows.length > 1) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: tStatic("logic.proxy", "PROXY_UTILS.REMOVE_DUPLICATE_BLANK_ROWS"),
+        code: "custom",
+        message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.REMOVE_DUPLICATE_BLANK_ROWS"),
       });
     }
 
@@ -152,9 +154,9 @@ const keyValueSchema = z
       const hasAnyValue = row.key.trim() || row.value.trim();
       if (hasAnyValue && !row.key.trim()) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: [index, "key"],
-          message: tStatic("logic.proxy", "PROXY_UTILS.KEY_IS_REQUIRED_WHEN"),
+          message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.KEY_IS_REQUIRED_WHEN"),
         });
       }
     });
@@ -506,17 +508,17 @@ export const parseRouteTemplate = (
 ): { ok: true; params: string[] } | { ok: false; reason: string } => {
   const trimmed = trimRoutePath(template);
   if (trimmed.length === 0) return { ok: true, params: [] };
-  if (trimmed.length > 512) return { ok: false, reason: tStatic("logic.proxy", "PROXY_UTILS.PATH_IS_TOO_LONG") };
+  if (trimmed.length > 512) return { ok: false, reason: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.PATH_IS_TOO_LONG") };
 
   const segments = trimmed.split("/");
-  if (segments.length > 20) return { ok: false, reason: tStatic("logic.proxy", "PROXY_UTILS.PATH_HAS_TOO_MANY") };
+  if (segments.length > 20) return { ok: false, reason: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.PATH_HAS_TOO_MANY") };
 
   const params: string[] = [];
   for (const segment of segments) {
     if (segment.length === 0)
-      return { ok: false, reason: tStatic("logic.proxy", "PROXY_UTILS.PATH_MUST_NOT_CONTAIN") };
+      return { ok: false, reason: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.PATH_MUST_NOT_CONTAIN") };
     if (segment === "." || segment === "..")
-      return { ok: false, reason: tStatic("logic.proxy", "PROXY_UTILS.PATH_MUST_NOT_CONTAIN_2") };
+      return { ok: false, reason: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.PATH_MUST_NOT_CONTAIN_2") };
     if (!segment.includes("{") && !segment.includes("}")) continue;
     if (!ROUTE_PARAM.test(segment))
       return {
@@ -525,7 +527,7 @@ export const parseRouteTemplate = (
       };
     const name = segment.slice(1, -1);
     if (params.includes(name))
-      return { ok: false, reason: tStatic("logic.proxy", "PROXY_UTILS.PARAMETER_IS_DECLARED_TWICE", { name }) };
+      return { ok: false, reason: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.PARAMETER_IS_DECLARED_TWICE", { name }) };
     params.push(name);
   }
 
@@ -598,15 +600,15 @@ const accessSchema = z.object({
 
 export const proxyFormSchema = z
   .object({
-    name: z.string().trim().min(1, { error: () => tStatic("logic.proxy", "PROXY_UTILS.GIVE_THE_PROXY_A_NAME") }),
+    name: z.string().trim().min(1, { error: () => tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.GIVE_THE_PROXY_A_NAME") }),
     upstreamUrl: z
       .string()
       .trim()
-      .refine(isParseableUrl, { error: () => tStatic("logic.proxy", "PROXY_UTILS.PLEASE_ENTER_A_VALID_URL") })
-      .refine((url) => url.startsWith("https://"), { error: () => tStatic("logic.proxy", "PROXY_UTILS.USE_AN_HTTPS_ENDPOINT") }),
+      .refine(isParseableUrl, { error: () => tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.PLEASE_ENTER_A_VALID_URL") })
+      .refine((url) => url.startsWith("https://"), { error: () => tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.USE_AN_HTTPS_ENDPOINT") }),
     methods: z
       .array(z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]))
-      .min(1, { error: () => tStatic("logic.proxy", "PROXY_UTILS.SELECT_AT_LEAST_ONE_METHOD") }),
+      .min(1, { error: () => tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.SELECT_AT_LEAST_ONE_METHOD") }),
     headers: keyValueSchema,
     query: keyValueSchema,
     bodyMerge: keyValueSchema,
@@ -620,21 +622,21 @@ export const proxyFormSchema = z
     resilience: resilienceSchema,
     requestsPerMinute: z
       .number()
-      .int({ error: () => tStatic("logic.proxy", "PROXY_UTILS.A_WHOLE_NUMBER") })
-      .min(1, { error: () => tStatic("logic.proxy", "PROXY_UTILS.A_WHOLE_NUMBER_RANGE", { max: PROXY_MAX_PER_MINUTE.toLocaleString("en") }) })
-      .max(PROXY_MAX_PER_MINUTE, { error: () => tStatic("logic.proxy", "PROXY_UTILS.A_WHOLE_NUMBER_RANGE", { max: PROXY_MAX_PER_MINUTE.toLocaleString("en") }) })
+      .int({ error: () => tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.A_WHOLE_NUMBER") })
+      .min(1, { error: () => tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.A_WHOLE_NUMBER_RANGE", { max: PROXY_MAX_PER_MINUTE.toLocaleString("en") }) })
+      .max(PROXY_MAX_PER_MINUTE, { error: () => tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.A_WHOLE_NUMBER_RANGE", { max: PROXY_MAX_PER_MINUTE.toLocaleString("en") }) })
       .nullable()
       .default(null),
   })
   .superRefine((values, ctx) => {
     const accessProblem = validateProxyAccess(values.access ?? defaultProxyAccess());
     if (accessProblem) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["access"], message: accessProblem });
+      ctx.addIssue({ code: "custom", path: ["access"], message: accessProblem });
     }
 
     resilienceIssues(values.resilience).forEach((issue) => {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["resilience", ...issue.path],
         message: issue.message,
       });
@@ -644,7 +646,7 @@ export const proxyFormSchema = z
     values.routes?.forEach((route, index) => {
       resilienceIssues(route.resilience).forEach((issue) => {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["routes", index, "resilience", ...issue.path],
           message: issue.message,
         });
@@ -653,7 +655,7 @@ export const proxyFormSchema = z
       const parsed = parseRouteTemplate(route.path);
       if (!parsed.ok) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["routes", index, "path"],
           message: parsed.reason,
         });
@@ -663,18 +665,18 @@ export const proxyFormSchema = z
       // A route for a method the proxy does not allow can never be reached, and the API rejects it.
       if (!values.methods.includes(route.method)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["routes", index, "method"],
-          message: tStatic("logic.proxy", "PROXY_UTILS.THIS_PROXY_DOES_NOT", { method: route.method }),
+          message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.THIS_PROXY_DOES_NOT", { method: route.method }),
         });
       }
 
       const address = routeAddress(route.method, route.path);
       if (seenRoutes.has(address)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["routes", index, "path"],
-          message: tStatic("logic.proxy", "PROXY_UTILS.THIS_ENDPOINT_IS_ALREADY"),
+          message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.THIS_ENDPOINT_IS_ALREADY"),
         });
       }
       seenRoutes.add(address);
@@ -684,7 +686,7 @@ export const proxyFormSchema = z
       const upstream = parseRouteTemplate(route.upstreamPath);
       if (!upstream.ok) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["routes", index, "upstreamPath"],
           message: upstream.reason,
         });
@@ -696,9 +698,9 @@ export const proxyFormSchema = z
       const undeclared = upstream.params.find((param) => !parsed.params.includes(param));
       if (undeclared) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["routes", index, "upstreamPath"],
-          message: tStatic("logic.proxy", "PROXY_UTILS.IS_NOT_A_PARAMETER", { undeclared }),
+          message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.IS_NOT_A_PARAMETER", { undeclared }),
         });
       }
     });
@@ -706,17 +708,17 @@ export const proxyFormSchema = z
     if (values.responseMode === "select") {
       if (values.responseInclude.length > MAX_RESPONSE_PATHS) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["responseInclude"],
-          message: tStatic("logic.proxy", "PROXY_UTILS.TOO_MANY_RESPONSE_FIELDS"),
+          message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.TOO_MANY_RESPONSE_FIELDS"),
         });
       }
       values.responseInclude.forEach((path, index) => {
         if (!isResponsePath(path)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             path: ["responseInclude", index],
-            message: tStatic("logic.proxy", "PROXY_UTILS.IS_NOT_A_VALID", { path }),
+            message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.IS_NOT_A_VALID", { path }),
           });
         }
       });
@@ -728,9 +730,9 @@ export const proxyFormSchema = z
       );
       if (!bodyMethods) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["bodyMode"],
-          message: tStatic("logic.proxy", "PROXY_UTILS.BODY_FIELDS_APPLY_TO"),
+          message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.BODY_FIELDS_APPLY_TO"),
         });
       }
 
@@ -740,9 +742,9 @@ export const proxyFormSchema = z
         if (!key) return;
         if (seen.has(key)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             path: ["bodyMerge", index, "key"],
-            message: tStatic("logic.proxy", "PROXY_UTILS.EACH_BODY_FIELD_KEY"),
+            message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.EACH_BODY_FIELD_KEY"),
           });
         }
         seen.add(key);
@@ -752,18 +754,18 @@ export const proxyFormSchema = z
     values.methodConfigs.forEach((override, index) => {
       if (!values.methods.includes(override.method)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["methodConfigs", index, "method"],
-          message: tStatic("logic.proxy", "PROXY_UTILS.ENABLE_THIS_METHOD_ABOVE"),
+          message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.ENABLE_THIS_METHOD_ABOVE"),
         });
       }
 
       const upstream = override.upstream?.trim();
       if (upstream && !/^https:\/\/.+/i.test(upstream)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["methodConfigs", index, "upstream"],
-          message: tStatic("logic.proxy", "PROXY_UTILS.PLEASE_ENTER_A_VALID"),
+          message: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.PLEASE_ENTER_A_VALID"),
         });
       }
     });
@@ -864,7 +866,7 @@ export const buildProxyCurl = (
   const lines = [
     `curl -X ${log.method} ${shellQuote(url)}`,
     `  -H ${shellQuote("x-blocks-key: <your x-blocks-key>")}`,
-    `  -H ${shellQuote(tStatic("logic.proxy", "PROXY_UTILS.AUTHORIZATION_BEARER_TOKEN_ISSUED"))}`,
+    `  -H ${shellQuote(tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.AUTHORIZATION_BEARER_TOKEN_ISSUED"))}`,
   ];
 
   // Trailing backslash + real newline: a multi-line command the shell reads as one line.

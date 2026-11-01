@@ -8,6 +8,8 @@ import { soleSecretName } from "../../utils/transfer";
 import { renderRichText } from "@/lib/rich-text";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 type VariablesEditorProps = {
   value: IVariableBinding[];
   onChange: (value: IVariableBinding[]) => void;
@@ -33,7 +35,10 @@ const SecretNameValue = ({
   index: number;
   onClear: () => void;
 }) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
+  let stateLabel = t("VARIABLES_EDITOR.BY_NAME");
+  if (state === "missing") stateLabel = t("VARIABLES_EDITOR.NOT_FOUND");
+  else if (state === "duplicate") stateLabel = t("VARIABLES_EDITOR.MORE_THAN_ONE");
   return (
     <div
       className="flex h-9 min-w-0 items-center gap-2 rounded-md border bg-surface-app px-2.5 text-xs"
@@ -42,7 +47,7 @@ const SecretNameValue = ({
       <KeyRound className="h-3.5 w-3.5 shrink-0 text-medium-emphasis" />
       <span className="truncate font-mono">{name}</span>
       <span className={state === "bound" ? "text-medium-emphasis" : "text-warning-800"}>
-        {state === "missing" ? t("VARIABLES_EDITOR.NOT_FOUND") : state === "duplicate" ? t("VARIABLES_EDITOR.MORE_THAN_ONE") : t("VARIABLES_EDITOR.BY_NAME")}
+        {stateLabel}
       </span>
       <button
         type="button"
@@ -62,14 +67,14 @@ const MAX_VALUE_LENGTH = 4096;
 const SECRET_LOOKING_VALUE = /^[A-Za-z0-9_\-.]{32,}$/;
 
 const keyError = (key: string, index: number, all: IVariableBinding[]) => {
-  if (!key) return tStatic("logic.functions.components", "VARIABLES_EDITOR.A_KEY_IS_REQUIRED");
-  if (!KEY_PATTERN.test(key)) return tStatic("logic.functions.components", "VARIABLES_EDITOR.UPPER_CASE_DIGITS_AND");
-  if (all.some((other, i) => i !== index && other.key === key)) return tStatic("logic.functions.components", "VARIABLES_EDITOR.THAT_KEY_IS_ALREADY");
+  if (!key) return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.A_KEY_IS_REQUIRED");
+  if (!KEY_PATTERN.test(key)) return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.UPPER_CASE_DIGITS_AND");
+  if (all.some((other, i) => i !== index && other.key === key)) return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.THAT_KEY_IS_ALREADY");
   return null;
 };
 
 const valueError = (value: string) =>
-  value.length > MAX_VALUE_LENGTH ? tStatic("logic.functions.components", "VARIABLES_EDITOR.THIS_VALUE_IS_TOO") : null;
+  value.length > MAX_VALUE_LENGTH ? tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.THIS_VALUE_IS_TOO") : null;
 
 const looksLikeSecret = ({ value }: IVariableBinding) => SECRET_LOOKING_VALUE.test(value);
 
@@ -85,7 +90,7 @@ export const VariablesEditor = ({
   missingSecrets = [],
   duplicateSecrets = [],
 }: VariablesEditorProps) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const update = (index: number, partial: Partial<IVariableBinding>) => {
     onChange(value.map((v, i) => (i === index ? { ...v, ...partial } : v)));
   };

@@ -7,6 +7,8 @@ import { useState } from "react";
 import { createContext, useContext } from "react";
 import { useT } from "@seliseblocks/genesis-os";
 
+const LOGIC_SHARED_MODULE = "logic.shared";
+
 interface ChipsContextProps {
   value: string[];
   inputValue: string;
@@ -25,7 +27,7 @@ export const useChipsContext = () => {
 };
 
 export const ChipsInputList = () => {
-  const { t } = useT("logic.shared");
+  const { t } = useT(LOGIC_SHARED_MODULE);
   const { value, handleRemoveChip } = useChipsContext();
   return (
     <>
@@ -53,7 +55,7 @@ export interface ChipsInputFieldProps {
 }
 
 export const ChipsInputField = ({ className }: ChipsInputFieldProps) => {
-  const { t } = useT("logic.shared");
+  const { t } = useT(LOGIC_SHARED_MODULE);
   const { inputValue, handleInputChange, handleKeyDown, error } = useChipsContext();
 
   return (
@@ -93,7 +95,7 @@ export const ChipsInput = ({
   validatorRegexErrorMessage,
   className,
 }: ChipsInputRootProps) => {
-  const { t } = useT("logic.shared");
+  const { t } = useT(LOGIC_SHARED_MODULE);
   const [inputValue, setInputValue] = useState("");
   const [error, setError] = useState<string | null>(null);
 

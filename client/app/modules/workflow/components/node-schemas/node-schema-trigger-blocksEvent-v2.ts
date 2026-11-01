@@ -8,6 +8,8 @@ import { ReadonlyDetails, SelectOption } from "../node-inspector/form-builder/fo
 import { tStatic } from "@seliseblocks/genesis-os";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 export const DISABLED_EVENT_WARNING =
   "This event is disabled for workflows. Enable it with Manage events. The published workflow will not run until then.";
 export const NO_ENABLED_EVENTS_MESSAGE = "No events are enabled for workflows. Use Manage events to enable one.";
@@ -46,7 +48,7 @@ export const buildEventOptions = (
     description: event.description,
   }));
   if (savedEventName && !events.some((event) => event.eventName === savedEventName)) {
-    options.unshift({ value: savedEventName, label: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.DISABLED_FOR_WORKFLOWS", { savedEventName }) });
+    options.unshift({ value: savedEventName, label: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.DISABLED_FOR_WORKFLOWS", { savedEventName }) });
   }
   return options;
 };
@@ -78,11 +80,11 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
         type: "callout-accordion-display",
         key: "executionNotes",
         displayValue: () => ({
-          title: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.NOTES"),
+          title: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.NOTES"),
           description: React.createElement(
             "span",
             null,
-            ...renderRichText(tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.RUNS_THE"), [(text: string) => React.createElement("code", { className: codeClass }, text)]),
+            ...renderRichText(tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.RUNS_THE"), [(text: string) => React.createElement("code", { className: codeClass }, text)]),
             " ",
             React.createElement(ManageBlocksEventsLink),
           ),
@@ -91,12 +93,12 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
       {
         id: "event",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.EVENT"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.THE_PLATFORM_EVENT_THAT"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.EVENT"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.THE_PLATFORM_EVENT_THAT"); },
         key: "eventName",
         required: true,
         searchable: true,
-        get placeholder() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.SELECT_AN_EVENT"); },
+        get placeholder() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.SELECT_AN_EVENT"); },
         // The list can change in the Event Triggers tab; returning here picks the change up.
         refetchOnWindowFocus: true,
         options: (data) => loadWorkflowEvents().then((events) => buildEventOptions(events, eventNameOf(data))),
@@ -113,8 +115,8 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
       {
         id: "output",
         type: "display",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.OUTPUT"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.STRUCTURE_OF_THE_TRIGGER"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.OUTPUT"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_BLOCKS_EVENT_V2.STRUCTURE_OF_THE_TRIGGER"); },
         key: "output",
         displayValue: (data) => `\`\`\`json
 {

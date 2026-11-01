@@ -55,6 +55,8 @@ import { AddWorkflow } from "../add-workflow";
 import { ImportWorkflow } from "../import-workflow";
 import { useExportWorkflow } from "../../hooks/use-export-workflow";
 
+const LOGIC_WORKFLOW_MODULE = "logic.workflow";
+
 const WorkflowListSkeleton = ({ length }: { length: number }) => {
   return (
     <>
@@ -73,7 +75,7 @@ const WorkflowListSkeleton = ({ length }: { length: number }) => {
 };
 
 const WorkflowEmptyState = () => {
-  const { t } = useT("logic.workflow");
+  const { t } = useT(LOGIC_WORKFLOW_MODULE);
   return (
     <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -104,7 +106,7 @@ const WorkflowEmptyState = () => {
 };
 
 const WorkflowNoResultsState = () => {
-  const { t } = useT("logic.workflow");
+  const { t } = useT(LOGIC_WORKFLOW_MODULE);
   return (
     <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -127,7 +129,7 @@ type WorkflowListProps = {
 };
 
 export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListProps) => {
-  const { t } = useT("logic.workflow");
+  const { t } = useT(LOGIC_WORKFLOW_MODULE);
   const navigate = useNavigate();
   const [modal, setModal] = useState<{
     type: "delete" | "publish" | "publish_new" | "unpublish" | "duplicate" | "rename" | null;

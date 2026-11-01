@@ -6,6 +6,8 @@ import { SelectOption } from "../node-inspector/form-builder/form-field.types";
 import { tStatic } from "@seliseblocks/genesis-os";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 /** One page is enough for a picker; the list is sorted by name so it is scannable. */
 const FUNCTION_PICKER_PAGE_SIZE = 200;
 
@@ -43,7 +45,7 @@ const loadFunctionOptions = async (): Promise<SelectOption[]> => {
 
     return (response.data ?? []).map((fn) => ({
       value: fn.id,
-      label: fn.workflowEnabled ? fn.name : tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.WORKFLOW_TRIGGER_OFF", { name: fn.name }),
+      label: fn.workflowEnabled ? fn.name : tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.WORKFLOW_TRIGGER_OFF", { name: fn.name }),
       disabled: !fn.workflowEnabled,
     }));
   } catch {
@@ -61,10 +63,10 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
       {
         id: "functionId",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.FUNCTION"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.THE_DEPLOYED_FUNCTION_THIS"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.FUNCTION"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.THE_DEPLOYED_FUNCTION_THIS"); },
         key: "functionId",
-        get placeholder() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.SELECT_A_DEPLOYED_FUNCTION"); },
+        get placeholder() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.SELECT_A_DEPLOYED_FUNCTION"); },
         required: true,
         searchable: true,
         options: loadFunctionOptions,
@@ -72,12 +74,12 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
       {
         id: "inputMode",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.INPUT"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.WHAT_THE_FUNCTION_RECEIVES"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.INPUT"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.WHAT_THE_FUNCTION_RECEIVES"); },
         key: "inputMode",
         options: [
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.PREVIOUS_STEP_S_OUTPUT"); }, value: "item" },
-          { get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.CUSTOM_JSON"); }, value: "expression" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.PREVIOUS_STEP_S_OUTPUT"); }, value: "item" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.CUSTOM_JSON"); }, value: "expression" },
         ],
       },
       {
@@ -89,15 +91,15 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
         transient: true,
         dependsOn: { key: "inputMode", value: "expression" },
         displayValue: () => ({
-          title: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.HOW_TO_BUILD_THE"),
-          description: React.createElement("span", null, ...renderRichText(tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.WRITE_THE_JSON_THE"), [code, code, code, code, code])),
+          title: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.HOW_TO_BUILD_THE"),
+          description: React.createElement("span", null, ...renderRichText(tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.WRITE_THE_JSON_THE"), [code, code, code, code, code])),
         }),
       },
       {
         id: "inputExpression",
         type: "json-code-editor",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.INPUT_JSON"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_ACTION_FUNCTION.THE_PAYLOAD_HANDED_TO"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.INPUT_JSON"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.THE_PAYLOAD_HANDED_TO"); },
         key: "inputExpression",
         placeholder: INPUT_JSON_PLACEHOLDER,
         height: 168,

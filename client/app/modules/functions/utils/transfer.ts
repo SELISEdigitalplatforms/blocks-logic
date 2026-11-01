@@ -1,6 +1,8 @@
 import type { IFunctionExportFile } from "../types/transfer.types";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
+
 /** The server's ceiling for an import (FunctionTransferCodec.MaxImportBytes): checked here first. */
 export const MAX_IMPORT_BYTES = 3 * 1024 * 1024;
 
@@ -15,10 +17,10 @@ export const EXPORT_SCHEMA_VERSION = 2;
  */
 export const checkImportFile = (file: File): string | null => {
   if (!file.name.toLowerCase().endsWith(".json"))
-    return tStatic("logic.functions", "TRANSFER.ONLY_JSON_EXPORT_FILES");
-  if (file.size === 0) return tStatic("logic.functions", "TRANSFER.THIS_FILE_IS_EMPTY");
+    return tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.ONLY_JSON_EXPORT_FILES");
+  if (file.size === 0) return tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THIS_FILE_IS_EMPTY");
   if (file.size > MAX_IMPORT_BYTES) {
-    return tStatic("logic.functions", "TRANSFER.THIS_FILE_IS_LARGER");
+    return tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THIS_FILE_IS_LARGER");
   }
   return null;
 };
@@ -35,19 +37,19 @@ export const readImportFile = async (file: File): Promise<IFunctionExportFile> =
   try {
     parsed = JSON.parse(await file.text());
   } catch {
-    throw new Error(tStatic("logic.functions", "TRANSFER.THIS_FILE_IS_NOT_VALID_JSON"));
+    throw new Error(tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THIS_FILE_IS_NOT_VALID_JSON"));
   }
   const head =
     parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as { format?: unknown; schemaVersion?: unknown })
       : null;
   if (head?.format === "blocks.proxy.export") {
-    throw new Error(tStatic("logic.functions", "TRANSFER.THIS_IS_A_PROXY_EXPORT"));
+    throw new Error(tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THIS_IS_A_PROXY_EXPORT"));
   }
-  if (head?.format !== EXPORT_FORMAT) throw new Error(tStatic("logic.functions", "TRANSFER.THIS_IS_NOT_A_FUNCTION_EXPORT"));
+  if (head?.format !== EXPORT_FORMAT) throw new Error(tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THIS_IS_NOT_A_FUNCTION_EXPORT"));
   if (head.schemaVersion !== EXPORT_SCHEMA_VERSION) {
     throw new Error(
-      tStatic("logic.functions", "TRANSFER.SCHEMA_VERSION_MISMATCH", {
+      tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.SCHEMA_VERSION_MISMATCH", {
         found: String(head.schemaVersion ?? "(none)"),
         expected: EXPORT_SCHEMA_VERSION,
       }),
@@ -104,7 +106,7 @@ export const importErrorOf = (error: unknown): { status?: number; message: strin
   if (!message && typeof raw?.message === "string" && raw.message) message = raw.message;
   return {
     status,
-    message: message ?? tStatic("logic.functions", "TRANSFER.THE_REQUEST_COULD_NOT"),
+    message: message ?? tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THE_REQUEST_COULD_NOT"),
   };
 };
 

@@ -2,6 +2,8 @@ import { NodeGuideTransformCodeV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
   guide: NodeGuideTransformCodeV1,
   schema: {
@@ -13,11 +15,11 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
         id: "mode",
         type: "select",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_CODE_V1.MODE");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_CODE_V1.MODE");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_CODE_V1.RUN_THE_SCRIPT_ONCE",
           );
         },
@@ -26,7 +28,7 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_CODE_V1.RUN_ONCE_FOR_ALL",
               );
             },
@@ -35,7 +37,7 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_CODE_V1.RUN_ONCE_FOR_EACH",
               );
             },
@@ -47,11 +49,11 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
         id: "language",
         type: "select",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_CODE_V1.LANGUAGE");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_CODE_V1.LANGUAGE");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_CODE_V1.SELECT_THE_PROGRAMMING_LANGUAGE",
           );
         },
@@ -61,7 +63,7 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_CODE_V1.PYTHON",
               );
             },
@@ -74,11 +76,11 @@ export const NodeSchemaTransformCodeV1: NodeSchemaDefinition = {
         id: "script",
         type: "code-editor",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_CODE_V1.SCRIPT");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_CODE_V1.SCRIPT");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_CODE_V1.WRITE_YOUR_TRANSFORMATION_SCRIPT",
           );
         },

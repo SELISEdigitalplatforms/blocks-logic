@@ -13,6 +13,8 @@ import {
 import { ITriggerConfig } from "../../types/function.types";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 type InvokeSnippetCardProps = {
   functionId: string;
   trigger: ITriggerConfig;
@@ -40,7 +42,7 @@ const SSE_RESPONSE = [
 
 /** Copy button with its own "Copied" state. */
 const CopyButton = ({ text, label }: { text: string; label?: string }) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const [copied, setCopied] = useState(false);
 
   // The clipboard API rejects without a secure context or permission; say so instead of
@@ -85,7 +87,7 @@ const ModeToggle = ({ mode, onChange }: { mode: CallMode; onChange: (mode: CallM
 );
 
 const StreamResponse = () => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   return (
     <>
       <pre className="font-mono text-xs leading-relaxed">{SSE_RESPONSE}</pre>
@@ -104,7 +106,7 @@ const StreamResponse = () => {
 };
 
 const HttpResponse = ({ isSync }: { isSync: boolean }) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   if (!isSync) {
     return (
       <pre className="font-mono text-xs leading-relaxed">
@@ -130,9 +132,9 @@ const HttpResponse = ({ isSync }: { isSync: boolean }) => {
 
 const pollNote = (isSse: boolean, isSync: boolean) => {
   if (isSse) {
-    return tStatic("logic.functions.components", "INVOKE_SNIPPET_CARD.ONLY_NEEDED_WHEN_THE");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "INVOKE_SNIPPET_CARD.ONLY_NEEDED_WHEN_THE");
   }
-  const base = tStatic("logic.functions.components", "INVOKE_SNIPPET_CARD.USE_THE_RUNID_AND");
+  const base = tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "INVOKE_SNIPPET_CARD.USE_THE_RUNID_AND");
   return isSync ? `${base} Only needed after a 202.` : base;
 };
 
@@ -142,7 +144,7 @@ const pollNote = (isSse: boolean, isSync: boolean) => {
  * toggle switches the same call between a plain HTTP request and an SSE stream.
  */
 export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProps) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const [mode, setMode] = useState<CallMode>("http");
   const project = useProjectStore().selectedProject;
   const realBaseUrl = getFunctionBaseUrl(project);

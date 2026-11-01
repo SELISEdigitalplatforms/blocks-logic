@@ -75,6 +75,8 @@ import { checkSetup } from "../../utils/connections";
 import { payloadOf } from "../../utils/test-input";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
+
 const RUNS_PAGE_SIZE = 20;
 
 /**
@@ -118,10 +120,10 @@ const CODE_CARD_MAX_HEIGHT = 1600;
  * `hint` is the tooltip that says what is behind the short word.
  */
 const SIDE_PANELS = [
-  { value: "test", get label() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.TEST"); }, get hint() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.RUN_THE_FUNCTION_WITH"); } },
-  { value: "environment", get label() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.RUNTIME"); }, get hint() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.VARIABLES_LIMITS_AND_SANDBOX"); } },
-  { value: "connections", get label() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.SERVICES"); }, get hint() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.CONNECT_MONGODB_REDIS_AND"); } },
-  { value: "guide", get label() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.GUIDE"); }, get hint() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.HOW_TO_WRITE_A"); } },
+  { value: "test", get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.TEST"); }, get hint() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.RUN_THE_FUNCTION_WITH"); } },
+  { value: "environment", get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.RUNTIME"); }, get hint() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.VARIABLES_LIMITS_AND_SANDBOX"); } },
+  { value: "connections", get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.SERVICES"); }, get hint() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.CONNECT_MONGODB_REDIS_AND"); } },
+  { value: "guide", get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.GUIDE"); }, get hint() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.HOW_TO_WRITE_A"); } },
 ] as const;
 type SidePanel = (typeof SIDE_PANELS)[number]["value"];
 
@@ -188,7 +190,7 @@ const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
 };
 
 export const FunctionDetailPage = () => {
-  const { t } = useT("logic.functions");
+  const { t } = useT(LOGIC_FUNCTIONS_MODULE);
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { pathname } = useLocation();
@@ -323,7 +325,7 @@ export const FunctionDetailPage = () => {
 
   useEffect(() => {
     if (functionId && isFetched && !isLoading && !fn) {
-      showErrorToast({ errors: tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.FUNCTION_NOT_FOUND") });
+      showErrorToast({ errors: tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.FUNCTION_NOT_FOUND") });
       navigate(scoped("functions"));
     }
   }, [functionId, isFetched, isLoading, fn, navigate, scoped]);
@@ -382,13 +384,10 @@ export const FunctionDetailPage = () => {
   // "Building…" covers the deploy request and, when it answered 202, the build it is watching.
   const isDeployed = fn.activeVersionNumber != null;
   const hasUndeployedChanges = isDirty || fn.isDirty;
-  const deployLabel = isBuilding
-    ? "Building…"
-    : !isDeployed
-      ? "Deploy"
-      : hasUndeployedChanges
-        ? `Deploy v${fn.lastVersionNumber + 1}`
-        : t("FUNCTION_DETAIL_PAGE.UP_TO_DATE");
+  let deployLabel = t("FUNCTION_DETAIL_PAGE.UP_TO_DATE");
+  if (isBuilding) deployLabel = "Building…";
+  else if (!isDeployed) deployLabel = "Deploy";
+  else if (hasUndeployedChanges) deployLabel = `Deploy v${fn.lastVersionNumber + 1}`;
 
   const runs = runsData?.data ?? [];
   const hasActiveRun = runs.some((run) => !TERMINAL_RUN_STATUSES.includes(run.status));

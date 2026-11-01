@@ -6,6 +6,8 @@ import { OutcomeBadge } from "../outcome-badge";
 import { StatusChip } from "../status-chip";
 import { useT } from "@seliseblocks/genesis-os";
 
+const LOGIC_SCHEDULER_MODULE = "logic.scheduler";
+
 interface ExecutionSheetHeaderProps {
   execution: IScheduleExecution | null;
   statusLabel: string;
@@ -15,7 +17,7 @@ interface ExecutionSheetHeaderProps {
 }
 
 const HeaderPlaceholder = ({ loading }: Readonly<{ loading: boolean }>) => {
-  const { t } = useT("logic.scheduler");
+  const { t } = useT(LOGIC_SCHEDULER_MODULE);
   return (
     <>
       <SheetDescription className="sr-only">{loading ? t("EXECUTION_SHEET_HEADER.LOADING_EXECUTION") : t("EXECUTION_SHEET_HEADER.EXECUTION_UNAVAILABLE")}</SheetDescription>
@@ -35,7 +37,7 @@ export const ExecutionSheetHeader = ({
   tz,
   loading = false,
 }: Readonly<ExecutionSheetHeaderProps>) => {
-  const { t } = useT("logic.scheduler");
+  const { t } = useT(LOGIC_SCHEDULER_MODULE);
   return (
     <SheetHeader className="space-y-2 border-b px-4 py-3 text-left">
       <SheetTitle className="text-base">{t("EXECUTION_SHEET_HEADER.EXECUTION_DETAILS")}</SheetTitle>

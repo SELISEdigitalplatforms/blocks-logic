@@ -12,6 +12,10 @@ import { ExpressionHighlighter, VariablePickerConfig } from "../utils/expression
 import { pickerTarget, showsVariablePicker } from "./secret-picker";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
+const CONDITIONS_FIELD_EQUALS = "CONDITIONS_FIELD.EQUALS";
+const CONDITIONS_FIELD_NOT_EQUALS = "CONDITIONS_FIELD.NOT_EQUALS";
+
 export type Condition = {
   left: string;
   operator: string;
@@ -20,65 +24,65 @@ export type Condition = {
 };
 
 const OPERATORS = [
-  { value: "equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS"); } },
-  { value: "not_equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_EQUALS"); } },
-  { value: "contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.CONTAINS"); } },
-  { value: "not_contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_CONTAINS"); } },
-  { value: "greater_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.GREATER_THAN"); } },
-  { value: "less_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.LESS_THAN"); } },
-  { value: "greater_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.GREATER_OR_EQUAL"); } },
-  { value: "less_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.LESS_OR_EQUAL"); } },
-  { value: "is_true", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.IS_TRUE"); } },
-  { value: "is_false", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.IS_FALSE"); } },
+  { value: "equals", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, CONDITIONS_FIELD_EQUALS); } },
+  { value: "not_equals", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, CONDITIONS_FIELD_NOT_EQUALS); } },
+  { value: "contains", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.CONTAINS"); } },
+  { value: "not_contains", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.NOT_CONTAINS"); } },
+  { value: "greater_than", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.GREATER_THAN"); } },
+  { value: "less_than", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.LESS_THAN"); } },
+  { value: "greater_or_equal", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.GREATER_OR_EQUAL"); } },
+  { value: "less_or_equal", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.LESS_OR_EQUAL"); } },
+  { value: "is_true", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.IS_TRUE"); } },
+  { value: "is_false", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.IS_FALSE"); } },
 ];
 
 const TYPE_OPTIONS = [
-  { value: "string", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.STRING"); } },
-  { value: "number", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NUMBER"); } },
-  { value: "array", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.ARRAY"); } },
-  { value: "boolean", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.BOOLEAN"); } },
-  { value: "date_time", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.DATE_TIME"); } },
+  { value: "string", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.STRING"); } },
+  { value: "number", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.NUMBER"); } },
+  { value: "array", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.ARRAY"); } },
+  { value: "boolean", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.BOOLEAN"); } },
+  { value: "date_time", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.DATE_TIME"); } },
 ];
 
 export const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> = {
   string: [
-    { value: "equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS"); } },
-    { value: "not_equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_EQUALS"); } },
-    { value: "contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.CONTAINS"); } },
-    { value: "not_contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_CONTAINS"); } },
+    { value: "equals", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, CONDITIONS_FIELD_EQUALS); } },
+    { value: "not_equals", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, CONDITIONS_FIELD_NOT_EQUALS); } },
+    { value: "contains", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.CONTAINS"); } },
+    { value: "not_contains", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.NOT_CONTAINS"); } },
     // Server: the left value exactly equals (case-sensitive) one entry of the right list. Empty list = false.
-    { value: "in", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS_ONE_OF_LIST"); } },
-    { value: "not_in", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS_NONE_OF_LIST"); } },
+    { value: "in", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.EQUALS_ONE_OF_LIST"); } },
+    { value: "not_in", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.EQUALS_NONE_OF_LIST"); } },
   ],
   number: [
-    { value: "equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS"); } },
-    { value: "not_equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_EQUALS"); } },
-    { value: "greater_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.GREATER_THAN"); } },
-    { value: "less_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.LESS_THAN"); } },
-    { value: "greater_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.GREATER_OR_EQUAL"); } },
-    { value: "less_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.LESS_OR_EQUAL"); } },
+    { value: "equals", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, CONDITIONS_FIELD_EQUALS); } },
+    { value: "not_equals", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, CONDITIONS_FIELD_NOT_EQUALS); } },
+    { value: "greater_than", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.GREATER_THAN"); } },
+    { value: "less_than", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.LESS_THAN"); } },
+    { value: "greater_or_equal", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.GREATER_OR_EQUAL"); } },
+    { value: "less_or_equal", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.LESS_OR_EQUAL"); } },
   ],
   array: [
     // The server compares the two lists: "contains" is true when they share at least one value.
-    { value: "contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.SHARES_ANY_VALUE_WITH"); } },
-    { value: "not_contains", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.SHARES_NO_VALUE_WITH"); } },
+    { value: "contains", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.SHARES_ANY_VALUE_WITH"); } },
+    { value: "not_contains", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.SHARES_NO_VALUE_WITH"); } },
     // Server: every left value is in the right list (subset). An empty left list = false.
-    { value: "in", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.ALL_VALUES_ARE_IN"); } },
-    { value: "not_in", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_ALL_VALUES_ARE"); } },
+    { value: "in", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.ALL_VALUES_ARE_IN"); } },
+    { value: "not_in", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.NOT_ALL_VALUES_ARE"); } },
   ],
   boolean: [
-    { value: "is_true", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.IS_TRUE"); } },
-    { value: "is_false", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.IS_FALSE"); } },
-    { value: "equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS"); } },
-    { value: "not_equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_EQUALS"); } },
+    { value: "is_true", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.IS_TRUE"); } },
+    { value: "is_false", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.IS_FALSE"); } },
+    { value: "equals", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, CONDITIONS_FIELD_EQUALS); } },
+    { value: "not_equals", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, CONDITIONS_FIELD_NOT_EQUALS); } },
   ],
   date_time: [
-    { value: "equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.EQUALS"); } },
-    { value: "not_equals", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.NOT_EQUALS"); } },
-    { value: "greater_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.AFTER"); } },
-    { value: "less_than", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.BEFORE"); } },
-    { value: "greater_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.ON_OR_AFTER"); } },
-    { value: "less_or_equal", get label() { return tStatic("logic.workflow.nodes.inspector", "CONDITIONS_FIELD.ON_OR_BEFORE"); } },
+    { value: "equals", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, CONDITIONS_FIELD_EQUALS); } },
+    { value: "not_equals", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, CONDITIONS_FIELD_NOT_EQUALS); } },
+    { value: "greater_than", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.AFTER"); } },
+    { value: "less_than", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.BEFORE"); } },
+    { value: "greater_or_equal", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.ON_OR_AFTER"); } },
+    { value: "less_or_equal", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "CONDITIONS_FIELD.ON_OR_BEFORE"); } },
   ],
 };
 
@@ -131,7 +135,7 @@ export const ConditionsField = ({
   className,
   variablePicker,
 }: FieldProps<Condition[]>) => {
-  const { t } = useT("logic.workflow.nodes.inspector");
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const initial: Condition[] = Array.isArray(value) ? (value as Condition[]) : [];
 
   const [conditions, setConditions] = useState<Condition[]>(() =>

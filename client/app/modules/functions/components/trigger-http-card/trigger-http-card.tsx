@@ -20,6 +20,8 @@ import { EndpointBadge } from "../endpoint-badge";
 import { renderRichText } from "@/lib/rich-text";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 const KIND_OPTIONS: Array<{
   value: AuthMode;
   title: string;
@@ -29,20 +31,20 @@ const KIND_OPTIONS: Array<{
   {
     value: "Token",
     get title() {
-      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.BLOCKS_TOKEN");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.BLOCKS_TOKEN");
     },
     get description() {
-      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.THE_CALLER_SENDS_A");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.THE_CALLER_SENDS_A");
     },
     icon: KeyRound,
   },
   {
     value: "Public",
     get title() {
-      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.PUBLIC");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.PUBLIC");
     },
     get description() {
-      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.ANYONE_WITH_THE_URL");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.ANYONE_WITH_THE_URL");
     },
     icon: Globe,
   },
@@ -57,30 +59,30 @@ const RESPONSE_OPTIONS: Array<{
   {
     value: "async",
     get title() {
-      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.BACKGROUND_202_POLL");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.BACKGROUND_202_POLL");
     },
     get description() {
-      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.THE_CALLER_GETS_202");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.THE_CALLER_GETS_202");
     },
     icon: Hourglass,
   },
   {
     value: "sync",
     get title() {
-      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.WAIT_FOR_ANSWER_API");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.WAIT_FOR_ANSWER_API");
     },
     get description() {
-      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.THE_CALLER_GETS_THE");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.THE_CALLER_GETS_THE");
     },
     icon: Zap,
   },
   {
     value: "sse",
     get title() {
-      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.STREAM_EVENTS_SSE");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.STREAM_EVENTS_SSE");
     },
     get description() {
-      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.THE_CALLER_GETS_TWO");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.THE_CALLER_GETS_TWO");
     },
     icon: Radio,
   },
@@ -89,13 +91,13 @@ const RESPONSE_OPTIONS: Array<{
 /** What the HTTP endpoint answers, in one sentence per response mode. */
 const ENDPOINT_HINTS: Record<TriggerResponseMode, string> = {
   get async() {
-    return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.ALWAYS_ON_THE_CALL");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.ALWAYS_ON_THE_CALL");
   },
   get sync() {
-    return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.ALWAYS_ON_THE_CALLER");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.ALWAYS_ON_THE_CALLER");
   },
   get sse() {
-    return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.ALWAYS_ON_THE_CALLER_2");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.ALWAYS_ON_THE_CALLER_2");
   },
 };
 
@@ -148,7 +150,7 @@ type TriggerHttpCardProps = {
  * so this card translates at its edges and nothing else has to know.
  */
 export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCardProps) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const patch = (partial: Partial<ITriggerConfig>) => onChange({ ...value, ...partial });
   const rolesQuery = useIamRoles();
   const permissionsQuery = useIamPermissions();
@@ -187,9 +189,8 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
             <span className="text-xs text-muted-foreground">
               {t("TRIGGER_HTTP_CARD.ACCEPTED_METHODS")}
             </span>
-            <div
-              className="flex flex-wrap gap-1"
-              role="group"
+            <fieldset
+              className="m-0 flex min-w-0 flex-wrap gap-1 border-0 p-0"
               aria-label={t("TRIGGER_HTTP_CARD.ACCEPTED_METHODS")}
             >
               {FUNCTION_HTTP_VERBS.map((verb) => {
@@ -219,7 +220,7 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
                   </button>
                 );
               })}
-            </div>
+            </fieldset>
           </div>
           <EndpointBadge
             functionId={functionId}

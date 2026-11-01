@@ -1,4 +1,6 @@
 import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
 /**
  * Shown only until `GetLimits` resolves — the server is the source of these numbers, not this file.
  * Mirrors `FunctionLimits.Ceiling` so the first paint matches what arrives a moment later.
@@ -19,46 +21,46 @@ export const HARD_CAPS = [
   // module import are paid every time and are pure CPU, and a smaller share would only slow that
   // down — admission counts memory and slots, never CPU, so a lower value frees nothing.
   { label: "CPU", value: "100m per run" },
-  { get label() { return tStatic("logic.functions", "LIMITS_CONSTANT.INPUT"); }, value: "Size-limited; a larger request is refused" },
-  { get label() { return tStatic("logic.functions", "LIMITS_CONSTANT.RESULT"); }, value: "Size-limited; return a reference for large data" },
-  { get label() { return tStatic("logic.functions", "LIMITS_CONSTANT.LOGS"); }, value: "Capped per run; lines past the cap are dropped" },
-  { get label() { return tStatic("logic.functions", "LIMITS_CONSTANT.TEMP_DISK"); }, value: "Small /tmp only; files can't be executed" },
-  { get label() { return tStatic("logic.functions", "LIMITS_CONSTANT.PROCESSES"); }, value: "Capped per sandbox" },
+  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.INPUT"); }, value: "Size-limited; a larger request is refused" },
+  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.RESULT"); }, value: "Size-limited; return a reference for large data" },
+  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.LOGS"); }, value: "Capped per run; lines past the cap are dropped" },
+  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.TEMP_DISK"); }, value: "Small /tmp only; files can't be executed" },
+  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.PROCESSES"); }, value: "Capped per sandbox" },
 ] as const;
 
 /** The "What the sandbox gives you" reference in the Code tab's right rail. */
 export const SANDBOX_CTX_DOCS = [
   {
     name: "input",
-    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.THE_REQUEST_METHOD_PATH"); },
+    get description() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.THE_REQUEST_METHOD_PATH"); },
   },
   {
     name: "fetch(url)",
-    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.STANDARD_FETCH_PUBLIC_INTERNET"); },
+    get description() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.STANDARD_FETCH_PUBLIC_INTERNET"); },
   },
   {
     name: "ctx.env.NAME",
-    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.YOUR_VARIABLES_AS_PLAIN"); },
+    get description() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.YOUR_VARIABLES_AS_PLAIN"); },
   },
   {
     name: "ctx.context",
-    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.TENANTID_USERID_ROLES_PERMISSIONS"); },
+    get description() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.TENANTID_USERID_ROLES_PERMISSIONS"); },
   },
   {
     name: "await ctx.blocks.getAccessToken()",
-    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.THE_CALLER_S_BLOCKS"); },
+    get description() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.THE_CALLER_S_BLOCKS"); },
   },
   {
     name: "ctx.run",
-    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.ID_VERSION_ATTEMPT_AND"); },
+    get description() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.ID_VERSION_ATTEMPT_AND"); },
   },
   {
     name: "ctx.log.info / warn / error",
-    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.STRUCTURED_LINES_KEPT_ON"); },
+    get description() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.STRUCTURED_LINES_KEPT_ON"); },
   },
   {
     name: "ctx.waitUntil(promise)",
-    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.FINISH_WORK_AFTER_THE"); },
+    get description() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.FINISH_WORK_AFTER_THE"); },
   },
 ] as const;
 
@@ -70,33 +72,33 @@ export const SANDBOX_CTX_DOCS = [
  */
 export const SANDBOX_CODE_RULES = [
   {
-    get dont() { return tStatic("logic.functions", "LIMITS_CONSTANT.START_WORK_AND_RETURN"); },
+    get dont() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.START_WORK_AND_RETURN"); },
     dontCode: "saveAudit(entry); // no await",
-    get fix() { return tStatic("logic.functions", "LIMITS_CONSTANT.AWAIT_IT_IF_IT"); },
+    get fix() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.AWAIT_IT_IF_IT"); },
     fixCode: "ctx.waitUntil(saveAudit(entry));",
   },
   {
-    get dont() { return tStatic("logic.functions", "LIMITS_CONSTANT.LEAVE_A_SETTIMEOUT_OR"); },
+    get dont() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.LEAVE_A_SETTIMEOUT_OR"); },
     dontCode: "setInterval(refreshCache, 60_000);",
-    get fix() { return tStatic("logic.functions", "LIMITS_CONSTANT.AWAIT_A_DELAY_INSIDE"); },
+    get fix() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.AWAIT_A_DELAY_INSIDE"); },
     fixCode: "await new Promise((r) => setTimeout(r, 500));",
   },
   {
-    get dont() { return tStatic("logic.functions", "LIMITS_CONSTANT.KEEP_CTX_CTX_LOG"); },
+    get dont() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.KEEP_CTX_CTX_LOG"); },
     dontCode: 'redis.on("error", (e) => ctx.log.error("redis", e));',
-    get fix() { return tStatic("logic.functions", "LIMITS_CONSTANT.READ_CTX_ONLY_INSIDE"); },
+    get fix() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.READ_CTX_ONLY_INSIDE"); },
     fixCode: 'redis.on("error", (e) => console.error("redis", e.message));',
   },
   {
-    get dont() { return tStatic("logic.functions", "LIMITS_CONSTANT.STORE_REQUEST_DATA_IN"); },
+    get dont() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.STORE_REQUEST_DATA_IN"); },
     dontCode: "let lastUser; // set from input.body",
-    get fix() { return tStatic("logic.functions", "LIMITS_CONSTANT.KEEP_PER_CALL_DATA"); },
+    get fix() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.KEEP_PER_CALL_DATA"); },
     fixCode: "const user = input.body.user; // inside the handler",
   },
   {
-    get dont() { return tStatic("logic.functions", "LIMITS_CONSTANT.CONNECT_AND_CLOSE_A"); },
+    get dont() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.CONNECT_AND_CLOSE_A"); },
     dontCode: "const db = await MongoClient.connect(url); /* … */ await db.close();",
-    get fix() { return tStatic("logic.functions", "LIMITS_CONSTANT.CREATE_THE_CLIENT_ONCE"); },
+    get fix() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.CREATE_THE_CLIENT_ONCE"); },
     fixCode: "let client; // module level\nclient ??= await MongoClient.connect(url);",
   },
 ] as const;
@@ -111,21 +113,21 @@ export const BACKOFF_DELAYS = {
 export const HTTP_METHOD_OPTIONS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
 export const FUNCTION_STATUS_LABELS: Record<string, string> = {
-  get Draft() { return tStatic("logic.functions", "LIMITS_CONSTANT.DRAFT"); },
-  get Live() { return tStatic("logic.functions", "LIMITS_CONSTANT.LIVE"); },
-  get Paused() { return tStatic("logic.functions", "LIMITS_CONSTANT.PAUSED"); },
+  get Draft() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.DRAFT"); },
+  get Live() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.LIVE"); },
+  get Paused() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.PAUSED"); },
 };
 
 export const RUN_STATUS_LABELS: Record<string, string> = {
-  get Queued() { return tStatic("logic.functions", "LIMITS_CONSTANT.QUEUED"); },
-  get Claimed() { return tStatic("logic.functions", "LIMITS_CONSTANT.CLAIMED"); },
-  get Starting() { return tStatic("logic.functions", "LIMITS_CONSTANT.STARTING"); },
-  get Running() { return tStatic("logic.functions", "LIMITS_CONSTANT.RUNNING"); },
-  get OutputProcessing() { return tStatic("logic.functions", "LIMITS_CONSTANT.OUTPUT_PROCESSING"); },
-  get Succeeded() { return tStatic("logic.functions", "LIMITS_CONSTANT.SUCCEEDED"); },
-  get Failed() { return tStatic("logic.functions", "LIMITS_CONSTANT.FAILED"); },
-  get TimedOut() { return tStatic("logic.functions", "LIMITS_CONSTANT.TIMED_OUT"); },
-  get Cancelled() { return tStatic("logic.functions", "LIMITS_CONSTANT.CANCELLED"); },
-  get ResourceExceeded() { return tStatic("logic.functions", "LIMITS_CONSTANT.RESOURCE_EXCEEDED"); },
-  get OutputFailed() { return tStatic("logic.functions", "LIMITS_CONSTANT.OUTPUT_FAILED"); },
+  get Queued() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.QUEUED"); },
+  get Claimed() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.CLAIMED"); },
+  get Starting() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.STARTING"); },
+  get Running() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.RUNNING"); },
+  get OutputProcessing() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.OUTPUT_PROCESSING"); },
+  get Succeeded() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.SUCCEEDED"); },
+  get Failed() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.FAILED"); },
+  get TimedOut() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.TIMED_OUT"); },
+  get Cancelled() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.CANCELLED"); },
+  get ResourceExceeded() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.RESOURCE_EXCEEDED"); },
+  get OutputFailed() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.OUTPUT_FAILED"); },
 };

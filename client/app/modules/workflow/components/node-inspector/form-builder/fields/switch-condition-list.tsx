@@ -17,15 +17,17 @@ import { DroppableConditionInput, LIST_OPERATORS, TYPE_OPERATORS, type Condition
 import { pickerTarget, showsVariablePicker } from "./secret-picker";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
+
 type ConditionType = NonNullable<Condition["type"]>;
 
 /** The condition types the server evaluates, in menu order. Operators come from TYPE_OPERATORS only. */
 export const SWITCH_CONDITION_TYPES: { value: ConditionType; label: string }[] = [
-  { value: "string", get label() { return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.STRING"); } },
-  { value: "number", get label() { return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.NUMBER"); } },
-  { value: "date_time", get label() { return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.DATE_TIME"); } },
-  { value: "boolean", get label() { return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.BOOLEAN"); } },
-  { value: "array", get label() { return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.ARRAY"); } },
+  { value: "string", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.STRING"); } },
+  { value: "number", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.NUMBER"); } },
+  { value: "date_time", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.DATE_TIME"); } },
+  { value: "boolean", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.BOOLEAN"); } },
+  { value: "array", get label() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.ARRAY"); } },
 ];
 
 const typeOf = (condition: Condition): ConditionType => condition.type || "string";
@@ -52,7 +54,7 @@ export const comparePlaceholder = (condition: Condition): string => {
     case "array":
       return "a, b, c";
     default:
-      return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.TEXT_TO_COMPARE");
+      return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.TEXT_TO_COMPARE");
   }
 };
 
@@ -72,9 +74,10 @@ export const literalProblem = (condition: Condition, side: "left" | "right"): st
     case "date_time":
       // The server parses numbers and dates leniently (thousands separators, many date formats); only text
       // without a single digit is certainly unreadable.
-      return /\d/.test(text) ? "" : `Not a ${typeOf(condition) === "number" ? "number" : "date"}, so this condition never matches.`;
+      if (/\d/.test(text)) return "";
+      return `Not a ${typeOf(condition) === "number" ? "number" : "date"}, so this condition never matches.`;
     case "boolean":
-      return /^(true|false)$/i.test(text) ? "" : tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.NOT_TRUE_OR_FALSE");
+      return /^(true|false)$/i.test(text) ? "" : tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.NOT_TRUE_OR_FALSE");
     default:
       return "";
   }
@@ -83,13 +86,13 @@ export const literalProblem = (condition: Condition, side: "left" | "right"): st
 /** One line for a collapsed rule: its first condition, and how many more there are. */
 export const conditionsSummary = (conditions: Condition[], conditionType: string): string => {
   const first = conditions[0];
-  if (!first || (!first.left && !first.right)) return tStatic("logic.workflow.nodes.inspector", "SWITCH_CONDITION_LIST.NO_CONDITIONS_YET");
+  if (!first || (!first.left && !first.right)) return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.NO_CONDITIONS_YET");
   const right = isUnaryOperator(first.operator) ? "" : ` ${first.right || "…"}`;
   const text = `${first.left || "…"} ${operatorLabel(first).toLowerCase()}${right}`;
   const more = conditions.length - 1;
   if (more <= 0) return text;
   return tStatic(
-    "logic.workflow.nodes.inspector",
+    LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE,
     conditionType === "or" ? "SWITCH_CONDITION_LIST.SUMMARY_OR_MORE" : "SWITCH_CONDITION_LIST.SUMMARY_AND_MORE",
     { text, more },
   );
@@ -112,7 +115,7 @@ type Props = {
  * Saves the same { left, operator, right, type } as the If node.
  */
 export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType, onChange, onConditionTypeChange, readOnly, locked }: Props) => {
-  const { t: tr } = useT("logic.workflow.nodes.inspector");
+  const { t: tr } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const useOr = conditionType === "or";
   const picker = showsVariablePicker(field, readOnly);
 

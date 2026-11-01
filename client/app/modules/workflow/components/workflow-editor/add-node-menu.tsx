@@ -10,59 +10,61 @@ import {
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_MODULE = "logic.workflow";
+
 const nodeTemplates = [
   {
     id: "trigger",
     get label() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.TRIGGER");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.TRIGGER");
     },
     get description() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.START_THE_WORKFLOW");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.START_THE_WORKFLOW");
     },
   },
   {
     id: "action",
     get label() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.ACTION");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.ACTION");
     },
     get description() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.PERFORM_AN_ACTION");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.PERFORM_AN_ACTION");
     },
   },
   {
     id: "condition",
     get label() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.CONDITION");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.CONDITION");
     },
     get description() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.BRANCH_BASED_ON_CONDITIONS");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.BRANCH_BASED_ON_CONDITIONS");
     },
   },
   {
     id: "loop",
     get label() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.LOOP");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.LOOP");
     },
     get description() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.REPEAT_ACTIONS");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.REPEAT_ACTIONS");
     },
   },
   {
     id: "delay",
     get label() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.DELAY");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.DELAY");
     },
     get description() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.WAIT_FOR_A_PERIOD");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.WAIT_FOR_A_PERIOD");
     },
   },
   {
     id: "webhook",
     get label() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.WEBHOOK");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.WEBHOOK");
     },
     get description() {
-      return tStatic("logic.workflow", "ADD_NODE_MENU.CALL_EXTERNAL_SERVICE");
+      return tStatic(LOGIC_WORKFLOW_MODULE, "ADD_NODE_MENU.CALL_EXTERNAL_SERVICE");
     },
   },
 ];
@@ -72,7 +74,7 @@ type AddNodeMenuProps = {
 };
 
 export const AddNodeMenu = ({ onAddNode }: AddNodeMenuProps) => {
-  const { t } = useT("logic.workflow");
+  const { t } = useT(LOGIC_WORKFLOW_MODULE);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

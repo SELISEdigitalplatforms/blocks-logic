@@ -2,6 +2,8 @@ import { NodeGuideTransformSetFieldV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
   guide: NodeGuideTransformSetFieldV1,
   schema: {
@@ -13,11 +15,11 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         id: "mode",
         type: "select",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.MODE");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.MODE");
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.THE_MODE_OF_SETTING",
           );
         },
@@ -26,7 +28,7 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.MANUAL_MAPPING",
               );
             },
@@ -40,13 +42,13 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         type: "key-type-value-pairs",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.SET_FIELDS",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.SET_FIELDS_2",
           );
         },
@@ -65,13 +67,13 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         },
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.JSON_CODE",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.ENTER_A_JSON_OBJECT",
           );
         },
@@ -82,13 +84,13 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         type: "switch",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.INCLUDE_OTHER_INPUT_FIELDS",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.INCLUDE_OTHER_INPUT_FIELDS_2",
           );
         },
@@ -99,13 +101,13 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         type: "select-with-description",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.INPUT_FIELDS_TO_INCLUDE",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.HOW_TO_SELECT_THE",
           );
         },
@@ -119,14 +121,14 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.ALL_FIELDS",
               );
             },
             value: "all",
             get description() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.INCLUDE_ALL_FIELDS_FROM",
               );
             },
@@ -134,14 +136,14 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.SPECIFIC_FIELDS",
               );
             },
             value: "include",
             get description() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.INCLUDE_SPECIFIC_FIELDS_FROM",
               );
             },
@@ -149,14 +151,14 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
           {
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.EXCLUDE_FIELDS",
               );
             },
             value: "exclude",
             get description() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.EXCLUDE_SPECIFIC_FIELDS_FROM",
               );
             },
@@ -168,13 +170,13 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         type: "text",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.FIELDS_TO_INCLUDE",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.FIELDS_TO_INCLUDE_IN",
           );
         },
@@ -189,13 +191,13 @@ export const NodeSchemaTransformSetFieldV1: NodeSchemaDefinition = {
         type: "text",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.FIELDS_TO_EXCLUDE",
           );
         },
         get info() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_SETFIELD_V1.FIELDS_TO_EXCLUDE_FROM",
           );
         },

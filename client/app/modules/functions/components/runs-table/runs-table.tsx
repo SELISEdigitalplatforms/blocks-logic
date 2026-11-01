@@ -22,6 +22,8 @@ import { RunStatusChip } from "../run-status-chip";
 import { useCancelRun, useReplayRun } from "../../hooks/use-runs";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 /**
  * Design's grid: Run · Status · Triggered by · Duration · Peak mem · Version · row actions.
  * The last track holds the kebab, the row's only control. It was 18 px — the prototype's
@@ -33,19 +35,19 @@ const GRID =
 const TRIGGER_LABELS: Record<string, string> = {
   Http: "HTTP",
   get Workflow() {
-    return tStatic("logic.functions.components", "RUNS_TABLE.WORKFLOW");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_TABLE.WORKFLOW");
   },
   get Test() {
-    return tStatic("logic.functions.components", "RUNS_TABLE.TEST");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_TABLE.TEST");
   },
   get Replay() {
-    return tStatic("logic.functions.components", "RUNS_TABLE.REPLAY");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_TABLE.REPLAY");
   },
   get Schedule() {
-    return tStatic("logic.functions.components", "RUNS_TABLE.SCHEDULE");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_TABLE.SCHEDULE");
   },
   get Event() {
-    return tStatic("logic.functions.components", "RUNS_TABLE.EVENT");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_TABLE.EVENT");
   },
 };
 
@@ -68,7 +70,10 @@ export const RunsTable = ({
   isDeployed,
   onOpenRun,
 }: RunsTableProps) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
+  let emptyMessage = t("RUNS_TABLE.NO_RUNS_YET_DEPLOY");
+  if (hasFilters) emptyMessage = t("RUNS_TABLE.NO_RUNS_MATCH_THIS");
+  else if (isDeployed) emptyMessage = t("RUNS_TABLE.NO_RUNS_YET_CALL");
   const { mutateAsync: replayAsync } = useReplayRun();
   const { mutateAsync: cancelAsync } = useCancelRun();
 
@@ -135,11 +140,7 @@ export const RunsTable = ({
 
         {!isLoading && runs.length === 0 && (
           <p className="px-5 py-9 text-center text-sm text-medium-emphasis">
-            {hasFilters
-              ? t("RUNS_TABLE.NO_RUNS_MATCH_THIS")
-              : isDeployed
-                ? t("RUNS_TABLE.NO_RUNS_YET_CALL")
-                : t("RUNS_TABLE.NO_RUNS_YET_DEPLOY")}
+            {emptyMessage}
           </p>
         )}
 

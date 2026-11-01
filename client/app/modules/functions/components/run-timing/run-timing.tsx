@@ -3,6 +3,8 @@ import { formatDuration } from "../../utils/format";
 import { IRunDetail, IRunTiming } from "../../types/run.types";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 /**
  * Where a call's time went, stage by stage — kept apart from the run's metrics so the sandbox
  * metric only says warm or cold. Each stage is reported by the part that did it: the Api (before
@@ -10,11 +12,11 @@ import { useT, tStatic } from "@seliseblocks/genesis-os";
  * function's own code), the Worker (saving the answer). Times only, never values.
  */
 const STAGES: { group: string; label: string; hint: string }[] = [
-  { group: "api", get label() { return tStatic("logic.functions.components", "RUN_TIMING.API_BEFORE_QUEUE"); }, get hint() { return tStatic("logic.functions.components", "RUN_TIMING.CHECKS_THE_CALLER_LOADS"); } },
-  { group: "queue", get label() { return tStatic("logic.functions.components", "RUN_TIMING.WAITING_FOR_A_RUNNER"); }, get hint() { return tStatic("logic.functions.components", "RUN_TIMING.ON_THE_QUEUE_UNTIL"); } },
-  { group: "handover", get label() { return tStatic("logic.functions.components", "RUN_TIMING.HANDOVER_TO_SANDBOX"); }, get hint() { return tStatic("logic.functions.components", "RUN_TIMING.RUNNER_ADMISSION_SANDBOX_SECRETS"); } },
-  { group: "code", get label() { return tStatic("logic.functions.components", "RUN_TIMING.YOUR_CODE"); }, get hint() { return tStatic("logic.functions.components", "RUN_TIMING.THE_HANDLER_INSIDE_THE"); } },
-  { group: "result", get label() { return tStatic("logic.functions.components", "RUN_TIMING.SAVING_THE_RESULT"); }, get hint() { return tStatic("logic.functions.components", "RUN_TIMING.WORKER_WAITS_WRITES_THE"); } },
+  { group: "api", get label() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_TIMING.API_BEFORE_QUEUE"); }, get hint() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_TIMING.CHECKS_THE_CALLER_LOADS"); } },
+  { group: "queue", get label() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_TIMING.WAITING_FOR_A_RUNNER"); }, get hint() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_TIMING.ON_THE_QUEUE_UNTIL"); } },
+  { group: "handover", get label() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_TIMING.HANDOVER_TO_SANDBOX"); }, get hint() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_TIMING.RUNNER_ADMISSION_SANDBOX_SECRETS"); } },
+  { group: "code", get label() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_TIMING.YOUR_CODE"); }, get hint() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_TIMING.THE_HANDLER_INSIDE_THE"); } },
+  { group: "result", get label() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_TIMING.SAVING_THE_RESULT"); }, get hint() { return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_TIMING.WORKER_WAITS_WRITES_THE"); } },
 ];
 
 interface TimingRow {
@@ -59,7 +61,7 @@ export const buildTimingRows = (run: IRunDetail): TimingRow[] => {
 };
 
 export const RunTiming = ({ run }: Readonly<{ run: IRunDetail }>) => {
-  const { t: tr } = useT("logic.functions.components");
+  const { t: tr } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const rows = buildTimingRows(run);
   if (rows.length === 0) return null;
 

@@ -12,6 +12,8 @@ import { StatusChip } from "./status-chip";
 import { ZonedTime } from "./zoned-time";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_SCHEDULER_MODULE = "logic.scheduler";
+
 interface ScheduleExecutionListProps {
   executions: IScheduleExecutionListItem[];
   isLoading: boolean;
@@ -43,12 +45,12 @@ const rowLabel = (row: IScheduleExecutionListItem, tz: string) =>
 
 /** The list's columns, built outside the component so no render function is redefined per render. */
 export const executionColumns = (tz: string): ColumnDef<IScheduleExecutionListItem>[] => [
-  { id: "firedUtc", header: () => <ColumnHeader label={tStatic("logic.scheduler", "SCHEDULE_EXECUTION_LIST.FIRED_AT")} />, cell: (info) => <ZonedTime iso={info.row.original.firedUtc} tz={tz} /> },
-  { id: "outcome", header: () => <ColumnHeader label={tStatic("logic.scheduler", "SCHEDULE_EXECUTION_LIST.RESULT")} />, cell: (info) => <OutcomeBadge outcome={info.row.original.outcome} /> },
-  { id: "status", header: () => <ColumnHeader label={tStatic("logic.scheduler", "common:STATUS")} />, cell: (info) => <StatusChip label={statusLabel(info.row.original.status)} /> },
+  { id: "firedUtc", header: () => <ColumnHeader label={tStatic(LOGIC_SCHEDULER_MODULE, "SCHEDULE_EXECUTION_LIST.FIRED_AT")} />, cell: (info) => <ZonedTime iso={info.row.original.firedUtc} tz={tz} /> },
+  { id: "outcome", header: () => <ColumnHeader label={tStatic(LOGIC_SCHEDULER_MODULE, "SCHEDULE_EXECUTION_LIST.RESULT")} />, cell: (info) => <OutcomeBadge outcome={info.row.original.outcome} /> },
+  { id: "status", header: () => <ColumnHeader label={tStatic(LOGIC_SCHEDULER_MODULE, "common:STATUS")} />, cell: (info) => <StatusChip label={statusLabel(info.row.original.status)} /> },
   {
     id: "durationMs",
-    header: () => <ColumnHeader label={tStatic("logic.scheduler", "SCHEDULE_EXECUTION_LIST.DURATION")} />,
+    header: () => <ColumnHeader label={tStatic(LOGIC_SCHEDULER_MODULE, "SCHEDULE_EXECUTION_LIST.DURATION")} />,
     cell: (info) => <span className="whitespace-nowrap">{formatDuration(info.row.original.durationMs)}</span>,
   },
 ];

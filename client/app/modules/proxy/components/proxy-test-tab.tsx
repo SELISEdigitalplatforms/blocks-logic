@@ -37,6 +37,8 @@ import {
 import { ProxyMethodBadge } from "./proxy-method-badge";
 import { ReadonlyConfigRows } from "./readonly-config-rows";
 
+const LOGIC_PROXY_COMPONENTS_MODULE = "logic.proxy.components";
+
 const MB = 1024 * 1024;
 
 type Props = {
@@ -82,7 +84,7 @@ const initialPrefill = (proxy: Proxy) => {
 
 /** "`a` is" / "`a`, `b` are" — the keys the proxy sets regardless of what is typed. */
 const OverrideNote = ({ keys, what }: { keys: string[]; what: string }) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   if (!keys.length) return null;
   const one = keys.length === 1;
   return (
@@ -101,7 +103,7 @@ const OverrideNote = ({ keys, what }: { keys: string[]; what: string }) => {
 };
 
 const ResetLink = ({ onClick, label }: { onClick: () => void; label: string }) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   return (
     <Button
       type="button"
@@ -122,17 +124,17 @@ const filterBadge = (note: string | null | undefined) => {
     case "Applied":
     case "EmptyResult":
       return {
-        label: tStatic("logic.proxy.components", "PROXY_TEST_TAB.FILTERED"),
+        label: tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_TEST_TAB.FILTERED"),
         variant: "success" as const,
       };
     case "WholePrimitive":
       return {
-        label: tStatic("logic.proxy.components", "PROXY_TEST_TAB.WHOLE_RESPONSE"),
+        label: tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_TEST_TAB.WHOLE_RESPONSE"),
         variant: "secondary" as const,
       };
     case "Failed":
       return {
-        label: tStatic("logic.proxy.components", "PROXY_TEST_TAB.FILTER_FAILED_502"),
+        label: tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_TEST_TAB.FILTER_FAILED_502"),
         variant: "error" as const,
       };
     default:
@@ -155,7 +157,7 @@ const statusClass = (status: number) =>
  * fields exactly as it does for a live call.
  */
 export const ProxyTestTab = ({ proxy }: Props) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const selectedProject = useProjectStore().selectedProject;
   const { isCopying, copy } = useCopyToClipboard();
   const sendTest = useSendProxyTestRequest();
@@ -195,17 +197,18 @@ export const ProxyTestTab = ({ proxy }: Props) => {
   const requestUrl = `${getProxyClientUrl(selectedProject, proxy.slug, pathSuffix)}${
     trimmedQuery ? `?${trimmedQuery}` : ""
   }`;
-  const blockedReason = !proxy.enabled
-    ? t("PROXY_TEST_TAB.THIS_PROXY_IS_PAUSED")
-    : !route
-      ? t("PROXY_TEST_TAB.NO_ROUTE_IS_DECLARED", { method })
-      : missingParams.length
-        ? t("PROXY_TEST_TAB.FILL_IN_TO_SEND", {
-            value: missingParams.map((name) => `{${name}}`).join(", "),
-          })
-        : sendsBody && bodyBytes > MAX_REQUEST_BODY_BYTES
-          ? t("PROXY_TEST_TAB.THE_REQUEST_BODY_IS", { value: MAX_REQUEST_BODY_BYTES / MB })
-          : null;
+  let blockedReason: string | null = null;
+  if (!proxy.enabled) {
+    blockedReason = t("PROXY_TEST_TAB.THIS_PROXY_IS_PAUSED");
+  } else if (!route) {
+    blockedReason = t("PROXY_TEST_TAB.NO_ROUTE_IS_DECLARED", { method });
+  } else if (missingParams.length) {
+    blockedReason = t("PROXY_TEST_TAB.FILL_IN_TO_SEND", {
+      value: missingParams.map((name) => `{${name}}`).join(", "),
+    });
+  } else if (sendsBody && bodyBytes > MAX_REQUEST_BODY_BYTES) {
+    blockedReason = t("PROXY_TEST_TAB.THE_REQUEST_BODY_IS", { value: MAX_REQUEST_BODY_BYTES / MB });
+  }
 
   const changeMethod = (next: ProxyMethod) => {
     setMethod(next);

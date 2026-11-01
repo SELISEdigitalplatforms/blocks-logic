@@ -4,18 +4,20 @@ import { useGetBuild } from "../../hooks/use-versions";
 import { cn } from "@/lib/utils";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 const LABELS: Record<string, string> = {
   get Queued() {
-    return tStatic("logic.functions.components", "BUILD_PROGRESS.QUEUED_FOR_BUILD");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "BUILD_PROGRESS.QUEUED_FOR_BUILD");
   },
   get Building() {
-    return tStatic("logic.functions.components", "BUILD_PROGRESS.BUILDING_IMAGE");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "BUILD_PROGRESS.BUILDING_IMAGE");
   },
   get Succeeded() {
-    return tStatic("logic.functions.components", "BUILD_PROGRESS.BUILD_SUCCEEDED");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "BUILD_PROGRESS.BUILD_SUCCEEDED");
   },
   get Failed() {
-    return tStatic("logic.functions.components", "BUILD_PROGRESS.BUILD_FAILED");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "BUILD_PROGRESS.BUILD_FAILED");
   },
 };
 
@@ -27,7 +29,7 @@ const LABELS: Record<string, string> = {
  * fetched and thrown away, so the only way to read it was the network tab.
  */
 export const BuildProgress = ({ buildId }: { buildId?: string }) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const { data: build } = useGetBuild(buildId);
   // null means "nobody has clicked yet", which is what lets a failed build open itself without
   // taking the toggle away: `false` from a click has to beat the default, not be equal to it.

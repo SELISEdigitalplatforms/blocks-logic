@@ -21,6 +21,8 @@ import { ProxyMethod, ProxyTestResponse } from "../types";
 import { ProxyMethodBadge } from "./proxy-method-badge";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_PROXY_COMPONENTS_MODULE = "logic.proxy.components";
+
 type Props = {
   pathSuffix: string;
   onPathSuffixChange: (value: string) => void;
@@ -48,17 +50,17 @@ const filterBadge = (note: string | null | undefined) => {
     case "Applied":
     case "EmptyResult":
       return {
-        label: tStatic("logic.proxy.components", "PROXY_TEST_PANEL.FILTERED"),
+        label: tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_TEST_PANEL.FILTERED"),
         variant: "success" as const,
       };
     case "WholePrimitive":
       return {
-        label: tStatic("logic.proxy.components", "PROXY_TEST_PANEL.WHOLE_RESPONSE"),
+        label: tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_TEST_PANEL.WHOLE_RESPONSE"),
         variant: "secondary" as const,
       };
     case "Failed":
       return {
-        label: tStatic("logic.proxy.components", "PROXY_TEST_PANEL.FILTER_FAILED_502"),
+        label: tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_TEST_PANEL.FILTER_FAILED_502"),
         variant: "error" as const,
       };
     default:
@@ -79,7 +81,7 @@ export const ProxyTestPanel = ({
   onSend,
   sending,
   response,
-  title = tStatic("logic.proxy.components", "PROXY_TEST_PANEL.TEST_IT"),
+  title = tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_TEST_PANEL.TEST_IT"),
   description,
   methods,
   method,
@@ -87,7 +89,7 @@ export const ProxyTestPanel = ({
   pathPrefix,
   showBody = true,
 }: Props) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const badge = response ? filterBadge(response.responseFilterNote) : null;
   const pathInput = (
     <Input

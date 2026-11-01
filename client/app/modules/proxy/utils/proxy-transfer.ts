@@ -2,6 +2,8 @@ import { PROXY_IMPORT_MAX_FILE_BYTES } from "../constants";
 import { ProxyExportFile } from "../types";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_PROXY_MODULE = "logic.proxy";
+
 /** The file name an export is saved under: `proxy-{slug}.json`, the same name the server suggests. */
 export const exportFileName = (slug: string) => `proxy-${slug || "proxy"}.json`;
 
@@ -30,10 +32,10 @@ export const PROXY_EXPORT_SCHEMA_VERSION = 1;
  */
 export const checkImportFile = (file: File): string | null => {
   if (!file.name.toLowerCase().endsWith(".json"))
-    return tStatic("logic.proxy", "PROXY_TRANSFER.ONLY_JSON_EXPORT_FILES");
-  if (file.size === 0) return tStatic("logic.proxy", "PROXY_TRANSFER.THIS_FILE_IS_EMPTY");
+    return tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.ONLY_JSON_EXPORT_FILES");
+  if (file.size === 0) return tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.THIS_FILE_IS_EMPTY");
   if (file.size > PROXY_IMPORT_MAX_FILE_BYTES) {
-    return tStatic("logic.proxy", "PROXY_TRANSFER.THIS_FILE_IS_LARGER");
+    return tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.THIS_FILE_IS_LARGER");
   }
   return null;
 };
@@ -53,7 +55,7 @@ export const readImportFile = async (
   try {
     parsed = JSON.parse(await file.text());
   } catch {
-    return { ok: false, error: tStatic("logic.proxy", "PROXY_TRANSFER.THIS_FILE_IS_NOT") };
+    return { ok: false, error: tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.THIS_FILE_IS_NOT") };
   }
 
   const head =
@@ -61,15 +63,15 @@ export const readImportFile = async (
       ? (parsed as ProxyExportFile)
       : null;
   if (head?.format === "blocks.function.export") {
-    return { ok: false, error: tStatic("logic.proxy", "PROXY_TRANSFER.THIS_IS_A_FUNCTION") };
+    return { ok: false, error: tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.THIS_IS_A_FUNCTION") };
   }
   if (head?.format !== "blocks.proxy.export") {
-    return { ok: false, error: tStatic("logic.proxy", "PROXY_TRANSFER.THIS_IS_NOT_A") };
+    return { ok: false, error: tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.THIS_IS_NOT_A") };
   }
   if (head.schemaVersion !== PROXY_EXPORT_SCHEMA_VERSION) {
     return {
       ok: false,
-      error: tStatic("logic.proxy", "PROXY_TRANSFER.SCHEMA_VERSION_MISMATCH", {
+      error: tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.SCHEMA_VERSION_MISMATCH", {
         found: String(head.schemaVersion ?? "(none)"),
         expected: PROXY_EXPORT_SCHEMA_VERSION,
       }),

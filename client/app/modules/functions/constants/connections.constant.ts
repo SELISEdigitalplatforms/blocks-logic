@@ -1,4 +1,6 @@
 import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
 /**
  * Ready-made setups for the services a function most often talks to. Each one names the npm
  * package, the variables its connection needs, and a handler that opens, uses and closes the
@@ -43,10 +45,10 @@ export const CONNECTION_PRESETS: IConnectionPreset[] = [
   {
     id: "blocks",
     get label() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.BLOCKS_APIS");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.BLOCKS_APIS");
     },
     get description() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.DATA_MAIL_IAM_AND");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.DATA_MAIL_IAM_AND");
     },
     packageName: "@seliseblocks/client",
     version: "0.2.0",
@@ -55,7 +57,7 @@ export const CONNECTION_PRESETS: IConnectionPreset[] = [
         key: "BLOCKS_API_URL",
         secret: false,
         get hint() {
-          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.THE_PROJECT_S_API");
+          return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.THE_PROJECT_S_API");
         },
         prefill: "blocksApiHost",
       },
@@ -63,14 +65,14 @@ export const CONNECTION_PRESETS: IConnectionPreset[] = [
         key: "BLOCKS_CLIENT_ID",
         secret: true,
         get hint() {
-          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.OPTIONAL_AN_IAM_CLIENT");
+          return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.OPTIONAL_AN_IAM_CLIENT");
         },
       },
       {
         key: "BLOCKS_CLIENT_SECRET",
         secret: true,
         get hint() {
-          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.OPTIONAL_THAT_CLIENT_S");
+          return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.OPTIONAL_THAT_CLIENT_S");
         },
       },
     ],
@@ -109,7 +111,7 @@ export default async function (input, ctx) {
     id: "mongodb",
     label: "MongoDB",
     get description() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.ANY_MONGODB_WITH_A");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.ANY_MONGODB_WITH_A");
     },
     packageName: "mongodb",
     version: "7.7.0",
@@ -137,7 +139,7 @@ export default async function (input, ctx) {
     id: "postgres",
     label: "PostgreSQL",
     get description() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.ANY_POSTGRES_WITH_A");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.ANY_POSTGRES_WITH_A");
     },
     packageName: "pg",
     version: "8.23.1",
@@ -165,7 +167,7 @@ export default async function (input, ctx) {
     id: "mysql",
     label: "MySQL",
     get description() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.ANY_MYSQL_OR_MARIADB");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.ANY_MYSQL_OR_MARIADB");
     },
     packageName: "mysql2",
     version: "3.24.5",
@@ -185,10 +187,10 @@ export default async function (input, ctx) {
   {
     id: "redis",
     get label() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.REDIS");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.REDIS");
     },
     get description() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.ANY_REDIS_WITH_A");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.ANY_REDIS_WITH_A");
     },
     packageName: "ioredis",
     version: "6.0.0",
@@ -213,7 +215,7 @@ export default async function (input, ctx) {
     id: "rabbitmq",
     label: "RabbitMQ",
     get description() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.PUBLISH_TO_ANY_AMQP");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.PUBLISH_TO_ANY_AMQP");
     },
     packageName: "amqplib",
     version: "2.2.0",
@@ -223,7 +225,7 @@ export default async function (input, ctx) {
         key: "AMQP_QUEUE",
         secret: false,
         get hint() {
-          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.QUEUE_TO_PUBLISH_TO");
+          return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.QUEUE_TO_PUBLISH_TO");
         },
         defaultValue: "events",
       },
@@ -247,10 +249,10 @@ export default async function (input, ctx) {
   {
     id: "servicebus",
     get label() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.AZURE_SERVICE_BUS");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.AZURE_SERVICE_BUS");
     },
     get description() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.SEND_TO_YOUR_OWN");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.SEND_TO_YOUR_OWN");
     },
     packageName: "@azure/service-bus",
     version: "7.10.0",
@@ -260,7 +262,7 @@ export default async function (input, ctx) {
         secret: true,
         get hint() {
           return tStatic(
-            "logic.functions",
+            LOGIC_FUNCTIONS_MODULE,
             "CONNECTIONS_CONSTANT.ENDPOINT_SB_NAMESPACE_SERVICEBUS",
           );
         },
@@ -269,7 +271,7 @@ export default async function (input, ctx) {
         key: "SERVICEBUS_QUEUE",
         secret: false,
         get hint() {
-          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.QUEUE_OR_TOPIC_NAME");
+          return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.QUEUE_OR_TOPIC_NAME");
         },
       },
     ],
@@ -290,10 +292,10 @@ export default async function (input, ctx) {
   {
     id: "sqs",
     get label() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.AMAZON_SQS");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.AMAZON_SQS");
     },
     get description() {
-      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.SEND_TO_AN_SQS");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.SEND_TO_AN_SQS");
     },
     packageName: "@aws-sdk/client-sqs",
     version: "3.1146.0",
@@ -302,7 +304,7 @@ export default async function (input, ctx) {
         key: "AWS_REGION",
         secret: false,
         get hint() {
-          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.THE_QUEUE_S_REGION");
+          return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.THE_QUEUE_S_REGION");
         },
       },
       {
@@ -314,14 +316,14 @@ export default async function (input, ctx) {
         key: "AWS_ACCESS_KEY_ID",
         secret: true,
         get hint() {
-          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.ACCESS_KEY_OF_AN");
+          return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.ACCESS_KEY_OF_AN");
         },
       },
       {
         key: "AWS_SECRET_ACCESS_KEY",
         secret: true,
         get hint() {
-          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.THAT_ACCESS_KEY_S");
+          return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.THAT_ACCESS_KEY_S");
         },
       },
     ],

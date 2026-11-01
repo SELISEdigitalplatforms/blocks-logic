@@ -41,6 +41,8 @@ import {
   ImportValuePair,
 } from "./import-parts";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,29 +50,50 @@ type Props = {
 
 const STATUS_TEXT: Record<IFunctionImportPreview["status"], string> = {
   get new() {
-    return tStatic("logic.functions.components", "FUNCTION_IMPORT_DIALOG.THIS_FUNCTION_IS_NOT");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "FUNCTION_IMPORT_DIALOG.THIS_FUNCTION_IS_NOT");
   },
   get same() {
     return tStatic(
-      "logic.functions.components",
+      LOGIC_FUNCTIONS_COMPONENTS_MODULE,
       "FUNCTION_IMPORT_DIALOG.THIS_ENVIRONMENT_ALREADY_HAS",
     );
   },
   get changed() {
-    return tStatic("logic.functions.components", "FUNCTION_IMPORT_DIALOG.THIS_FUNCTION_IS_ALREADY");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "FUNCTION_IMPORT_DIALOG.THIS_FUNCTION_IS_ALREADY");
   },
   get blocked() {
-    return tStatic("logic.functions.components", "FUNCTION_IMPORT_DIALOG.THIS_FILE_CANNOT_BE");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "FUNCTION_IMPORT_DIALOG.THIS_FILE_CANNOT_BE");
   },
 };
 
+const importToastText = (done: IFunctionImportResult) => {
+  const module = LOGIC_FUNCTIONS_COMPONENTS_MODULE;
+  if (done.status === "created") {
+    return tStatic(module, "FUNCTION_IMPORT_DIALOG.IMPORTED", { name: done.name });
+  }
+  if (done.status === "updated") {
+    return tStatic(module, "FUNCTION_IMPORT_DIALOG.UPDATED_FROM_THE_FILE", { name: done.name });
+  }
+  return tStatic(module, "FUNCTION_IMPORT_DIALOG.NOTHING_CHANGED_THE_FUNCTION");
+};
+
+const importResultText = (result: IFunctionImportResult) => {
+  const module = LOGIC_FUNCTIONS_COMPONENTS_MODULE;
+  if (result.status === "created") {
+    return tStatic(module, "FUNCTION_IMPORT_DIALOG.IMPORTED_2", { name: result.name });
+  }
+  if (result.status === "updated") {
+    return tStatic(module, "FUNCTION_IMPORT_DIALOG.UPDATED", { name: result.name });
+  }
+  return tStatic(module, "FUNCTION_IMPORT_DIALOG.ALREADY_MATCHES_THE_FILE", { name: result.name });
+};
 /**
  * After a write: the automatic build and deploy, watched like the editor's Deploy. A build still
  * running is polled; once it succeeds that exact build is deployed. A failed build does not undo
  * the import — "Deploy again" retries, exactly as the editor's Deploy would.
  */
 const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const [buildId, setBuildId] = useState(result.deploy?.buildId ?? undefined);
   const [deployState, setDeployState] = useState(result.deploy?.state);
   const [version, setVersion] = useState(result.deploy?.versionNumber ?? undefined);
@@ -120,6 +143,7 @@ const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
   };
 
   if (!state) return null;
+  const versionSuffix = version ? ` as v${version}` : "";
 
   return (
     <div className="flex flex-col gap-2" data-testid="import-deploy">
@@ -129,7 +153,7 @@ const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
         {state === "failed" && <XCircle className="h-4 w-4 text-error" />}
         <span>
           {state === "building" && t("FUNCTION_IMPORT_DIALOG.IMPORTED_BUILDING_AND_DEPLOYING")}
-          {state === "live" && `Imported and live${version ? ` as v${version}` : ""}.`}
+          {state === "live" && `Imported and live${versionSuffix}.`}
           {state === "failed" && t("FUNCTION_IMPORT_DIALOG.IMPORTED_BUT_THE_DEPLOY")}
         </span>
       </div>
@@ -152,7 +176,7 @@ const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
  * back and the server checks everything again, so what this dialog shows is advice only.
  */
 export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const inputRef = useRef<HTMLInputElement>(null);
   // Bumped on every pick and every reset: an answer that arrives for an older file is dropped.
   const ticket = useRef(0);
@@ -266,12 +290,7 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
       });
       setResult(done);
       showSuccessToast({
-        description:
-          done.status === "created"
-            ? t("FUNCTION_IMPORT_DIALOG.IMPORTED", { name: done.name })
-            : done.status === "updated"
-              ? t("FUNCTION_IMPORT_DIALOG.UPDATED_FROM_THE_FILE", { name: done.name })
-              : t("FUNCTION_IMPORT_DIALOG.NOTHING_CHANGED_THE_FUNCTION"),
+        description: importToastText(done),
       });
     } catch (failure) {
       const { status, message } = importErrorOf(failure);
@@ -443,11 +462,7 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true" />
                 <span className="text-sm font-semibold">
-                  {result.status === "created"
-                    ? t("FUNCTION_IMPORT_DIALOG.IMPORTED_2", { name: result.name })
-                    : result.status === "updated"
-                      ? t("FUNCTION_IMPORT_DIALOG.UPDATED", { name: result.name })
-                      : t("FUNCTION_IMPORT_DIALOG.ALREADY_MATCHES_THE_FILE", { name: result.name })}
+                  {importResultText(result)}
                 </span>
               </div>
               {result.messages.map((m) => (

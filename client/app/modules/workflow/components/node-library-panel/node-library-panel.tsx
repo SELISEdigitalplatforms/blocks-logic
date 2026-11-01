@@ -21,16 +21,18 @@ import { v4 as uuidv4 } from "uuid";
 import { findFreePosition } from "../../utils/find-free-position";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
+
 type NodeLibraryPanelProps = {
   title?: string;
   description?: string;
 };
 
 export const NodeLibraryPanel = ({
-  title = tStatic("logic.workflow.nodes.inspector", "NODE_LIBRARY_PANEL.START_YOUR_WORKFLOW"),
-  description = tStatic("logic.workflow.nodes.inspector", "NODE_LIBRARY_PANEL.SELECT_HOW_THIS_WORKFLOW"),
+  title = tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_LIBRARY_PANEL.START_YOUR_WORKFLOW"),
+  description = tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_LIBRARY_PANEL.SELECT_HOW_THIS_WORKFLOW"),
 }: NodeLibraryPanelProps) => {
-  const { t } = useT("logic.workflow.nodes.inspector");
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const {
     isPanelOpen,
     closeNodeLibraryPanel,

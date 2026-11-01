@@ -1,27 +1,29 @@
 import { RunErrorCode } from "../types/run.types";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
+
 /**
  * A run's error code as a sentence the developer can act on — §4.8 of the UI spec. The raw code is
  * still shown next to it, so nothing is hidden by the friendlier wording.
  */
 export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
-  get MemoryLimit() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_FUNCTION_USED_MORE"); },
-  get PidLimit() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_FUNCTION_STARTED_MORE"); },
-  get UserRuntimeError() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_HANDLER_THREW_THE"); },
-  get RuntimeStartFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_SANDBOX_COULD_NOT"); },
-  get ResultTooLarge() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_RETURNED_VALUE_IS"); },
-  get ResultNotSerializable() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_RETURNED_VALUE_COULD"); },
-  get ImagePullFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_IMAGE_COULD_NOT"); },
-  get TimedOut() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_RUN_PASSED_ITS"); },
-  get SandboxStartFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_SANDBOX_FAILED_TO"); },
-  get OutputActionFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_FUNCTION_RETURNED_SUCCESSFULLY"); },
-  get Undeliverable() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.NO_RUNNER_EVER_PICKED"); },
-  get EnqueueFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_RUN_COULD_NOT"); },
-  get Abandoned() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_RUN_NEVER_REPORTED"); },
-  get SecretUnresolved() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.A_VARIABLE_IS_BOUND"); },
-  get BuildFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_TEST_S_IMAGE"); },
-  get SecretStoreUnavailable() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_SECRET_STORE_COULD"); },
+  get MemoryLimit() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_FUNCTION_USED_MORE"); },
+  get PidLimit() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_FUNCTION_STARTED_MORE"); },
+  get UserRuntimeError() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_HANDLER_THREW_THE"); },
+  get RuntimeStartFailed() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_SANDBOX_COULD_NOT"); },
+  get ResultTooLarge() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_RETURNED_VALUE_IS"); },
+  get ResultNotSerializable() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_RETURNED_VALUE_COULD"); },
+  get ImagePullFailed() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_IMAGE_COULD_NOT"); },
+  get TimedOut() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_RUN_PASSED_ITS"); },
+  get SandboxStartFailed() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_SANDBOX_FAILED_TO"); },
+  get OutputActionFailed() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_FUNCTION_RETURNED_SUCCESSFULLY"); },
+  get Undeliverable() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.NO_RUNNER_EVER_PICKED"); },
+  get EnqueueFailed() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_RUN_COULD_NOT"); },
+  get Abandoned() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_RUN_NEVER_REPORTED"); },
+  get SecretUnresolved() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.A_VARIABLE_IS_BOUND"); },
+  get BuildFailed() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_TEST_S_IMAGE"); },
+  get SecretStoreUnavailable() { return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.THE_SECRET_STORE_COULD"); },
 };
 
 /**
@@ -58,12 +60,12 @@ export const explainRunError = (
 
   if (message.toLowerCase().startsWith(MODULE_LOAD_PREFIX)) {
     if (HANDLER_SCOPE.test(message)) {
-      return tStatic("logic.functions", "RUN_ERROR_CONSTANT.HANDLER_SCOPE");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.HANDLER_SCOPE");
     }
     if (MISSING_PACKAGE.test(message)) {
-      return tStatic("logic.functions", "RUN_ERROR_CONSTANT.MISSING_PACKAGE");
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.MISSING_PACKAGE");
     }
-    return tStatic("logic.functions", "RUN_ERROR_CONSTANT.MODULE_THREW");
+    return tStatic(LOGIC_FUNCTIONS_MODULE, "RUN_ERROR_CONSTANT.MODULE_THREW");
   }
 
   if (!errorCode) return null;

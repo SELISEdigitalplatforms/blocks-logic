@@ -18,13 +18,16 @@ import { fieldsNotFound } from "@blocks-workflow/utils/split-out";
 import { mergeInputCounts, mergeInputsWithoutData } from "@blocks-workflow/utils/merge-handles";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
+const OUTPUT_PANEL_NO_ITEMS_WENT_TO = "OUTPUT_PANEL.NO_ITEMS_WENT_TO";
+
 type BranchGroup = OutputBranchGroup & {
   schema: ReturnType<typeof inferSchemaFromRuntimeRows>;
 };
 
 /** A branch's name (its output's label, not its key), item count, and a copy button for the key. */
 const BranchHeader = ({ group, className = "" }: { group: BranchGroup; className?: string }) => {
-  const { t } = useT("logic.workflow.nodes.inspector");
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   return (
     <div className={`group/branch flex min-w-0 items-center gap-2 ${className}`}>
       <span title={group.key} className="truncate text-xs font-semibold text-high-emphasis">
@@ -48,7 +51,7 @@ export const OutputPanel = ({
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 } = {}) => {
-  const { t } = useT("logic.workflow.nodes.inspector");
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const [tab, setTab] = useState("schema");
   const [isEditingMock, setIsEditingMock] = useState(false);
   const [mockDataInput, setMockDataInput] = useState("");
@@ -180,7 +183,7 @@ export const OutputPanel = ({
     try {
       newPinData = JSON.parse(mockDataInput);
     } catch {
-      showErrorToast({ errors: tStatic("logic.workflow.nodes.inspector", "OUTPUT_PANEL.INVALID_JSON_FORMAT") });
+      showErrorToast({ errors: tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "OUTPUT_PANEL.INVALID_JSON_FORMAT") });
       return;
     }
     if (!Array.isArray(newPinData)) {
@@ -356,7 +359,7 @@ export const OutputPanel = ({
                 <div key={group.key} className="flex flex-col gap-2">
                   {hasMultipleBranches && <BranchHeader group={group} className="px-1" />}
                   {hasMultipleBranches && group.rows.length === 0 && (
-                    <p className="rounded border border-dashed border-border/60 px-2 py-1.5 text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_ITEMS_WENT_TO")}</p>
+                    <p className="rounded border border-dashed border-border/60 px-2 py-1.5 text-xs text-low-emphasis">{t(OUTPUT_PANEL_NO_ITEMS_WENT_TO)}</p>
                   )}
                   {group.rows.map((row, index) => (
                     <div
@@ -408,7 +411,7 @@ export const OutputPanel = ({
                 <div key={group.key} className="rounded border border-border/60 p-2">
                   <BranchHeader group={group} className="mb-2" />
                   {group.rows.length === 0 ? (
-                    <p className="text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_ITEMS_WENT_TO")}</p>
+                    <p className="text-xs text-low-emphasis">{t(OUTPUT_PANEL_NO_ITEMS_WENT_TO)}</p>
                   ) : (
                     <RuntimeTable rows={group.rows} />
                   )}
@@ -429,7 +432,7 @@ export const OutputPanel = ({
                 <div key={group.key} className="rounded border border-border/60">
                   <BranchHeader group={group} className="border-b border-border/60 px-3 py-2" />
                   {group.rows.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_ITEMS_WENT_TO")}</p>
+                    <p className="px-3 py-2 text-xs text-low-emphasis">{t(OUTPUT_PANEL_NO_ITEMS_WENT_TO)}</p>
                   ) : (
                     <RuntimeJson rows={group.rows} />
                   )}
@@ -447,8 +450,8 @@ export const OutputPanel = ({
   );
 };
 
-function RuntimeTable({ rows }: { rows: unknown[] }) {
-  const { t } = useT("logic.workflow.nodes.inspector");
+function RuntimeTable({ rows }: Readonly<{ rows: unknown[] }>) {
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   if (rows.length === 0) {
     return <p className="text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_RUNTIME_OUTPUT_DATA")}</p>;
   }
@@ -506,8 +509,8 @@ function RuntimeTable({ rows }: { rows: unknown[] }) {
   );
 }
 
-function RuntimeJson({ rows }: { rows: unknown[] }) {
-  const { t } = useT("logic.workflow.nodes.inspector");
+function RuntimeJson({ rows }: Readonly<{ rows: unknown[] }>) {
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   if (rows.length === 0) {
     return <p className="p-3 text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_RUNTIME_OUTPUT_DATA")}</p>;
   }
@@ -539,10 +542,10 @@ function latestRun(executedNodes: ExecutedNode[] | null | undefined, nodeId: str
 
 function latestRunError(executedNodes: ExecutedNode[] | null | undefined, nodeId: string): string | null {
   const latest = latestRun(executedNodes, nodeId);
-  if (!latest || latest.status !== NodeExecutionStatus.Failed) return null;
+  if (latest?.status !== NodeExecutionStatus.Failed) return null;
 
   const message = (latest.error ?? "").split(/\r?\n\s+at /)[0].replace(/^System\.Exception:\s*/, "").trim();
-  return message || tStatic("logic.workflow.nodes.inspector", "OUTPUT_PANEL.THIS_STEP_FAILED");
+  return message || tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "OUTPUT_PANEL.THIS_STEP_FAILED");
 }
 
 function formatCellValue(value: unknown): string {

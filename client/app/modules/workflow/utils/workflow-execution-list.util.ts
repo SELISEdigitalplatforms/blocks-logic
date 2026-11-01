@@ -2,6 +2,8 @@ import { NodeExecutionStatus } from "./workflow-execution-editor.util";
 import { CheckCircle2, XCircle, Loader2, Clock, CircleDashed, AlertCircle, HelpCircle } from "lucide-react";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_MODULE = "logic.workflow";
+
 export enum WorkflowExecutionStatus {
   Init = 0,
   Queued = 1,
@@ -38,7 +40,7 @@ export const getStatusConfig = (status: number) => {
     case WorkflowExecutionStatus.Init:
       return {
         color: "bg-gray-400",
-        label: tStatic("logic.workflow", "WORKFLOW_EXECUTION_LIST_UTIL.INITIALIZED"),
+        label: tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_EXECUTION_LIST_UTIL.INITIALIZED"),
         textClass: "text-gray-600",
         icon: AlertCircle,
         iconClass: "h-4 w-4",
@@ -46,7 +48,7 @@ export const getStatusConfig = (status: number) => {
     case WorkflowExecutionStatus.Queued:
       return {
         color: "bg-blue-400",
-        label: tStatic("logic.workflow", "WORKFLOW_EXECUTION_LIST_UTIL.QUEUED"),
+        label: tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_EXECUTION_LIST_UTIL.QUEUED"),
         textClass: "text-blue-600",
         icon: CircleDashed,
         iconClass: "h-4 w-4",
@@ -54,7 +56,7 @@ export const getStatusConfig = (status: number) => {
     case WorkflowExecutionStatus.Pending:
       return {
         color: "bg-yellow-400",
-        label: tStatic("logic.workflow", "WORKFLOW_EXECUTION_LIST_UTIL.PENDING"),
+        label: tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_EXECUTION_LIST_UTIL.PENDING"),
         textClass: "text-yellow-600",
         icon: Clock,
         iconClass: "h-4 w-4",
@@ -62,7 +64,7 @@ export const getStatusConfig = (status: number) => {
     case WorkflowExecutionStatus.Running:
       return {
         color: "bg-purple-400",
-        label: tStatic("logic.workflow", "WORKFLOW_EXECUTION_LIST_UTIL.RUNNING"),
+        label: tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_EXECUTION_LIST_UTIL.RUNNING"),
         textClass: "text-purple-600",
         icon: Loader2,
         iconClass: "h-4 w-4 animate-spin",
@@ -70,7 +72,7 @@ export const getStatusConfig = (status: number) => {
     case WorkflowExecutionStatus.Completed:
       return {
         color: "bg-success",
-        label: tStatic("logic.workflow", "WORKFLOW_EXECUTION_LIST_UTIL.COMPLETED"),
+        label: tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_EXECUTION_LIST_UTIL.COMPLETED"),
         textClass: "text-success",
         icon: CheckCircle2,
         iconClass: "h-4 w-4",
@@ -78,7 +80,7 @@ export const getStatusConfig = (status: number) => {
     case WorkflowExecutionStatus.Failed:
       return {
         color: "bg-error",
-        label: tStatic("logic.workflow", "WORKFLOW_EXECUTION_LIST_UTIL.FAILED"),
+        label: tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_EXECUTION_LIST_UTIL.FAILED"),
         textClass: "text-error",
         icon: XCircle,
         iconClass: "h-4 w-4",
@@ -86,7 +88,7 @@ export const getStatusConfig = (status: number) => {
     default:
       return {
         color: "bg-gray-400",
-        label: tStatic("logic.workflow", "WORKFLOW_EXECUTION_LIST_UTIL.UNKNOWN"),
+        label: tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_EXECUTION_LIST_UTIL.UNKNOWN"),
         textClass: "text-gray-600",
         icon: HelpCircle,
         iconClass: "h-4 w-4",

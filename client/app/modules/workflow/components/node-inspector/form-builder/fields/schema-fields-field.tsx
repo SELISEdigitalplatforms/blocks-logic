@@ -16,6 +16,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/po
 import { buildEmptyFieldMapping } from "@blocks-workflow/utils/resolve-schema-fields";
 import { useT } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
+
 // ─── Flat dot-path helpers ────────────────────────────────────────────────────
 
 /** Check if any key matches prefix exactly or starts with prefix + "." */
@@ -138,7 +140,7 @@ function SchemaFieldRow({
   readOnly,
   disabled,
 }: SchemaFieldRowProps) {
-  const { t } = useT("logic.workflow.nodes.inspector");
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const [open, setOpen] = useState(true);
   const isEntity = !!(schemaField.fields && schemaField.fields.length > 0);
 
@@ -360,7 +362,7 @@ function AddFieldPopover({
   onRestore: (prefix: string, schema: ResolvedSchemaField) => void;
   disabled?: boolean;
 }) {
-  const { t } = useT("logic.workflow.nodes.inspector");
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const [popoverOpen, setPopoverOpen] = useState(false);
 
   if (disabled || missingChildren.length === 0) return null;
@@ -411,7 +413,7 @@ export const SchemaFieldsField = ({
   data,
   config,
 }: FieldProps<Record<string, unknown>>) => {
-  const { t } = useT("logic.workflow.nodes.inspector");
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const schemaFields = useMemo(
     () => (data.schemaFields ?? []) as ResolvedSchemaField[],
     [data.schemaFields],

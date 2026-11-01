@@ -12,35 +12,37 @@ import {
 import { cn } from "@/lib/utils";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 /** Status chips, per FEATURES-AND-UI §4.8. "" is All; Running covers every non-terminal status. */
 export const RUN_STATUS_FILTERS = [
   {
     get label() {
-      return tStatic("logic.functions.components", "common:ALL");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "common:ALL");
     },
     value: "",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.SUCCEEDED");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.SUCCEEDED");
     },
     value: "Succeeded",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.FAILED");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.FAILED");
     },
     value: "Failed",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.TIMED_OUT");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.TIMED_OUT");
     },
     value: "TimedOut",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.RUNNING");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.RUNNING");
     },
     value: "Running",
   },
@@ -53,32 +55,32 @@ const ANY_TRIGGER = "any";
 const TRIGGER_FILTERS = [
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.ANY_TRIGGER");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.ANY_TRIGGER");
     },
     value: ANY_TRIGGER,
   },
   { label: "HTTP", value: "Http" },
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.WORKFLOW");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.WORKFLOW");
     },
     value: "Workflow",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.TEST");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.TEST");
     },
     value: "Test",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.REPLAY");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.REPLAY");
     },
     value: "Replay",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.EVENT");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.EVENT");
     },
     value: "Event",
   },
@@ -87,19 +89,19 @@ const TRIGGER_FILTERS = [
 const RANGE_FILTERS = [
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.LAST_24_HOURS");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.LAST_24_HOURS");
     },
     value: "24h",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.LAST_7_DAYS");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.LAST_7_DAYS");
     },
     value: "7d",
   },
   {
     get label() {
-      return tStatic("logic.functions.components", "RUNS_FILTER_BAR.LAST_30_DAYS");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUNS_FILTER_BAR.LAST_30_DAYS");
     },
     value: "30d",
   },
@@ -121,7 +123,7 @@ type RunsFilterBarProps = {
 };
 
 export const RunsFilterBar = ({ value, onChange, hasActiveRun }: RunsFilterBarProps) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-1">

@@ -16,10 +16,12 @@ import {
 import { cn } from "@/lib/utils";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
+
 const friendlyJsonError = (message: string): string => {
   if (message.includes("Unexpected end of JSON input")) {
     return tStatic(
-      "logic.workflow.nodes.inspector",
+      LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE,
       "JSON_CODE_EDITOR_FIELD.INCOMPLETE_JSON_CHECK_FOR",
     );
   }
@@ -28,14 +30,14 @@ const friendlyJsonError = (message: string): string => {
     message.includes("Expected double-quoted property name")
   ) {
     return tStatic(
-      "logic.workflow.nodes.inspector",
+      LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE,
       "JSON_CODE_EDITOR_FIELD.PROPERTY_NAMES_MUST_BE",
     );
   }
-  const tokenMatch = message.match(/Unexpected token '?([^' ]+)'?/);
+  const tokenMatch = /Unexpected token '?([^' ]+)'?/.exec(message);
   if (tokenMatch) {
     return tStatic(
-      "logic.workflow.nodes.inspector",
+      LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE,
       "JSON_CODE_EDITOR_FIELD.INVALID_SYNTAX_NEAR_CHECK",
       {
         value: tokenMatch[1],
@@ -43,7 +45,7 @@ const friendlyJsonError = (message: string): string => {
     );
   }
   return tStatic(
-    "logic.workflow.nodes.inspector",
+    LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE,
     "JSON_CODE_EDITOR_FIELD.INVALID_JSON_PLEASE_CHECK",
   );
 };
@@ -70,7 +72,7 @@ export const JsonCodeEditor = ({
   data,
   config,
 }: FieldProps<string>) => {
-  const { t } = useT("logic.workflow.nodes.inspector");
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const [touched, setTouched] = useState(false);
   const { locked, lockedKey } = useLockedValue<LockedKeys>(field, data, config);
   const lockedKeys = locked && Object.keys(locked).length ? locked : null;

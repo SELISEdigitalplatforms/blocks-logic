@@ -362,6 +362,12 @@ export const ProxyOpenApiImportDialog = ({
                     const checked = selected.has(operation.operationId);
                     const queryCount = operation.queryParameters.length;
                     const headerCount = operation.headerParameters.length;
+                    let bringsText = t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_HEADER", { count: headerCount });
+                    if (queryCount > 0 && headerCount > 0) {
+                      bringsText = t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_BOTH", { query: queryCount, header: headerCount });
+                    } else if (queryCount > 0) {
+                      bringsText = t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_QUERY", { count: queryCount });
+                    }
 
                     return (
                       <li key={`${operation.method} ${operation.path}`}>
@@ -401,11 +407,7 @@ export const ProxyOpenApiImportDialog = ({
                             ) : null}
                             {queryCount + headerCount > 0 ? (
                               <span className="block text-[11px] text-muted-foreground">
-                                {queryCount > 0 && headerCount > 0
-                                  ? t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_BOTH", { query: queryCount, header: headerCount })
-                                  : queryCount > 0
-                                    ? t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_QUERY", { count: queryCount })
-                                    : t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_HEADER", { count: headerCount })}
+                                {bringsText}
                               </span>
                             ) : null}
                           </span>
@@ -415,7 +417,8 @@ export const ProxyOpenApiImportDialog = ({
                   })}
                 </ul>
               </div>
-            ) : preview.errors.length ? null : (
+            ) : null}
+            {!operations.length && !preview.errors.length && (
               <p className="text-xs text-muted-foreground">
                 {t("PROXY_OPENAPI_IMPORT_DIALOG.THE_DOCUMENT_DESCRIBED_NO")}
               </p>

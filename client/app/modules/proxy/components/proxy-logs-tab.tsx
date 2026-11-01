@@ -15,11 +15,13 @@ import { buildProxyCurl } from "../utils";
 import { ProxyMethodBadge } from "./proxy-method-badge";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_PROXY_COMPONENTS_MODULE = "logic.proxy.components";
+
 const FILTERS: { value: ProxyLogFilter; label: string }[] = [
   {
     value: "all",
     get label() {
-      return tStatic("logic.proxy.components", "common:ALL");
+      return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "common:ALL");
     },
   },
   { value: "ok", label: "2xx" },
@@ -33,40 +35,40 @@ const statusClass = (status: number) =>
 /** Human label for a server `outcome` enum, used when the row carries no `errorMessage`. */
 const OUTCOME_LABELS: Record<string, string> = {
   get Timeout() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_UPSTREAM_ENDPOINT_DID");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.THE_UPSTREAM_ENDPOINT_DID");
   },
   get UpstreamUnreachable() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_UPSTREAM_ENDPOINT_COULD");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.THE_UPSTREAM_ENDPOINT_COULD");
   },
   get UpstreamBlocked() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_UPSTREAM_ENDPOINT_IS");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.THE_UPSTREAM_ENDPOINT_IS");
   },
   get UpstreamResponseTooLarge() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_UPSTREAM_RESPONSE_EXCEEDED");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.THE_UPSTREAM_RESPONSE_EXCEEDED");
   },
   get RequestTooLarge() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_REQUEST_BODY_EXCEEDED");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.THE_REQUEST_BODY_EXCEEDED");
   },
   get RequestBodyNotMergeable() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_REQUEST_BODY_IS");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.THE_REQUEST_BODY_IS");
   },
   get VariableResolutionFailed() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.A_CONFIGURED_CONFIGURATION_VARIABLE");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.A_CONFIGURED_CONFIGURATION_VARIABLE");
   },
   get ResponseFilterFailed() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_UPSTREAM_RESPONSE_COULD");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.THE_UPSTREAM_RESPONSE_COULD");
   },
   get MethodNotAllowed() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THIS_HTTP_METHOD_IS");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.THIS_HTTP_METHOD_IS");
   },
   get ProxyNotFound() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.NO_ENABLED_PROXY_IS");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.NO_ENABLED_PROXY_IS");
   },
   get Unauthorized() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.MISSING_OR_INVALID_CREDENTIALS");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.MISSING_OR_INVALID_CREDENTIALS");
   },
   get InternalError() {
-    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_PROXY_FORWARDER_ENCOUNTERED");
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_LOGS_TAB.THE_PROXY_FORWARDER_ENCOUNTERED");
   },
 };
 
@@ -76,10 +78,13 @@ const outcomeLabel = (outcome?: string) =>
 const logSkeletonClass = "bg-slate-200 dark:bg-muted";
 const logTableGridClass = "grid-cols-[20px_170px_96px_minmax(300px,1fr)_96px_112px]";
 
+const logSkeletonColumns = ["marker", "time", "method", "path", "status", "latency"];
+const logSkeletonRows = ["row-1", "row-2", "row-3", "row-4", "row-5"];
+
 const ProxyLogsSkeleton = () => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   return (
-    <div className="space-y-4" role="status" aria-label={t("PROXY_LOGS_TAB.LOADING_REQUEST_LOGS")}>
+    <output className="block space-y-4" aria-label={t("PROXY_LOGS_TAB.LOADING_REQUEST_LOGS")}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-2">
           <Skeleton className={cn("h-8 w-12", logSkeletonClass)} />
@@ -95,19 +100,19 @@ const ProxyLogsSkeleton = () => {
       </div>
       <div className="overflow-hidden rounded-sm border">
         <div className={cn("grid gap-4 px-4 py-3", logTableGridClass)}>
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} className={cn("h-4 w-full", logSkeletonClass)} />
+          {logSkeletonColumns.map((column) => (
+            <Skeleton key={column} className={cn("h-4 w-full", logSkeletonClass)} />
           ))}
         </div>
-        {Array.from({ length: 5 }).map((_, rowIndex) => (
-          <div key={rowIndex} className={cn("grid gap-4 border-t px-4 py-3", logTableGridClass)}>
-            {Array.from({ length: 6 }).map((_, cellIndex) => (
-              <Skeleton key={cellIndex} className={cn("h-4 w-full", logSkeletonClass)} />
+        {logSkeletonRows.map((row) => (
+          <div key={row} className={cn("grid gap-4 border-t px-4 py-3", logTableGridClass)}>
+            {logSkeletonColumns.map((column) => (
+              <Skeleton key={column} className={cn("h-4 w-full", logSkeletonClass)} />
             ))}
           </div>
         ))}
       </div>
-    </div>
+    </output>
   );
 };
 
@@ -131,7 +136,7 @@ const CopyButton = ({
   iconOnly?: boolean;
   className?: string;
 }) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const { isCopying, copy } = useCopyToClipboard();
 
   return (
@@ -170,7 +175,7 @@ const CopyButton = ({
 const logDetailsId = (logId: string) => `proxy-log-details-${logId}`;
 
 const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog }) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   // The list row carries only summary fields; the forwarded URL and injected keys are fetched on demand
   // from `GET /api/Proxies/{proxyId}/executions/{executionId}`.
   const { data, isLoading, isError } = useGetProxyExecution(proxyId, log.id);
@@ -278,7 +283,7 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
 };
 
 export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean }) => {
-  const { t } = useT("logic.proxy.components");
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const [filter, setFilter] = useState<ProxyLogFilter>("all");
   const [live, setLive] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);

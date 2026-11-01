@@ -1,6 +1,8 @@
 import { ProxyBreaker, ProxyResilience, ProxyRetry } from "../types";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_PROXY_MODULE = "logic.proxy";
+
 /**
  * The server's own bounds, from `ProxyConfigValidator`. Mirrored here rather than guessed: a form that
  * accepts a value the API refuses turns an edit the user can fix into a save that fails.
@@ -78,7 +80,7 @@ export const resilienceIssues = (value: ProxyResilience | null | undefined): Res
   if (value.timeoutSeconds !== null && outOfRange(value.timeoutSeconds, limits.maxTimeoutSeconds)) {
     issues.push({
       path: ["timeoutSeconds"],
-      message: tStatic("logic.proxy", "PROXY_RESILIENCE.THE_TIMEOUT_MUST_BE", { maxTimeoutSeconds: limits.maxTimeoutSeconds }),
+      message: tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.THE_TIMEOUT_MUST_BE", { maxTimeoutSeconds: limits.maxTimeoutSeconds }),
     });
   }
 
@@ -88,7 +90,7 @@ export const resilienceIssues = (value: ProxyResilience | null | undefined): Res
     if (outOfRange(attempts, limits.maxRetryAttempts)) {
       issues.push({
         path: ["retry", "attempts"],
-        message: tStatic("logic.proxy", "PROXY_RESILIENCE.ATTEMPTS_MUST_BE_BETWEEN", { maxRetryAttempts: limits.maxRetryAttempts }),
+        message: tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.ATTEMPTS_MUST_BE_BETWEEN", { maxRetryAttempts: limits.maxRetryAttempts }),
       });
     }
 
@@ -98,14 +100,14 @@ export const resilienceIssues = (value: ProxyResilience | null | undefined): Res
       issues.push({
         path: ["retry", "idempotent"],
         message:
-          tStatic("logic.proxy", "PROXY_RESILIENCE.CONFIRM_THAT_SENDING_THIS"),
+          tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.CONFIRM_THAT_SENDING_THIS"),
       });
     }
 
     if (outOfRange(initialDelaySeconds, limits.maxRetryDelaySeconds)) {
       issues.push({
         path: ["retry", "initialDelaySeconds"],
-        message: tStatic("logic.proxy", "PROXY_RESILIENCE.THE_DELAY_IS_OUT"),
+        message: tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.THE_DELAY_IS_OUT"),
       });
     }
   }
@@ -114,14 +116,14 @@ export const resilienceIssues = (value: ProxyResilience | null | undefined): Res
     if (outOfRange(value.breaker.failureThreshold, limits.maxBreakerThreshold)) {
       issues.push({
         path: ["breaker", "failureThreshold"],
-        message: tStatic("logic.proxy", "PROXY_RESILIENCE.THE_FAILURE_COUNT_IS"),
+        message: tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.THE_FAILURE_COUNT_IS"),
       });
     }
 
     if (outOfRange(value.breaker.openSeconds, limits.maxBreakerOpenSeconds)) {
       issues.push({
         path: ["breaker", "openSeconds"],
-        message: tStatic("logic.proxy", "PROXY_RESILIENCE.THE_PAUSE_IS_OUT"),
+        message: tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.THE_PAUSE_IS_OUT"),
       });
     }
   }
@@ -157,7 +159,7 @@ export const describeBreaker = (breaker: ProxyBreaker | null) =>
 
 /** One line for a summary row: what this policy does, or that there isn't one. */
 export const describeResilience = (value: ProxyResilience | null | undefined): string => {
-  if (!value) return tStatic("logic.proxy", "PROXY_RESILIENCE.NOT_CONFIGURED");
+  if (!value) return tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.NOT_CONFIGURED");
 
   const parts = [
     value.timeoutSeconds === null ? null : `${value.timeoutSeconds}s timeout`,
@@ -165,5 +167,5 @@ export const describeResilience = (value: ProxyResilience | null | undefined): s
     value.breaker ? `breaker ${describeBreaker(value.breaker)}` : null,
   ].filter((part): part is string => part !== null);
 
-  return parts.length ? parts.join(" · ") : tStatic("logic.proxy", "PROXY_RESILIENCE.NOT_CONFIGURED");
+  return parts.length ? parts.join(" · ") : tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.NOT_CONFIGURED");
 };

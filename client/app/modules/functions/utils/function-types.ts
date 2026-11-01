@@ -1,4 +1,6 @@
 import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
 /**
  * The type declarations the Code tab feeds Monaco so `input`, `ctx` and the tenant's own
  * variables complete and hover like they would in VS Code. This mirrors the runner's
@@ -171,8 +173,8 @@ export const buildCtxCompletions = (envKeys: string[] = []) => {
   return [
     {
       label: "env",
-      detail: tStatic("logic.functions", "FUNCTION_TYPES.RECORD_STRING_STRING"),
-      documentation: tStatic("logic.functions", "FUNCTION_TYPES.YOUR_VARIABLES_AS_PLAIN"),
+      detail: tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_TYPES.RECORD_STRING_STRING"),
+      documentation: tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_TYPES.YOUR_VARIABLES_AS_PLAIN"),
     },
     {
       label: "log",
@@ -194,12 +196,12 @@ export const buildCtxCompletions = (envKeys: string[] = []) => {
       label: "waitUntil",
       detail: "(promise: Promise<unknown>) => void",
       documentation:
-        tStatic("logic.functions", "FUNCTION_TYPES.FINISH_WORK_AFTER_THE"),
+        tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_TYPES.FINISH_WORK_AFTER_THE"),
     },
     ...keys.map((key) => ({
-      label: tStatic("logic.functions", "FUNCTION_TYPES.ENV", { key }),
+      label: tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_TYPES.ENV", { key }),
       detail: "string",
-      documentation: tStatic("logic.functions", "FUNCTION_TYPES.VARIABLE_SNAPSHOTTED_AT_DEPLOY", { key }),
+      documentation: tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_TYPES.VARIABLE_SNAPSHOTTED_AT_DEPLOY", { key }),
     })),
   ];
 };

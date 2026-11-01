@@ -25,6 +25,8 @@ import { testHttpVerb } from "../../constants/endpoint.constant";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
+
 type TestPanelProps = {
   functionId: string;
   /** Most recent run, so its input can be reused as the test payload. */
@@ -44,39 +46,39 @@ type TestPanelProps = {
 const STEPS = [
   {
     get title() {
-      return tStatic("logic.functions.components", "TEST_PANEL.SAVE_CODE");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.SAVE_CODE");
     },
     get hint() {
-      return tStatic("logic.functions.components", "TEST_PANEL.SAVING_THE_CODE_ON");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.SAVING_THE_CODE_ON");
     },
   },
   {
     get title() {
-      return tStatic("logic.functions.components", "TEST_PANEL.WAIT_FOR_A_RUNNER");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.WAIT_FOR_A_RUNNER");
     },
     get hint() {
-      return tStatic("logic.functions.components", "TEST_PANEL.THE_TEST_IS_QUEUED");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.THE_TEST_IS_QUEUED");
     },
   },
   {
     get title() {
-      return tStatic("logic.functions.components", "TEST_PANEL.BUILD_AND_START_SANDBOX");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.BUILD_AND_START_SANDBOX");
     },
     get hint() {
-      return tStatic("logic.functions.components", "TEST_PANEL.INSTALLING_YOUR_PACKAGES_AND");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.INSTALLING_YOUR_PACKAGES_AND");
     },
   },
   {
     get title() {
-      return tStatic("logic.functions.components", "TEST_PANEL.RUN_HANDLER");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.RUN_HANDLER");
     },
     get hint() {
-      return tStatic("logic.functions.components", "TEST_PANEL.YOUR_HANDLER_IS_RUNNING");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.YOUR_HANDLER_IS_RUNNING");
     },
   },
   {
     get title() {
-      return tStatic("logic.functions.components", "TEST_PANEL.RESULT");
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.RESULT");
     },
     hint: "",
   },
@@ -99,7 +101,7 @@ const retryAfterSeconds = (message: string) => {
 
 const errorText = (error: unknown) => {
   if (!isErrorWithErrors(error))
-    return tStatic("logic.functions.components", "TEST_PANEL.THE_TEST_COULD_NOT");
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.THE_TEST_COULD_NOT");
   const { errors } = error;
   // The Test endpoint's refusals are { code, message }; the rest are { field: message }.
   if (typeof errors.message === "string") return errors.message;
@@ -132,8 +134,23 @@ const LOG_LEVEL_CLASS: Record<string, string> = {
 };
 
 /** Test input + the result of the last test, in the Code tab's right rail. Ctrl+Enter runs it. */
+const StepIcon = ({
+  isFailed,
+  isCurrent,
+  isDone,
+}: {
+  isFailed: boolean;
+  isCurrent: boolean;
+  isDone: boolean;
+}) => {
+  if (isFailed) return <XCircle className="h-4 w-4 text-error" />;
+  if (isCurrent) return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
+  if (isDone) return <CheckCircle2 className="h-4 w-4 text-success" />;
+  return <Circle className="h-4 w-4 text-low-emphasis" />;
+};
+
 export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: TestPanelProps) => {
-  const { t } = useT("logic.functions.components");
+  const { t } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const testInput = useFunctionEditorStore((s) => s.testInput);
   const setTestInput = useFunctionEditorStore((s) => s.setTestInput);
   const httpMethod = useFunctionEditorStore((s) => s.trigger.httpMethod);
@@ -216,7 +233,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
       try {
         JSON.parse(testInput || "{}");
       } catch {
-        return setInputError(tStatic("logic.functions.components", "TEST_PANEL.THAT_IS_NOT_VALID"));
+        return setInputError(tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.THAT_IS_NOT_VALID"));
       }
       setInputError(null);
       setRequestError(null);
@@ -264,7 +281,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
         // A 429's own text names the test window, which is not a decided number: say it plainly.
         setRequestError(
           status === 429
-            ? tStatic("logic.functions.components", "TEST_PANEL.THIS_FUNCTION_WAS_TESTED")
+            ? tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.THIS_FUNCTION_WAS_TESTED")
             : message,
         );
       } finally {
@@ -338,13 +355,10 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
   const result = run && !isRunLive && !hasStream ? prettyJson(run.result) : null;
   const showSteps = isActive || !!run || !!buildId;
 
-  const buttonLabel = isActive
-    ? "Running…"
-    : cooldownSeconds > 0
-      ? t("TEST_PANEL.NEXT_TEST_IN_S", { cooldownSeconds })
-      : runId
-        ? t("TEST_PANEL.RUN_AGAIN")
-        : t("TEST_PANEL.RUN_TEST");
+  let idleLabel = t("TEST_PANEL.RUN_TEST");
+  if (cooldownSeconds > 0) idleLabel = t("TEST_PANEL.NEXT_TEST_IN_S", { cooldownSeconds });
+  else if (runId) idleLabel = t("TEST_PANEL.RUN_AGAIN");
+  const buttonLabel = isActive ? "Running…" : idleLabel;
 
   return (
     <div className="flex flex-col gap-3">
@@ -456,8 +470,9 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               const isDone = index < currentStep || (index === 4 && currentStep === 4 && !failed);
               const isCurrent = index === currentStep && currentStep < 4;
               const isFailed = index === 4 && failed;
-              const title =
-                index === 4 && currentStep === 4 ? (failed ? "Failed" : "Succeeded") : step.title;
+              const finished = index === 4 && currentStep === 4;
+              const finalTitle = failed ? "Failed" : "Succeeded";
+              const title = finished ? finalTitle : step.title;
               return (
                 <li
                   key={step.title}
@@ -465,15 +480,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
                   className="flex gap-2.5"
                 >
                   <span className="mt-0.5 shrink-0">
-                    {isFailed ? (
-                      <XCircle className="h-4 w-4 text-error" />
-                    ) : isCurrent ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    ) : isDone ? (
-                      <CheckCircle2 className="h-4 w-4 text-success" />
-                    ) : (
-                      <Circle className="h-4 w-4 text-low-emphasis" />
-                    )}
+                    <StepIcon isFailed={isFailed} isCurrent={isCurrent} isDone={isDone} />
                   </span>
                   <span className="flex min-w-0 flex-col">
                     <span

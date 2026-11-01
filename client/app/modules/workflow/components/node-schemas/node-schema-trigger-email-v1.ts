@@ -5,6 +5,8 @@ import { emailService } from "@blocks-workflow/services/email.services";
 import { tStatic } from "@seliseblocks/genesis-os";
 import { renderRichText } from "@/lib/rich-text";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
   guide: NodeGuideTriggerEmailV1,
   schema: {
@@ -17,15 +19,15 @@ export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
         type: "callout-accordion-display",
         key: "executionNotes",
         displayValue: () => ({
-          title: tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.NOTES_OF_EDITOR_EXECUTION"),
-          description: React.createElement("span", null, ...renderRichText(tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.IF_AN_INBOUND_EMAIL"), [(text: string) => React.createElement("code", { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" }, text), (text: string) => React.createElement("code", { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" }, text)])),
+          title: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_EMAIL_V1.NOTES_OF_EDITOR_EXECUTION"),
+          description: React.createElement("span", null, ...renderRichText(tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_EMAIL_V1.IF_AN_INBOUND_EMAIL"), [(text: string) => React.createElement("code", { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" }, text), (text: string) => React.createElement("code", { className: "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold" }, text)])),
         }),
       },
       {
         id: "mailbox",
         type: "select",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.MAILBOX"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.SELECT_THE_MAILBOX_TO"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_EMAIL_V1.MAILBOX"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_EMAIL_V1.SELECT_THE_MAILBOX_TO"); },
         key: "mailbox_composite",
         required: true,
         options: (_data, config) => {
@@ -54,8 +56,8 @@ export const NodeSchemaTriggerEmailV1: NodeSchemaDefinition = {
       {
         id: "test-subject",
         type: "text",
-        get label() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.TEST_SUBJECT"); },
-        get info() { return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRIGGER_EMAIL_V1.IF_AN_INBOUND_EMAIL_2"); },
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_EMAIL_V1.TEST_SUBJECT"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_EMAIL_V1.IF_AN_INBOUND_EMAIL_2"); },
         key: "testSubject",
         required: false,
       },

@@ -5,17 +5,19 @@ import { useScheduleExecutionQueryParams } from "../../hooks/use-schedule-execut
 import { DateRangeValue, fromDateRangeValue, toDateRangeValue } from "../../utils/execution-date-range";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_SCHEDULER_MODULE = "logic.scheduler";
+
 type ScheduleExecutionFilter = { outcome: string; firedDate: DateRangeValue };
 
 const OUTCOME_OPTIONS = [
-  { get label() { return tStatic("logic.scheduler", "common:ALL"); }, value: "all" },
-  { get label() { return tStatic("logic.scheduler", "SCHEDULE_EXECUTION_FILTER_TOOLBAR.SUCCEEDED"); }, value: "Succeeded" },
-  { get label() { return tStatic("logic.scheduler", "SCHEDULE_EXECUTION_FILTER_TOOLBAR.FAILED"); }, value: "Failed" },
+  { get label() { return tStatic(LOGIC_SCHEDULER_MODULE, "common:ALL"); }, value: "all" },
+  { get label() { return tStatic(LOGIC_SCHEDULER_MODULE, "SCHEDULE_EXECUTION_FILTER_TOOLBAR.SUCCEEDED"); }, value: "Succeeded" },
+  { get label() { return tStatic(LOGIC_SCHEDULER_MODULE, "SCHEDULE_EXECUTION_FILTER_TOOLBAR.FAILED"); }, value: "Failed" },
 ];
 
 /** Mirrors `WorkflowFilterToolBar`: any change resets to page 0; Reset clears every param. */
 export const ScheduleExecutionFilterToolbar = () => {
-  const { t } = useT("logic.scheduler");
+  const { t } = useT(LOGIC_SCHEDULER_MODULE);
   const { queryParams, setQueryParams } = useScheduleExecutionQueryParams();
   // Stable identity: the DateRange control resyncs its draft whenever its value object changes.
   const firedDate = useMemo(

@@ -2,6 +2,8 @@ import { NodeGuideTransformLimitV2 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { tStatic } from "@seliseblocks/genesis-os";
 
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
+
 export const NodeSchemaTransformLimitV2: NodeSchemaDefinition = {
   guide: NodeGuideTransformLimitV2,
   schema: {
@@ -14,7 +16,7 @@ export const NodeSchemaTransformLimitV2: NodeSchemaDefinition = {
         type: "number",
         get label() {
           return tStatic(
-            "logic.workflow.nodes.schemas",
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
             "NODE_SCHEMA_TRANSFORM_LIMIT_V2.MAX_ITEMS",
           );
         },
@@ -31,7 +33,7 @@ export const NodeSchemaTransformLimitV2: NodeSchemaDefinition = {
         id: "keep",
         type: "select",
         get label() {
-          return tStatic("logic.workflow.nodes.schemas", "NODE_SCHEMA_TRANSFORM_LIMIT_V2.KEEP");
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_LIMIT_V2.KEEP");
         },
         key: "keep",
         defaultValue: "first",
@@ -40,7 +42,7 @@ export const NodeSchemaTransformLimitV2: NodeSchemaDefinition = {
             value: "first",
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_LIMIT_V2.FIRST_ITEMS",
               );
             },
@@ -49,7 +51,7 @@ export const NodeSchemaTransformLimitV2: NodeSchemaDefinition = {
             value: "last",
             get label() {
               return tStatic(
-                "logic.workflow.nodes.schemas",
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
                 "NODE_SCHEMA_TRANSFORM_LIMIT_V2.LAST_ITEMS",
               );
             },

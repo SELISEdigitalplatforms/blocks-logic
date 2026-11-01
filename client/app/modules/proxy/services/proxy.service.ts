@@ -49,6 +49,8 @@ import {
   ProxyImportResultDto,
 } from "../types";
 
+const LOGIC_PROXY_MODULE = "logic.proxy";
+
 /** Turn a thrown {@link HttpError} into the `{ isSuccess: false, ... }` shape callers already branch on. */
 const toMutationFailure = (error: unknown): ProxyMutationResponse => {
   if (error instanceof HttpError) {
@@ -63,7 +65,7 @@ const toMutationFailure = (error: unknown): ProxyMutationResponse => {
     return {
       isSuccess: false,
       errors:
-        message ?? fieldErrors ?? tStatic("logic.proxy", "PROXY_SERVICE.THE_REQUEST_COULD_NOT"),
+        message ?? fieldErrors ?? tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_REQUEST_COULD_NOT"),
       code,
       message: message ?? null,
     };
@@ -71,7 +73,7 @@ const toMutationFailure = (error: unknown): ProxyMutationResponse => {
 
   return {
     isSuccess: false,
-    errors: tStatic("logic.proxy", "PROXY_SERVICE.THE_REQUEST_COULD_NOT"),
+    errors: tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_REQUEST_COULD_NOT"),
     code: null,
   };
 };
@@ -103,7 +105,7 @@ const toPreviewFailure = (error: unknown): { errors: string[]; warnings: string[
   }
 
   return {
-    errors: [tStatic("logic.proxy", "PROXY_SERVICE.THE_SPECIFICATION_COULD_NOT")],
+    errors: [tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_SPECIFICATION_COULD_NOT")],
     warnings: [],
   };
 };
@@ -130,7 +132,7 @@ const toImportFailure = (error: unknown): ProxyImportOutcome => {
       message:
         typeof body.message === "string"
           ? body.message
-          : (fieldErrors[0] ?? tStatic("logic.proxy", "PROXY_SERVICE.THE_FILE_COULD_NOT")),
+          : (fieldErrors[0] ?? tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_FILE_COULD_NOT")),
       errors: fieldErrors,
       result: data ? mapImportResultDtoToResult(data) : null,
     };
@@ -140,7 +142,7 @@ const toImportFailure = (error: unknown): ProxyImportOutcome => {
     ok: false,
     status: 0,
     code: null,
-    message: tStatic("logic.proxy", "PROXY_SERVICE.THE_FILE_COULD_NOT"),
+    message: tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_FILE_COULD_NOT"),
     errors: [],
     result: null,
   };
@@ -155,7 +157,7 @@ const flattenErrors = (error: unknown): string => {
     );
     if (values.length) return values.join(" ");
   }
-  return tStatic("logic.proxy", "PROXY_SERVICE.THE_PROXY_TEST_REQUEST");
+  return tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_PROXY_TEST_REQUEST");
 };
 
 const buildQuery = (params: Record<string, string | number | boolean | undefined>) => {
@@ -409,8 +411,8 @@ export class ProxyService {
         status,
         statusText:
           status === 400
-            ? tStatic("logic.proxy", "PROXY_SERVICE.BAD_REQUEST")
-            : tStatic("logic.proxy", "PROXY_SERVICE.REQUEST_FAILED"),
+            ? tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.BAD_REQUEST")
+            : tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.REQUEST_FAILED"),
         latencyMs: 0,
         meta: flattenErrors(error),
         responseBody: "",
