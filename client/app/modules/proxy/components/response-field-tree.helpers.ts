@@ -1,4 +1,5 @@
 import { ResponseFieldNode } from "../types";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 /**
  * Longest a single field-tree key may be. The whole-path cap is
@@ -19,10 +20,13 @@ export const validateFieldKey = (raw: string): string | null => {
   const key = raw.trim();
   if (!key) return null;
   if (key.startsWith("."))
-    return 'Field names can’t start with ".", use "Add child field" to nest a key.';
-  if (RESERVED_KEY_CHARS.test(key)) return 'A field name can’t contain "." "[" or "]".';
+    return tStatic("logic.proxy.components", "RESPONSE_FIELD_TREE_HELPERS.FIELD_NAMES_CAN_T");
+  if (RESERVED_KEY_CHARS.test(key))
+    return tStatic("logic.proxy.components", "RESPONSE_FIELD_TREE_HELPERS.A_FIELD_NAME_CAN");
   if (key.length > MAX_FIELD_KEY_LENGTH)
-    return `Keep the field name under ${MAX_FIELD_KEY_LENGTH} characters.`;
+    return tStatic("logic.proxy.components", "RESPONSE_FIELD_TREE_HELPERS.KEEP_THE_FIELD_NAME", {
+      maxFieldKeyLength: MAX_FIELD_KEY_LENGTH,
+    });
   return null;
 };
 

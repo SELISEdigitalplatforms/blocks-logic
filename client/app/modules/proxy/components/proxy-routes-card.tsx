@@ -46,6 +46,8 @@ import { flattenResilienceErrors } from "./proxy-resilience-card";
 import { ProxyResilienceFields } from "./proxy-resilience-fields";
 import { ProxyTestPanel } from "./proxy-test-panel";
 import { VariableTokenField, varNameRef } from "@/components/variable-picker";
+import { renderRichText } from "@/lib/rich-text";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 type VariablePickerProps = {
   variables?: SecretListItem[];
@@ -92,19 +94,19 @@ type RowOverrideName = "bodyMerge" | "headers" | "query";
  */
 const OVERRIDE_LABELS: Record<RowOverrideName, { title: string; on: string; off: string }> = {
   bodyMerge: {
-    title: "Body fields",
-    on: "Merged into the JSON body this endpoint forwards.",
-    off: "The body is forwarded as your client sent it, unless proxy-wide body fields are set.",
+    get title() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.BODY_FIELDS"); },
+    get on() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.MERGED_INTO_THE_JSON"); },
+    get off() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.THE_BODY_IS_FORWARDED"); },
   },
   headers: {
-    title: "Extra headers",
-    on: "Sent in addition to the connection's headers. A same-name header replaces the connection's.",
-    off: "Sends only the connection's headers.",
+    get title() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.EXTRA_HEADERS"); },
+    get on() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.SENT_IN_ADDITION_TO"); },
+    get off() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.SENDS_ONLY_THE_CONNECTION"); },
   },
   query: {
-    title: "Extra query parameters",
-    on: "Sent in addition to the connection's query parameters. A same-name key replaces the connection's.",
-    off: "Sends the connection's query parameters, plus the caller's own (configured keys win).",
+    get title() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.EXTRA_QUERY_PARAMETERS"); },
+    get on() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.SENT_IN_ADDITION_TO_2"); },
+    get off() { return tStatic("logic.proxy.components", "PROXY_ROUTES_CARD.SENDS_THE_CONNECTION_S"); },
   },
 };
 
@@ -127,7 +129,6 @@ const countReplaced = (
   return replaced.size;
 };
 
-const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
 const joinPath = (base: string, suffix: string) => {
   const root = base.replace(/\/+$/, "");
@@ -149,6 +150,7 @@ export const ProxyRoutesCard = ({
   variablesLoading,
   variablesError,
 }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const { watch, setValue, getValues, formState } = useFormContext<ProxyFormValues>();
   const routes = watch("routes") ?? [];
   // The connection's rows, split by where they are sent. `credentials` is the form's source of truth
@@ -273,10 +275,9 @@ export const ProxyRoutesCard = ({
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium">Endpoints</p>
+          <p className="text-sm font-medium">{t("PROXY_ROUTES_CARD.ENDPOINTS")}</p>
           <p className="text-xs text-muted-foreground">
-            What your client can call through this proxy. Anything else is refused before the
-            request leaves Blocks.
+            {t("PROXY_ROUTES_CARD.WHAT_YOUR_CLIENT_CAN")}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -288,7 +289,7 @@ export const ProxyRoutesCard = ({
             onClick={() => setImportOpen(true)}
           >
             <Download className="h-3.5 w-3.5" />
-            Import from OpenAPI
+            {t("PROXY_ROUTES_CARD.IMPORT_FROM_OPENAPI")}
           </Button>
           <Button
             type="button"
@@ -300,7 +301,7 @@ export const ProxyRoutesCard = ({
             }
           >
             <Plus className="h-3.5 w-3.5" />
-            Add endpoint
+            {t("PROXY_ROUTES_CARD.ADD_ENDPOINT")}
           </Button>
         </div>
       </div>
@@ -315,43 +316,43 @@ export const ProxyRoutesCard = ({
 
         const sends = [
           hasBody(route.method) && route.bodyMerge?.length
-            ? `${route.bodyMerge.length} body ${route.bodyMerge.length === 1 ? "field" : "fields"} merged`
+            ? t("PROXY_ROUTES_CARD.BODY_FIELDS_MERGED", { count: route.bodyMerge.length })
             : null,
           route.headers?.length
-            ? `${route.headers.length} extra ${route.headers.length === 1 ? "header" : "headers"}`
+            ? t("PROXY_ROUTES_CARD.EXTRA_HEADERS", { count: route.headers.length })
             : null,
           route.query?.length
-            ? `${route.query.length} extra query ${route.query.length === 1 ? "param" : "params"}`
+            ? t("PROXY_ROUTES_CARD.EXTRA_QUERY_PARAMS", { count: route.query.length })
             : null,
         ].filter(Boolean);
         const replacedHeaders = countReplaced(route.headers, connection.headers, "header");
         const replacedQuery = countReplaced(route.query, connection.query, "query");
         const replacesSummary = [
           replacedHeaders
-            ? `replaces ${replacedHeaders} connection ${plural(replacedHeaders, "header", "headers")}`
+            ? t("PROXY_ROUTES_CARD.REPLACES_HEADERS", { count: replacedHeaders })
             : null,
           replacedQuery
-            ? `replaces ${replacedQuery} connection query ${plural(replacedQuery, "param", "params")}`
+            ? t("PROXY_ROUTES_CARD.REPLACES_QUERY_PARAMS", { count: replacedQuery })
             : null,
         ].filter(Boolean);
         const sendsSummary = sends.length
           ? [...sends, ...replacesSummary].join(" · ")
           : hasBody(route.method)
-            ? "Body as your client sent it, with the connection’s headers and query (plus the caller’s query)"
-            : "The connection’s headers and query (plus the caller’s query)";
+            ? t("PROXY_ROUTES_CARD.BODY_AS_YOUR_CLIENT")
+            : t("PROXY_ROUTES_CARD.THE_CONNECTION_S_HEADERS");
         const included = (route.responseInclude ?? []).map((path) => path.trim()).filter(Boolean);
         const returnsSummary =
           route.responseMode === "select"
             ? included.length
-              ? `Only: ${included.join(", ")}`
-              : "Only the listed fields — none listed yet"
-            : "Whole response";
+              ? t("PROXY_ROUTES_CARD.ONLY_FIELDS", { fields: included.join(", ") })
+              : t("PROXY_ROUTES_CARD.ONLY_THE_LISTED_FIELDS")
+            : t("PROXY_ROUTES_CARD.WHOLE_RESPONSE");
 
         return (
           <div key={`route-${index}`} className="rounded-md border p-3">
             <div className="flex flex-wrap items-start gap-2">
               <div className="w-[110px]">
-                <Label className="text-[11px] text-muted-foreground">Method</Label>
+                <Label className="text-[11px] text-muted-foreground">{t("PROXY_ROUTES_CARD.METHOD")}</Label>
                 <Select
                   value={route.method}
                   onValueChange={(value) => {
@@ -362,7 +363,7 @@ export const ProxyRoutesCard = ({
                 >
                   <SelectTrigger
                     className="mt-1 h-9"
-                    aria-label={`Method for endpoint ${index + 1}`}
+                    aria-label={t("PROXY_ROUTES_CARD.METHOD_FOR_ENDPOINT", { value: index + 1 })}
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -380,11 +381,11 @@ export const ProxyRoutesCard = ({
               </div>
 
               <div className="min-w-[180px] flex-1">
-                <Label className="text-[11px] text-muted-foreground">Client path</Label>
+                <Label className="text-[11px] text-muted-foreground">{t("PROXY_ROUTES_CARD.CLIENT_PATH")}</Label>
                 <Input
                   className="mt-1 h-9 font-mono text-xs"
-                  placeholder="orders/{id}  ·  blank = the base path"
-                  aria-label={`Client path for endpoint ${index + 1}`}
+                  placeholder={t("PROXY_ROUTES_CARD.ORDERS_ID_BLANK_THE")}
+                  aria-label={t("PROXY_ROUTES_CARD.CLIENT_PATH_FOR_ENDPOINT", { value: index + 1 })}
                   value={route.path}
                   onChange={(event) => patch(index, { path: event.target.value })}
                 />
@@ -395,14 +396,14 @@ export const ProxyRoutesCard = ({
 
               <div className="min-w-[180px] flex-1">
                 <Label className="text-[11px] text-muted-foreground">
-                  Upstream path <span className="font-normal">· defaults to the client path</span>
+                  {renderRichText(t("PROXY_ROUTES_CARD.UPSTREAM_PATH_0_DEFAULTS"), [(children) => <span className="font-normal">{children}</span>])}
                 </Label>
                 <Input
                   className="mt-1 h-9 font-mono text-xs"
                   placeholder={
-                    template ? `same as client path (${template})` : "same as client path"
+                    template ? t("PROXY_ROUTES_CARD.SAME_AS_CLIENT_PATH", { template }) : t("PROXY_ROUTES_CARD.SAME_AS_CLIENT_PATH_2")
                   }
-                  aria-label={`Upstream path for endpoint ${index + 1}`}
+                  aria-label={t("PROXY_ROUTES_CARD.UPSTREAM_PATH_FOR_ENDPOINT", { value: index + 1 })}
                   value={route.upstreamPath ?? ""}
                   onChange={(event) =>
                     patch(index, {
@@ -423,20 +424,20 @@ export const ProxyRoutesCard = ({
                   variant={testOpenFor === index ? "secondary" : "ghost"}
                   size="xs"
                   className="gap-1.5"
-                  aria-label={`Test endpoint ${index + 1}`}
+                  aria-label={t("PROXY_ROUTES_CARD.TEST_ENDPOINT", { value: index + 1 })}
                   onClick={() => openTest(index)}
                 >
                   <FlaskConical className="h-3.5 w-3.5" />
-                  Test
+                  {t("PROXY_ROUTES_CARD.TEST")}
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
                   className="text-muted-foreground hover:text-destructive"
-                  aria-label={`Remove endpoint ${index + 1}`}
+                  aria-label={t("PROXY_ROUTES_CARD.REMOVE_ENDPOINT", { value: index + 1 })}
                   disabled={isOnlyEndpoint}
-                  title={isOnlyEndpoint ? "A proxy needs at least one endpoint." : undefined}
+                  title={isOnlyEndpoint ? t("PROXY_ROUTES_CARD.A_PROXY_NEEDS_AT") : undefined}
                   onClick={() => {
                     commit(routes.filter((_, i) => i !== index));
                     if (testOpenFor === index) setTestOpenFor(null);
@@ -448,39 +449,37 @@ export const ProxyRoutesCard = ({
             </div>
 
             <dl className="mt-3 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[max-content_1fr]">
-              <dt className="text-muted-foreground">Your client calls</dt>
+              <dt className="text-muted-foreground">{t("PROXY_ROUTES_CARD.YOUR_CLIENT_CALLS")}</dt>
               <dd className="break-all font-mono">
                 {route.method} {clientUrlFor(route.path)}
               </dd>
-              <dt className="text-muted-foreground">Forwards to</dt>
+              <dt className="text-muted-foreground">{t("PROXY_ROUTES_CARD.FORWARDS_TO")}</dt>
               <dd className="break-all font-mono">
                 {route.method} {forwardsTo}
               </dd>
-              <dt className="text-muted-foreground">Sends</dt>
+              <dt className="text-muted-foreground">{t("PROXY_ROUTES_CARD.SENDS")}</dt>
               <dd>{sendsSummary}</dd>
-              <dt className="text-muted-foreground">Returns</dt>
+              <dt className="text-muted-foreground">{t("PROXY_ROUTES_CARD.RETURNS")}</dt>
               <dd>{returnsSummary}</dd>
-              <dt className="text-muted-foreground">If it fails</dt>
+              <dt className="text-muted-foreground">{t("PROXY_ROUTES_CARD.IF_IT_FAILS")}</dt>
               <dd>
                 {describeResilience(route.resilience ?? connectionResilience)}
                 {route.resilience ? null : (
-                  <span className="text-muted-foreground"> — from the connection</span>
+                  <span className="text-muted-foreground"> {t("PROXY_ROUTES_CARD.FROM_THE_CONNECTION")}</span>
                 )}
               </dd>
             </dl>
 
             {params.length ? (
               <p className="mt-2 text-[11px] text-muted-foreground">
-                Parameters:{" "}
-                <span className="font-mono">{params.map((name) => `{${name}}`).join(" ")}</span> —
-                each matches exactly one path segment.
+                {renderRichText(t("PROXY_ROUTES_CARD.PARAMETERS_0_0_EACH", { value: params.map((name) => `{${name}}`).join(" ") }), [(children) => <span className="font-mono">{children}</span>])}
               </p>
             ) : null}
 
             <Accordion type="single" collapsible className="mt-2">
               <AccordionItem value={`overrides-${index}`} className="border-0">
                 <AccordionTrigger className="py-1 text-xs hover:no-underline">
-                  What this endpoint sends and returns
+                  {t("PROXY_ROUTES_CARD.WHAT_THIS_ENDPOINT_SENDS")}
                 </AccordionTrigger>
                 <AccordionContent className="space-y-3 pt-2">
                   {/* What it sends: body fields, but only for methods that carry a body. */}
@@ -495,7 +494,7 @@ export const ProxyRoutesCard = ({
                       variables={variables}
                       variablesLoading={variablesLoading}
                       variablesError={variablesError}
-                      note="On with no rows means this endpoint merges nothing."
+                      note={t("PROXY_ROUTES_CARD.ON_WITH_NO_ROWS")}
                     />
                   ) : null}
 
@@ -506,16 +505,16 @@ export const ProxyRoutesCard = ({
                   <div className="rounded border p-2">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-xs font-medium">Response fields</p>
+                        <p className="text-xs font-medium">{t("PROXY_ROUTES_CARD.RESPONSE_FIELDS")}</p>
                         <p className="text-[11px] text-muted-foreground">
                           {responseOn
-                            ? "This endpoint decides which fields reach your client. Vendor errors and non-JSON answers return 502."
-                            : "The vendor's status and body reach your client (secret values masked, vendor headers dropped)."}
+                            ? t("PROXY_ROUTES_CARD.THIS_ENDPOINT_DECIDES_WHICH")
+                            : t("PROXY_ROUTES_CARD.THE_VENDOR_S_STATUS")}
                         </p>
                       </div>
                       <Switch
                         checked={responseOn}
-                        aria-label={`Filter response fields for endpoint ${index + 1}`}
+                        aria-label={t("PROXY_ROUTES_CARD.FILTER_RESPONSE_FIELDS_FOR", { value: index + 1 })}
                         onCheckedChange={(checked) =>
                           patch(index, {
                             responseMode: checked ? "select" : null,
@@ -538,14 +537,14 @@ export const ProxyRoutesCard = ({
                         >
                           <SelectTrigger
                             className="h-8 text-xs"
-                            aria-label={`Response mode for endpoint ${index + 1}`}
+                            aria-label={t("PROXY_ROUTES_CARD.RESPONSE_MODE_FOR_ENDPOINT", { value: index + 1 })}
                           >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="select">Only the fields listed below</SelectItem>
+                            <SelectItem value="select">{t("PROXY_ROUTES_CARD.ONLY_THE_FIELDS_LISTED")}</SelectItem>
                             <SelectItem value="all">
-                              All fields — relay the vendor&apos;s body (secret values masked)
+                              {t("PROXY_ROUTES_CARD.ALL_FIELDS_RELAY_THE")}
                             </SelectItem>
                           </SelectContent>
                         </Select>
@@ -556,8 +555,8 @@ export const ProxyRoutesCard = ({
                               <div key={`include-${pathIndex}`} className="flex items-center gap-2">
                                 <Input
                                   className="h-8 font-mono text-xs"
-                                  placeholder="data.id  ·  items[].name"
-                                  aria-label={`Response field ${pathIndex + 1} for endpoint ${index + 1}`}
+                                  placeholder={t("PROXY_ROUTES_CARD.DATA_ID_ITEMS_NAME")}
+                                  aria-label={t("PROXY_ROUTES_CARD.RESPONSE_FIELD_FOR_ENDPOINT", { value: pathIndex + 1, value2: index + 1 })}
                                   value={fieldPath}
                                   onChange={(event) =>
                                     patchIncludePath(index, pathIndex, event.target.value)
@@ -568,7 +567,7 @@ export const ProxyRoutesCard = ({
                                   variant="ghost"
                                   size="icon"
                                   className="shrink-0 text-muted-foreground hover:text-destructive"
-                                  aria-label={`Remove response field ${pathIndex + 1} for endpoint ${index + 1}`}
+                                  aria-label={t("PROXY_ROUTES_CARD.REMOVE_RESPONSE_FIELD_FOR", { value: pathIndex + 1, value2: index + 1 })}
                                   onClick={() =>
                                     patch(index, {
                                       responseInclude: (route.responseInclude ?? []).filter(
@@ -593,12 +592,11 @@ export const ProxyRoutesCard = ({
                               }
                             >
                               <Plus className="h-3.5 w-3.5" />
-                              Add field
+                              {t("PROXY_ROUTES_CARD.ADD_FIELD")}
                             </Button>
                             {(route.responseInclude ?? []).length === 0 ? (
                               <p className="text-[11px] text-muted-foreground">
-                                No fields listed means your client gets an empty object. Add at
-                                least one.
+                                {t("PROXY_ROUTES_CARD.NO_FIELDS_LISTED_MEANS")}
                               </p>
                             ) : null}
                           </div>
@@ -643,23 +641,23 @@ export const ProxyRoutesCard = ({
               */}
               <AccordionItem value={`resilience-${index}`} className="border-0">
                 <AccordionTrigger className="py-1 text-xs hover:no-underline">
-                  If this endpoint is slow or failing
+                  {t("PROXY_ROUTES_CARD.IF_THIS_ENDPOINT_IS")}
                 </AccordionTrigger>
                 <AccordionContent className="space-y-3 pt-2">
                   <div className="flex items-start justify-between gap-3 rounded border p-2">
                     <div className="min-w-0">
-                      <p className="text-xs font-medium">Its own timeouts and retries</p>
+                      <p className="text-xs font-medium">{t("PROXY_ROUTES_CARD.ITS_OWN_TIMEOUTS_AND")}</p>
                       <p className="text-[11px] text-muted-foreground">
                         {!route.resilience
-                          ? `Uses the connection's: ${describeResilience(connectionResilience).toLowerCase()}.`
+                          ? t("PROXY_ROUTES_CARD.USES_THE_CONNECTION_S", { value: describeResilience(connectionResilience).toLowerCase() })
                           : describeResilience(route.resilience) === "Not configured"
-                            ? "Nothing set yet, so this endpoint still uses the connection's. Turn one on below."
-                            : "This endpoint ignores the connection's settings entirely."}
+                            ? t("PROXY_ROUTES_CARD.NOTHING_SET_YET_SO")
+                            : t("PROXY_ROUTES_CARD.THIS_ENDPOINT_IGNORES_THE")}
                       </p>
                     </div>
                     <Switch
                       checked={route.resilience !== null}
-                      aria-label={`Separate timeouts and retries for endpoint ${index + 1}`}
+                      aria-label={t("PROXY_ROUTES_CARD.SEPARATE_TIMEOUTS_AND_RETRIES", { value: index + 1 })}
                       onCheckedChange={(checked) =>
                         patch(index, {
                           resilience: checked
@@ -768,22 +766,25 @@ const RouteValueCell = ({
   variables,
   variablesLoading,
   variablesError,
-}: RouteValueCellProps) => (
-  <div className="min-w-0 flex-1">
-    <VariableTokenField
-      value={row.value ?? ""}
-      onChange={(next) => patchRow(index, name, rowIndex, { value: next })}
-      codec={varNameRef}
-      ariaLabel={`${label} value`}
-      placeholder="Enter value"
-      className="h-8 font-mono text-xs"
-      variables={variables}
-      isLoading={variablesLoading}
-      isError={variablesError}
-      variablePickMode="replace"
-    />
-  </div>
-);
+}: RouteValueCellProps) => {
+  const { t } = useT("logic.proxy.components");
+  return (
+    <div className="min-w-0 flex-1">
+      <VariableTokenField
+        value={row.value ?? ""}
+        onChange={(next) => patchRow(index, name, rowIndex, { value: next })}
+        codec={varNameRef}
+        ariaLabel={t("PROXY_ROUTES_CARD.VALUE", { label })}
+        placeholder={t("PROXY_ROUTES_CARD.ENTER_VALUE")}
+        className="h-8 font-mono text-xs"
+        variables={variables}
+        isLoading={variablesLoading}
+        isError={variablesError}
+        variablePickMode="replace"
+      />
+    </div>
+  );
+};
 
 /** One key/value override slot: a switch that says what on and off mean, then the rows. */
 const OverrideRows = ({
@@ -799,6 +800,7 @@ const OverrideRows = ({
   variablesLoading,
   variablesError,
 }: OverrideRowsProps) => {
+  const { t } = useT("logic.proxy.components");
   // A route read from an older payload may omit the key entirely; treat a missing override
   // exactly like an explicit null, i.e. inherit.
   const rows = route[name] ?? null;
@@ -817,7 +819,7 @@ const OverrideRows = ({
         </div>
         <Switch
           checked={on}
-          aria-label={`${labels.title} for endpoint ${index + 1}`}
+          aria-label={t("PROXY_ROUTES_CARD.FOR_ENDPOINT", { title: labels.title, value: index + 1 })}
           onCheckedChange={(checked) => toggleOverride(index, name, checked)}
         />
       </div>
@@ -829,7 +831,7 @@ const OverrideRows = ({
               <div className="flex items-center gap-2">
                 <Input
                   className="h-8 flex-1 text-xs"
-                  placeholder="Enter key"
+                  placeholder={t("PROXY_ROUTES_CARD.ENTER_KEY")}
                   value={row.key}
                   onChange={(event) => patchRow(index, name, rowIndex, { key: event.target.value })}
                 />
@@ -849,7 +851,7 @@ const OverrideRows = ({
                   variant="ghost"
                   size="icon"
                   className="shrink-0 text-muted-foreground hover:text-destructive"
-                  aria-label={`Remove ${labels.title.toLowerCase()} row ${rowIndex + 1}`}
+                  aria-label={t("PROXY_ROUTES_CARD.REMOVE_ROW", { value: labels.title.toLowerCase(), value2: rowIndex + 1 })}
                   onClick={() =>
                     patch(index, {
                       [name]: (rows ?? []).filter((_, i) => i !== rowIndex),
@@ -878,7 +880,7 @@ const OverrideRows = ({
             }
           >
             <Plus className="h-3.5 w-3.5" />
-            Add row
+            {t("PROXY_ROUTES_CARD.ADD_ROW")}
           </Button>
           {note && rows !== null && rows.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">{note}</p>

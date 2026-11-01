@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT, tStatic } from "@seliseblocks/genesis-os";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { showErrorToast } from "@/hooks/use-toast";
@@ -8,6 +8,7 @@ import { ProxyForm } from "../../components/proxy-form";
 import { useGetProxyById } from "../../hooks";
 
 export const ProxyFormPage = ({ mode }: { mode: "create" | "edit" }) => {
+  const { t } = useT("logic.proxy");
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { pathname } = useLocation();
@@ -18,14 +19,14 @@ export const ProxyFormPage = ({ mode }: { mode: "create" | "edit" }) => {
 
   useEffect(() => {
     if (isEdit && proxyId && isFetched && !isLoading && !proxy) {
-      showErrorToast({ errors: "Proxy not found" });
+      showErrorToast({ errors: tStatic("logic.proxy", "PROXY_FORM_PAGE.PROXY_NOT_FOUND") });
       navigate(scoped("proxy"));
     } else if (isEdit && proxy?.name) {
       // 2nd breadcrumb position: show the proxy name instead of the raw id.
       BREADCRUMB_CUSTOM_TITLES[pathname.replace(/\/edit$/, "")] = proxy.name;
       BREADCRUMB_CUSTOM_TITLES[pathname] = "Edit";
     } else if (!isEdit) {
-      BREADCRUMB_CUSTOM_TITLES[pathname] = "New Proxy";
+      BREADCRUMB_CUSTOM_TITLES[pathname] = tStatic("logic.proxy", "PROXY_FORM_PAGE.NEW_PROXY");
     }
   }, [isEdit, isFetched, isLoading, navigate, pathname, proxy, proxyId, scoped]);
 

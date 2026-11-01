@@ -4,6 +4,8 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
 import { useDeleteProxy } from "../hooks";
 import { Proxy } from "../types";
+import { renderRichText } from "@/lib/rich-text";
+import { useT } from "@seliseblocks/genesis-os";
 
 type DeleteProxyDialogProps = {
   open: boolean;
@@ -18,19 +20,23 @@ export const DeleteProxyDialog = ({
   proxy,
   onDeleted,
 }: DeleteProxyDialogProps) => {
+  const { t } = useT("logic.proxy.components");
   const { mutateAsync, isPending } = useDeleteProxy();
 
   const confirmHandler = async () => {
     if (!proxy) return;
     try {
       const res = await mutateAsync(proxy.id);
-      if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Failed to delete proxy" });
-      showSuccessToast({ description: "Proxy deleted successfully." });
+      if (!res.isSuccess)
+        return showErrorToast({
+          errors: res.errors || t("DELETE_PROXY_DIALOG.FAILED_TO_DELETE_PROXY"),
+        });
+      showSuccessToast({ description: t("DELETE_PROXY_DIALOG.PROXY_DELETED_SUCCESSFULLY") });
       onOpenChange(false);
       onDeleted?.();
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to delete proxy" });
+      return showErrorToast({ errors: t("DELETE_PROXY_DIALOG.FAILED_TO_DELETE_PROXY") });
     }
   };
 
@@ -38,11 +44,13 @@ export const DeleteProxyDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <ConfirmationModal
         data={{
-          dialogTitle: "Delete Proxy",
+          dialogTitle: t("DELETE_PROXY_DIALOG.DELETE_PROXY"),
           dialogSubtitle: (
             <>
-              Are you sure you want to delete <span className="font-semibold">{proxy?.name}</span>?
-              This action cannot be undone.
+              {renderRichText(
+                t("DELETE_PROXY_DIALOG.ARE_YOU_SURE_YOU", { name: proxy?.name ?? "" }),
+                [(children) => <span className="font-semibold">{children}</span>],
+              )}
             </>
           ),
           confirmButton: "Delete",

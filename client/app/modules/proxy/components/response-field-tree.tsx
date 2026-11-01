@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { ResponseFieldNode } from "../types";
 import { duplicateKeys, isNodeSelected, validateFieldKey } from "./response-field-tree.helpers";
 import { AddChildIcon } from "./response-field-icons";
+import { useT } from "@seliseblocks/genesis-os";
 
 type TreeHandlers = {
   checked: Set<string>;
@@ -89,6 +90,7 @@ const ResponseFieldRow = ({
   onRemove,
   onCollapse,
 }: RowProps) => {
+  const { t } = useT("logic.proxy.components");
   const selected = isNodeSelected(node, checked, inherited);
   const isCollapsed = collapsed.has(node.id);
   const hasChildren = node.children.length > 0;
@@ -97,10 +99,8 @@ const ResponseFieldRow = ({
 
   const keyError =
     validateFieldKey(node.key) ??
-    (duplicate ? "Another field at this level already uses this name." : null) ??
-    (hasChildren && !node.key.trim()
-      ? "Name this field — unnamed rows and everything nested under them are dropped."
-      : null);
+    (duplicate ? t("RESPONSE_FIELD_TREE.ANOTHER_FIELD_AT_THIS") : null) ??
+    (hasChildren && !node.key.trim() ? t("RESPONSE_FIELD_TREE.NAME_THIS_FIELD_UNNAMED") : null);
 
   return (
     <li>
@@ -113,7 +113,9 @@ const ResponseFieldRow = ({
           <button
             type="button"
             className="text-muted-foreground"
-            aria-label={isCollapsed ? "Expand" : "Collapse"}
+            aria-label={
+              isCollapsed ? t("RESPONSE_FIELD_TREE.EXPAND") : t("RESPONSE_FIELD_TREE.COLLAPSE")
+            }
             onClick={() => onCollapse(node.id)}
           >
             {isCollapsed ? (
@@ -129,7 +131,7 @@ const ResponseFieldRow = ({
         <div className="flex w-40 flex-col gap-0.5">
           <Input
             value={node.key}
-            placeholder="field name"
+            placeholder={t("RESPONSE_FIELD_TREE.FIELD_NAME")}
             aria-invalid={!!keyError}
             onChange={(event) => onRename(node.id, event.target.value)}
             onBlur={(event) => onRename(node.id, event.target.value.trim())}
@@ -142,14 +144,20 @@ const ResponseFieldRow = ({
             <span className="text-[11px] leading-tight text-destructive">{keyError}</span>
           ) : null}
         </div>
-        <RowIconButton label="Add child field" onClick={() => onAddChild(node.id)}>
+        <RowIconButton
+          label={t("RESPONSE_FIELD_TREE.ADD_CHILD_FIELD")}
+          onClick={() => onAddChild(node.id)}
+        >
           <AddChildIcon className="h-4 w-4" />
         </RowIconButton>
-        <RowIconButton label="Add sibling field" onClick={() => onAddSibling(node.id)}>
+        <RowIconButton
+          label={t("RESPONSE_FIELD_TREE.ADD_SIBLING_FIELD")}
+          onClick={() => onAddSibling(node.id)}
+        >
           <CirclePlus className="h-4 w-4" />
         </RowIconButton>
         <RowIconButton
-          label="Remove field"
+          label={t("RESPONSE_FIELD_TREE.REMOVE_FIELD")}
           className="hover:text-destructive"
           onClick={() => onRemove(node.id)}
         >

@@ -19,6 +19,8 @@ import { usePreviewOpenApi } from "../hooks";
 import { ProxyOpenApiOperation, ProxyOpenApiPreview, ProxyRoute } from "../types";
 import { routeAddress } from "../utils";
 import { ProxyMethodBadge } from "./proxy-method-badge";
+import { renderRichText } from "@/lib/rich-text";
+import { useT } from "@seliseblocks/genesis-os";
 
 /** What the form should apply when the user confirms. Nothing is saved here. */
 export type ProxyOpenApiImportResult = {
@@ -97,6 +99,7 @@ export const ProxyOpenApiImportDialog = ({
   upstreamUrl,
   onImport,
 }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const [source, setSource] = useState<Source>("paste");
   const [specJson, setSpecJson] = useState("");
   const [specUrl, setSpecUrl] = useState("");
@@ -136,8 +139,14 @@ export const ProxyOpenApiImportDialog = ({
     [preview, taken],
   );
 
-  const importable = operations.filter((operation) => !operation.alreadyExists);
-  const chosen = importable.filter((operation) => selected.has(operation.operationId));
+  const importable = useMemo(
+    () => operations.filter((operation) => !operation.alreadyExists),
+    [operations],
+  );
+  const chosen = useMemo(
+    () => importable.filter((operation) => selected.has(operation.operationId)),
+    [importable, selected],
+  );
   const clashes = operations.length - importable.length;
 
   const covered = useMemo(
@@ -200,10 +209,9 @@ export const ProxyOpenApiImportDialog = ({
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Import endpoints from OpenAPI</DialogTitle>
+          <DialogTitle>{t("PROXY_OPENAPI_IMPORT_DIALOG.IMPORT_ENDPOINTS_FROM_OPENAPI")}</DialogTitle>
           <DialogDescription>
-            Nothing is saved here. The operations you pick are added to the form below, where you can
-            edit them before saving as usual.
+            {t("PROXY_OPENAPI_IMPORT_DIALOG.NOTHING_IS_SAVED_HERE")}
           </DialogDescription>
         </DialogHeader>
 
@@ -211,8 +219,8 @@ export const ProxyOpenApiImportDialog = ({
           <div className="flex gap-2">
             {(
               [
-                { value: "paste", label: "Paste the document", icon: FileJson },
-                { value: "url", label: "Fetch from a URL", icon: Link2 },
+                { value: "paste", label: t("PROXY_OPENAPI_IMPORT_DIALOG.PASTE_THE_DOCUMENT"), icon: FileJson },
+                { value: "url", label: t("PROXY_OPENAPI_IMPORT_DIALOG.FETCH_FROM_A_URL"), icon: Link2 },
               ] as const
             ).map((option) => (
               <Button
@@ -232,7 +240,7 @@ export const ProxyOpenApiImportDialog = ({
           {source === "paste" ? (
             <div>
               <Label htmlFor="openapi-spec" className="text-xs">
-                OpenAPI 3 document (JSON)
+                {t("PROXY_OPENAPI_IMPORT_DIALOG.OPENAPI_3_DOCUMENT_JSON")}
               </Label>
               <Textarea
                 id="openapi-spec"
@@ -246,7 +254,7 @@ export const ProxyOpenApiImportDialog = ({
           ) : (
             <div>
               <Label htmlFor="openapi-url" className="text-xs">
-                Document URL
+                {t("PROXY_OPENAPI_IMPORT_DIALOG.DOCUMENT_URL")}
               </Label>
               <Input
                 id="openapi-url"
@@ -256,8 +264,7 @@ export const ProxyOpenApiImportDialog = ({
                 onChange={(event) => setSpecUrl(event.target.value)}
               />
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Blocks fetches it from the server, through the same address checks as any vendor
-                call. A URL that resolves inside a private network is refused.
+                {t("PROXY_OPENAPI_IMPORT_DIALOG.BLOCKS_FETCHES_IT_FROM")}
               </p>
             </div>
           )}
@@ -271,7 +278,7 @@ export const ProxyOpenApiImportDialog = ({
             onClick={read}
           >
             {previewOpenApi.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            Read document
+            {t("PROXY_OPENAPI_IMPORT_DIALOG.READ_DOCUMENT")}
           </Button>
         </div>
 
@@ -308,19 +315,19 @@ export const ProxyOpenApiImportDialog = ({
                 <Checkbox
                   className="mt-0.5"
                   checked={adoptBaseUrl}
-                  aria-label="Use the document's server as the vendor URL"
+                  aria-label={t("PROXY_OPENAPI_IMPORT_DIALOG.USE_THE_DOCUMENT_S")}
                   onCheckedChange={(checked) => setAdoptBaseUrl(checked === true)}
                 />
                 <span className="min-w-0 text-xs">
                   <span className="block font-medium">
-                    Use <span className="break-all font-mono">{baseUrl}</span> as the vendor URL
+                    {renderRichText(t("PROXY_OPENAPI_IMPORT_DIALOG.USE_0_0_AS", { baseUrl }), [(children) => <span className="break-all font-mono">{children}</span>])}
                   </span>
                   <span className="block text-[11px] text-muted-foreground">
                     {upstreamUrl.trim() === ""
-                      ? "The connection has no vendor URL yet."
+                      ? t("PROXY_OPENAPI_IMPORT_DIALOG.THE_CONNECTION_HAS_NO")
                       : differentHost
-                        ? `This replaces ${upstreamUrl}, which points somewhere else.`
-                        : `This replaces ${upstreamUrl}.`}
+                        ? t("PROXY_OPENAPI_IMPORT_DIALOG.THIS_REPLACES_WHICH_POINTS", { upstreamUrl })
+                        : t("PROXY_OPENAPI_IMPORT_DIALOG.THIS_REPLACES", { upstreamUrl })}
                   </span>
                 </span>
               </label>
@@ -330,9 +337,8 @@ export const ProxyOpenApiImportDialog = ({
               <div>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs font-medium">
-                    {importable.length} of {operations.length}{" "}
-                    {operations.length === 1 ? "operation" : "operations"} can be added
-                    {clashes ? `, ${clashes} already defined` : ""}
+                    {t("PROXY_OPENAPI_IMPORT_DIALOG.OPERATIONS_CAN_BE_ADDED", { importable: importable.length, count: operations.length })}
+                    {clashes ? t("PROXY_OPENAPI_IMPORT_DIALOG.ALREADY_DEFINED", { clashes }) : ""}
                   </p>
                   <Button
                     type="button"
@@ -347,21 +353,15 @@ export const ProxyOpenApiImportDialog = ({
                       )
                     }
                   >
-                    {chosen.length === importable.length ? "Clear all" : "Select all"}
+                    {chosen.length === importable.length ? t("PROXY_OPENAPI_IMPORT_DIALOG.CLEAR_ALL") : t("PROXY_OPENAPI_IMPORT_DIALOG.SELECT_ALL")}
                   </Button>
                 </div>
 
                 <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-1">
                   {operations.map((operation) => {
                     const checked = selected.has(operation.operationId);
-                    const extras = [
-                      operation.queryParameters.length
-                        ? `${operation.queryParameters.length} query`
-                        : null,
-                      operation.headerParameters.length
-                        ? `${operation.headerParameters.length} header`
-                        : null,
-                    ].filter(Boolean);
+                    const queryCount = operation.queryParameters.length;
+                    const headerCount = operation.headerParameters.length;
 
                     return (
                       <li key={`${operation.method} ${operation.path}`}>
@@ -377,7 +377,7 @@ export const ProxyOpenApiImportDialog = ({
                             className="mt-0.5"
                             checked={checked && !operation.alreadyExists}
                             disabled={operation.alreadyExists}
-                            aria-label={`Import ${operation.method} ${operation.path}`}
+                            aria-label={t("PROXY_OPENAPI_IMPORT_DIALOG.IMPORT", { method: operation.method, path: operation.path })}
                             onCheckedChange={(value) =>
                               toggle(operation.operationId, value === true)
                             }
@@ -390,7 +390,7 @@ export const ProxyOpenApiImportDialog = ({
                               </code>
                               {operation.alreadyExists ? (
                                 <span className="text-[11px] text-muted-foreground">
-                                  already defined — kept as it is
+                                  {t("PROXY_OPENAPI_IMPORT_DIALOG.ALREADY_DEFINED_KEPT_AS")}
                                 </span>
                               ) : null}
                             </span>
@@ -399,10 +399,13 @@ export const ProxyOpenApiImportDialog = ({
                                 {operation.summary}
                               </span>
                             ) : null}
-                            {extras.length ? (
+                            {queryCount + headerCount > 0 ? (
                               <span className="block text-[11px] text-muted-foreground">
-                                Brings {extras.join(" and ")}{" "}
-                                {extras.length === 1 ? "parameter" : "parameters"}, with no values.
+                                {queryCount > 0 && headerCount > 0
+                                  ? t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_BOTH", { query: queryCount, header: headerCount })
+                                  : queryCount > 0
+                                    ? t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_QUERY", { count: queryCount })
+                                    : t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_HEADER", { count: headerCount })}
                               </span>
                             ) : null}
                           </span>
@@ -414,7 +417,7 @@ export const ProxyOpenApiImportDialog = ({
               </div>
             ) : preview.errors.length ? null : (
               <p className="text-xs text-muted-foreground">
-                The document described no operation this gateway can forward.
+                {t("PROXY_OPENAPI_IMPORT_DIALOG.THE_DOCUMENT_DESCRIBED_NO")}
               </p>
             )}
 
@@ -422,11 +425,13 @@ export const ProxyOpenApiImportDialog = ({
               <Alert>
                 <Info className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  The document says these calls are authenticated with{" "}
-                  <span className="font-mono">{missingCredentials.join(", ")}</span>. They will be
-                  added to the connection with no value — set a value for each one (ideally a{" "}
-                  <span className="font-mono">{"{{$VAR.name}}"}</span> secret), or the vendor will
-                  refuse the calls. A specification never carries the key itself.
+                  {renderRichText(
+                    t("PROXY_OPENAPI_IMPORT_DIALOG.AUTHENTICATED_WITH", { names: missingCredentials.join(", ") }),
+                    [
+                      (text) => <span className="font-mono">{text}</span>,
+                      (text) => <span className="font-mono">{text}</span>,
+                    ],
+                  )}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -435,12 +440,12 @@ export const ProxyOpenApiImportDialog = ({
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={close}>
-            Cancel
+            {t("common:CANCEL")}
           </Button>
           <Button type="button" disabled={chosen.length === 0} onClick={confirm}>
             {chosen.length
-              ? `Add ${chosen.length} ${chosen.length === 1 ? "endpoint" : "endpoints"}`
-              : "Add endpoints"}
+              ? t("PROXY_OPENAPI_IMPORT_DIALOG.ADD_N_ENDPOINTS", { count: chosen.length })
+              : t("PROXY_OPENAPI_IMPORT_DIALOG.ADD_ENDPOINTS")}
           </Button>
         </DialogFooter>
       </DialogContent>

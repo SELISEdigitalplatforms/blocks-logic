@@ -33,6 +33,7 @@ import {
 } from "./response-field-tree.helpers";
 import { ResponseFieldTree } from "./response-field-tree";
 import { ResponseSkeletonEditor } from "./response-skeleton-editor";
+import { useT } from "@seliseblocks/genesis-os";
 
 type Props = {
   control: Control<ProxyFormValues>;
@@ -58,6 +59,7 @@ const prettyBytes = (bytes: number) => {
  * subtree to a minimal path list and pushes it onto the form.
  */
 export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const { setError, clearErrors } = useFormContext<ProxyFormValues>();
   const { field: modeField } = useController({ control, name: "responseMode" });
   const { field: includeField } = useController({ control, name: "responseInclude" });
@@ -137,9 +139,10 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
           const keyProblem = validateFieldKey(node.key);
           const dupes = nodes.filter((sib) => sib.key.trim() && sib.key.trim() === key);
           if (keyProblem) problems.push(keyProblem);
-          else if (key && dupes.length > 1) problems.push(`Duplicate field "${key}".`);
+          else if (key && dupes.length > 1)
+            problems.push(t("PROXY_RESPONSE_CARD.DUPLICATE_FIELD", { key }));
           else if (!key && node.children.length > 0)
-            problems.push("A nested field has no name — name it or remove it.");
+            problems.push(t("PROXY_RESPONSE_CARD.A_NESTED_FIELD_HAS"));
           walk(node.children);
         }
       };
@@ -153,12 +156,17 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
       const tooLong = encodedPaths.find((path) => path.length > MAX_RESPONSE_PATH_LENGTH);
       if (tooLong)
         problems.push(
-          `A field path is over ${MAX_RESPONSE_PATH_LENGTH} characters — shorten or remove it.`,
+          t("PROXY_RESPONSE_CARD.A_FIELD_PATH_IS", {
+            maxResponsePathLength: MAX_RESPONSE_PATH_LENGTH,
+          }),
         );
 
       if (encodedPaths.length > MAX_RESPONSE_PATHS)
         problems.push(
-          `Too many fields selected (${encodedPaths.length}) — the limit is ${MAX_RESPONSE_PATHS}.`,
+          t("PROXY_RESPONSE_CARD.TOO_MANY_FIELDS_SELECTED", {
+            length: encodedPaths.length,
+            maxResponsePaths: MAX_RESPONSE_PATHS,
+          }),
         );
     }
 
@@ -174,7 +182,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
 
   const selectedCount = encodedPaths.length;
   const summary = wholeResponse
-    ? "Whole response forwarded"
+    ? t("PROXY_RESPONSE_CARD.WHOLE_RESPONSE_FORWARDED")
     : modeField.value === "select" && selectedCount === 0
       ? "Nothing selected — clients receive {}"
       : `${selectedCount} field${selectedCount === 1 ? "" : "s"} selected`;
@@ -320,13 +328,13 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
     }
     if (result.bytes > MAX_PROJECTABLE_BYTES) {
       setSampleNote(
-        `Response is ${prettyBytes(result.bytes)}, over the 5 MB filter limit — can't build a tree, and live calls would return 502.`,
+        t("PROXY_RESPONSE_CARD.RESPONSE_IS_OVER_THE", { value: prettyBytes(result.bytes) }),
       );
       return;
     }
     if (result.status < 200 || result.status >= 300) {
       setSampleNote(
-        `Endpoint returned ${result.status}. Filled nothing — add fields by hand or fix the endpoint.`,
+        t("PROXY_RESPONSE_CARD.ENDPOINT_RETURNED_FILLED_NOTHING", { status: result.status }),
       );
       return;
     }
@@ -335,14 +343,14 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
     try {
       parsed = JSON.parse(result.body);
     } catch {
-      setSampleNote("Response wasn't JSON — nothing to fill.");
+      setSampleNote(t("PROXY_RESPONSE_CARD.RESPONSE_WASN_T_JSON"));
       return;
     }
 
     const { rootKind, tree: schema } = deriveResponseSchema(parsed);
     if (rootKind === "primitive") {
       setWholeResponse(true);
-      setSampleNote("This endpoint returns a single value — the whole response is forwarded.");
+      setSampleNote(t("PROXY_RESPONSE_CARD.THIS_ENDPOINT_RETURNS_A"));
       return;
     }
 
@@ -351,7 +359,9 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
     setChecked(merged.checked);
     setWholeResponse(false);
     resyncSkeleton();
-    setSampleNote(`Filled ${countResponseLeaves(schema)} fields from the response.`);
+    setSampleNote(
+      t("PROXY_RESPONSE_CARD.FILLED_FIELDS_FROM_THE", { value: countResponseLeaves(schema) }),
+    );
   };
 
   // ---- skeleton editor ----------------------------------------------------
@@ -369,7 +379,9 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
     try {
       parsed = JSON.parse(value);
     } catch (error) {
-      setSkeletonError(error instanceof Error ? error.message : "Invalid JSON.");
+      setSkeletonError(
+        error instanceof Error ? error.message : t("PROXY_RESPONSE_CARD.INVALID_JSON"),
+      );
       return;
     }
     const paths = skeletonToPaths(parsed);
@@ -408,9 +420,9 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
       <CardContent className="space-y-4 p-0">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold">Response</h3>
+            <h3 className="text-sm font-semibold">{t("PROXY_RESPONSE_CARD.RESPONSE")}</h3>
             <p className="text-sm text-muted-foreground">
-              Choose which fields of the vendor&apos;s JSON reach your client.
+              {t("PROXY_RESPONSE_CARD.CHOOSE_WHICH_FIELDS_OF")}
             </p>
           </div>
           <Tabs
@@ -421,11 +433,11 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
             <TabsList className="grid h-10 w-full grid-cols-2 rounded-lg bg-muted p-1 sm:w-auto">
               <TabsTrigger value="all" className="gap-1.5 rounded-md px-3 text-sm">
                 <ListChecks className="h-4 w-4" />
-                All fields
+                {t("PROXY_RESPONSE_CARD.ALL_FIELDS")}
               </TabsTrigger>
               <TabsTrigger value="select" className="gap-1.5 rounded-md px-3 text-sm">
                 <ListFilter className="h-4 w-4" />
-                Filter fields
+                {t("PROXY_RESPONSE_CARD.FILTER_FIELDS")}
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -433,9 +445,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
 
         {!showSelect ? (
           <div className="flex items-start gap-3 rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-            <p className="pt-0.5">
-              The vendor&apos;s response is relayed to your client unchanged.
-            </p>
+            <p className="pt-0.5">{t("PROXY_RESPONSE_CARD.THE_VENDOR_S_RESPONSE")}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -449,7 +459,9 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
                 onClick={onFill}
               >
                 <SquareArrowRight className="h-3.5 w-3.5" />
-                {sampleBusy ? "Running…" : "Fill from test run"}
+                {sampleBusy
+                  ? t("PROXY_RESPONSE_CARD.RUNNING")
+                  : t("PROXY_RESPONSE_CARD.FILL_FROM_TEST_RUN")}
               </Button>
               <Button
                 type="button"
@@ -460,7 +472,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
                 onClick={addRootField}
               >
                 <Plus className="h-3.5 w-3.5" />
-                Add root field
+                {t("PROXY_RESPONSE_CARD.ADD_ROOT_FIELD")}
               </Button>
               <span
                 className={cn(
@@ -476,13 +488,13 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="flex max-h-[420px] flex-col overflow-y-auto rounded-lg border bg-card p-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Fields
+                  {t("PROXY_RESPONSE_CARD.FIELDS")}
                 </p>
                 {wholeResponse ? (
                   <div className="space-y-2 text-sm">
                     <label className="flex items-center gap-2 text-muted-foreground">
                       <Checkbox checked disabled />
-                      Whole response — nothing to filter
+                      {t("PROXY_RESPONSE_CARD.WHOLE_RESPONSE_NOTHING_TO")}
                     </label>
                     {sampleNote ? (
                       <p className="text-xs text-muted-foreground">{sampleNote}</p>
@@ -492,12 +504,12 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
                       className="text-xs text-primary underline"
                       onClick={() => setWholeResponse(false)}
                     >
-                      Filter fields instead
+                      {t("PROXY_RESPONSE_CARD.FILTER_FIELDS_INSTEAD")}
                     </button>
                   </div>
                 ) : tree.length === 0 ? (
                   <p className="py-4 text-center text-xs text-muted-foreground">
-                    No fields yet. Add one by hand, or “Fill from test run”.
+                    {t("PROXY_RESPONSE_CARD.NO_FIELDS_YET_ADD")}
                   </p>
                 ) : (
                   <ResponseFieldTree

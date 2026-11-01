@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { ProxyMethod, ProxyTestResponse } from "../types";
 import { ProxyMethodBadge } from "./proxy-method-badge";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 type Props = {
   pathSuffix: string;
@@ -46,11 +47,20 @@ const filterBadge = (note: string | null | undefined) => {
   switch (note) {
     case "Applied":
     case "EmptyResult":
-      return { label: "Filtered", variant: "success" as const };
+      return {
+        label: tStatic("logic.proxy.components", "PROXY_TEST_PANEL.FILTERED"),
+        variant: "success" as const,
+      };
     case "WholePrimitive":
-      return { label: "Whole response", variant: "secondary" as const };
+      return {
+        label: tStatic("logic.proxy.components", "PROXY_TEST_PANEL.WHOLE_RESPONSE"),
+        variant: "secondary" as const,
+      };
     case "Failed":
-      return { label: "Filter failed — 502", variant: "error" as const };
+      return {
+        label: tStatic("logic.proxy.components", "PROXY_TEST_PANEL.FILTER_FAILED_502"),
+        variant: "error" as const,
+      };
     default:
       return null;
   }
@@ -69,7 +79,7 @@ export const ProxyTestPanel = ({
   onSend,
   sending,
   response,
-  title = "Test it",
+  title = tStatic("logic.proxy.components", "PROXY_TEST_PANEL.TEST_IT"),
   description,
   methods,
   method,
@@ -77,13 +87,14 @@ export const ProxyTestPanel = ({
   pathPrefix,
   showBody = true,
 }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const badge = response ? filterBadge(response.responseFilterNote) : null;
   const pathInput = (
     <Input
       value={pathSuffix}
       onChange={(event) => onPathSuffixChange(event.target.value)}
       placeholder="/charges"
-      aria-label="Test request path"
+      aria-label={t("PROXY_TEST_PANEL.TEST_REQUEST_PATH")}
       className={pathPrefix ? "border-0 focus-visible:ring-0 focus-visible:ring-offset-0" : ""}
     />
   );
@@ -102,7 +113,10 @@ export const ProxyTestPanel = ({
                 value={method}
                 onValueChange={(value) => onMethodChange(value as ProxyMethod)}
               >
-                <SelectTrigger className="h-10 w-full shrink-0 sm:w-[120px]" aria-label="Method">
+                <SelectTrigger
+                  className="h-10 w-full shrink-0 sm:w-[120px]"
+                  aria-label={t("PROXY_TEST_PANEL.METHOD")}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -133,7 +147,7 @@ export const ProxyTestPanel = ({
             value={body}
             onChange={(event) => onBodyChange(event.target.value)}
             placeholder="{ }"
-            aria-label="Test request body"
+            aria-label={t("PROXY_TEST_PANEL.TEST_REQUEST_BODY")}
           />
         ) : null}
         <Button
@@ -144,7 +158,7 @@ export const ProxyTestPanel = ({
           disabled={sending}
         >
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          Test Run
+          {t("PROXY_TEST_PANEL.TEST_RUN")}
         </Button>
         {response ? (
           <div className="rounded-sm border bg-muted/20 p-3">
@@ -153,7 +167,9 @@ export const ProxyTestPanel = ({
                 {response.status} {response.statusText}
               </Badge>
               {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
-              <span className="text-xs text-muted-foreground">{response.latencyMs}ms</span>
+              <span className="text-xs text-muted-foreground">
+                {t("PROXY_TEST_PANEL.MS", { latencyMs: response.latencyMs })}
+              </span>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">{response.meta}</p>
             <pre className="mt-2 max-h-44 overflow-auto rounded-sm bg-background p-3 text-xs">

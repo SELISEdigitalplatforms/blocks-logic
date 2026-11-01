@@ -13,9 +13,15 @@ import { useGetProxyExecution, useGetProxyExecutions } from "../hooks";
 import { Proxy, ProxyExecutionLog, ProxyLogFilter } from "../types";
 import { buildProxyCurl } from "../utils";
 import { ProxyMethodBadge } from "./proxy-method-badge";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 const FILTERS: { value: ProxyLogFilter; label: string }[] = [
-  { value: "all", label: "All" },
+  {
+    value: "all",
+    get label() {
+      return tStatic("logic.proxy.components", "common:ALL");
+    },
+  },
   { value: "ok", label: "2xx" },
   { value: "client", label: "4xx" },
   { value: "server", label: "5xx" },
@@ -26,18 +32,42 @@ const statusClass = (status: number) =>
 
 /** Human label for a server `outcome` enum, used when the row carries no `errorMessage`. */
 const OUTCOME_LABELS: Record<string, string> = {
-  Timeout: "The upstream endpoint did not respond in time.",
-  UpstreamUnreachable: "The upstream endpoint could not be reached.",
-  UpstreamBlocked: "The upstream endpoint is not an allowed destination.",
-  UpstreamResponseTooLarge: "The upstream response exceeded the 5 MB limit.",
-  RequestTooLarge: "The request body exceeded the 1 MB limit.",
-  RequestBodyNotMergeable: "The request body is not a JSON object and could not be merged.",
-  VariableResolutionFailed: "A configured configuration variable could not be resolved.",
-  ResponseFilterFailed: "The upstream response could not be filtered to the configured fields.",
-  MethodNotAllowed: "This HTTP method is not allowed for this proxy.",
-  ProxyNotFound: "No enabled proxy is configured for this path.",
-  Unauthorized: "Missing or invalid credentials for this tenant.",
-  InternalError: "The proxy forwarder encountered an unexpected error.",
+  get Timeout() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_UPSTREAM_ENDPOINT_DID");
+  },
+  get UpstreamUnreachable() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_UPSTREAM_ENDPOINT_COULD");
+  },
+  get UpstreamBlocked() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_UPSTREAM_ENDPOINT_IS");
+  },
+  get UpstreamResponseTooLarge() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_UPSTREAM_RESPONSE_EXCEEDED");
+  },
+  get RequestTooLarge() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_REQUEST_BODY_EXCEEDED");
+  },
+  get RequestBodyNotMergeable() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_REQUEST_BODY_IS");
+  },
+  get VariableResolutionFailed() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.A_CONFIGURED_CONFIGURATION_VARIABLE");
+  },
+  get ResponseFilterFailed() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_UPSTREAM_RESPONSE_COULD");
+  },
+  get MethodNotAllowed() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THIS_HTTP_METHOD_IS");
+  },
+  get ProxyNotFound() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.NO_ENABLED_PROXY_IS");
+  },
+  get Unauthorized() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.MISSING_OR_INVALID_CREDENTIALS");
+  },
+  get InternalError() {
+    return tStatic("logic.proxy.components", "PROXY_LOGS_TAB.THE_PROXY_FORWARDER_ENCOUNTERED");
+  },
 };
 
 const outcomeLabel = (outcome?: string) =>
@@ -46,37 +76,40 @@ const outcomeLabel = (outcome?: string) =>
 const logSkeletonClass = "bg-slate-200 dark:bg-muted";
 const logTableGridClass = "grid-cols-[20px_170px_96px_minmax(300px,1fr)_96px_112px]";
 
-const ProxyLogsSkeleton = () => (
-  <div className="space-y-4" role="status" aria-label="Loading request logs">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex gap-2">
-        <Skeleton className={cn("h-8 w-12", logSkeletonClass)} />
-        <Skeleton className={cn("h-8 w-14", logSkeletonClass)} />
-        <Skeleton className={cn("h-8 w-14", logSkeletonClass)} />
-        <Skeleton className={cn("h-8 w-14", logSkeletonClass)} />
+const ProxyLogsSkeleton = () => {
+  const { t } = useT("logic.proxy.components");
+  return (
+    <div className="space-y-4" role="status" aria-label={t("PROXY_LOGS_TAB.LOADING_REQUEST_LOGS")}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-2">
+          <Skeleton className={cn("h-8 w-12", logSkeletonClass)} />
+          <Skeleton className={cn("h-8 w-14", logSkeletonClass)} />
+          <Skeleton className={cn("h-8 w-14", logSkeletonClass)} />
+          <Skeleton className={cn("h-8 w-14", logSkeletonClass)} />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className={cn("h-8 w-32", logSkeletonClass)} />
+          <Skeleton className={cn("h-8 w-20", logSkeletonClass)} />
+          <Skeleton className={cn("h-8 w-28", logSkeletonClass)} />
+        </div>
       </div>
-      <div className="flex gap-2">
-        <Skeleton className={cn("h-8 w-32", logSkeletonClass)} />
-        <Skeleton className={cn("h-8 w-20", logSkeletonClass)} />
-        <Skeleton className={cn("h-8 w-28", logSkeletonClass)} />
-      </div>
-    </div>
-    <div className="overflow-hidden rounded-sm border">
-      <div className={cn("grid gap-4 px-4 py-3", logTableGridClass)}>
-        {Array.from({ length: 6 }).map((_, index) => (
-          <Skeleton key={index} className={cn("h-4 w-full", logSkeletonClass)} />
-        ))}
-      </div>
-      {Array.from({ length: 5 }).map((_, rowIndex) => (
-        <div key={rowIndex} className={cn("grid gap-4 border-t px-4 py-3", logTableGridClass)}>
-          {Array.from({ length: 6 }).map((_, cellIndex) => (
-            <Skeleton key={cellIndex} className={cn("h-4 w-full", logSkeletonClass)} />
+      <div className="overflow-hidden rounded-sm border">
+        <div className={cn("grid gap-4 px-4 py-3", logTableGridClass)}>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className={cn("h-4 w-full", logSkeletonClass)} />
           ))}
         </div>
-      ))}
+        {Array.from({ length: 5 }).map((_, rowIndex) => (
+          <div key={rowIndex} className={cn("grid gap-4 border-t px-4 py-3", logTableGridClass)}>
+            {Array.from({ length: 6 }).map((_, cellIndex) => (
+              <Skeleton key={cellIndex} className={cn("h-4 w-full", logSkeletonClass)} />
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 /**
  * One labelled copy action. Swaps to a tick for the duration of the hook's cooldown so a click on a
@@ -98,6 +131,7 @@ const CopyButton = ({
   iconOnly?: boolean;
   className?: string;
 }) => {
+  const { t } = useT("logic.proxy.components");
   const { isCopying, copy } = useCopyToClipboard();
 
   return (
@@ -114,8 +148,12 @@ const CopyButton = ({
       onClick={() =>
         copy(
           value,
-          () => showSuccessToast({ description: `${label} copied to clipboard.` }),
-          () => showErrorToast({ errors: `Could not copy the ${label.toLowerCase()}.` }),
+          () =>
+            showSuccessToast({ description: t("PROXY_LOGS_TAB.COPIED_TO_CLIPBOARD", { label }) }),
+          () =>
+            showErrorToast({
+              errors: t("PROXY_LOGS_TAB.COULD_NOT_COPY_THE", { value: label.toLowerCase() }),
+            }),
         )
       }
     >
@@ -132,6 +170,7 @@ const CopyButton = ({
 const logDetailsId = (logId: string) => `proxy-log-details-${logId}`;
 
 const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog }) => {
+  const { t } = useT("logic.proxy.components");
   // The list row carries only summary fields; the forwarded URL and injected keys are fetched on demand
   // from `GET /api/Proxies/{proxyId}/executions/{executionId}`.
   const { data, isLoading, isError } = useGetProxyExecution(proxyId, log.id);
@@ -146,7 +185,7 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
         className="flex items-center gap-2 border-t bg-muted/20 px-4 py-6 text-sm text-muted-foreground"
       >
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading response...
+        {t("PROXY_LOGS_TAB.LOADING_RESPONSE")}
       </div>
     );
   }
@@ -164,7 +203,7 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
         <div className="flex flex-wrap gap-6">
           <div>
             <span className="text-xs font-medium uppercase text-muted-foreground">
-              Forwarded to
+              {t("PROXY_LOGS_TAB.FORWARDED_TO")}
             </span>
             <div className="group/url flex items-center gap-1">
               <p className="break-all font-mono">{upstreamUrl || "—"}</p>
@@ -172,7 +211,7 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
                 <CopyButton
                   label="URL"
                   value={upstreamUrl}
-                  title="Copy the forwarded upstream URL"
+                  title={t("PROXY_LOGS_TAB.COPY_THE_FORWARDED_UPSTREAM")}
                   iconOnly
                   className="opacity-0 transition-opacity group-hover/url:opacity-100"
                 />
@@ -180,9 +219,15 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
             </div>
           </div>
           <div>
-            <span className="text-xs font-medium uppercase text-muted-foreground">Result</span>
+            <span className="text-xs font-medium uppercase text-muted-foreground">
+              {t("PROXY_LOGS_TAB.RESULT")}
+            </span>
             <p>
-              {detail.status} {detail.statusText} in {detail.latencyMs}ms
+              {t("PROXY_LOGS_TAB.IN_MS", {
+                status: detail.status,
+                statusText: detail.statusText,
+                latencyMs: detail.latencyMs,
+              })}
             </p>
           </div>
         </div>
@@ -190,34 +235,41 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
           <CopyButton
             label="cURL"
             value={curl}
-            title="Copy an approximate curl command for this call (check URL and credentials before use)"
+            title={t("PROXY_LOGS_TAB.COPY_AN_APPROXIMATE_CURL")}
           />
           <CopyButton
             label="JSON"
             value={JSON.stringify(detail, null, 2)}
-            title="Copy the whole log row as JSON"
+            title={t("PROXY_LOGS_TAB.COPY_THE_WHOLE_LOG")}
           />
         </div>
       </div>
       <div>
         <span className="text-xs font-medium uppercase text-muted-foreground">
-          Added headers and query keys
+          {t("PROXY_LOGS_TAB.ADDED_HEADERS_AND_QUERY")}
         </span>
-        <p>{[...detail.injectedHeaderKeys, ...detail.injectedQueryKeys].join(", ") || "None"}</p>
+        <p>
+          {[...detail.injectedHeaderKeys, ...detail.injectedQueryKeys].join(", ") ||
+            t("PROXY_LOGS_TAB.NONE")}
+        </p>
       </div>
       {showError ? (
         <div className="lg:col-span-2">
-          <span className="text-xs font-medium uppercase text-muted-foreground">Error</span>
+          <span className="text-xs font-medium uppercase text-muted-foreground">
+            {t("common:ERROR")}
+          </span>
           <p className="mt-1 text-red-700">{errorText}</p>
         </div>
       ) : null}
       <div className="lg:col-span-2">
-        <span className="text-xs font-medium uppercase text-muted-foreground">Response body</span>
+        <span className="text-xs font-medium uppercase text-muted-foreground">
+          {t("PROXY_LOGS_TAB.RESPONSE_BODY")}
+        </span>
         {isError ? (
-          <p className="mt-1 text-red-700">Failed to load the call details.</p>
+          <p className="mt-1 text-red-700">{t("PROXY_LOGS_TAB.FAILED_TO_LOAD_THE")}</p>
         ) : (
           <p className="mt-1 text-muted-foreground" data-testid="body-not-saved">
-            Not saved. Blocks never stores request or response bodies; they are customer data.
+            {t("PROXY_LOGS_TAB.NOT_SAVED_BLOCKS_NEVER")}
           </p>
         )}
       </div>
@@ -226,6 +278,7 @@ const LogDetails = ({ proxyId, log }: { proxyId: string; log: ProxyExecutionLog 
 };
 
 export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean }) => {
+  const { t } = useT("logic.proxy.components");
   const [filter, setFilter] = useState<ProxyLogFilter>("all");
   const [live, setLive] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -287,9 +340,9 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
           <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Activity className="h-7 w-7" />
           </div>
-          <h3 className="mt-5 text-xl font-semibold">No request logs yet</h3>
+          <h3 className="mt-5 text-xl font-semibold">{t("PROXY_LOGS_TAB.NO_REQUEST_LOGS_YET")}</h3>
           <p className="mt-2 max-w-md text-sm text-muted-foreground">
-            Requests sent through this proxy will appear here once traffic starts flowing.
+            {t("PROXY_LOGS_TAB.REQUESTS_SENT_THROUGH_THIS")}
           </p>
         </CardContent>
       </Card>
@@ -314,7 +367,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">
-            {data.length} of {totalAllCount} requests
+            {t("PROXY_LOGS_TAB.OF_REQUESTS", { length: data.length, totalAllCount })}
           </span>
           <Button
             variant="outline"
@@ -329,7 +382,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
             }}
           >
             {live ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-            {live ? "Paused" : "Live"}
+            {live ? t("PROXY_LOGS_TAB.PAUSED") : t("PROXY_LOGS_TAB.LIVE")}
           </Button>
         </div>
       </div>
@@ -340,11 +393,11 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
               <th colSpan={5} className="p-0 text-left font-medium">
                 <div className={cn("grid gap-4 px-4 py-2", logTableGridClass)}>
                   <span aria-hidden="true" />
-                  <span role="columnheader">TIME</span>
-                  <span role="columnheader">METHOD</span>
-                  <span role="columnheader">PATH</span>
-                  <span role="columnheader">STATUS</span>
-                  <span role="columnheader">LATENCY</span>
+                  <span role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_TIME")}</span>
+                  <span role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_METHOD")}</span>
+                  <span role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_PATH")}</span>
+                  <span role="columnheader">{t("PROXY_LOGS_TAB.COLUMN_STATUS")}</span>
+                  <span role="columnheader">{t("PROXY_LOGS_TAB.LATENCY")}</span>
                 </div>
               </th>
             </tr>
@@ -353,7 +406,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
             {!data.length ? (
               <tr>
                 <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                  No requests match this filter.
+                  {t("PROXY_LOGS_TAB.NO_REQUESTS_MATCH_THIS")}
                 </td>
               </tr>
             ) : (
@@ -387,7 +440,7 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
                         <Badge variant="outline" className={cn("w-fit", statusClass(log.status))}>
                           {log.status}
                         </Badge>
-                        <span>{log.latencyMs}ms</span>
+                        <span>{t("PROXY_LOGS_TAB.MS", { latencyMs: log.latencyMs })}</span>
                       </button>
                       {expanded ? <LogDetails proxyId={proxy.id} log={log} /> : null}
                     </td>
@@ -411,7 +464,9 @@ export const ProxyLogsTab = ({ proxy, active }: { proxy: Proxy; active: boolean 
           />
         </div>
       ) : null}
-      {isFetching ? <p className="text-xs text-muted-foreground">Refreshing logs...</p> : null}
+      {isFetching ? (
+        <p className="text-xs text-muted-foreground">{t("PROXY_LOGS_TAB.REFRESHING_LOGS")}</p>
+      ) : null}
     </div>
   );
 };

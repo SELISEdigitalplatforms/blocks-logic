@@ -26,7 +26,10 @@ const { FakeHttpError } = vi.hoisted(() => {
   return { FakeHttpError };
 });
 
-vi.mock("@seliseblocks/genesis-os", () => ({ HttpError: FakeHttpError }));
+vi.mock("@seliseblocks/genesis-os", async () => ({
+  ...(await vi.importActual<object>("@seliseblocks/genesis-os")),
+  HttpError: FakeHttpError,
+}));
 
 import { proxyService } from "./proxy.service";
 

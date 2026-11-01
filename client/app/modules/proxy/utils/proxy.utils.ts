@@ -11,6 +11,7 @@ import {
   ProxyMethod,
   ResponseFieldNode,
 } from "../types";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 // ---------------------------------------------------------------------------
 // "Who can call it"
@@ -36,10 +37,21 @@ export const defaultProxyAccess = (): ProxyAccess => ({
   organizationId: "",
 });
 
-const listClause = (noun: string, rule: ProxyAccessRule) => {
-  if (rule.values.length === 1) return `the ${noun} ${rule.values[0]}`;
-  const quantifier = rule.mode === "all" ? "all of the" : "any of the";
-  return `${quantifier} ${noun}s ${rule.values.join(", ")}`;
+const listClause = (kind: "role" | "permission", rule: ProxyAccessRule) => {
+  const list = rule.values.join(", ");
+  if (rule.values.length === 1) {
+    return kind === "role"
+      ? tStatic("logic.proxy", "PROXY_UTILS.LIST_ONE_ROLE", { value: list })
+      : tStatic("logic.proxy", "PROXY_UTILS.LIST_ONE_PERMISSION", { value: list });
+  }
+  if (kind === "role") {
+    return rule.mode === "all"
+      ? tStatic("logic.proxy", "PROXY_UTILS.LIST_ALL_ROLES", { values: list })
+      : tStatic("logic.proxy", "PROXY_UTILS.LIST_ANY_ROLES", { values: list });
+  }
+  return rule.mode === "all"
+    ? tStatic("logic.proxy", "PROXY_UTILS.LIST_ALL_PERMISSIONS", { values: list })
+    : tStatic("logic.proxy", "PROXY_UTILS.LIST_ANY_PERMISSIONS", { values: list });
 };
 
 /**
@@ -48,28 +60,32 @@ const listClause = (noun: string, rule: ProxyAccessRule) => {
  */
 export const describeProxyAccess = (access: ProxyAccess): string => {
   if (access.kind === "public") {
-    return "Anyone with the URL and your x-blocks-key can call it. No identity, no token-scoped work.";
+    return tStatic("logic.proxy", "PROXY_UTILS.ANYONE_WITH_THE_URL");
   }
 
   const hasRoles = access.roles.values.length > 0;
   const hasPermissions = access.permissions.values.length > 0;
   if (!hasRoles && !hasPermissions) {
-    return "No extra restriction — any signed-in caller with a valid Blocks token can invoke it.";
+    return tStatic("logic.proxy", "PROXY_UTILS.NO_EXTRA_RESTRICTION_ANY");
   }
 
   const roles = hasRoles ? listClause("role", access.roles) : null;
   const permissions = hasPermissions ? listClause("permission", access.permissions) : null;
   if (roles && permissions) {
-    return `Callers must hold ${roles} ${access.combine === "and" ? "AND" : "OR"} ${permissions}.`;
+    return tStatic(
+      "logic.proxy",
+      access.combine === "and" ? "PROXY_UTILS.MUST_HOLD_BOTH_AND" : "PROXY_UTILS.MUST_HOLD_BOTH_OR",
+      { roles, permissions },
+    );
   }
-  return `Callers must hold ${roles ?? permissions}.`;
+  return tStatic("logic.proxy", "PROXY_UTILS.MUST_HOLD", { clause: roles ?? permissions ?? "" });
 };
 
 /** Problems the form must block on before the server does. `null` when the policy is saveable. */
 export const validateProxyAccess = (access: ProxyAccess): string | null => {
   if (access.kind === "public") {
     return access.roles.values.length || access.permissions.values.length
-      ? "A public endpoint cannot be restricted by roles or permissions."
+      ? tStatic("logic.proxy", "PROXY_UTILS.A_PUBLIC_ENDPOINT_CANNOT")
       : null;
   }
   const rules: Array<[string, ProxyAccessRule]> = [
@@ -77,12 +93,12 @@ export const validateProxyAccess = (access: ProxyAccess): string | null => {
     ["permission", access.permissions],
   ];
   for (const [label, rule] of rules) {
-    if (rule.values.length > MAX_ACCESS_VALUES) return `Too many ${label} entries.`;
+    if (rule.values.length > MAX_ACCESS_VALUES) return tStatic("logic.proxy", "PROXY_UTILS.TOO_MANY_ENTRIES", { label });
     if (rule.values.some((value) => value.length > MAX_ACCESS_VALUE_LENGTH)) {
-      return `A ${label} entry is too long.`;
+      return tStatic("logic.proxy", "PROXY_UTILS.A_ENTRY_IS_TOO", { label });
     }
     if (rule.values.some((value) => value.includes(","))) {
-      return `A ${label} entry may not contain a comma.`;
+      return tStatic("logic.proxy", "PROXY_UTILS.A_ENTRY_MAY_NOT", { label });
     }
   }
   return null;
@@ -128,7 +144,7 @@ const keyValueSchema = z
     if (blankRows.length > 1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Remove duplicate blank rows.",
+        message: tStatic("logic.proxy", "PROXY_UTILS.REMOVE_DUPLICATE_BLANK_ROWS"),
       });
     }
 
@@ -138,7 +154,7 @@ const keyValueSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [index, "key"],
-          message: "Key is required when a value is provided.",
+          message: tStatic("logic.proxy", "PROXY_UTILS.KEY_IS_REQUIRED_WHEN"),
         });
       }
     });
@@ -490,17 +506,17 @@ export const parseRouteTemplate = (
 ): { ok: true; params: string[] } | { ok: false; reason: string } => {
   const trimmed = trimRoutePath(template);
   if (trimmed.length === 0) return { ok: true, params: [] };
-  if (trimmed.length > 512) return { ok: false, reason: "Path is too long." };
+  if (trimmed.length > 512) return { ok: false, reason: tStatic("logic.proxy", "PROXY_UTILS.PATH_IS_TOO_LONG") };
 
   const segments = trimmed.split("/");
-  if (segments.length > 20) return { ok: false, reason: "Path has too many segments." };
+  if (segments.length > 20) return { ok: false, reason: tStatic("logic.proxy", "PROXY_UTILS.PATH_HAS_TOO_MANY") };
 
   const params: string[] = [];
   for (const segment of segments) {
     if (segment.length === 0)
-      return { ok: false, reason: "Path must not contain an empty segment." };
+      return { ok: false, reason: tStatic("logic.proxy", "PROXY_UTILS.PATH_MUST_NOT_CONTAIN") };
     if (segment === "." || segment === "..")
-      return { ok: false, reason: "Path must not contain a '.' or '..' segment." };
+      return { ok: false, reason: tStatic("logic.proxy", "PROXY_UTILS.PATH_MUST_NOT_CONTAIN_2") };
     if (!segment.includes("{") && !segment.includes("}")) continue;
     if (!ROUTE_PARAM.test(segment))
       return {
@@ -509,7 +525,7 @@ export const parseRouteTemplate = (
       };
     const name = segment.slice(1, -1);
     if (params.includes(name))
-      return { ok: false, reason: `Parameter '${name}' is declared twice.` };
+      return { ok: false, reason: tStatic("logic.proxy", "PROXY_UTILS.PARAMETER_IS_DECLARED_TWICE", { name }) };
     params.push(name);
   }
 
@@ -582,15 +598,15 @@ const accessSchema = z.object({
 
 export const proxyFormSchema = z
   .object({
-    name: z.string().trim().min(1, "Give the proxy a name - it becomes the path."),
+    name: z.string().trim().min(1, { error: () => tStatic("logic.proxy", "PROXY_UTILS.GIVE_THE_PROXY_A_NAME") }),
     upstreamUrl: z
       .string()
       .trim()
-      .refine(isParseableUrl, "Please enter a valid url")
-      .refine((url) => url.startsWith("https://"), "Use an https endpoint."),
+      .refine(isParseableUrl, { error: () => tStatic("logic.proxy", "PROXY_UTILS.PLEASE_ENTER_A_VALID_URL") })
+      .refine((url) => url.startsWith("https://"), { error: () => tStatic("logic.proxy", "PROXY_UTILS.USE_AN_HTTPS_ENDPOINT") }),
     methods: z
       .array(z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]))
-      .min(1, "Select at least one method."),
+      .min(1, { error: () => tStatic("logic.proxy", "PROXY_UTILS.SELECT_AT_LEAST_ONE_METHOD") }),
     headers: keyValueSchema,
     query: keyValueSchema,
     bodyMerge: keyValueSchema,
@@ -604,9 +620,9 @@ export const proxyFormSchema = z
     resilience: resilienceSchema,
     requestsPerMinute: z
       .number()
-      .int("A whole number.")
-      .min(1, `A whole number from 1 to ${PROXY_MAX_PER_MINUTE.toLocaleString("en")}.`)
-      .max(PROXY_MAX_PER_MINUTE, `A whole number from 1 to ${PROXY_MAX_PER_MINUTE.toLocaleString("en")}.`)
+      .int({ error: () => tStatic("logic.proxy", "PROXY_UTILS.A_WHOLE_NUMBER") })
+      .min(1, { error: () => tStatic("logic.proxy", "PROXY_UTILS.A_WHOLE_NUMBER_RANGE", { max: PROXY_MAX_PER_MINUTE.toLocaleString("en") }) })
+      .max(PROXY_MAX_PER_MINUTE, { error: () => tStatic("logic.proxy", "PROXY_UTILS.A_WHOLE_NUMBER_RANGE", { max: PROXY_MAX_PER_MINUTE.toLocaleString("en") }) })
       .nullable()
       .default(null),
   })
@@ -649,7 +665,7 @@ export const proxyFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["routes", index, "method"],
-          message: `This proxy does not allow ${route.method}.`,
+          message: tStatic("logic.proxy", "PROXY_UTILS.THIS_PROXY_DOES_NOT", { method: route.method }),
         });
       }
 
@@ -658,7 +674,7 @@ export const proxyFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["routes", index, "path"],
-          message: "This endpoint is already defined.",
+          message: tStatic("logic.proxy", "PROXY_UTILS.THIS_ENDPOINT_IS_ALREADY"),
         });
       }
       seenRoutes.add(address);
@@ -682,7 +698,7 @@ export const proxyFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["routes", index, "upstreamPath"],
-          message: `{${undeclared}} is not a parameter of the client path.`,
+          message: tStatic("logic.proxy", "PROXY_UTILS.IS_NOT_A_PARAMETER", { undeclared }),
         });
       }
     });
@@ -692,7 +708,7 @@ export const proxyFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["responseInclude"],
-          message: "Too many response fields.",
+          message: tStatic("logic.proxy", "PROXY_UTILS.TOO_MANY_RESPONSE_FIELDS"),
         });
       }
       values.responseInclude.forEach((path, index) => {
@@ -700,7 +716,7 @@ export const proxyFormSchema = z
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["responseInclude", index],
-            message: `'${path}' is not a valid field path.`,
+            message: tStatic("logic.proxy", "PROXY_UTILS.IS_NOT_A_VALID", { path }),
           });
         }
       });
@@ -714,7 +730,7 @@ export const proxyFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["bodyMode"],
-          message: "Body fields apply to POST, PUT or PATCH only.",
+          message: tStatic("logic.proxy", "PROXY_UTILS.BODY_FIELDS_APPLY_TO"),
         });
       }
 
@@ -726,7 +742,7 @@ export const proxyFormSchema = z
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["bodyMerge", index, "key"],
-            message: "Each body field key must be unique.",
+            message: tStatic("logic.proxy", "PROXY_UTILS.EACH_BODY_FIELD_KEY"),
           });
         }
         seen.add(key);
@@ -738,7 +754,7 @@ export const proxyFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["methodConfigs", index, "method"],
-          message: "Enable this method above before configuring it.",
+          message: tStatic("logic.proxy", "PROXY_UTILS.ENABLE_THIS_METHOD_ABOVE"),
         });
       }
 
@@ -747,7 +763,7 @@ export const proxyFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["methodConfigs", index, "upstream"],
-          message: "Please enter a valid url",
+          message: tStatic("logic.proxy", "PROXY_UTILS.PLEASE_ENTER_A_VALID"),
         });
       }
     });
@@ -848,7 +864,7 @@ export const buildProxyCurl = (
   const lines = [
     `curl -X ${log.method} ${shellQuote(url)}`,
     `  -H ${shellQuote("x-blocks-key: <your x-blocks-key>")}`,
-    `  -H ${shellQuote("Authorization: Bearer <token issued for that tenant>")}`,
+    `  -H ${shellQuote(tStatic("logic.proxy", "PROXY_UTILS.AUTHORIZATION_BEARER_TOKEN_ISSUED"))}`,
   ];
 
   // Trailing backslash + real newline: a multi-line command the shell reads as one line.

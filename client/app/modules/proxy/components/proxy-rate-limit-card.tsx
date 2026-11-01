@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { Input } from "@/components/ui-kits/input/input";
 import { ProxyFormValues } from "../types";
 import { PROXY_MAX_PER_MINUTE, PROXY_PUBLIC_DEFAULT_PER_MINUTE } from "../utils";
+import { useT } from "@seliseblocks/genesis-os";
 
 type Props = {
   control: Control<ProxyFormValues>;
@@ -16,6 +17,7 @@ type Props = {
  * vendor budget without limit; token proxies have none unless the tenant sets one.
  */
 export const ProxyRateLimitCard = ({ control }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const { field, fieldState } = useController({ control, name: "requestsPerMinute" });
   const kind = useWatch({ control, name: "access.kind" });
   const isPublic = kind === "public";
@@ -32,7 +34,7 @@ export const ProxyRateLimitCard = ({ control }: Props) => {
       ? `${value.toLocaleString("en")} calls a minute (your limit).`
       : isPublic
         ? `${PROXY_PUBLIC_DEFAULT_PER_MINUTE} calls a minute (the default for public proxies).`
-        : "No limit (the default for proxies that need a Blocks token).";
+        : t("PROXY_RATE_LIMIT_CARD.NO_LIMIT_THE_DEFAULT");
 
   return (
     <Card className="rounded-xl">
@@ -40,22 +42,20 @@ export const ProxyRateLimitCard = ({ control }: Props) => {
         <div className="flex min-w-0 flex-col gap-1">
           <span className="flex items-center gap-1.5 text-base font-semibold">
             <Gauge className="h-4 w-4 text-muted-foreground" />
-            Rate limit
+            {t("PROXY_RATE_LIMIT_CARD.RATE_LIMIT")}
           </span>
           <span className="text-xs leading-relaxed text-medium-emphasis">
-            Calls per minute through the gateway, from all callers together. Over it, callers get 429
-            with Retry-After; nothing is sent to the vendor and nothing is logged. Workflow steps and
-            Test calls are never counted.
+            {t("PROXY_RATE_LIMIT_CARD.CALLS_PER_MINUTE_THROUGH")}
           </span>
         </div>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Calls per minute</span>
+          <span className="font-medium">{t("PROXY_RATE_LIMIT_CARD.CALLS_PER_MINUTE")}</span>
           <Input
             type="number"
             inputMode="numeric"
             min={1}
             max={PROXY_MAX_PER_MINUTE}
-            placeholder={isPublic ? `Default: ${PROXY_PUBLIC_DEFAULT_PER_MINUTE}` : "Default: no limit"}
+            placeholder={isPublic ? t("PROXY_RATE_LIMIT_CARD.DEFAULT", { proxyPublicDefaultPerMinute: PROXY_PUBLIC_DEFAULT_PER_MINUTE }) : t("PROXY_RATE_LIMIT_CARD.DEFAULT_NO_LIMIT")}
             value={value ?? ""}
             onChange={(event) => onInput(event.target.value)}
             onBlur={field.onBlur}
@@ -70,7 +70,7 @@ export const ProxyRateLimitCard = ({ control }: Props) => {
           </p>
         ) : (
           <p className="text-xs text-medium-emphasis" data-testid="proxy-rate-limit-effective">
-            Now: {effective} Takes effect when you save.
+            {t("PROXY_RATE_LIMIT_CARD.NOW_TAKES_EFFECT_WHEN", { effective })}
           </p>
         )}
       </CardContent>

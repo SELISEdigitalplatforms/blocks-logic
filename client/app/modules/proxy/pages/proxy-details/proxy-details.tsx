@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
+import { useProjectStore, useScopedPath, useT, tStatic } from "@seliseblocks/genesis-os";
 import { AlertTriangle, Download, EllipsisVertical, Loader2, Pause, Pen, Play, Trash2 } from "lucide-react";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
@@ -39,9 +39,7 @@ import { ProxyTestTab } from "../../components/proxy-test-tab";
 import { ProxyHistoryTab } from "../../components/proxy-history-tab";
 import { DeleteProxyDialog } from "../../components/delete-proxy-dialog";
 import { VariablesButton } from "../../components/variables-button";
-
-const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
-  `${count} ${count === 1 ? singular : plural}`;
+import { renderRichText } from "@/lib/rich-text";
 
 const KeyValueRows = ({
   title,
@@ -122,6 +120,7 @@ const EndpointRow = ({
   /** Proxy-wide body merge and response filter. Inherited field by field, as the gateway reads it. */
   proxyWide: Pick<Proxy, "bodyMerge" | "responseMode" | "responseInclude">;
 }) => {
+  const { t } = useT("logic.proxy");
   const forwardPath = (route.upstreamPath ?? route.path).replace(/^\/+|\/+$/g, "");
   const forwardsTo = forwardPath
     ? `${upstreamUrl.replace(/\/+$/, "")}/${forwardPath}`
@@ -132,55 +131,55 @@ const EndpointRow = ({
   const { tree } = pathsToTree(paths);
   const extras = [
     route.bodyMerge?.length
-      ? pluralize(route.bodyMerge.length, "body field")
+      ? t("PROXY_DETAILS.BODY_FIELDS", { count: route.bodyMerge.length })
       : !route.bodyMerge && proxyWide.bodyMerge.length
-        ? `${pluralize(proxyWide.bodyMerge.length, "body field")} from the proxy-wide settings`
+        ? t("PROXY_DETAILS.BODY_FIELDS_PROXY_WIDE", { count: proxyWide.bodyMerge.length })
         : null,
-    route.headers?.length ? pluralize(route.headers.length, "extra header") : null,
-    route.query?.length ? pluralize(route.query.length, "extra query param") : null,
+    route.headers?.length ? t("PROXY_DETAILS.EXTRA_HEADERS", { count: route.headers.length }) : null,
+    route.query?.length ? t("PROXY_DETAILS.EXTRA_QUERY_PARAMS", { count: route.query.length }) : null,
   ].filter(Boolean);
 
   return (
     <li className="rounded-lg border bg-card p-4 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <ProxyMethodBadge method={route.method} />
-        <code className="font-mono text-xs">{route.path ? route.path : "base path"}</code>
+        <code className="font-mono text-xs">{route.path ? route.path : t("PROXY_DETAILS.BASE_PATH")}</code>
       </div>
       <dl className="mt-3 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[max-content_1fr]">
-        <dt className="text-muted-foreground">Your client calls</dt>
+        <dt className="text-muted-foreground">{t("PROXY_DETAILS.YOUR_CLIENT_CALLS")}</dt>
         <dd className="break-all font-mono">{clientUrl}</dd>
-        <dt className="text-muted-foreground">Forwards to</dt>
+        <dt className="text-muted-foreground">{t("PROXY_DETAILS.FORWARDS_TO")}</dt>
         <dd className="break-all font-mono">{forwardsTo}</dd>
-        <dt className="text-muted-foreground">Sends</dt>
-        <dd>{extras.length ? extras.join(" · ") : "The connection’s headers and query (plus the caller’s query)"}</dd>
-        <dt className="text-muted-foreground">Returns</dt>
+        <dt className="text-muted-foreground">{t("PROXY_DETAILS.SENDS")}</dt>
+        <dd>{extras.length ? extras.join(" · ") : t("PROXY_DETAILS.THE_CONNECTION_S_HEADERS")}</dd>
+        <dt className="text-muted-foreground">{t("PROXY_DETAILS.RETURNS")}</dt>
         <dd>
           {!filters ? (
-            "The vendor’s status and body (secret values masked)"
+            t("PROXY_DETAILS.THE_VENDOR_S_STATUS")
           ) : paths.length ? (
             <div className="space-y-1">
               <span>
-                Only {pluralize(paths.length, "field")}:
+                {t("PROXY_DETAILS.ONLY_FIELDS", { count: paths.length })}
                 {filterFromProxy ? (
-                  <span className="text-muted-foreground"> — from the proxy-wide filter</span>
+                  <span className="text-muted-foreground"> {t("PROXY_DETAILS.FROM_THE_PROXY_WIDE")}</span>
                 ) : null}
               </span>
               <ResponseFilterTree nodes={tree} />
             </div>
           ) : (
             <>
-              An empty object (<code>{"{}"}</code>) — no fields selected yet. Vendor errors return 502
-              {filterFromProxy ? (
-                <span className="text-muted-foreground"> — from the proxy-wide filter</span>
-              ) : null}
+              {renderRichText(
+                t(filterFromProxy ? "PROXY_DETAILS.EMPTY_OBJECT_FROM_PROXY" : "PROXY_DETAILS.EMPTY_OBJECT"),
+                [(text: string) => <code>{text}</code>],
+              )}
             </>
           )}
         </dd>
-        <dt className="text-muted-foreground">If it fails</dt>
+        <dt className="text-muted-foreground">{t("PROXY_DETAILS.IF_IT_FAILS")}</dt>
         <dd>
           {describeResilience(route.resilience ?? inherited)}
           {route.resilience ? null : (
-            <span className="text-muted-foreground"> — from the connection</span>
+            <span className="text-muted-foreground"> {t("PROXY_DETAILS.FROM_THE_CONNECTION")}</span>
           )}
         </dd>
       </dl>
@@ -195,6 +194,7 @@ const EndpointsSection = ({
   proxy: Proxy;
   clientUrlFor: (routePath: string) => string;
 }) => {
+  const { t } = useT("logic.proxy");
   // A saved proxy with no routes is callable at its base path only; show that as the one endpoint
   // rather than an empty list that reads as "cannot be called".
   const routes: ProxyRoute[] = proxy.routes.length
@@ -214,10 +214,10 @@ const EndpointsSection = ({
   return (
     <div>
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Endpoints
+        {t("PROXY_DETAILS.ENDPOINTS")}
       </h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        What your client can call through this proxy. Anything else is refused.
+        {t("PROXY_DETAILS.WHAT_YOUR_CLIENT_CAN")}
       </p>
       <ul className="mt-3 space-y-3">
         {routes.map((route, index) => (
@@ -334,38 +334,41 @@ const ProxyOverviewSkeleton = () => (
   </>
 );
 
-const ProxyDetailsSkeleton = () => (
-  <div role="status" aria-label="Loading proxy details" className="flex min-h-screen flex-col">
-    <div className="px-6 pb-2 pt-4">
-      <Skeleton className="h-5 w-full max-w-xs" />
-    </div>
-    <div className="flex-1 space-y-6 px-6 pb-8 pt-4">
-      <div className="mb-3 flex items-center justify-between gap-4 sm:items-start">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <Skeleton className="h-2 w-2 shrink-0 rounded-full" />
-          <Skeleton className="h-8 w-full max-w-xs" />
-          <Skeleton className="h-6 w-20 shrink-0" />
-        </div>
-        <Skeleton className="h-10 w-10 shrink-0 sm:hidden" />
-        <div className="hidden shrink-0 gap-3 sm:flex">
-          <Skeleton className="h-10 w-24" />
-          <Skeleton className="h-10 w-20" />
-          <Skeleton className="h-10 w-24" />
-        </div>
+const ProxyDetailsSkeleton = () => {
+  const { t } = useT("logic.proxy");
+  return (
+    <div role="status" aria-label={t("PROXY_DETAILS.LOADING_PROXY_DETAILS")} className="flex min-h-screen flex-col">
+      <div className="px-6 pb-2 pt-4">
+        <Skeleton className="h-5 w-full max-w-xs" />
       </div>
+      <div className="flex-1 space-y-6 px-6 pb-8 pt-4">
+        <div className="mb-3 flex items-center justify-between gap-4 sm:items-start">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Skeleton className="h-2 w-2 shrink-0 rounded-full" />
+            <Skeleton className="h-8 w-full max-w-xs" />
+            <Skeleton className="h-6 w-20 shrink-0" />
+          </div>
+          <Skeleton className="h-10 w-10 shrink-0 sm:hidden" />
+          <div className="hidden shrink-0 gap-3 sm:flex">
+            <Skeleton className="h-10 w-24" />
+            <Skeleton className="h-10 w-20" />
+            <Skeleton className="h-10 w-24" />
+          </div>
+        </div>
 
-      <div className="space-y-4">
-        <Skeleton className="h-10 w-full sm:hidden" />
-        <div className="hidden gap-1 rounded-md bg-muted p-1 sm:inline-flex">
-          {Array.from({ length: proxyDetailTabs.length }).map((_, index) => (
-            <Skeleton key={index} className="h-8 w-20 bg-background/70" />
-          ))}
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-full sm:hidden" />
+          <div className="hidden gap-1 rounded-md bg-muted p-1 sm:inline-flex">
+            {Array.from({ length: proxyDetailTabs.length }).map((_, index) => (
+              <Skeleton key={index} className="h-8 w-20 bg-background/70" />
+            ))}
+          </div>
+          <ProxyOverviewSkeleton />
         </div>
-        <ProxyOverviewSkeleton />
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ConfigurationStepCard = ({
   eyebrow,
@@ -394,6 +397,7 @@ const ConfigurationStepCard = ({
  * right after an import. The server computes it on every read; adding the secret is the whole fix.
  */
 const NeedsSecretBanner = ({ missing, duplicates }: { missing: string[]; duplicates: string[] }) => {
+  const { t } = useT("logic.proxy");
   const absent = missing.filter((name) => !duplicates.includes(name));
   return (
     <div
@@ -406,17 +410,12 @@ const NeedsSecretBanner = ({ missing, duplicates }: { missing: string[]; duplica
         <div className="min-w-0 space-y-1">
           {absent.length ? (
             <p>
-              <span className="font-semibold">Needs secret:</span>{" "}
-              <span className="font-mono">{absent.join(", ")}</span>. Calls that use it fail until
-              you add a secret with this exact name in Blocks OS Secrets. No change to the proxy is
-              needed.
+              {renderRichText(t("PROXY_DETAILS.N_0_NEEDS_SECRET_0", { value: absent.join(", ") }), [(children) => <span className="font-semibold">{children}</span>, (children) => <span className="font-mono">{children}</span>])}
             </p>
           ) : null}
           {duplicates.length ? (
             <p>
-              More than one secret has the name{" "}
-              <span className="font-mono">{duplicates.join(", ")}</span>. Keep one secret per name so
-              the right one is used.
+              {renderRichText(t("PROXY_DETAILS.MORE_THAN_ONE_SECRET", { value: duplicates.join(", ") }), [(children) => <span className="font-mono">{children}</span>])}
             </p>
           ) : null}
         </div>
@@ -427,13 +426,14 @@ const NeedsSecretBanner = ({ missing, duplicates }: { missing: string[]; duplica
 };
 
 const proxyDetailTabs = [
-  { value: "overview", label: "Overview" },
-  { value: "test", label: "Test" },
-  { value: "logs", label: "Logs" },
-  { value: "history", label: "History" },
+  { value: "overview", get label() { return tStatic("logic.proxy", "PROXY_DETAILS.OVERVIEW"); } },
+  { value: "test", get label() { return tStatic("logic.proxy", "PROXY_DETAILS.TEST"); } },
+  { value: "logs", get label() { return tStatic("logic.proxy", "PROXY_DETAILS.LOGS"); } },
+  { value: "history", get label() { return tStatic("logic.proxy", "PROXY_DETAILS.HISTORY"); } },
 ];
 
 export const ProxyDetails = () => {
+  const { t } = useT("logic.proxy");
   const navigate = useNavigate();
   const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
@@ -448,12 +448,12 @@ export const ProxyDetails = () => {
   });
   const toggleProxy = useToggleProxy();
   const exportProxy = useProxyExport();
-  const toggleLabel = proxy?.enabled ? "Pause" : "Resume";
-  const pendingToggleLabel = proxy?.enabled ? "Pausing..." : "Resuming...";
+  const toggleLabel = proxy?.enabled ? t("PROXY_DETAILS.PAUSE") : t("PROXY_DETAILS.RESUME");
+  const pendingToggleLabel = proxy?.enabled ? t("PROXY_DETAILS.PAUSING") : t("PROXY_DETAILS.RESUMING");
 
   useEffect(() => {
     if (proxyId && isFetched && !isLoading && !proxy) {
-      showErrorToast({ errors: "Proxy not found" });
+      showErrorToast({ errors: tStatic("logic.proxy", "PROXY_DETAILS.PROXY_NOT_FOUND") });
       navigate(scoped("proxy"));
     } else if (proxy?.name) {
       BREADCRUMB_CUSTOM_TITLES[pathname] = proxy.name;
@@ -473,8 +473,8 @@ export const ProxyDetails = () => {
   const errorRateIsHigh = overview?.errorRateIsHigh ?? false;
   const addedCount = proxy.headers.length + proxy.query.length;
   const addedSummary = [
-    pluralize(proxy.headers.length, "header"),
-    pluralize(proxy.query.length, "param"),
+    t("PROXY_DETAILS.HEADERS_COUNT", { count: proxy.headers.length }),
+    t("PROXY_DETAILS.PARAMS_COUNT", { count: proxy.query.length }),
   ].join(" · ");
   const clientUrlFor = (routePath: string) =>
     getProxyClientUrl(selectedProject, proxy.slug, routePath);
@@ -488,9 +488,9 @@ export const ProxyDetails = () => {
     });
     if (!res.isSuccess)
       return showErrorToast({
-        errors: res.errors || (enabled ? "Failed to resume proxy" : "Failed to pause proxy"),
+        errors: res.errors || (enabled ? t("PROXY_DETAILS.FAILED_TO_RESUME_PROXY") : t("PROXY_DETAILS.FAILED_TO_PAUSE_PROXY")),
       });
-    showSuccessToast({ description: enabled ? "Proxy resumed." : "Proxy paused." });
+    showSuccessToast({ description: enabled ? t("PROXY_DETAILS.PROXY_RESUMED") : t("PROXY_DETAILS.PROXY_PAUSED") });
   };
 
   const handleExport = () => exportProxy.handleExport(proxy);
@@ -504,7 +504,7 @@ export const ProxyDetails = () => {
         <div className="flex items-center justify-between gap-4 sm:items-start mb-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <span
-              aria-label={`${proxy.enabled ? "Live" : "Paused"} status indicator`}
+              aria-label={t(proxy.enabled ? "PROXY_DETAILS.LIVE_STATUS_INDICATOR" : "PROXY_DETAILS.PAUSED_STATUS_INDICATOR")}
               className={cn(
                 "h-2 w-2 shrink-0 rounded-full",
                 proxy.enabled ? "bg-success" : "bg-slate-400 dark:bg-slate-500",
@@ -518,7 +518,7 @@ export const ProxyDetails = () => {
           <div className="shrink-0 sm:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" aria-label="Proxy actions">
+                <Button variant="outline" size="icon" aria-label={t("PROXY_DETAILS.PROXY_ACTIONS")}>
                   <EllipsisVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -542,7 +542,7 @@ export const ProxyDetails = () => {
                   onClick={() => navigate(scoped(`proxy/${proxy.id}/edit`))}
                 >
                   <Pen className="mr-2 h-4 w-4" />
-                  <span>Edit</span>
+                  <span>{t("common:EDIT")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
@@ -550,7 +550,7 @@ export const ProxyDetails = () => {
                   onClick={handleExport}
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  <span>Export</span>
+                  <span>{t("PROXY_DETAILS.EXPORT")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer text-destructive focus:text-destructive"
@@ -558,7 +558,7 @@ export const ProxyDetails = () => {
                   onClick={() => setIsDeleteOpen(true)}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  <span>Delete</span>
+                  <span>{t("common:DELETE")}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -582,19 +582,19 @@ export const ProxyDetails = () => {
               {toggleProxy.isPending ? pendingToggleLabel : toggleLabel}
             </Button>
             <Button
-              aria-label="Edit"
-              title="Edit"
+              aria-label={t("common:EDIT")}
+              title={t("common:EDIT")}
               onClick={() => navigate(scoped(`proxy/${proxy.id}/edit`))}
             >
               <Pen className="mr-2 h-4 w-4" />
-              Edit
+              {t("common:EDIT")}
             </Button>
             <Button
               type="button"
               variant="outline"
               disabled={exportProxy.isPending}
-              aria-label="Export"
-              title="Download this proxy as a file to import into another environment"
+              aria-label={t("PROXY_DETAILS.EXPORT")}
+              title={t("PROXY_DETAILS.DOWNLOAD_THIS_PROXY_AS")}
               onClick={handleExport}
             >
               {exportProxy.isPending ? (
@@ -602,19 +602,19 @@ export const ProxyDetails = () => {
               ) : (
                 <Download className="mr-2 h-4 w-4" />
               )}
-              Export
+              {t("PROXY_DETAILS.EXPORT")}
             </Button>
             <Button
               type="button"
               variant="outline"
               className="gap-2 text-destructive hover:text-destructive"
               disabled={toggleProxy.isPending}
-              aria-label="Delete"
-              title="Delete"
+              aria-label={t("common:DELETE")}
+              title={t("common:DELETE")}
               onClick={() => setIsDeleteOpen(true)}
             >
               <Trash2 className="h-4 w-4" />
-              Delete
+              {t("common:DELETE")}
             </Button>
           </div>
         </div>
@@ -627,7 +627,7 @@ export const ProxyDetails = () => {
           <div>
             <div className="sm:hidden">
               <Select value={activeTab} onValueChange={setActiveTab}>
-                <SelectTrigger aria-label="Proxy detail section">
+                <SelectTrigger aria-label={t("PROXY_DETAILS.PROXY_DETAIL_SECTION")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -654,18 +654,18 @@ export const ProxyDetails = () => {
             ) : (
               <>
                 <div className="grid gap-4 md:grid-cols-3">
-                  <MetricCard label="Recent calls" value={calls24h.toLocaleString()} />
-                  <MetricCard label="Avg latency" value={`${averageLatency} ms`} />
-                  <MetricCard label="Error rate" value={`${errorRate}%`} danger={errorRateIsHigh} />
+                  <MetricCard label={t("PROXY_DETAILS.RECENT_CALLS")} value={calls24h.toLocaleString()} />
+                  <MetricCard label={t("PROXY_DETAILS.AVG_LATENCY")} value={`${averageLatency} ms`} />
+                  <MetricCard label={t("PROXY_DETAILS.ERROR_RATE")} value={`${errorRate}%`} danger={errorRateIsHigh} />
                 </div>
 
                 <Card className="rounded-xl">
                   <CardHeader>
-                    <h2 className="text-lg font-semibold">Configuration</h2>
+                    <h2 className="text-lg font-semibold">{t("PROXY_DETAILS.CONFIGURATION")}</h2>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="grid gap-4 lg:grid-cols-3">
-                      <ConfigurationStepCard eyebrow="Your client calls">
+                      <ConfigurationStepCard eyebrow={t("PROXY_DETAILS.YOUR_CLIENT_CALLS")}>
                         <div className="mb-3 flex flex-wrap gap-2">
                           <ProxyMethodChips methods={proxy.methods} />
                         </div>
@@ -673,36 +673,35 @@ export const ProxyDetails = () => {
                           {clientUrlFor("")}
                         </p>
                         <p className="mt-2 text-xs text-muted-foreground">
-                          {pluralize(proxy.routes.length || proxy.methods.length, "endpoint")} —
-                          listed below
+                          {t("PROXY_DETAILS.ENDPOINTS_LISTED_BELOW", { count: proxy.routes.length || proxy.methods.length })}
                         </p>
                       </ConfigurationStepCard>
-                      <ConfigurationStepCard eyebrow="Blocks adds" active>
+                      <ConfigurationStepCard eyebrow={t("PROXY_DETAILS.BLOCKS_ADDS")} active>
                         <p className="text-2xl font-bold leading-none">{addedCount}</p>
                         <p className="mt-3 text-sm text-primary">{addedSummary}</p>
                       </ConfigurationStepCard>
-                      <ConfigurationStepCard eyebrow="Forwards to">
+                      <ConfigurationStepCard eyebrow={t("PROXY_DETAILS.FORWARDS_TO")}>
                         <p className="break-all font-mono text-sm text-foreground">
                           {proxy.upstreamUrl}
                         </p>
                       </ConfigurationStepCard>
                     </div>
                     <KeyValueRows
-                      title="Connection headers"
+                      title={t("PROXY_DETAILS.CONNECTION_HEADERS")}
                       rows={proxy.headers}
-                      empty="No headers added. The credential usually goes here."
+                      empty={t("PROXY_DETAILS.NO_HEADERS_ADDED_THE")}
                     />
                     <KeyValueRows
-                      title="Connection query parameters"
+                      title={t("PROXY_DETAILS.CONNECTION_QUERY_PARAMETERS")}
                       rows={proxy.query}
-                      empty="No query parameters added."
+                      empty={t("PROXY_DETAILS.NO_QUERY_PARAMETERS_ADDED")}
                     />
                     <div data-testid="proxy-access-summary">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Who can call it
+                        {t("PROXY_DETAILS.WHO_CAN_CALL_IT")}
                       </p>
                       <p className="mt-1 text-sm font-medium">
-                        {proxy.access.kind === "public" ? "Public" : "Blocks token"}
+                        {proxy.access.kind === "public" ? t("PROXY_DETAILS.PUBLIC") : t("PROXY_DETAILS.BLOCKS_TOKEN")}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {describeProxyAccess(proxy.access)}
@@ -710,15 +709,15 @@ export const ProxyDetails = () => {
                     </div>
                     <div data-testid="proxy-resilience-summary">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        If the vendor is slow or down
+                        {t("PROXY_DETAILS.IF_THE_VENDOR_IS")}
                       </p>
                       <p className="mt-1 text-sm font-medium">
                         {describeResilience(proxy.resilience)}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {proxy.resilience
-                          ? "Endpoints use this unless they set their own."
-                          : "Not set for the proxy. Endpoints with their own settings use those; the rest wait up to 30 s and are never sent twice."}
+                          ? t("PROXY_DETAILS.ENDPOINTS_USE_THIS_UNLESS")
+                          : t("PROXY_DETAILS.NOT_SET_FOR_THE")}
                       </p>
                     </div>
                     <EndpointsSection proxy={proxy} clientUrlFor={clientUrlFor} />

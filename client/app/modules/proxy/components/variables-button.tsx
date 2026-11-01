@@ -1,5 +1,5 @@
 import { Variable } from "lucide-react";
-import { getRuntimeEnv, usePrefetchRedirect, useScopedPath } from "@seliseblocks/genesis-os";
+import { getRuntimeEnv, usePrefetchRedirect, useScopedPath, useT } from "@seliseblocks/genesis-os";
 import { Button } from "@/components/ui-kits/button/button";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ type Props = {
  * on once OS finishes login — i.e. `/app/<projectId>/secret-management/secret`.
  */
 export const VariablesButton = ({ className }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const scoped = useScopedPath();
 
   const { isFetching, isReady, redirect } = usePrefetchRedirect({
@@ -33,7 +34,7 @@ export const VariablesButton = ({ className }: Props) => {
       onClick={redirect}
     >
       <Variable className="h-4 w-4" />
-      {isFetching ? "Loading…" : "Variables"}
+      {isFetching ? t("VARIABLES_BUTTON.LOADING") : t("VARIABLES_BUTTON.VARIABLES")}
     </Button>
   );
 };

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useProjectStore } from "@seliseblocks/genesis-os";
+import { useProjectStore, useT, tStatic } from "@seliseblocks/genesis-os";
 import { Check, Copy, Loader2, Send } from "lucide-react";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
@@ -38,8 +38,6 @@ import { ProxyMethodBadge } from "./proxy-method-badge";
 import { ReadonlyConfigRows } from "./readonly-config-rows";
 
 const MB = 1024 * 1024;
-/** The gateway's size limits, shown before a call so nobody learns them from a 413 / 502. */
-const LIMITS_NOTE = `Limits: request body ${MAX_REQUEST_BODY_BYTES / MB} MB, response ${MAX_RESPONSE_BODY_BYTES / MB} MB.`;
 
 type Props = {
   proxy: Proxy;
@@ -84,6 +82,7 @@ const initialPrefill = (proxy: Proxy) => {
 
 /** "`a` is" / "`a`, `b` are" — the keys the proxy sets regardless of what is typed. */
 const OverrideNote = ({ keys, what }: { keys: string[]; what: string }) => {
+  const { t } = useT("logic.proxy.components");
   if (!keys.length) return null;
   const one = keys.length === 1;
   return (
@@ -94,35 +93,48 @@ const OverrideNote = ({ keys, what }: { keys: string[]; what: string }) => {
           <code className="font-mono">{key}</code>
         </span>
       ))}{" "}
-      {one ? "is" : "are"} set by the proxy — {one ? "its" : "their"} configured{" "}
-      {one ? "value is" : "values are"} sent regardless of what&apos;s typed in this {what}.
+      {one ? "is" : "are"} {t("PROXY_TEST_TAB.SET_BY_THE_PROXY")} {one ? "its" : "their"} configured{" "}
+      {one ? t("PROXY_TEST_TAB.VALUE_IS") : t("PROXY_TEST_TAB.VALUES_ARE")}{" "}
+      {t("PROXY_TEST_TAB.SENT_REGARDLESS_OF_WHAT", { what })}
     </p>
   );
 };
 
-const ResetLink = ({ onClick, label }: { onClick: () => void; label: string }) => (
-  <Button
-    type="button"
-    variant="link"
-    size="sm"
-    className="h-auto p-0 text-xs"
-    aria-label={label}
-    onClick={onClick}
-  >
-    Reset to config
-  </Button>
-);
+const ResetLink = ({ onClick, label }: { onClick: () => void; label: string }) => {
+  const { t } = useT("logic.proxy.components");
+  return (
+    <Button
+      type="button"
+      variant="link"
+      size="sm"
+      className="h-auto p-0 text-xs"
+      aria-label={label}
+      onClick={onClick}
+    >
+      {t("PROXY_TEST_TAB.RESET_TO_CONFIG")}
+    </Button>
+  );
+};
 
 /** Short badge for the response-filter outcome of a Test (SPEC 5.6). */
 const filterBadge = (note: string | null | undefined) => {
   switch (note) {
     case "Applied":
     case "EmptyResult":
-      return { label: "Filtered", variant: "success" as const };
+      return {
+        label: tStatic("logic.proxy.components", "PROXY_TEST_TAB.FILTERED"),
+        variant: "success" as const,
+      };
     case "WholePrimitive":
-      return { label: "Whole response", variant: "secondary" as const };
+      return {
+        label: tStatic("logic.proxy.components", "PROXY_TEST_TAB.WHOLE_RESPONSE"),
+        variant: "secondary" as const,
+      };
     case "Failed":
-      return { label: "Filter failed - 502", variant: "error" as const };
+      return {
+        label: tStatic("logic.proxy.components", "PROXY_TEST_TAB.FILTER_FAILED_502"),
+        variant: "error" as const,
+      };
     default:
       return null;
   }
@@ -143,6 +155,7 @@ const statusClass = (status: number) =>
  * fields exactly as it does for a live call.
  */
 export const ProxyTestTab = ({ proxy }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const selectedProject = useProjectStore().selectedProject;
   const { isCopying, copy } = useCopyToClipboard();
   const sendTest = useSendProxyTestRequest();
@@ -183,13 +196,15 @@ export const ProxyTestTab = ({ proxy }: Props) => {
     trimmedQuery ? `?${trimmedQuery}` : ""
   }`;
   const blockedReason = !proxy.enabled
-    ? "This proxy is paused - the gateway answers 404 until it is resumed."
+    ? t("PROXY_TEST_TAB.THIS_PROXY_IS_PAUSED")
     : !route
-      ? `No route is declared for ${method} on this proxy.`
+      ? t("PROXY_TEST_TAB.NO_ROUTE_IS_DECLARED", { method })
       : missingParams.length
-        ? `Fill in ${missingParams.map((name) => `{${name}}`).join(", ")} to send.`
+        ? t("PROXY_TEST_TAB.FILL_IN_TO_SEND", {
+            value: missingParams.map((name) => `{${name}}`).join(", "),
+          })
         : sendsBody && bodyBytes > MAX_REQUEST_BODY_BYTES
-          ? `The request body is over the ${MAX_REQUEST_BODY_BYTES / MB} MB limit - the gateway would answer 413.`
+          ? t("PROXY_TEST_TAB.THE_REQUEST_BODY_IS", { value: MAX_REQUEST_BODY_BYTES / MB })
           : null;
 
   const changeMethod = (next: ProxyMethod) => {
@@ -224,8 +239,8 @@ export const ProxyTestTab = ({ proxy }: Props) => {
   const copyResponse = (text: string) =>
     copy(
       text,
-      () => showSuccessToast({ description: "Response body copied to clipboard." }),
-      () => showErrorToast({ errors: "Could not copy the response body." }),
+      () => showSuccessToast({ description: t("PROXY_TEST_TAB.RESPONSE_BODY_COPIED_TO") }),
+      () => showErrorToast({ errors: t("PROXY_TEST_TAB.COULD_NOT_COPY_THE") }),
     );
 
   return (
@@ -234,9 +249,9 @@ export const ProxyTestTab = ({ proxy }: Props) => {
         <CardContent className="space-y-4 pt-6">
           <div className="grid gap-4 sm:grid-cols-[minmax(0,140px)_minmax(0,1fr)]">
             <div className="space-y-2">
-              <Label htmlFor="proxy-test-method">Method</Label>
+              <Label htmlFor="proxy-test-method">{t("PROXY_TEST_TAB.METHOD")}</Label>
               <Select value={method} onValueChange={(value) => changeMethod(value as ProxyMethod)}>
-                <SelectTrigger id="proxy-test-method" aria-label="Test method">
+                <SelectTrigger id="proxy-test-method" aria-label={t("PROXY_TEST_TAB.TEST_METHOD")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -249,10 +264,10 @@ export const ProxyTestTab = ({ proxy }: Props) => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="proxy-test-route">Route</Label>
+              <Label htmlFor="proxy-test-route">{t("PROXY_TEST_TAB.ROUTE")}</Label>
               {route ? (
                 <Select value={routeKey(route)} onValueChange={changeRoute}>
-                  <SelectTrigger id="proxy-test-route" aria-label="Test route">
+                  <SelectTrigger id="proxy-test-route" aria-label={t("PROXY_TEST_TAB.TEST_ROUTE")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -265,8 +280,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
                 </Select>
               ) : (
                 <p className="rounded-sm border border-dashed px-3 py-2 text-sm text-muted-foreground">
-                  No {method} route is declared on this proxy. Add one from Edit before testing this
-                  method.
+                  {t("PROXY_TEST_TAB.NO_ROUTE_IS_DECLARED_2", { method })}
                 </p>
               )}
             </div>
@@ -292,9 +306,9 @@ export const ProxyTestTab = ({ proxy }: Props) => {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="proxy-test-query">Query string</Label>
+              <Label htmlFor="proxy-test-query">{t("PROXY_TEST_TAB.QUERY_STRING")}</Label>
               <ResetLink
-                label="Reset query string to config"
+                label={t("PROXY_TEST_TAB.RESET_QUERY_STRING_TO")}
                 onClick={() => setQuery(buildPrefillQuery(effective.query))}
               />
             </div>
@@ -306,7 +320,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
               className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              Sent alongside the query parameters the proxy injects server-side.
+              {t("PROXY_TEST_TAB.SENT_ALONGSIDE_THE_QUERY")}
             </p>
             <OverrideNote keys={overriddenQuery} what="query string" />
           </div>
@@ -314,9 +328,9 @@ export const ProxyTestTab = ({ proxy }: Props) => {
           {sendsBody ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <Label htmlFor="proxy-test-body">Request body (JSON)</Label>
+                <Label htmlFor="proxy-test-body">{t("PROXY_TEST_TAB.REQUEST_BODY_JSON")}</Label>
                 <ResetLink
-                  label="Reset body to config"
+                  label={t("PROXY_TEST_TAB.RESET_BODY_TO_CONFIG")}
                   onClick={() => setBody(buildPrefillBody(effective.bodyMerge))}
                 />
               </div>
@@ -329,9 +343,11 @@ export const ProxyTestTab = ({ proxy }: Props) => {
               />
               {effective.bodyMerge.length ? (
                 <p className="text-xs text-muted-foreground">
-                  {effective.bodyMerge.length} configured field
-                  {effective.bodyMerge.length === 1 ? " is" : "s are"} merged into this body
-                  server-side.
+                  {t("PROXY_TEST_TAB.CONFIGURED_FIELD", { length: effective.bodyMerge.length })}
+                  {effective.bodyMerge.length === 1
+                    ? t("PROXY_TEST_TAB.IS")
+                    : t("PROXY_TEST_TAB.S_ARE")}{" "}
+                  {t("PROXY_TEST_TAB.MERGED_INTO_THIS_BODY")}
                 </p>
               ) : null}
               <OverrideNote keys={overriddenBody} what="body" />
@@ -339,14 +355,14 @@ export const ProxyTestTab = ({ proxy }: Props) => {
           ) : null}
 
           <div className="space-y-2">
-            <p className="text-sm font-medium">Headers the proxy adds</p>
+            <p className="text-sm font-medium">{t("PROXY_TEST_TAB.HEADERS_THE_PROXY_ADDS")}</p>
             <ReadonlyConfigRows
-              label="Headers the proxy adds"
+              label={t("PROXY_TEST_TAB.HEADERS_THE_PROXY_ADDS")}
               rows={effective.headers.map((row) => ({ ...row, tag: row.source }))}
-              empty="No headers are added on this endpoint."
+              empty={t("PROXY_TEST_TAB.NO_HEADERS_ARE_ADDED")}
             />
             <p className="text-xs text-muted-foreground">
-              Attached server-side on every call. Headers sent by the caller are not forwarded.
+              {t("PROXY_TEST_TAB.ATTACHED_SERVER_SIDE_ON")}
             </p>
           </div>
 
@@ -369,11 +385,14 @@ export const ProxyTestTab = ({ proxy }: Props) => {
               ) : (
                 <Send className="h-4 w-4" />
               )}
-              Send test request
+              {t("PROXY_TEST_TAB.SEND_TEST_REQUEST")}
             </Button>
             <span className="text-sm text-muted-foreground">
               {blockedReason ??
-                `Runs the same forwarding as live calls, without the caller and rate-limit checks; no request log row is written. ${LIMITS_NOTE}`}
+                t("PROXY_TEST_TAB.RUNS_THE_SAME_FORWARDING", {
+                  requestMb: MAX_REQUEST_BODY_BYTES / MB,
+                  responseMb: MAX_RESPONSE_BODY_BYTES / MB,
+                })}
             </span>
           </div>
         </CardContent>
@@ -394,9 +413,11 @@ export const ProxyTestTab = ({ proxy }: Props) => {
                   {filterBadge(response.responseFilterNote)!.label}
                 </Badge>
               ) : null}
-              <span className="text-xs text-muted-foreground">{response.latencyMs} ms</span>
               <span className="text-xs text-muted-foreground">
-                {response.responseBodyBytes} bytes
+                {t("PROXY_TEST_TAB.MS", { latencyMs: response.latencyMs })}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {t("PROXY_TEST_TAB.BYTES", { responseBodyBytes: response.responseBodyBytes })}
               </span>
               <Button
                 type="button"
@@ -411,13 +432,13 @@ export const ProxyTestTab = ({ proxy }: Props) => {
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}
-                Copy response
+                {t("PROXY_TEST_TAB.COPY_RESPONSE")}
               </Button>
             </div>
             <p className="break-all text-sm text-muted-foreground">{response.meta}</p>
             <pre className="max-h-96 overflow-auto rounded-sm bg-muted/30 p-3 text-xs">
               {formatProxyBody(response.responseBody, response.contentType) ||
-                "(empty response body)"}
+                t("PROXY_TEST_TAB.EMPTY_RESPONSE_BODY")}
             </pre>
           </CardContent>
         </Card>

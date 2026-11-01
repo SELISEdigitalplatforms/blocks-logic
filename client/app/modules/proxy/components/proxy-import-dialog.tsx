@@ -25,6 +25,8 @@ import {
   ImportSteps,
   ImportValuePair,
 } from "./proxy-import-parts";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
+import { renderRichText } from "@/lib/rich-text";
 
 type Choice = "mine" | "incoming";
 
@@ -38,10 +40,18 @@ type Props = {
 const VERSION_CONFLICT = "PROXY_VERSION_CONFLICT";
 
 const STATUS_TEXT: Record<ProxyImportResult["status"], string> = {
-  new: "Not in this environment yet. Importing creates it with the same id and address.",
-  same: "This environment already has exactly this proxy. There is nothing to import.",
-  changed: "This proxy is already here and some fields differ. Choose what to keep.",
-  blocked: "This file cannot be imported here.",
+  get new() {
+    return tStatic("logic.proxy.components", "PROXY_IMPORT_DIALOG.NOT_IN_THIS_ENVIRONMENT");
+  },
+  get same() {
+    return tStatic("logic.proxy.components", "PROXY_IMPORT_DIALOG.THIS_ENVIRONMENT_ALREADY_HAS");
+  },
+  get changed() {
+    return tStatic("logic.proxy.components", "PROXY_IMPORT_DIALOG.THIS_PROXY_IS_ALREADY");
+  },
+  get blocked() {
+    return tStatic("logic.proxy.components", "PROXY_IMPORT_DIALOG.THIS_FILE_CANNOT_BE");
+  },
 };
 
 type Done = { itemId: string; applied: boolean; status: ProxyImportResult["status"] };
@@ -51,6 +61,7 @@ type Done = { itemId: string; applied: boolean; status: ProxyImportResult["statu
  * the server checks everything again, so what the dialog shows is advice, never the authority.
  */
 export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const inputRef = useRef<HTMLInputElement>(null);
   // Bumped on every pick and every reset: an answer that arrives for an older file is dropped.
   const ticket = useRef(0);
@@ -106,7 +117,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
     const chosen = files[0];
     if (!chosen) return;
     if (files.length > 1) {
-      setReadError("Choose one file at a time.");
+      setReadError(t("PROXY_IMPORT_DIALOG.CHOOSE_ONE_FILE_AT"));
       return;
     }
     // The cheap checks run before the file is read, so a wrong file never costs a read.
@@ -157,10 +168,10 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
       const written = response.result;
       showSuccessToast({
         description: !written.applied
-          ? "Nothing to change. The proxy already matches."
+          ? t("PROXY_IMPORT_DIALOG.NOTHING_TO_CHANGE_THE")
           : status === "new"
-            ? "Proxy imported."
-            : "Proxy updated from the file.",
+            ? t("PROXY_IMPORT_DIALOG.PROXY_IMPORTED")
+            : t("PROXY_IMPORT_DIALOG.PROXY_UPDATED_FROM_THE"),
       });
       setDone({ itemId: written.itemId, applied: !!written.applied, status });
       return;
@@ -169,7 +180,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
     if (response.code === VERSION_CONFLICT) {
       // Someone saved meanwhile: show the fresh difference instead of applying old choices to it.
       showErrorToast({
-        errors: "This proxy changed while you were looking. Check the new preview and apply again.",
+        errors: t("PROXY_IMPORT_DIALOG.THIS_PROXY_CHANGED_WHILE"),
       });
       await runPreview(file);
       return;
@@ -190,11 +201,8 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <DialogContent className="max-h-[90vh] w-[min(96vw,1100px)] max-w-none overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Import proxy</DialogTitle>
-          <DialogDescription>
-            Choose a proxy export file (.json) from another environment. You see what will change
-            before anything is saved.
-          </DialogDescription>
+          <DialogTitle>{t("PROXY_IMPORT_DIALOG.IMPORT_PROXY")}</DialogTitle>
+          <DialogDescription>{t("PROXY_IMPORT_DIALOG.CHOOSE_A_PROXY_EXPORT")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
@@ -205,7 +213,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
             type="file"
             accept=".json,application/json"
             className="hidden"
-            aria-label="Proxy file"
+            aria-label={t("PROXY_IMPORT_DIALOG.PROXY_FILE")}
             onChange={(event) => {
               void pick([...(event.target.files ?? [])]);
               event.target.value = "";
@@ -214,7 +222,6 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
 
           {!picked && !done ? (
             <ImportDropZone
-              noun="proxy"
               disabled={busy}
               onBrowse={() => inputRef.current?.click()}
               onDropFiles={(files) => void pick(files)}
@@ -276,7 +283,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription className="text-xs">
-                    {result.reason ?? "This file cannot be imported here."}
+                    {result.reason ?? t("PROXY_IMPORT_DIALOG.THIS_FILE_CANNOT_BE")}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -285,8 +292,9 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
                 <Alert>
                   <Info className="h-4 w-4" />
                   <AlertDescription className="text-xs">
-                    A proxy with this id was deleted here before. Its change history is kept, and
-                    the import continues it from version {result.currentVersion}.
+                    {t("PROXY_IMPORT_DIALOG.A_PROXY_WITH_THIS", {
+                      currentVersion: result.currentVersion ?? "",
+                    })}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -301,16 +309,18 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
                 <Alert>
                   <Info className="h-4 w-4" />
                   <AlertDescription className="text-xs">
-                    The file hides{" "}
-                    {result.maskedValues.length === 1
-                      ? "one value"
-                      : `${result.maskedValues.length} values`}{" "}
-                    as <span className="font-mono">***</span> (
-                    <span className="font-mono">{result.maskedValues.join(", ")}</span>). A value
-                    this environment already has is kept. Otherwise{" "}
-                    <span className="font-mono">***</span> is saved — set the real value after the
-                    import, ideally as a <span className="font-mono">{"{{$VAR.name}}"}</span>{" "}
-                    secret.
+                    {renderRichText(
+                      t("PROXY_IMPORT_DIALOG.FILE_HIDES_VALUES", {
+                        count: result.maskedValues.length,
+                        names: result.maskedValues.join(", "),
+                      }),
+                      [
+                        (text) => <span className="font-mono">{text}</span>,
+                        (text) => <span className="font-mono">{text}</span>,
+                        (text) => <span className="font-mono">{text}</span>,
+                        (text) => <span className="font-mono">{text}</span>,
+                      ],
+                    )}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -319,20 +329,27 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm text-medium-emphasis" aria-live="polite">
-                      {takeCount} of {changes.length} changes will be taken
+                      {t("PROXY_IMPORT_DIALOG.OF_CHANGES_WILL_BE", {
+                        takeCount,
+                        length: changes.length,
+                      })}
                       {result.currentVersion
-                        ? ` (this proxy is at version ${result.currentVersion} here)`
+                        ? t("PROXY_IMPORT_DIALOG.THIS_PROXY_IS_AT", {
+                            currentVersion: result.currentVersion,
+                          })
                         : ""}
                     </span>
                     <Button size="xs" variant="ghost" onClick={() => setAll("incoming")}>
-                      Take all incoming
+                      {t("PROXY_IMPORT_DIALOG.TAKE_ALL_INCOMING")}
                     </Button>
                     <Button size="xs" variant="ghost" onClick={() => setAll("mine")}>
-                      Keep all mine
+                      {t("PROXY_IMPORT_DIALOG.KEEP_ALL_MINE")}
                     </Button>
                     {result.mineJson && result.incomingJson ? (
                       <Button size="xs" variant="ghost" onClick={() => setShowJson((v) => !v)}>
-                        {showJson ? "Hide JSON" : "Compare JSON"}
+                        {showJson
+                          ? t("PROXY_IMPORT_DIALOG.HIDE_JSON")
+                          : t("PROXY_IMPORT_DIALOG.COMPARE_JSON")}
                       </Button>
                     ) : null}
                   </div>
@@ -368,8 +385,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
                         }}
                       />
                       <p className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
-                        Left: mine (this environment). Right: incoming (the file). Hidden values
-                        show as ***.
+                        {t("PROXY_IMPORT_DIALOG.LEFT_MINE_THIS_ENVIRONMENT")}
                       </p>
                     </div>
                   ) : null}
@@ -391,10 +407,10 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
                 <CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true" />
                 <span className="text-sm font-semibold">
                   {!done.applied
-                    ? `"${result.name}" already matches the file`
+                    ? t("PROXY_IMPORT_DIALOG.ALREADY_MATCHES_THE_FILE", { name: result.name })
                     : done.status === "new"
-                      ? `Imported "${result.name}"`
-                      : `Updated "${result.name}"`}
+                      ? t("PROXY_IMPORT_DIALOG.IMPORTED", { name: result.name })
+                      : t("PROXY_IMPORT_DIALOG.UPDATED", { name: result.name })}
                 </span>
               </div>
               <ImportSecretChecklist
@@ -410,7 +426,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
           {done ? (
             <>
               <Button type="button" variant="outline" onClick={close}>
-                Close
+                {t("common:CLOSE")}
               </Button>
               <Button
                 type="button"
@@ -420,21 +436,21 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
                   onImported?.(id);
                 }}
               >
-                Open proxy
+                {t("PROXY_IMPORT_DIALOG.OPEN_PROXY")}
               </Button>
             </>
           ) : (
             <>
               <Button type="button" variant="outline" onClick={close}>
-                {result?.status === "same" ? "Close" : "Cancel"}
+                {result?.status === "same" ? t("common:CLOSE") : t("common:CANCEL")}
               </Button>
               <Button type="button" disabled={!canApply || busy} onClick={confirm}>
                 {apply.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {result?.status === "changed"
                   ? takeCount
                     ? `Apply ${takeCount} ${takeCount === 1 ? "change" : "changes"}`
-                    : "Nothing to apply"
-                  : "Import"}
+                    : t("PROXY_IMPORT_DIALOG.NOTHING_TO_APPLY")
+                  : t("PROXY_IMPORT_DIALOG.IMPORT")}
               </Button>
             </>
           )}

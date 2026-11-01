@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
+import { useProjectStore, useScopedPath, useT } from "@seliseblocks/genesis-os";
 import {
   AlertTriangle,
   ArrowRightFromLine,
@@ -78,6 +78,7 @@ export const ProxyList = ({
   isFiltered,
   rowCount = SKELETON_ROWS,
 }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const navigate = useNavigate();
   const selectedProject = useProjectStore().selectedProject;
   const scoped = useScopedPath();
@@ -87,8 +88,11 @@ export const ProxyList = ({
 
   const handleToggle = async (proxy: Proxy, enabled: boolean) => {
     const res = await toggleProxy.mutateAsync({ id: proxy.id, enabled });
-    if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Failed to update proxy" });
-    showSuccessToast({ description: enabled ? "Proxy enabled." : "Proxy paused." });
+    if (!res.isSuccess)
+      return showErrorToast({ errors: res.errors || t("PROXY_LIST.FAILED_TO_UPDATE_PROXY") });
+    showSuccessToast({
+      description: enabled ? t("PROXY_LIST.PROXY_ENABLED") : t("PROXY_LIST.PROXY_PAUSED"),
+    });
   };
 
   if (isLoading) {
@@ -105,7 +109,7 @@ export const ProxyList = ({
     if (isFiltered) {
       return (
         <p className="py-14 text-center text-sm text-medium-emphasis">
-          No proxies match this search.
+          {t("PROXY_LIST.NO_PROXIES_MATCH_THIS")}
         </p>
       );
     }
@@ -114,14 +118,15 @@ export const ProxyList = ({
         <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
           <ProxyIcon className="h-7 w-7" />
         </div>
-        <h4 className="mt-5 text-lg font-semibold text-high-emphasis">No proxies yet</h4>
+        <h4 className="mt-5 text-lg font-semibold text-high-emphasis">
+          {t("PROXY_LIST.NO_PROXIES_YET")}
+        </h4>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Create your first proxy configuration to keep client traffic stable while upstream
-          services stay behind a managed route.
+          {t("PROXY_LIST.CREATE_YOUR_FIRST_PROXY")}
         </p>
         <Button className="mt-6 gap-2" size="sm" onClick={() => navigate(scoped("proxy/new"))}>
           <Plus className="h-4 w-4" />
-          Add proxy
+          {t("PROXY_LIST.ADD_PROXY")}
         </Button>
       </div>
     );
@@ -133,25 +138,25 @@ export const ProxyList = ({
         <TableHeader className="[&_tr]:border-0">
           <TableRow className="border-0">
             <TableHead className={HEAD_CLASS}>
-              <div className="font-bold text-medium-emphasis">Name</div>
+              <div className="font-bold text-medium-emphasis">{t("common:NAME")}</div>
             </TableHead>
             <TableHead className={HEAD_CLASS}>
-              <div className="font-bold text-medium-emphasis">Client route</div>
+              <div className="font-bold text-medium-emphasis">{t("PROXY_LIST.CLIENT_ROUTE")}</div>
             </TableHead>
             <TableHead className={cn("w-[220px]", HEAD_CLASS)}>
-              <div className="font-bold text-medium-emphasis">Methods</div>
+              <div className="font-bold text-medium-emphasis">{t("PROXY_LIST.METHODS")}</div>
             </TableHead>
             <TableHead className={HEAD_CLASS}>
-              <div className="font-bold text-medium-emphasis">Upstream</div>
+              <div className="font-bold text-medium-emphasis">{t("PROXY_LIST.UPSTREAM")}</div>
             </TableHead>
             <TableHead className={HEAD_CLASS}>
-              <div className="font-bold text-medium-emphasis">Traffic</div>
+              <div className="font-bold text-medium-emphasis">{t("PROXY_LIST.TRAFFIC")}</div>
             </TableHead>
             <TableHead className={cn("w-[120px]", HEAD_CLASS)}>
-              <div className="font-bold text-medium-emphasis">Active</div>
+              <div className="font-bold text-medium-emphasis">{t("PROXY_LIST.ACTIVE")}</div>
             </TableHead>
             <TableHead className={cn("w-[80px]", HEAD_CLASS)}>
-              <span className="sr-only">Row actions</span>
+              <span className="sr-only">{t("PROXY_LIST.ROW_ACTIONS")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -167,10 +172,10 @@ export const ProxyList = ({
                 {proxy.hasUnboundSecrets ? (
                   <span
                     className="mt-1 inline-flex items-center gap-1 rounded border border-amber-300/60 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
-                    title="A secret this proxy uses is not linked yet. Open the proxy to see which."
+                    title={t("PROXY_LIST.A_SECRET_THIS_PROXY")}
                   >
                     <AlertTriangle aria-hidden="true" className="h-3 w-3" />
-                    Check secrets
+                    {t("PROXY_LIST.CHECK_SECRETS")}
                   </span>
                 ) : null}
               </TableCell>
@@ -189,7 +194,7 @@ export const ProxyList = ({
                       className="w-fit rounded border border-border bg-muted px-2 py-1 font-mono text-[11px] font-bold leading-none text-muted-foreground"
                       title={proxy.methods.slice(VISIBLE_METHOD_COUNT).join(", ")}
                     >
-                      +{proxy.methods.length - VISIBLE_METHOD_COUNT} more
+                      {t("PROXY_LIST.MORE", { value: proxy.methods.length - VISIBLE_METHOD_COUNT })}
                     </span>
                   ) : null}
                 </div>
@@ -204,7 +209,7 @@ export const ProxyList = ({
               </TableCell>
               <TableCell className={CELL_CLASS}>
                 <span className="whitespace-nowrap text-sm text-muted-foreground">
-                  {proxy.calls24h.toLocaleString()} recent calls
+                  {t("PROXY_LIST.RECENT_CALLS", { value: proxy.calls24h.toLocaleString() })}
                 </span>
               </TableCell>
               <TableCell className={cn("w-[120px]", CELL_CLASS)}>
@@ -213,7 +218,7 @@ export const ProxyList = ({
                   onClick={(event) => event.stopPropagation()}
                 >
                   <Switch
-                    aria-label={`${proxy.name} enabled`}
+                    aria-label={t("PROXY_LIST.ENABLED", { name: proxy.name })}
                     checked={proxy.enabled}
                     disabled={toggleProxy.isPending}
                     onCheckedChange={(checked) => handleToggle(proxy, checked)}
@@ -231,7 +236,7 @@ export const ProxyList = ({
                       <Button
                         variant="ghost"
                         className="h-5 w-5 p-0"
-                        aria-label={`${proxy.name} options`}
+                        aria-label={t("PROXY_LIST.OPTIONS", { name: proxy.name })}
                       >
                         <EllipsisVertical width={20} height={20} />
                       </Button>
@@ -242,14 +247,14 @@ export const ProxyList = ({
                         onClick={() => navigate(scoped(`proxy/${proxy.id}`))}
                       >
                         <ArrowRightFromLine className="mr-2 h-4 w-4" />
-                        <span>Open</span>
+                        <span>{t("PROXY_LIST.OPEN")}</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
                         onClick={() => navigate(scoped(`proxy/${proxy.id}/edit`))}
                       >
                         <Pen className="mr-2 h-4 w-4" />
-                        <span>Edit</span>
+                        <span>{t("common:EDIT")}</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
@@ -261,7 +266,9 @@ export const ProxyList = ({
                         ) : (
                           <Play className="mr-2 h-4 w-4" />
                         )}
-                        <span>{proxy.enabled ? "Disable" : "Enable"}</span>
+                        <span>
+                          {proxy.enabled ? t("PROXY_LIST.DISABLE") : t("PROXY_LIST.ENABLE")}
+                        </span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
@@ -269,14 +276,14 @@ export const ProxyList = ({
                         onClick={() => proxyExport.handleExport(proxy)}
                       >
                         <Download className="mr-2 h-4 w-4" />
-                        <span>Export</span>
+                        <span>{t("PROXY_LIST.EXPORT")}</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer text-destructive focus:text-destructive"
                         onClick={() => setProxyToDelete(proxy)}
                       >
                         <Trash className="mr-2 h-4 w-4" />
-                        <span>Delete</span>
+                        <span>{t("common:DELETE")}</span>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

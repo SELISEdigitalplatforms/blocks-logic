@@ -30,6 +30,7 @@ import {
   emptyAccessRule,
   validateProxyAccess,
 } from "../utils";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 type Props = {
   control: Control<ProxyFormValues>;
@@ -43,15 +44,14 @@ const KIND_OPTIONS: Array<{
 }> = [
   {
     value: "blocksToken",
-    title: "Blocks token",
-    description:
-      "The caller sends a Blocks token. Blocks checks its roles and permissions; the vendor never sees them.",
+    get title() { return tStatic("logic.proxy.components", "PROXY_ACCESS_CARD.BLOCKS_TOKEN"); },
+    get description() { return tStatic("logic.proxy.components", "PROXY_ACCESS_CARD.THE_CALLER_SENDS_A"); },
     icon: KeyRound,
   },
   {
     value: "public",
-    title: "Public",
-    description: "Anyone with the URL and your x-blocks-key can call it. No identity, no token-scoped work.",
+    get title() { return tStatic("logic.proxy.components", "PROXY_ACCESS_CARD.PUBLIC"); },
+    get description() { return tStatic("logic.proxy.components", "PROXY_ACCESS_CARD.ANYONE_WITH_THE_URL"); },
     icon: Globe,
   },
 ];
@@ -63,7 +63,7 @@ const KIND_OPTIONS: Array<{
  */
 export const AccessRulePicker = ({
   label,
-  noun,
+  kind,
   addLabel,
   rule,
   options,
@@ -72,7 +72,7 @@ export const AccessRulePicker = ({
   onChange,
 }: {
   label: string;
-  noun: string;
+  kind: "role" | "permission";
   addLabel: string;
   rule: ProxyAccessRule;
   options: AccessOption[];
@@ -81,8 +81,14 @@ export const AccessRulePicker = ({
   showValue?: boolean;
   onChange: (rule: ProxyAccessRule) => void;
 }) => {
+  const { t } = useT("logic.proxy.components");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const isRole = kind === "role";
+  const toggleAria = (mode: "all" | "any") => {
+    if (isRole) return mode === "all" ? t("PROXY_ACCESS_CARD.TOGGLE_ALL_ROLES") : t("PROXY_ACCESS_CARD.TOGGLE_ANY_ROLES");
+    return mode === "all" ? t("PROXY_ACCESS_CARD.TOGGLE_ALL_PERMISSIONS") : t("PROXY_ACCESS_CARD.TOGGLE_ANY_PERMISSIONS");
+  };
 
   const labelFor = useMemo(() => {
     const map = new Map(options.map((option) => [option.value, option.label]));
@@ -113,16 +119,16 @@ export const AccessRulePicker = ({
         </p>
         {rule.values.length > 1 ? (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <span>Caller needs</span>
+            <span>{t("PROXY_ACCESS_CARD.CALLER_NEEDS")}</span>
             <button
               type="button"
               className="rounded border px-1.5 py-0.5 font-medium text-foreground hover:bg-muted"
-              aria-label={`Caller needs ${rule.mode === "all" ? "all" : "any"} of these ${noun}s; click to toggle`}
+              aria-label={toggleAria(rule.mode === "all" ? "all" : "any")}
               onClick={() => onChange({ ...rule, mode: rule.mode === "all" ? "any" : "all" })}
             >
-              {rule.mode === "all" ? "all" : "any"}
+              {rule.mode === "all" ? t("PROXY_ACCESS_CARD.MODE_ALL") : t("PROXY_ACCESS_CARD.MODE_ANY")}
             </button>
-            <span>of these</span>
+            <span>{t("PROXY_ACCESS_CARD.OF_THESE")}</span>
           </div>
         ) : null}
       </div>
@@ -137,7 +143,7 @@ export const AccessRulePicker = ({
             <button
               type="button"
               className="rounded-full text-muted-foreground hover:text-foreground"
-              aria-label={`Remove ${noun} ${labelFor(value)}`}
+              aria-label={t(isRole ? "PROXY_ACCESS_CARD.REMOVE_ROLE" : "PROXY_ACCESS_CARD.REMOVE_PERMISSION", { value: labelFor(value) })}
               onClick={() => remove(value)}
             >
               <X className="h-3 w-3" />
@@ -159,7 +165,7 @@ export const AccessRulePicker = ({
           <PopoverContent className="w-72 p-0" align="start">
             <Command shouldFilter>
               <CommandInput
-                placeholder={`Search ${noun}s…`}
+                placeholder={t(isRole ? "PROXY_ACCESS_CARD.SEARCH_ROLES" : "PROXY_ACCESS_CARD.SEARCH_PERMISSIONS")}
                 value={query}
                 onValueChange={setQuery}
               />
@@ -167,11 +173,11 @@ export const AccessRulePicker = ({
                 {loading ? (
                   <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Loading {noun}s…
+                    {t(isRole ? "PROXY_ACCESS_CARD.LOADING_ROLES" : "PROXY_ACCESS_CARD.LOADING_PERMISSIONS")}
                   </div>
                 ) : (
                   <CommandEmpty className="px-3 py-3 text-xs text-muted-foreground">
-                    {trimmedQuery ? `No ${noun} matches "${trimmedQuery}".` : `No ${noun}s found.`}
+                    {trimmedQuery ? t(isRole ? "PROXY_ACCESS_CARD.NO_ROLE_MATCHES" : "PROXY_ACCESS_CARD.NO_PERMISSION_MATCHES", { trimmedQuery }) : t(isRole ? "PROXY_ACCESS_CARD.NO_ROLES_FOUND" : "PROXY_ACCESS_CARD.NO_PERMISSIONS_FOUND")}
                   </CommandEmpty>
                 )}
                 {queryIsNew ? (
@@ -181,7 +187,7 @@ export const AccessRulePicker = ({
                       onSelect={() => add(trimmedQuery)}
                     >
                       <Plus className="mr-2 h-3.5 w-3.5" />
-                      Use “{trimmedQuery}”
+                      {t("PROXY_ACCESS_CARD.USE", { trimmedQuery })}
                     </CommandItem>
                   </CommandGroup>
                 ) : null}
@@ -227,6 +233,7 @@ export const AccessRulePicker = ({
  * clears any chips, since the server refuses a public policy that still names roles or permissions.
  */
 export const ProxyAccessCard = ({ control }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const { field, fieldState } = useController({ control, name: "access" });
   const access: ProxyAccess = field.value ?? defaultProxyAccess();
   const update = (patch: Partial<ProxyAccess>) => field.onChange({ ...access, ...patch });
@@ -250,9 +257,9 @@ export const ProxyAccessCard = ({ control }: Props) => {
     <Card className="rounded-xl">
       <CardContent className="space-y-4 p-0">
         <div>
-          <p className="text-sm font-semibold">Who can call it</p>
+          <p className="text-sm font-semibold">{t("PROXY_ACCESS_CARD.WHO_CAN_CALL_IT")}</p>
           <p className="text-xs text-muted-foreground">
-            One setting for every endpoint of this proxy. Nothing is ever public by omission.
+            {t("PROXY_ACCESS_CARD.ONE_SETTING_FOR_EVERY")}
           </p>
         </div>
 
@@ -288,8 +295,8 @@ export const ProxyAccessCard = ({ control }: Props) => {
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm">
-                <span className="font-semibold">Restrict further</span>
-                <span className="text-muted-foreground"> — optional, both work together</span>
+                <span className="font-semibold">{t("PROXY_ACCESS_CARD.RESTRICT_FURTHER")}</span>
+                <span className="text-muted-foreground"> {t("PROXY_ACCESS_CARD.OPTIONAL_BOTH_WORK_TOGETHER")}</span>
               </p>
               <Tabs
                 value={access.combine}
@@ -298,7 +305,7 @@ export const ProxyAccessCard = ({ control }: Props) => {
               >
                 <TabsList
                   className="grid h-8 grid-cols-2 rounded-md bg-muted p-0.5"
-                  aria-label="How roles and permissions combine"
+                  aria-label={t("PROXY_ACCESS_CARD.HOW_ROLES_AND_PERMISSIONS")}
                 >
                   <TabsTrigger value="or" className="rounded px-3 text-xs">
                     OR
@@ -311,19 +318,19 @@ export const ProxyAccessCard = ({ control }: Props) => {
             </div>
 
             <AccessRulePicker
-              label="Roles"
-              noun="role"
-              addLabel="Add role"
+              label={t("PROXY_ACCESS_CARD.ROLES")}
+              kind="role"
+              addLabel={t("PROXY_ACCESS_CARD.ADD_ROLE")}
               rule={access.roles}
               options={rolesQuery.data ?? []}
               loading={rolesQuery.isLoading}
               onChange={(roles) => update({ roles })}
             />
             <AccessRulePicker
-              label="Permissions"
-              noun="permission"
+              label={t("PROXY_ACCESS_CARD.PERMISSIONS")}
+              kind="permission"
               showValue={false}
-              addLabel="Add permission"
+              addLabel={t("PROXY_ACCESS_CARD.ADD_PERMISSION")}
               rule={access.permissions}
               options={permissionsQuery.data ?? []}
               loading={permissionsQuery.isLoading}

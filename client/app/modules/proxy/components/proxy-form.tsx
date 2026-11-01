@@ -33,7 +33,7 @@ import { ProxyResilienceCard } from "./proxy-resilience-card";
 import { ProxyRateLimitCard } from "./proxy-rate-limit-card";
 import { ProxyFormHeader } from "./proxy-form-header";
 import { ProxyRoutesCard, blankRoute } from "./proxy-routes-card";
-import { useProjectStore } from "@seliseblocks/genesis-os";
+import { useProjectStore, useT } from "@seliseblocks/genesis-os";
 
 type Props = {
   mode: "create" | "edit";
@@ -64,6 +64,7 @@ export const ProxyForm = ({
   onSuccess,
   onCancel,
 }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const isEdit = mode === "edit";
   const createProxy = useCreateProxy();
   const updateProxy = useUpdateProxy();
@@ -175,15 +176,15 @@ export const ProxyForm = ({
         values: payload,
         expectedVersion: seededVersion.current,
       });
-      if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Failed to save proxy" });
-      showSuccessToast({ description: "Proxy updated successfully." });
+      if (!res.isSuccess) return showErrorToast({ errors: res.errors || t("PROXY_FORM.FAILED_TO_SAVE_PROXY") });
+      showSuccessToast({ description: t("PROXY_FORM.PROXY_UPDATED_SUCCESSFULLY") });
       onSuccess?.(proxy.id);
       return;
     }
 
     const res = await createProxy.mutateAsync(payload);
-    if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Failed to create proxy" });
-    showSuccessToast({ description: "Proxy created successfully." });
+    if (!res.isSuccess) return showErrorToast({ errors: res.errors || t("PROXY_FORM.FAILED_TO_CREATE_PROXY") });
+    showSuccessToast({ description: t("PROXY_FORM.PROXY_CREATED_SUCCESSFULLY") });
     onSuccess?.(res.itemId);
   };
 
@@ -207,9 +208,9 @@ export const ProxyForm = ({
         <Card className="rounded-xl !mt-0">
           <CardContent className="space-y-6 p-0">
             <div>
-              <p className="text-sm font-semibold">Connection</p>
+              <p className="text-sm font-semibold">{t("PROXY_FORM.CONNECTION")}</p>
               <p className="text-xs text-muted-foreground">
-                The vendor this proxy talks to, and what every request to it carries.
+                {t("PROXY_FORM.THE_VENDOR_THIS_PROXY")}
               </p>
             </div>
             <div className="grid gap-5 lg:grid-cols-[minmax(260px,0.8fr)_minmax(320px,1.2fr)]">
@@ -218,9 +219,9 @@ export const ProxyForm = ({
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name</FormLabel>
+                    <FormLabel>{t("common:NAME")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter name" {...field} />
+                      <Input placeholder={t("PROXY_FORM.ENTER_NAME")} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -231,7 +232,7 @@ export const ProxyForm = ({
                 name="upstreamUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Vendor base URL</FormLabel>
+                    <FormLabel>{t("PROXY_FORM.VENDOR_BASE_URL")}</FormLabel>
                     <FormControl>
                       <Input
                         type="text"
@@ -241,7 +242,7 @@ export const ProxyForm = ({
                       />
                     </FormControl>
                     <p className="text-xs text-muted-foreground">
-                      Endpoint paths below are appended to this.
+                      {t("PROXY_FORM.ENDPOINT_PATHS_BELOW_ARE")}
                     </p>
                     <FormMessage />
                   </FormItem>
@@ -251,13 +252,12 @@ export const ProxyForm = ({
             <KeyValueFieldArray
               control={form.control}
               name="credentials"
-              label="Sent with every request"
-              addLabel="Add"
+              label={t("PROXY_FORM.SENT_WITH_EVERY_REQUEST")}
+              addLabel={t("common:ADD")}
               sendAsColumn
               description={
                 <>
-                  The credential lives here, never in your client. Headers cover almost every
-                  vendor; choose a query parameter only when the vendor takes its key in the URL.
+                  {t("PROXY_FORM.THE_CREDENTIAL_LIVES_HERE")}
                 </>
               }
               {...variableProps}

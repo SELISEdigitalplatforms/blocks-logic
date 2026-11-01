@@ -20,6 +20,7 @@ import {
   startingRetry,
   startingTimeoutSeconds,
 } from "../utils";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 /** Errors keyed the way `resilienceIssues` paths read: `timeoutSeconds`, `retry.attempts`, … */
 export type ResilienceErrors = Record<string, string | undefined>;
@@ -43,9 +44,9 @@ const numberValue = (value: number) => (value === 0 ? "" : String(value));
 const toNumber = (raw: string) => (raw.trim() === "" ? 0 : Number.parseInt(raw, 10) || 0);
 
 const BACKOFF_LABELS: Array<{ value: ProxyBackoff; label: string; hint: string }> = [
-  { value: "exponential", label: "Back off", hint: "Double the wait each time." },
-  { value: "fixed", label: "Fixed wait", hint: "The same wait before every attempt." },
-  { value: "none", label: "Immediately", hint: "No wait between attempts." },
+  { value: "exponential", get label() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.BACK_OFF"); }, get hint() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.DOUBLE_THE_WAIT_EACH"); } },
+  { value: "fixed", get label() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.FIXED_WAIT"); }, get hint() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.THE_SAME_WAIT_BEFORE"); } },
+  { value: "none", get label() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.IMMEDIATELY"); }, get hint() { return tStatic("logic.proxy.components", "PROXY_RESILIENCE_FIELDS.NO_WAIT_BETWEEN_ATTEMPTS"); } },
 ];
 
 /**
@@ -95,6 +96,7 @@ const FieldError = ({ message }: { message?: string }) =>
  * saved as if it had been chosen.
  */
 export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, errors }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const limits = PROXY_RESILIENCE_LIMITS;
   const retry = value?.retry ?? null;
   const breaker = value?.breaker ?? null;
@@ -105,20 +107,20 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
   return (
     <div className="space-y-2">
       <Section
-        title="Timeout"
+        title={t("PROXY_RESILIENCE_FIELDS.TIMEOUT")}
         on={timeout !== null}
-        switchLabel={`Set a timeout for ${subject}`}
+        switchLabel={t("PROXY_RESILIENCE_FIELDS.SET_A_TIMEOUT_FOR", { subject })}
         onToggle={(on) => patch({ timeoutSeconds: on ? startingTimeoutSeconds : null })}
         summary={
           timeout === null
-            ? `Not set — each try stops after Blocks' own ${PROXY_PLATFORM_TIMEOUT_SECONDS}-second limit.`
-            : "Counts from the first try. Waits between retries are not counted."
+            ? t("PROXY_RESILIENCE_FIELDS.NOT_SET_EACH_TRY", { proxyPlatformTimeoutSeconds: PROXY_PLATFORM_TIMEOUT_SECONDS })
+            : t("PROXY_RESILIENCE_FIELDS.COUNTS_FROM_THE_FIRST")
         }
       >
         <div className="flex items-end gap-2">
           <div className="w-28">
             <Label htmlFor={`${idPrefix}-timeout`} className="text-[11px]">
-              Seconds
+              {t("PROXY_RESILIENCE_FIELDS.SECONDS")}
             </Label>
             <Input
               id={`${idPrefix}-timeout`}
@@ -131,21 +133,21 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
             />
           </div>
           <p className="pb-1.5 text-[11px] text-muted-foreground">
-            1–{limits.maxTimeoutSeconds}. Your client sees a 504 when it runs out.
+            {t("PROXY_RESILIENCE_FIELDS.N_1_YOUR_CLIENT_SEES", { maxTimeoutSeconds: limits.maxTimeoutSeconds })}
           </p>
         </div>
         <FieldError message={errors?.timeoutSeconds} />
       </Section>
 
       <Section
-        title="Retries"
+        title={t("PROXY_RESILIENCE_FIELDS.RETRIES")}
         on={retry !== null}
-        switchLabel={`Retry failed calls for ${subject}`}
+        switchLabel={t("PROXY_RESILIENCE_FIELDS.RETRY_FAILED_CALLS_FOR", { subject })}
         onToggle={(on) => patch({ retry: on ? startingRetry() : null })}
         summary={
           retry === null
-            ? "Off — a failed call is returned to your client as it came back."
-            : "Retried on 429, 502, 503 and 504, and when a call does not complete. Any other answer — a 4xx included — comes back as it is."
+            ? t("PROXY_RESILIENCE_FIELDS.OFF_A_FAILED_CALL")
+            : t("PROXY_RESILIENCE_FIELDS.RETRIED_ON_429_502")
         }
       >
         {retry ? (
@@ -153,7 +155,7 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-24">
                 <Label htmlFor={`${idPrefix}-attempts`} className="text-[11px]">
-                  Attempts
+                  {t("PROXY_RESILIENCE_FIELDS.ATTEMPTS")}
                 </Label>
                 <Input
                   id={`${idPrefix}-attempts`}
@@ -169,7 +171,7 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
               </div>
               <div className="w-40">
                 <Label htmlFor={`${idPrefix}-backoff`} className="text-[11px]">
-                  Between attempts
+                  {t("PROXY_RESILIENCE_FIELDS.BETWEEN_ATTEMPTS")}
                 </Label>
                 <Select
                   value={retry.backoff}
@@ -192,7 +194,7 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
               {retry.backoff === "none" ? null : (
                 <div className="w-24">
                   <Label htmlFor={`${idPrefix}-delay`} className="text-[11px]">
-                    First wait (s)
+                    {t("PROXY_RESILIENCE_FIELDS.FIRST_WAIT_S")}
                   </Label>
                   <Input
                     id={`${idPrefix}-delay`}
@@ -211,9 +213,7 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
               )}
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {BACKOFF_LABELS.find((option) => option.value === retry.backoff)?.hint} Attempts count
-              the first call. With a timeout set, all tries share it; the waits between them are
-              not counted.
+              {t("PROXY_RESILIENCE_FIELDS.ATTEMPTS_COUNT_THE_FIRST", { hint: BACKOFF_LABELS.find((option) => option.value === retry.backoff)?.hint ?? "" })}
             </p>
             <FieldError message={errors?.["retry.attempts"]} />
             <FieldError message={errors?.["retry.initialDelaySeconds"]} />
@@ -229,7 +229,7 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
             >
               <Checkbox
                 id={`${idPrefix}-idempotent`}
-                aria-label="Sending this request twice is safe"
+                aria-label={t("PROXY_RESILIENCE_FIELDS.SENDING_THIS_REQUEST_TWICE")}
                 className="mt-0.5"
                 checked={retry.idempotent}
                 onCheckedChange={(checked) =>
@@ -239,12 +239,10 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
               <span className="min-w-0">
                 <span className="flex items-center gap-1.5 text-[11px] font-medium">
                   <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-                  Sending this request twice is safe
+                  {t("PROXY_RESILIENCE_FIELDS.SENDING_THIS_REQUEST_TWICE")}
                 </span>
                 <span className="block text-[11px] text-muted-foreground">
-                  A retry sends the same request again, so the vendor may act on it twice. Reads are
-                  safe. A payment, an order or an email usually is not — unless the vendor dedupes it
-                  for you.
+                  {t("PROXY_RESILIENCE_FIELDS.A_RETRY_SENDS_THE")}
                 </span>
               </span>
             </label>
@@ -254,14 +252,14 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
       </Section>
 
       <Section
-        title="Circuit breaker"
+        title={t("PROXY_RESILIENCE_FIELDS.CIRCUIT_BREAKER")}
         on={breaker !== null}
-        switchLabel={`Pause calls to an unreachable vendor for ${subject}`}
+        switchLabel={t("PROXY_RESILIENCE_FIELDS.PAUSE_CALLS_TO_AN", { subject })}
         onToggle={(on) => patch({ breaker: on ? startingBreaker() : null })}
         summary={
           breaker === null
-            ? "Off — every call is attempted, however long the vendor has been unreachable."
-            : "While paused your client gets an immediate 503 instead of waiting."
+            ? t("PROXY_RESILIENCE_FIELDS.OFF_EVERY_CALL_IS")
+            : t("PROXY_RESILIENCE_FIELDS.WHILE_PAUSED_YOUR_CLIENT")
         }
       >
         {breaker ? (
@@ -269,7 +267,7 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-28">
                 <Label htmlFor={`${idPrefix}-threshold`} className="text-[11px]">
-                  Failures
+                  {t("PROXY_RESILIENCE_FIELDS.FAILURES")}
                 </Label>
                 <Input
                   id={`${idPrefix}-threshold`}
@@ -287,7 +285,7 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
               </div>
               <div className="w-28">
                 <Label htmlFor={`${idPrefix}-open`} className="text-[11px]">
-                  Pause for (s)
+                  {t("PROXY_RESILIENCE_FIELDS.PAUSE_FOR_S")}
                 </Label>
                 <Input
                   id={`${idPrefix}-open`}
@@ -303,12 +301,7 @@ export const ProxyResilienceFields = ({ value, onChange, idPrefix, subject, erro
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              After {breaker.failureThreshold || "…"} calls in a row the vendor did not answer — it
-              refused the connection, or ran out of time — calls to it stop for{" "}
-              {breaker.openSeconds || "…"} seconds. One is then let through to see whether it is
-              back. A vendor that answers is not a failure here, even when it answers with an error.
-              The count is per vendor host for this proxy, kept separately for public callers,
-              signed-in callers, workflows and tests.
+              {t("PROXY_RESILIENCE_FIELDS.AFTER")} {breaker.failureThreshold || "…"} {t("PROXY_RESILIENCE_FIELDS.CALLS_IN_A_ROW")}{breaker.openSeconds || "…"} {t("PROXY_RESILIENCE_FIELDS.SECONDS_ONE_IS_THEN")}
             </p>
             <FieldError message={errors?.["breaker.failureThreshold"]} />
             <FieldError message={errors?.["breaker.openSeconds"]} />

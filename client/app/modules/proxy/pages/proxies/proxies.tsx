@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT } from "@seliseblocks/genesis-os";
 import { FileUp, Loader2, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
@@ -13,6 +13,7 @@ import { VariablesButton } from "../../components/variables-button";
 import { ProxyImportDialog } from "../../components/proxy-import-dialog";
 
 export const Proxies = () => {
+  const { t } = useT("logic.proxy");
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { queryParams, setQueryParams } = useProxyFilterQueryParams();
@@ -46,10 +47,9 @@ export const Proxies = () => {
     <section className="flex flex-col gap-6 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">Proxy</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("PROXIES.PROXY")}</h1>
           <p className="mt-1 text-sm text-medium-emphasis">
-            Your client calls Blocks, Blocks adds the key and calls the third party. Your client
-            never sees the vendor URL or the key. Store keys as secrets.
+            {t("PROXIES.YOUR_CLIENT_CALLS_BLOCKS")}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -62,12 +62,12 @@ export const Proxies = () => {
             onClick={() => setIsImportOpen(true)}
           >
             <FileUp className="h-4 w-4" />
-            Import
+            {t("PROXIES.IMPORT")}
           </Button>
           {showCreateButton && (
             <Button size="sm" className="gap-1.5" onClick={() => navigate(scoped("proxy/new"))}>
               <Plus className="h-4 w-4" />
-              Add proxy
+              {t("PROXIES.ADD_PROXY")}
             </Button>
           )}
         </div>
@@ -76,13 +76,13 @@ export const Proxies = () => {
       {isError ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
-            <p className="text-sm font-semibold">Proxies could not be loaded</p>
+            <p className="text-sm font-semibold">{t("PROXIES.PROXIES_COULD_NOT_BE")}</p>
             <p className="max-w-md text-xs text-medium-emphasis">
-              The request failed before the list came back. Nothing has changed — try again.
+              {t("PROXIES.THE_REQUEST_FAILED_BEFORE")}
             </p>
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void refetch()}>
               <RotateCcw className="h-3.5 w-3.5" />
-              Retry
+              {t("common:RETRY")}
             </Button>
           </CardContent>
         </Card>

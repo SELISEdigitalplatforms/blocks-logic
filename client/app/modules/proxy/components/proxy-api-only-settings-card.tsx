@@ -3,6 +3,8 @@ import { type FieldPathValue, type UseFormReturn, useWatch } from "react-hook-fo
 import { Button } from "@/components/ui-kits/button/button";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { ProxyFormValues } from "../types";
+import { useT } from "@seliseblocks/genesis-os";
+import { renderRichText } from "@/lib/rich-text";
 
 type Props = {
   form: UseFormReturn<ProxyFormValues>;
@@ -29,17 +31,20 @@ const Row = ({
   title: string;
   children: ReactNode;
   onTurnOff: () => void;
-}) => (
-  <li className="flex flex-wrap items-start justify-between gap-4">
-    <div className="space-y-1">
-      <p className="text-sm font-medium">{title}</p>
-      <p className="text-xs text-muted-foreground">{children}</p>
-    </div>
-    <Button type="button" variant="outline" size="sm" aria-label={`Turn off: ${title}`} onClick={onTurnOff}>
-      Turn off
-    </Button>
-  </li>
-);
+}) => {
+  const { t } = useT("logic.proxy.components");
+  return (
+    <li className="flex flex-wrap items-start justify-between gap-4">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-xs text-muted-foreground">{children}</p>
+      </div>
+      <Button type="button" variant="outline" size="sm" aria-label={t("PROXY_API_ONLY_SETTINGS_CARD.TURN_OFF_2", { title })} onClick={onTurnOff}>
+        {t("PROXY_API_ONLY_SETTINGS_CARD.TURN_OFF")}
+      </Button>
+    </li>
+  );
+};
 
 /**
  * Proxy-wide settings the console does not edit — response filter, body merge and per-method overrides —
@@ -47,6 +52,7 @@ const Row = ({
  * the owner clear one on purpose. Values are not shown: a body-merge value may hold a credential.
  */
 export const ProxyApiOnlySettingsCard = ({ form }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const [responseMode, responseInclude, bodyMerge, methodConfigs] = useWatch({
     control: form.control,
     name: ["responseMode", "responseInclude", "bodyMerge", "methodConfigs"],
@@ -67,47 +73,39 @@ export const ProxyApiOnlySettingsCard = ({ form }: Props) => {
     <Card className="rounded-xl" data-testid="proxy-api-only-settings">
       <CardContent className="space-y-4 p-0">
         <div>
-          <p className="text-sm font-semibold">Proxy-wide settings from the CLI or API</p>
+          <p className="text-sm font-semibold">{t("PROXY_API_ONLY_SETTINGS_CARD.PROXY_WIDE_SETTINGS_FROM")}</p>
           <p className="text-xs text-muted-foreground">
-            These are kept when you save. They apply to every endpoint that does not set its own.
+            {t("PROXY_API_ONLY_SETTINGS_CARD.THESE_ARE_KEPT_WHEN")}
           </p>
         </div>
         <ul className="space-y-4">
           {filterOn ? (
             <Row
-              title="Proxy-wide response filter is on"
+              title={t("PROXY_API_ONLY_SETTINGS_CARD.PROXY_WIDE_RESPONSE_FILTER")}
               onTurnOff={() => {
                 clear("responseMode", "all");
                 clear("responseInclude", []);
               }}
             >
-              Endpoints without their own filter return only{" "}
-              {include.length ? (
-                <Codes items={include} />
-              ) : (
-                <>
-                  an empty object (<code>{"{}"}</code>)
-                </>
-              )}
-              . Vendor errors and non-JSON answers return 502.
+              {include.length
+                ? renderRichText(t("PROXY_API_ONLY_SETTINGS_CARD.RETURN_ONLY_FIELDS", { fields: include.join(", ") }), [(text: string) => <code>{text}</code>])
+                : renderRichText(t("PROXY_API_ONLY_SETTINGS_CARD.RETURN_EMPTY_OBJECT"), [(text: string) => <code>{text}</code>])}
             </Row>
           ) : null}
           {bodyKeys.length ? (
             <Row
-              title="Proxy-wide body fields are on"
+              title={t("PROXY_API_ONLY_SETTINGS_CARD.PROXY_WIDE_BODY_FIELDS")}
               onTurnOff={() => {
                 clear("bodyMerge", []);
                 clear("bodyMode", "passthrough");
               }}
             >
-              POST, PUT and PATCH calls on endpoints without their own body fields get{" "}
-              <Codes items={bodyKeys} /> added to the request body.
+              {t("PROXY_API_ONLY_SETTINGS_CARD.POST_PUT_AND_PATCH")}<Codes items={bodyKeys} /> {t("PROXY_API_ONLY_SETTINGS_CARD.ADDED_TO_THE_REQUEST")}
             </Row>
           ) : null}
           {overrides.length ? (
-            <Row title="Per-method overrides are on" onTurnOff={() => clear("methodConfigs", [])}>
-              <Codes items={overrides.map((entry) => entry.method)} /> calls use their own upstream,
-              headers or query.
+            <Row title={t("PROXY_API_ONLY_SETTINGS_CARD.PER_METHOD_OVERRIDES_ARE")} onTurnOff={() => clear("methodConfigs", [])}>
+              <Codes items={overrides.map((entry) => entry.method)} /> {t("PROXY_API_ONLY_SETTINGS_CARD.CALLS_USE_THEIR_OWN")}
             </Row>
           ) : null}
         </ul>
