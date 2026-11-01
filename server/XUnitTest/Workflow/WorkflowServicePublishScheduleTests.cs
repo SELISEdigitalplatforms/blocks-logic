@@ -33,7 +33,8 @@ namespace XUnitTest.Workflow
                 _workflowRepository.Object,
                 _workflowVersionRepository.Object,
                 _scheduleService.Object,
-                Mock.Of<ILogger<WorkflowService>>());
+                Mock.Of<ILogger<WorkflowService>>(),
+                Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>());
         }
 
         public void Dispose()

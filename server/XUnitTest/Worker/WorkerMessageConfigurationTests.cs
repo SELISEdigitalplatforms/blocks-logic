@@ -21,6 +21,8 @@ namespace XUnitTest.Worker
         [
             ("blocks_workflow_email_trigger_listener", 5, false),
             ("blocks_logic_workflow_data_trigger_listener", 10, false),
+            // Platform events Genesis forwards for the Blocks Event trigger (blocks-genesis-net#167); same prefetch as the data trigger.
+            ("blocks_logic_workflow_blocks_event_trigger_listener", 10, false),
             ("blocks_logic_workflow_scheduler_trigger_listener", 10, false),
             ("blocks_logic_workflow_import_listener", 5, false),
             ("blocks_email_listener", 5, false),
@@ -43,7 +45,7 @@ namespace XUnitTest.Worker
         public void The_full_RabbitMq_configuration_is_unchanged()
         {
             Shape(LogicConstants.GetMessageConfiguration(Rabbit)).Should().Equal(FullRabbitMq);
-            FullRabbitMq.Should().HaveCount(27);
+            FullRabbitMq.Should().HaveCount(28);
         }
 
         [Fact]
@@ -56,6 +58,7 @@ namespace XUnitTest.Worker
                 .. LogicConstants.AllNodeQueues,
                 "blocks_workflow_email_trigger_listener",
                 "blocks_logic_workflow_data_trigger_listener",
+                "blocks_logic_workflow_blocks_event_trigger_listener",
                 "blocks_logic_workflow_scheduler_trigger_listener",
                 "blocks_logic_workflow_import_listener",
                 "blocks_email_listener",
@@ -64,7 +67,7 @@ namespace XUnitTest.Worker
                 "blocks_notification_push_listener",
                 Registry,
             ]);
-            azure.Queues.Should().HaveCount(26);
+            azure.Queues.Should().HaveCount(27);
             azure.Topics.Should().Equal("blocks_migration_topic1");
             azure.QueuePrefetchCount.Should().Be(40);
             azure.MaxConcurrentCalls.Should().Be(40);
@@ -76,7 +79,7 @@ namespace XUnitTest.Worker
             var worker = Shape(LogicConstants.GetWorkerMessageConfiguration(Rabbit));
 
             worker.Should().Equal(FullRabbitMq.Where(s => s.Queue != Registry));
-            worker.Should().HaveCount(26);
+            worker.Should().HaveCount(27);
         }
 
         [Fact]
@@ -86,7 +89,7 @@ namespace XUnitTest.Worker
             var worker = LogicConstants.GetWorkerMessageConfiguration(Azure).AzureServiceBusConfiguration!;
 
             worker.Queues.Should().Equal(full.Queues.Where(q => q != Registry));
-            worker.Queues.Should().HaveCount(25);
+            worker.Queues.Should().HaveCount(26);
             worker.Topics.Should().Equal(full.Topics);
             worker.QueuePrefetchCount.Should().Be(40);
             worker.MaxConcurrentCalls.Should().Be(40);

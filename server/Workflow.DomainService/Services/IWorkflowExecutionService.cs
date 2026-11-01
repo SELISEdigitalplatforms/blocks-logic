@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Dtos;
 using Workflow.DomainService.Nodes.TriggerDataV1;
@@ -27,6 +28,12 @@ namespace Workflow.DomainService.Services
         Task<WorkflowExecutionGetResponseDto> LastSuccessfullExecutionAsync(string tenantId, LastSuccessfullExecutionRequestDto dto);
         Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent);
         Task DataTriggerStartAsync(DataChangeEvent dataEvent);
+        /// <summary>
+        /// Creates an execution of <paramref name="workflow"/> started by <paramref name="triggerNode"/> with
+        /// <paramref name="triggerData"/> as its input, and queues the trigger node. Never throws: a failure is
+        /// logged (and recorded on the execution when it exists) and returns false.
+        /// </summary>
+        Task<bool> QueueTriggeredExecutionAsync(WorkflowEntity workflow, NodeEntity triggerNode, BsonArray triggerData, WorkflowExecutionMode executionMode);
         Task SchedulerTriggerStartAsync(SchedulerTriggerPayload payload);
         Task<StepExecuteResponseDto> StepExecuteAsync(string tenantId, StepExecuteRequestDto dto);
     }

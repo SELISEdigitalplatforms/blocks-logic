@@ -18,7 +18,8 @@ namespace XUnitTest.Workflow
         }
 
         /// <summary>Types added after SPEC6: they start at v2 and have no v1.</summary>
-        private static bool IsV2Only(INodeExecutor e) => e.NodeType is "switch" or "splitOut" or "merge" or "notification";
+        private static bool IsV2Only(INodeExecutor e) =>
+            e.NodeType is "switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit" or "notification";
 
         /// <summary>The 13 node types that existed before SPEC6; they must keep resolving exactly as before.</summary>
         private static List<INodeExecutor> ProductionExecutors() =>
@@ -99,6 +100,17 @@ namespace XUnitTest.Workflow
             {
                 registry.Resolve(executor.NodeType, "v1").Executor.Should().BeSameAs(executor);
             }
+        }
+
+        /// <summary>SPEC9 C10: a server built before Filter (no Filter executor) fails the step instead of running another node.</summary>
+        [Fact]
+        public void Filter_OnAServerWithoutTheFilterExecutor_HasNoExecutor()
+        {
+            var registry = new NodeExecutorRegistry(AllProductionExecutors().Where(e => e.NodeType != "filter"));
+
+            var act = () => registry.Resolve("filter", "v2");
+
+            act.Should().Throw<InvalidOperationException>().WithMessage("No executor for node type.");
         }
 
         [Fact]

@@ -29,6 +29,7 @@ import { SplitOutFieldsField } from "./split-out-fields-field";
 import { CommaListField } from "./comma-list-field";
 import { ReadonlyDetailsField } from "./readonly-details-field";
 import { SwitchRulesField } from "./switch-rules-field";
+import { FilterConditionsField } from "./filter-conditions-field";
 
 /**
  * Registry of all field components mapped by their field type.
@@ -57,6 +58,7 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   "key-type-value-pairs": KeyTypeValueField,
   conditions: ConditionsField,
   "switch-rules": SwitchRulesField,
+  "filter-conditions": FilterConditionsField,
   array: ArrayField,
   "expression-list": ExpressionListField,
   "path-list": PathListField,

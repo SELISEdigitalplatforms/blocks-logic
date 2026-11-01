@@ -56,7 +56,8 @@ ENV ASPNETCORE_ENVIRONMENT=Production \
 
 EXPOSE 5000
 
-RUN apk add --no-cache icu-libs
+# tzdata backs TimeZoneInfo (IANA ids); Alpine ships without it.
+RUN apk add --no-cache icu-libs tzdata
 
 COPY --from=publish /app/publish .
 RUN chown -R app:app /app

@@ -153,6 +153,50 @@ describe("NodeLibraryPanel Switch (SPEC6)", () => {
   });
 });
 
+describe("NodeLibraryPanel Filter (SPEC9)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const open = (): any => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<NodeLibraryPanel />, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (s: any) => {
+        store = s;
+        s.getState().openNodeLibraryPanel();
+      },
+    });
+    return store;
+  };
+
+  it("H1: lists Filter as a logic node with the Filter icon and its description", () => {
+    open();
+    const option = screen.getByText("Filter").closest("div.cursor-pointer") as HTMLElement;
+    expect(option.textContent).toContain("Keep only the items that match the conditions.");
+    expect(option.querySelector("svg.lucide-filter")?.getAttribute("class")).toContain("text-success");
+    expect(NodeDefinitions.find((d) => d.type === "filter")).toMatchObject({ category: "logic", version: "v2" });
+  });
+
+  it("H2/H3: creates a v2 Filter named Filter with one target, one source and its default parameters", () => {
+    const store = open();
+    fireEvent.click(screen.getByText("Filter"));
+    const created = Object.values(store.getState().nodesMap)[0] as Record<string, unknown>;
+    expect(created).toMatchObject({ name: "Filter", type: "filter", category: "logic", version: "v2" });
+    expect(created.handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [{ key: "target", label: "" }] });
+    expect(created.parameters).toEqual({ conditionType: "and", conditions: [{ left: "", operator: "equals", right: "", type: "string" }] });
+  });
+
+  it("C11: two new Filter nodes never share parameters", () => {
+    const store = open();
+    fireEvent.click(screen.getByText("Filter"));
+    act(() => store.getState().openNodeLibraryPanel());
+    fireEvent.click(screen.getByText("Filter"));
+    const [a, b] = Object.values(store.getState().nodesMap) as Array<Record<string, any>>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(b.name).toBe("Filter2");
+    expect(a.parameters).not.toBe(b.parameters);
+    expect(a.parameters.conditions).not.toBe(b.parameters.conditions);
+  });
+});
+
 describe("NodeLibraryPanel Split Out (SPEC2)", () => {
   it("H10: lists Split Out and creates a v2 node with one target and one source", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -168,6 +212,52 @@ describe("NodeLibraryPanel Split Out (SPEC2)", () => {
     const created = Object.values(store.getState().nodesMap)[0] as Record<string, unknown>;
     expect(created).toMatchObject({ type: "splitOut", category: "transform", version: "v2" });
     expect(created.handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [{ key: "target", label: "" }] });
+  });
+});
+
+describe("NodeLibraryPanel Limit (SPEC10)", () => {
+  it("H1/H2: lists Limit in Transform and creates a v2 node with one input and one output", () => {
+    const limit = NodeDefinitions.find((d) => d.id === "transform-limit-v2")!;
+    expect(limit).toMatchObject({
+      title: "Limit",
+      description: "Keep at most a set number of items, from the start or the end of the list.",
+      type: "limit",
+      category: "transform",
+      version: "v2",
+      defaultName: "Limit",
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<NodeLibraryPanel />, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (s: any) => {
+        store = s;
+        s.getState().openNodeLibraryPanel();
+      },
+    });
+    fireEvent.click(screen.getByText("Limit"));
+    const created = Object.values(store.getState().nodesMap)[0] as Record<string, unknown>;
+    expect(created).toMatchObject({ type: "limit", category: "transform", version: "v2", name: "Limit", parameters: { maxItems: 1, keep: "first" } });
+    expect(created.handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [{ key: "target", label: "" }] });
+  });
+
+  it("C14: two Limit nodes keep independent parameters", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<NodeLibraryPanel />, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (s: any) => {
+        store = s;
+        s.getState().openNodeLibraryPanel();
+      },
+    });
+    fireEvent.click(screen.getByText("Limit"));
+    act(() => store.getState().openNodeLibraryPanel());
+    fireEvent.click(screen.getByText("Limit"));
+    const [first, second] = Object.values(store.getState().nodesMap) as { id: string; parameters: Record<string, unknown> }[];
+    expect(second).toBeDefined();
+    store.getState().updateNodeParameters(first.id, { maxItems: 7, keep: "last" });
+    expect(store.getState().nodesMap[second.id].parameters).toEqual({ maxItems: 1, keep: "first" });
   });
 });
 

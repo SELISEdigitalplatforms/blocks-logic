@@ -18,6 +18,10 @@ namespace Workflow.DomainService.Repositories
         Task<List<WorkflowEntity>> GetWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);
 
         Task<List<WorkflowEntity>> GetPublishWorkflowsByDataCollectionAsync(string tenantId, string collectionName, string operation);
+        /// <summary>Published workflows whose published trigger nodes include a Blocks Event trigger for <paramref name="eventName"/>.</summary>
+        Task<List<WorkflowEntity>> GetPublishWorkflowsByBlocksEventAsync(string tenantId, string eventName);
+        /// <summary>How many published workflows <see cref="GetPublishWorkflowsByBlocksEventAsync"/> would return.</summary>
+        Task<long> CountPublishWorkflowsByBlocksEventAsync(string tenantId, string eventName);
 
         Task<long> GetWorkflowsCountAsync(string tenantId, string? search, bool? isPublished);
 

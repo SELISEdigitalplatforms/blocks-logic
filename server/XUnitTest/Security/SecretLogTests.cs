@@ -47,7 +47,7 @@ namespace XUnitTest.Security
                    .Returns(() => new HttpClient(new EchoHandler(HttpStatusCode.Unauthorized, body), disposeHandler: false));
             var logger = new CapturingLogger<ClientCredentialTokenService>();
             var sut = new ClientCredentialTokenService(logger, factory.Object, new ConfigurationBuilder().Build(),
-                Mock.Of<IClientCredentialRepository>());
+                Mock.Of<IClientCredentialRepository>(), XUnitTest.Links.ClientCredentialTokenServiceTests.SecretScopes());
 
             var token = await sut.GetTokenAsync(new ClientCredential { ItemId = "client-1", ClientSecret = Secret }, "tenant-1");
 
@@ -110,7 +110,7 @@ namespace XUnitTest.Security
             {
                 var logger = new CapturingLogger<WorkflowService>();
                 var sut = new WorkflowService(Mock.Of<IWorkflowRepository>(), Mock.Of<IWorkflowVersionRepository>(),
-                    Mock.Of<IScheduleService>(), logger);
+                    Mock.Of<IScheduleService>(), logger, Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>());
                 // The marker rides in a node field: the point is that no node content reaches the log at all.
                 var nodes = new List<NodeDto>
                 {

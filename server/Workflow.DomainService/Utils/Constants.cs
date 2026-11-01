@@ -46,6 +46,14 @@ namespace Workflow.DomainService.Utils
         }
         public const string EmailTriggerQueue = CommunicationConstants.EmailTriggerQueueName;
         public const string DataTriggerQueue = "blocks_logic_workflow_data_trigger_listener";
+        /// <summary>Platform events Genesis forwards for the Blocks Event trigger (blocks-genesis-net#167).</summary>
+        public const string BlocksEventTriggerQueue = BlocksEventTriggerConstants.QueueName;
+        /// <summary>Node type of the Blocks Event trigger, on the client and in <c>PublishedMeta.TriggerNodes</c>.</summary>
+        public const string BlocksEventNodeType = "blocksEvent";
+        /// <summary>The <c>Category</c> of every trigger node.</summary>
+        public const string TriggerCategory = "trigger";
+        /// <summary>The execution context key that holds the trigger's items.</summary>
+        public const string ExecutionInputKey = "Input";
         public const string SchedulerTriggerQueue = SchedulerConstants.WorkflowSchedulerTriggerQueue;
         public const string WorkflowImportQueue = "blocks_logic_workflow_import_listener";
         /// <summary>Fallback only, when WORKFLOW_NOTIFICATION_CONFIGURATION_NAME is not set; no environment creates it.</summary>
@@ -95,6 +103,7 @@ namespace Workflow.DomainService.Utils
                     // Genesis and made one-at-a-time per queue by NodeQueueLanes in the consumer.
                     ConsumerSubscriptions = [ConsumerSubscription.BindToQueue(EmailTriggerQueue),
                                              ConsumerSubscription.BindToQueue(DataTriggerQueue,10),
+                                             ConsumerSubscription.BindToQueue(BlocksEventTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(SchedulerTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(WorkflowImportQueue),
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
@@ -122,7 +131,7 @@ namespace Workflow.DomainService.Utils
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, FunctionEventQueueName, CommunicationConstants.MailStatusQueueName, NotificationQueues.Push, .. registry],
+                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, BlocksEventTriggerQueue, SchedulerTriggerQueue, WorkflowImportQueue, LogicMailQueueName, FunctionEventQueueName, CommunicationConstants.MailStatusQueueName, NotificationQueues.Push, .. registry],
                     Topics = [MigrationCompletionTopic],
                     QueuePrefetchCount = 40,
                     MaxConcurrentCalls = 40

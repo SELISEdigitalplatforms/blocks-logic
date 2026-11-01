@@ -25,6 +25,7 @@ namespace XUnitTest.Mail
                 "Caller@Test.com", [], "caller", "", "Caller", "token", "t1"));
             _repo.Setup(r => r.GetEmailAdressOfUsers(It.IsAny<IEnumerable<string>>())).ReturnsAsync([]);
             _repo.Setup(r => r.GetPhoneEmailAddressesOfUsers(It.IsAny<IEnumerable<string>>())).ReturnsAsync([]);
+            _repo.Setup(r => r.GetUserEmailAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync((string?)null);
             // Stop right after mapping: the test only needs what would be sent, not the sending.
             _validator.Setup(v => v.ValidateAsync(It.IsAny<MailToBeSent>(), It.IsAny<CancellationToken>()))
                 .Callback<MailToBeSent, CancellationToken>((m, _) => _mapped = m)
@@ -35,6 +36,15 @@ namespace XUnitTest.Mail
 
         private MailService Service() => new(_validator.Object, Mock.Of<IMessageClient>(), _repo.Object,
             Mock.Of<ISendMailService>(), NullLogger<MailService>.Instance);
+
+        // What a console caller really looks like: IAM access tokens carry no email claim.
+        private static void SignInWithoutEmailClaim(string tenantId, string userId, bool impersonated = false, string? originalTenantId = null)
+        {
+            BlocksContext.SetContext(BlocksContext.Create(tenantId: tenantId, roles: [], userId: userId, isAuthenticated: true,
+                requestUri: "/api/mail", organizationId: "default", expireOn: DateTime.UtcNow.AddMinutes(5), email: "",
+                permissions: [], userName: "", phoneNumber: "", displayName: "", oauthToken: "token",
+                originalTenantId: originalTenantId ?? tenantId, applicationDomain: "", impersonated: impersonated));
+        }
 
         [Theory]
         [InlineData("someone@else.com", null)]
@@ -58,6 +68,57 @@ namespace XUnitTest.Mail
 
             _mapped.Should().NotBeNull();
             _mapped!.IsTestMail.Should().BeTrue();
+            _repo.Verify(r => r.GetUserEmailAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task TestMail_WithAnIamToken_ReadsTheCallersAddressFromTheirUserRecord()
+        {
+            SignInWithoutEmailClaim("t1", "user-1");
+            _repo.Setup(r => r.GetUserEmailAsync("t1", "user-1")).ReturnsAsync("Me@App.com");
+
+            await Service().ProcessMailToAnyAsync(new SendMailToAny { IsTestMail = true, Purpose = "p", To = [" me@app.com "] });
+
+            _mapped.Should().NotBeNull();
+            _mapped!.IsTestMail.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task TestMail_WithAnIamToken_ToSomeoneElse_IsRefused()
+        {
+            SignInWithoutEmailClaim("t1", "user-1");
+            _repo.Setup(r => r.GetUserEmailAsync("t1", "user-1")).ReturnsAsync("me@app.com");
+
+            var response = await Service().ProcessMailToAnyAsync(new SendMailToAny
+            {
+                IsTestMail = true, Purpose = "p", To = ["me@app.com"], Cc = ["someone@else.com"]
+            });
+
+            response.Errors.Should().ContainKey("To");
+            _mapped.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task TestMail_Impersonated_ReadsTheCallerFromTheRootTenant()
+        {
+            SignInWithoutEmailClaim("project-1", "root-user", impersonated: true, originalTenantId: "root-1");
+            _repo.Setup(r => r.GetUserEmailAsync("root-1", "root-user")).ReturnsAsync("me@root.com");
+
+            await Service().ProcessMailToAnyAsync(new SendMailToAny { IsTestMail = true, Purpose = "p", To = ["me@root.com"] });
+
+            _mapped.Should().NotBeNull();
+            _repo.Verify(r => r.GetUserEmailAsync("project-1", It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task TestMail_WithAnIamToken_AndNoUserRecord_IsRefused()
+        {
+            SignInWithoutEmailClaim("t1", "gone-user");
+
+            var response = await Service().ProcessMailToAnyAsync(new SendMailToAny { IsTestMail = true, Purpose = "p", To = ["me@app.com"] });
+
+            response.Errors.Should().ContainKey("To");
+            _mapped.Should().BeNull();
         }
 
         [Fact]

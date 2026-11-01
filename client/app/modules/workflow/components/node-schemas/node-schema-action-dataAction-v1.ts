@@ -116,7 +116,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
               sortDescending: true,
               sortBy: "CreatedDate",
               keyword: "",
-              schemaType: "",
+              schemaType: 1,
             })
             .then((res) =>
               res.data.items.map((item) => ({

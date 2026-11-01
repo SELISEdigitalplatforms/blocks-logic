@@ -1,11 +1,16 @@
 using System.Net;
 using System.Text;
+using Blocks.Genesis;
+using Blocks.Secrets;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Links
 {
@@ -64,12 +69,24 @@ namespace XUnitTest.Links
             ClientSecret = "s3cr3t",
         };
 
+        /// <summary>A scope factory whose scopes serve <paramref name="secrets"/> as the scoped ISecretService.</summary>
+        internal static IServiceScopeFactory SecretScopes(Mock<ISecretService>? secrets = null)
+        {
+            var secretService = (secrets ?? new Mock<ISecretService>(MockBehavior.Strict)).Object;
+            var services = new ServiceCollection();
+            services.AddScoped(_ => secretService);
+            return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true })
+                .GetRequiredService<IServiceScopeFactory>();
+        }
+
         private static (ClientCredentialTokenService sut, StubHandler handler) Build(
             HttpStatusCode status = HttpStatusCode.OK,
             string body = """{"accessToken":"token-abc","expiresIn":3600}""",
             Exception? shouldThrow = null,
             string? endpoint = "https://iam.example.com/api/oidc/token",
-            ClientCredential? stored = null)
+            ClientCredential? stored = null,
+            Mock<ISecretService>? secrets = null,
+            ILogger<ClientCredentialTokenService>? logger = null)
         {
             var handler = new StubHandler(status, body, shouldThrow);
             var factory = new Mock<IHttpClientFactory>();
@@ -88,10 +105,96 @@ namespace XUnitTest.Links
             repository.Setup(r => r.GetClientCredentialAsync("project-1", "client-1")).ReturnsAsync(stored);
 
             return (new ClientCredentialTokenService(
-                NullLogger<ClientCredentialTokenService>.Instance,
+                logger ?? NullLogger<ClientCredentialTokenService>.Instance,
                 factory.Object,
                 configuration,
-                repository.Object), handler);
+                repository.Object,
+                SecretScopes(secrets)), handler);
+        }
+
+        // ---------- secret in Blocks Secrets (blocks-iam#651) ----------
+
+        private const string Reference = "cs-ref-1";
+
+        private static ClientCredential Referenced(string plaintext = "") =>
+            new() { ItemId = "client-1", ClientSecret = plaintext, ClientSecretReference = Reference, IsActive = true };
+
+        [Fact]
+        public async Task By_client_id_a_referenced_secret_is_read_from_the_store_in_the_credentials_tenant()
+        {
+            var secrets = new Mock<ISecretService>(MockBehavior.Strict);
+            BlocksContext? seen = null;
+            secrets.Setup(s => s.GetValueAsync(Reference, It.IsAny<CancellationToken>()))
+                .Callback(() => seen = BlocksContext.GetContext())
+                .ReturnsAsync("vault-s3cr3t");
+            var (sut, handler) = Build(stored: Referenced(), secrets: secrets);
+
+            var token = await sut.GetTokenAsync("client-1", "project-1");
+
+            token.Should().Be("token-abc");
+            handler.RequestBody.Should().Contain("client_secret=vault-s3cr3t");
+            seen!.TenantId.Should().Be("project-1");
+            seen.IsAuthenticated.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task A_referenced_secret_wins_over_a_plaintext_left_in_the_document()
+        {
+            var secrets = new Mock<ISecretService>(MockBehavior.Strict);
+            secrets.Setup(s => s.GetValueAsync(Reference, It.IsAny<CancellationToken>())).ReturnsAsync("vault-s3cr3t");
+            var (sut, handler) = Build(stored: Referenced(plaintext: "stale-plaintext"), secrets: secrets);
+
+            await sut.GetTokenAsync("client-1", "project-1");
+
+            handler.RequestBody.Should().Contain("client_secret=vault-s3cr3t").And.NotContain("stale-plaintext");
+        }
+
+        public static TheoryData<Exception> StoreFailures() => new()
+        {
+            new SecretVaultException("vault down for " + Reference, "get", Reference),
+            new SecretNotFoundException(Reference),
+            new SecretStateException("locked", "read"),
+        };
+
+        [Theory]
+        [MemberData(nameof(StoreFailures))]
+        public async Task A_failed_store_read_yields_null_calls_nothing_and_never_uses_the_plaintext(Exception failure)
+        {
+            var secrets = new Mock<ISecretService>(MockBehavior.Strict);
+            secrets.Setup(s => s.GetValueAsync(Reference, It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+            var logger = new CapturingLogger<ClientCredentialTokenService>();
+            var (sut, handler) = Build(stored: Referenced(plaintext: "stale-plaintext"), secrets: secrets, logger: logger);
+
+            var token = await sut.GetTokenAsync("client-1", "project-1");
+
+            token.Should().BeNull();
+            handler.Request.Should().BeNull();
+            logger.All.Should().Contain(failure.GetType().Name).And.NotContain(Reference).And.NotContain("stale-plaintext");
+        }
+
+        [Fact]
+        public async Task A_legacy_plaintext_credential_makes_no_store_call()
+        {
+            var secrets = new Mock<ISecretService>(MockBehavior.Strict);
+            var (sut, handler) = Build(stored: new ClientCredential { ItemId = "client-1", ClientSecret = "s3cr3t", IsActive = true }, secrets: secrets);
+
+            await sut.GetTokenAsync("client-1", "project-1");
+
+            handler.RequestBody.Should().Contain("client_secret=s3cr3t");
+            secrets.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task A_referenced_secret_without_a_tenant_yields_null_and_reads_nothing()
+        {
+            var secrets = new Mock<ISecretService>(MockBehavior.Strict);
+            var (sut, handler) = Build(secrets: secrets);
+
+            var token = await sut.GetTokenAsync(Referenced(), " ");
+
+            token.Should().BeNull();
+            handler.Request.Should().BeNull();
+            secrets.VerifyNoOtherCalls();
         }
 
         [Fact]
