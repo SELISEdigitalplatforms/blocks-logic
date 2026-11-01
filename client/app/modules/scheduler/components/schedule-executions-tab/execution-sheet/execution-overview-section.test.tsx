@@ -14,8 +14,8 @@ describe("ExecutionOverviewSection", () => {
     expect(screen.getByText("340 ms")).toBeTruthy();
     expect(screen.getByText("Nightly sync")).toBeTruthy();
     expect(screen.queryByText(/now:/)).toBeNull();
-    expect(screen.getByText("e1")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Copy execution id" })).toBeTruthy();
+    expect(screen.queryByText("Execution id")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy execution id" })).toBeNull();
   });
 
   it("flags a rename since the run", () => {

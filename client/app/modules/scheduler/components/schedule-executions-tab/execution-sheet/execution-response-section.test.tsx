@@ -9,9 +9,9 @@ vi.mock("@monaco-editor/react", () => ({
 import { ExecutionResponseSection } from "./execution-response-section";
 
 describe("ExecutionResponseSection", () => {
-  it("shows the target's body", () => {
+  it("shows the target's body, beautified", () => {
     renderWithProviders(<ExecutionResponseSection body='{"ok":true}' statusLabel="HTTP 200" />);
-    expect((screen.getByTestId("viewer") as HTMLTextAreaElement).value).toBe('{"ok":true}');
+    expect((screen.getByTestId("viewer") as HTMLTextAreaElement).value).toBe('{\n  "ok": true\n}');
     expect(screen.queryByText(/Recorded by the scheduler/)).toBeNull();
     expect(screen.queryByText(/truncated/)).toBeNull();
   });

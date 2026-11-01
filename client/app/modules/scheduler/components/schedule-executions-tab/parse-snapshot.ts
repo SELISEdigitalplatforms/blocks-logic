@@ -20,7 +20,7 @@ export interface ScheduleSnapshot {
 export type ParsedSnapshot =
   | { kind: "none" }
   | { kind: "invalid"; raw: string }
-  | { kind: "ok"; raw: string; pretty: string; snapshot: ScheduleSnapshot };
+  | { kind: "ok"; raw: string; snapshot: ScheduleSnapshot };
 
 type JsonObject = Record<string, unknown>;
 
@@ -67,5 +67,5 @@ export function parseSnapshot(raw: string | null | undefined): ParsedSnapshot {
   }
 
   if (!isObject(data)) return { kind: "invalid", raw };
-  return { kind: "ok", raw, pretty: JSON.stringify(data, null, 2), snapshot: readSnapshot(data) };
+  return { kind: "ok", raw, snapshot: readSnapshot(data) };
 }

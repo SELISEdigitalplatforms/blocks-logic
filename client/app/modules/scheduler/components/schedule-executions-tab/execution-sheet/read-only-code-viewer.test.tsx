@@ -11,7 +11,7 @@ vi.mock("@monaco-editor/react", () => ({
 const theme = vi.hoisted(() => ({ resolvedTheme: "light" }));
 vi.mock("@seliseblocks/genesis-os/hooks", () => ({ useTheme: () => theme }));
 
-import { detectLanguage, ReadOnlyCodeViewer } from "./read-only-code-viewer";
+import { beautify, detectLanguage, ReadOnlyCodeViewer } from "./read-only-code-viewer";
 
 describe("detectLanguage", () => {
   it("is json only for text that parses", () => {
@@ -20,13 +20,25 @@ describe("detectLanguage", () => {
   });
 });
 
+describe("beautify", () => {
+  it("indents JSON and leaves anything else untouched", () => {
+    expect(beautify('{"a":{"b":1}}', "json")).toBe(JSON.stringify({ a: { b: 1 } }, null, 2));
+    expect(beautify('{"a":1}', "plaintext")).toBe('{"a":1}');
+    expect(beautify("{oops", "json")).toBe("{oops");
+  });
+});
+
 describe("ReadOnlyCodeViewer", () => {
-  it("shows JSON as json with a copy button", () => {
+  it("shows JSON beautified, with a hover-only copy button over the editor", () => {
     renderWithProviders(<ReadOnlyCodeViewer value='{"ok":true}' label="Response body" />);
-    const viewer = screen.getByTestId("viewer");
+    const viewer = screen.getByTestId("viewer") as HTMLTextAreaElement;
     expect(viewer.getAttribute("data-language")).toBe("json");
     expect(viewer.getAttribute("data-theme")).toBe("vs");
-    expect(screen.getByRole("button", { name: "Copy response body" })).toBeTruthy();
+    expect(viewer.value).toBe('{\n  "ok": true\n}');
+    const copy = screen.getByRole("button", { name: "Copy response body" });
+    expect(copy.className).toContain("absolute");
+    expect(copy.className).toContain("opacity-0");
+    expect(copy.className).toContain("group-hover:opacity-100");
   });
 
   it("shows HTML as plain text, never rendered", () => {
@@ -48,5 +60,6 @@ describe("ReadOnlyCodeViewer", () => {
   it("honours a forced language", () => {
     renderWithProviders(<ReadOnlyCodeViewer value='{"a":1}' label="Snapshot" language="plaintext" />);
     expect(screen.getByTestId("viewer").getAttribute("data-language")).toBe("plaintext");
+    expect((screen.getByTestId("viewer") as HTMLTextAreaElement).value).toBe('{"a":1}');
   });
 });

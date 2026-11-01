@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import Editor from "@monaco-editor/react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import { CopyIconButton } from "../copy-icon-button";
@@ -29,22 +30,36 @@ export function detectLanguage(value: string): "json" | "plaintext" {
   }
 }
 
-/** Read-only Monaco (text only, never HTML) with the app theme and a copy button. */
+/** Indents JSON two spaces; anything else is returned untouched. */
+export function beautify(value: string, language: "json" | "plaintext"): string {
+  if (language !== "json") return value;
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
+
+/** Read-only Monaco (text only, never HTML) with the app theme and a copy button shown on hover. */
 export const ReadOnlyCodeViewer = ({ value, label, language }: Readonly<ReadOnlyCodeViewerProps>) => {
   const { resolvedTheme } = useTheme();
+  const lang = language ?? detectLanguage(value);
+  const display = useMemo(() => beautify(value, lang), [value, lang]);
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex justify-end">
-        <CopyIconButton value={value} label={label} />
-      </div>
+    <div className="group relative">
       <Editor
-        height="240px"
-        language={language ?? detectLanguage(value)}
+        height="200px"
+        language={lang}
         theme={resolvedTheme === "dark" ? "vs-dark" : "vs"}
-        value={value}
+        value={display}
         options={VIEWER_OPTIONS}
         className="overflow-hidden rounded-lg border"
+      />
+      <CopyIconButton
+        value={display}
+        label={label}
+        className="absolute right-4 top-2 z-10 bg-background/80 opacity-0 transition-opacity focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
       />
     </div>
   );
