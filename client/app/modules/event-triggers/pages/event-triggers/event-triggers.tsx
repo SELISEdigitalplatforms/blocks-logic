@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui-kits/dialog/dialog";
-import { EventTriggerList, pendingKey, READ_ONLY_TOOLTIP } from "../../components/event-trigger-list/event-trigger-list";
+import { EventTriggerList, pendingKey } from "../../components/event-trigger-list/event-trigger-list";
 import { EventTriggerToolbar } from "../../components/event-trigger-toolbar/event-trigger-toolbar";
 import { useCanManageEventTriggers, useGetEventTriggers } from "../../hooks/use-event-triggers-api";
 import { useEventTriggerToggle } from "../../hooks/use-event-trigger-toggle";
@@ -22,30 +22,34 @@ import {
   filterEvents,
   serviceKeysOf,
 } from "../../utils/filter-events";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NOT_SEEDED_MESSAGE =
-  "The event catalog is not set up for this project. Ask a platform operator to run the Blocks Event Trigger seed.";
+const LoadError = ({ onRetry }: { onRetry: () => void }) => {
+  const { t } = useT("logic.event-triggers");
+  return (
+    <Alert variant="destructive">
+      <AlertCircle className="h-4 w-4" />
+      <AlertTitle>{t("EVENT_TRIGGERS.COULD_NOT_LOAD_THE")}</AlertTitle>
+      <AlertDescription className="flex flex-wrap items-center gap-3">
+        {t("EVENT_TRIGGERS.CHECK_YOUR_CONNECTION")}
+        <Button size="sm" variant="outline" onClick={onRetry}>
+          {t("common:RETRY")}
+        </Button>
+      </AlertDescription>
+    </Alert>
+  );
+};
 
-const LoadError = ({ onRetry }: { onRetry: () => void }) => (
-  <Alert variant="destructive">
-    <AlertCircle className="h-4 w-4" />
-    <AlertTitle>Could not load the event catalog</AlertTitle>
-    <AlertDescription className="flex flex-wrap items-center gap-3">
-      Check your connection and try again.
-      <Button size="sm" variant="outline" onClick={onRetry}>
-        Retry
-      </Button>
-    </AlertDescription>
-  </Alert>
-);
-
-const NotSeeded = () => (
-  <Alert>
-    <AlertCircle className="h-4 w-4" />
-    <AlertTitle>Event catalog not set up</AlertTitle>
-    <AlertDescription>{NOT_SEEDED_MESSAGE}</AlertDescription>
-  </Alert>
-);
+const NotSeeded = () => {
+  const { t } = useT("logic.event-triggers");
+  return (
+    <Alert>
+      <AlertCircle className="h-4 w-4" />
+      <AlertTitle>{t("EVENT_TRIGGERS.EVENT_CATALOG_NOT_SET")}</AlertTitle>
+      <AlertDescription>{t("EVENT_TRIGGERS.NOT_SEEDED_MESSAGE")}</AlertDescription>
+    </Alert>
+  );
+};
 
 type CatalogBodyProps = {
   items: IBlocksEventCatalogItem[];
@@ -59,16 +63,19 @@ type CatalogBodyProps = {
 
 /** The table, or why there are no rows. */
 const CatalogBody = ({ items, visible, isLoading, isFiltered, canManage, pending, onToggle }: CatalogBodyProps) => {
+  const { t } = useT("logic.event-triggers");
   if (isLoading || visible.length > 0) {
     return (
       <EventTriggerList items={visible} isLoading={isLoading} canManage={canManage} pending={pending} onToggle={onToggle} />
     );
   }
-  const message = isFiltered || items.length > 0 ? "No events match your filters." : "The catalog has no events.";
+  const message =
+    isFiltered || items.length > 0 ? t("EVENT_TRIGGERS.NO_EVENTS_MATCH_FILTERS") : t("EVENT_TRIGGERS.CATALOG_HAS_NO_EVENTS");
   return <p className="py-12 text-center text-sm text-muted-foreground">{message}</p>;
 };
 
 export const EventTriggers = () => {
+  const { t } = useT("logic.event-triggers");
   const { data, isLoading, isError, refetch } = useGetEventTriggers();
   const { canManage, isLoading: isCheckingAccess } = useCanManageEventTriggers();
   const { pending, optimistic, pendingDisable, cancelDisable, handleToggle, confirmDisable } =
@@ -117,13 +124,13 @@ export const EventTriggers = () => {
   return (
     <section className="flex flex-col gap-6 p-4">
       <div className="flex min-h-10 flex-col justify-center gap-1">
-        <h3 className="text-2xl font-bold tracking-tight">Event Triggers</h3>
+        <h3 className="text-2xl font-bold tracking-tight">{t("EVENT_TRIGGERS.EVENT_TRIGGERS")}</h3>
         <p className="text-sm text-muted-foreground">
-          Choose which platform events can start workflows and functions in this project.
+          {t("EVENT_TRIGGERS.CHOOSE_WHICH_PLATFORM_EVENTS")}
         </p>
         {!canManage && !isCheckingAccess && (
           // The switches are disabled for this user; say why where keyboard and screen-reader users read it too.
-          <p className="text-sm text-muted-foreground">{READ_ONLY_TOOLTIP} to change these settings.</p>
+          <p className="text-sm text-muted-foreground">{t("EVENT_TRIGGERS.READ_ONLY_NOTICE")}</p>
         )}
       </div>
 
@@ -132,18 +139,17 @@ export const EventTriggers = () => {
       <Dialog open={pendingDisable !== null} onOpenChange={(open) => !open && cancelDisable()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Disable {pendingDisable?.item.label} for workflows?</DialogTitle>
+            <DialogTitle>{t("EVENT_TRIGGERS.DISABLE_FOR_WORKFLOWS", { label: pendingDisable?.item.label ?? "" })}</DialogTitle>
             <DialogDescription>
-              {pendingDisable?.count} published workflow(s) use this event and will stop running until it is enabled
-              again.
+              {t("EVENT_TRIGGERS.PUBLISHED_WORKFLOWS_USE", { count: pendingDisable?.count ?? 0 })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={cancelDisable}>
-              Cancel
+              {t("common:CANCEL")}
             </Button>
             <Button variant="destructive" onClick={confirmDisable}>
-              Disable
+              {t("EVENT_TRIGGERS.DISABLE")}
             </Button>
           </DialogFooter>
         </DialogContent>
