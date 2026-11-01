@@ -24,6 +24,7 @@ using Workflow.DomainService.Nodes.TriggerDataV1;
 using Workflow.DomainService.Nodes.TriggerScheduleV1;
 using Workflow.DomainService.Nodes.LogicIFV1;
 using Workflow.DomainService.Nodes.LogicSwitchV2;
+using Workflow.DomainService.Nodes.LogicFilterV2;
 using Workflow.DomainService.Nodes.TriggerWebhookV1;
 using Workflow.DomainService.Nodes.TransformSetFieldV1;
 using Workflow.DomainService.Nodes.TransformSplitOutV2;
@@ -78,6 +79,7 @@ namespace Workflow.DomainService
             // Logic nodes
             services.AddSingleton<INodeExecutor, LogicIfV1Node>();
             services.AddSingleton<INodeExecutor, LogicSwitchV2Node>();
+            services.AddSingleton<INodeExecutor, LogicFilterV2Node>();
 
 
             // Transform nodes

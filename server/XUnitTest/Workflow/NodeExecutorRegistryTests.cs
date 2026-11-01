@@ -19,7 +19,7 @@ namespace XUnitTest.Workflow
 
         /// <summary>The 13 node types that existed before SPEC6; they must keep resolving exactly as before.</summary>
         private static List<INodeExecutor> ProductionExecutors() =>
-            AllProductionExecutors().Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "blocksEvent" or "limit" or "errorTrigger")).ToList();
+            AllProductionExecutors().Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit" or "errorTrigger")).ToList();
 
         /// <summary>Every production executor class, read without running its constructor (NodeType/Versions need no state).</summary>
         private static List<INodeExecutor> AllProductionExecutors() =>
@@ -92,10 +92,21 @@ namespace XUnitTest.Workflow
                 var act = () => registry.Resolve("switch", version);
                 act.Should().Throw<InvalidOperationException>($"version '{version}'");
             }
-            foreach (var executor in all.Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "blocksEvent" or "limit" or "errorTrigger")))
+            foreach (var executor in all.Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit" or "errorTrigger")))
             {
                 registry.Resolve(executor.NodeType, "v1").Executor.Should().BeSameAs(executor);
             }
+        }
+
+        /// <summary>SPEC9 C10: a server built before Filter (no Filter executor) fails the step instead of running another node.</summary>
+        [Fact]
+        public void Filter_OnAServerWithoutTheFilterExecutor_HasNoExecutor()
+        {
+            var registry = new NodeExecutorRegistry(AllProductionExecutors().Where(e => e.NodeType != "filter"));
+
+            var act = () => registry.Resolve("filter", "v2");
+
+            act.Should().Throw<InvalidOperationException>().WithMessage("No executor for node type.");
         }
 
         [Fact]

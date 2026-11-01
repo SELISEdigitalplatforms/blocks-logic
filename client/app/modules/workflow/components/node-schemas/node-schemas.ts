@@ -15,6 +15,7 @@ import { NodeSchemaActionFunction } from "./node-schema-action-function";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
 import { NodeSchemaActionProxy } from "./node-schema-action-proxy";
 import { NodeSchemaLogicSwitchV2 } from "./node-schema-logic-switch-v2";
+import { NodeSchemaLogicFilterV2 } from "./node-schema-logic-filter-v2";
 import { NodeSchemaTransformSplitOutV2 } from "./node-schema-transform-splitOut-v2";
 import { NodeSchemaTransformMergeV2 } from "./node-schema-transform-merge-v2";
 import { NodeSchemaTransformLimitV2 } from "./node-schema-transform-limit-v2";
@@ -46,6 +47,7 @@ export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   ),
   // New types start at v2 (they own their handle from the start) and have no v1.
   logicswitchv2: NodeSchemaLogicSwitchV2,
+  logicfilterv2: NodeSchemaLogicFilterV2,
   transformsplitOutv2: NodeSchemaTransformSplitOutV2,
   transformmergev2: NodeSchemaTransformMergeV2,
   transformlimitv2: NodeSchemaTransformLimitV2,

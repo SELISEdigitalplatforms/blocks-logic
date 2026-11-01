@@ -40,6 +40,9 @@ import {
  */
 
 const SCHEDULE_NAME_PREFIX = "e2e-shared-schedule";
+// A saved schedule's details page. "/schedule/new" also has one path segment, so it is excluded:
+// otherwise the check passes on the create form before the redirect, and the test records that URL.
+const SCHEDULE_DETAILS_URL = /\/schedule\/(?!new$)[^/]+$/;
 
 function uniqueName() {
   return `${SCHEDULE_NAME_PREFIX}-${Date.now()}`;
@@ -219,7 +222,7 @@ test.describe("flow: Schedules menu", () => {
       await form.fillHeaderValue("e2e");
       await form.clickSubmit();
       await toast.expectSuccessVisible("Schedule successfully created.");
-      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      await expect(page).toHaveURL(SCHEDULE_DETAILS_URL, { timeout: 15_000 });
     });
 
     // ----- Details page header ----------------------------------------------
@@ -263,7 +266,7 @@ test.describe("flow: Schedules menu", () => {
     await form.fillRequiredFields(detailsName);
     await form.fillSigningSecret(detailsSecret);
     await form.clickSubmit();
-    await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(SCHEDULE_DETAILS_URL, { timeout: 15_000 });
 
     await test.step("[Positive] Signing Secret is masked by default; the eye button reveals it and the copy button swaps Copy -> Check icon", async () => {
       await details.expectSigningSecretMasked();
@@ -291,7 +294,7 @@ test.describe("flow: Schedules menu", () => {
     await gotoScheduleNew(form, page);
     await form.fillRequiredFields(originalName);
     await form.clickSubmit();
-    await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(SCHEDULE_DETAILS_URL, { timeout: 15_000 });
 
     await test.step("[Positive] Edit button navigates to /schedule/:id/edit with pre-filled values", async () => {
       await details.clickEdit();
@@ -307,7 +310,7 @@ test.describe("flow: Schedules menu", () => {
       await form.fillName(updatedName);
       await form.clickSubmit();
       await toast.expectSuccessVisible("Schedule updated successfully.");
-      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      await expect(page).toHaveURL(SCHEDULE_DETAILS_URL, { timeout: 15_000 });
       await details.expectHeading(updatedName, false);
     });
 
@@ -316,7 +319,7 @@ test.describe("flow: Schedules menu", () => {
       await form.expectOnEdit();
       await form.fillName("this-should-not-be-saved");
       await form.clickCancel();
-      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      await expect(page).toHaveURL(SCHEDULE_DETAILS_URL, { timeout: 15_000 });
       await details.expectHeading(updatedName, false);
     });
 
@@ -326,7 +329,7 @@ test.describe("flow: Schedules menu", () => {
     await gotoScheduleNew(form, page);
     await form.fillRequiredFields(deleteName);
     await form.clickSubmit();
-    await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(SCHEDULE_DETAILS_URL, { timeout: 15_000 });
 
     await test.step("[Security] Delete button opens the 'Delete Schedule' confirmation with the exact copy", async () => {
       await details.clickDelete();
@@ -430,7 +433,7 @@ test.describe("flow: Schedules menu", () => {
       // Local 00:00 of the picked day in Dhaka (UTC+6) is 18:00Z the day before.
       expect(body.startDate).toMatch(/T18:00:00\.000Z$/);
 
-      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      await expect(page).toHaveURL(SCHEDULE_DETAILS_URL, { timeout: 15_000 });
       created.push(page.url());
       await details.expectEvaluatedIn("Asia/Dhaka");
       await expect(details.nextRunLabel).toBeVisible();
@@ -440,7 +443,7 @@ test.describe("flow: Schedules menu", () => {
       await gotoScheduleNew(form, page);
       await form.fillRequiredFields(`E2E-tz-utc-${Date.now()}`);
       await form.clickSubmit();
-      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      await expect(page).toHaveURL(SCHEDULE_DETAILS_URL, { timeout: 15_000 });
       created.push(page.url());
 
       await details.clickEdit();
@@ -540,7 +543,7 @@ test.describe("flow: Schedules menu", () => {
       await form.fillHeaderKey("X-Token");
       await form.fillHeaderValue("secret123");
       await form.clickSubmit();
-      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      await expect(page).toHaveURL(SCHEDULE_DETAILS_URL, { timeout: 15_000 });
       const detailsUrl = page.url();
       created.push(detailsUrl);
       return detailsUrl;

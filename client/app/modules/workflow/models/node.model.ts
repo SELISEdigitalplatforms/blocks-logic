@@ -3,6 +3,7 @@ import { Node } from "@xyflow/react";
 export type NodeType =
   | "if"
   | "switch"
+  | "filter"
   | "setfield"
   | "splitOut"
   | "merge"
