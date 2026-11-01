@@ -43,7 +43,8 @@ namespace XUnitTest.Workflow
             WorkflowSettings? settings = null,
             WorkflowExecutionStatus statusBefore = WorkflowExecutionStatus.Running,
             string triggerType = "webhook",
-            bool settingsReadThrows = false)
+            bool settingsReadThrows = false,
+            string? completionNodeId = null)
         {
             var execution = new WorkflowExecutionEntity
             {
@@ -61,7 +62,7 @@ namespace XUnitTest.Workflow
                     TenantId = "t1",
                     Nodes = [new NodeEntity { Id = "n1", Name = "Postgres", Category = "action", Type = "fn", Version = "v1", Position = new Position() }],
                     Edges = [],
-                    TestMeta = new TestWorkflowMeta(),
+                    TestMeta = new TestWorkflowMeta { UserIds = ["user-1"], CompletionNodeId = completionNodeId },
                 },
             };
             string? error = null;
@@ -146,14 +147,37 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task C2_ATestRun_NeverReadsSettingsOrSends()
+        public async Task C2_AFullTestRun_SendsATestEvent_ForWhoRanIt()
         {
             var h = Build(mode: WorkflowExecutionMode.Test, settings: EnabledAlert);
 
             await Run(h);
 
+            h.Sent.Should().ContainSingle();
+            h.Sent[0].ExecutionMode.Should().Be(WorkflowExecutionMode.Test);
+            h.Sent[0].UserIds.Should().Equal("user-1");
+        }
+
+        [Fact]
+        public async Task C2b_AStepTest_NeverReadsSettingsOrSends()
+        {
+            var h = Build(mode: WorkflowExecutionMode.Test, settings: EnabledAlert, completionNodeId: "n1");
+
+            await Run(h);
+
             h.Sent.Should().BeEmpty();
             h.Workflows.Verify(r => r.GetWorkflowSettingsAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task C2c_AProductionRun_SendsNoUserIds()
+        {
+            var h = Build(settings: EnabledAlert);
+
+            await Run(h);
+
+            h.Sent.Should().ContainSingle();
+            h.Sent[0].UserIds.Should().BeEmpty();
         }
 
         [Fact]

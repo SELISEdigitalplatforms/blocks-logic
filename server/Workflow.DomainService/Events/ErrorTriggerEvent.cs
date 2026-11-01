@@ -3,7 +3,8 @@ using Blocks.Genesis.Entities.Logic;
 namespace Workflow.DomainService.Events
 {
     /// <summary>
-    /// Sent once per failed attempt of a production run whose workflow has an enabled alert.
+    /// Sent once per failed attempt of a production run, or of a full test run ("Execute workflow"),
+    /// whose workflow has an enabled alert.
     /// The Worker's ErrorTriggerConsumer starts the alert's error workflow from it.
     /// </summary>
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -17,6 +18,8 @@ namespace Workflow.DomainService.Events
         public DateTime StartedAt { get; set; }
         public DateTime? FinishedAt { get; set; }
         public ErrorTriggerEventError Error { get; set; } = new();
+        /// <summary>Test runs only: who ran the failing test, so the error workflow's test run shows live for them.</summary>
+        public List<string> UserIds { get; set; } = new();
         /// <summary>Copied from the failed workflow's settings when the run failed.</summary>
         public ErrorTriggerEventAlert Alert { get; set; } = new();
     }

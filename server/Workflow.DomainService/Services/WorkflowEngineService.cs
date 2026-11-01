@@ -882,14 +882,19 @@ namespace Workflow.DomainService.Services
                 await SendErrorTriggerAsync(execution, node, error);
         }
 
+        // "Execute workflow" in the editor; a step test ("Test step") always names the node it stops at.
+        private static bool IsFullTestRun(WorkflowExecutionEntity execution) =>
+            execution.ExecutionMode == WorkflowExecutionMode.Test
+            && string.IsNullOrWhiteSpace(execution.WorkflowSnapshot?.TestMeta?.CompletionNodeId);
+
         /// <summary>
-        /// Sends one ErrorTriggerEvent when a production run fails and its workflow has an enabled alert.
-        /// Nothing is sent (and nothing is read) for test runs or runs an Error Trigger started (no loops).
+        /// Sends one ErrorTriggerEvent when a production run or a full test run fails and its workflow has an
+        /// enabled alert. Nothing is sent (and nothing is read) for step tests or runs an Error Trigger started (no loops).
         /// A failure here is logged and never changes the failed run.
         /// </summary>
         private async Task SendErrorTriggerAsync(WorkflowExecutionEntity execution, NodeEntity node, string error)
         {
-            if (execution.ExecutionMode != WorkflowExecutionMode.Production) return;
+            if (execution.ExecutionMode != WorkflowExecutionMode.Production && !IsFullTestRun(execution)) return;
             if (execution.TriggerMetadata?.TriggerType == LogicConstants.ErrorTriggerNodeType) return;
 
             try
@@ -919,6 +924,9 @@ namespace Workflow.DomainService.Services
                             NodeType = node.Type,
                         },
                         Alert = new ErrorTriggerEventAlert { Mode = alert.Mode, WorkflowId = alert.WorkflowId },
+                        UserIds = execution.ExecutionMode == WorkflowExecutionMode.Test
+                            ? execution.WorkflowSnapshot?.TestMeta?.UserIds ?? new List<string>()
+                            : new List<string>(),
                     }
                 });
             }

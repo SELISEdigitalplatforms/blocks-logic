@@ -88,12 +88,16 @@ namespace Workflow.DomainService.Repositories
             }
             if (hasErrorTrigger == true)
             {
-                // The published graph, not the draft: an Error Trigger only runs once it is published.
+                // A published workflow counts by its published version (what a production failure runs),
+                // an unpublished one by its draft (what a test failure runs).
                 var errorTrigger = Builders<NodeEntity>.Filter.And(
                     Builders<NodeEntity>.Filter.Eq("Type", LogicConstants.ErrorTriggerNodeType),
                     Builders<NodeEntity>.Filter.Eq(nameof(NodeEntity.Category), LogicConstants.TriggerCategory));
-                filter &= Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, true)
-                    & Builders<WorkflowEntity>.Filter.ElemMatch(w => w.PublishedMeta.TriggerNodes, errorTrigger);
+                filter &= Builders<WorkflowEntity>.Filter.Or(
+                    Builders<WorkflowEntity>.Filter.Eq(w => w.IsPublished, true)
+                        & Builders<WorkflowEntity>.Filter.ElemMatch(w => w.PublishedMeta.TriggerNodes, errorTrigger),
+                    Builders<WorkflowEntity>.Filter.Ne(w => w.IsPublished, true)
+                        & Builders<WorkflowEntity>.Filter.ElemMatch(w => w.Nodes, errorTrigger));
             }
             if (!string.IsNullOrEmpty(excludeItemId))
             {

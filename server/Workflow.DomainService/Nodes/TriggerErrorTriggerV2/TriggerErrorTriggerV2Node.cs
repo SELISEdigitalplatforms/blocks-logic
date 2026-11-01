@@ -10,7 +10,7 @@ namespace Workflow.DomainService.Nodes.TriggerErrorTriggerV2
     /// Runs when another workflow's production run fails and that workflow's alert names this workflow;
     /// outputs the one failure item ErrorTriggerStartAsync put in the execution's Input.
     /// </summary>
-    public class TriggerErrorTriggerV2Node : NodeExecutorBase<object>, INodeExecutor
+    public class TriggerErrorTriggerV2Node : NodeExecutorBase<TriggerErrorTriggerV2Parameters>, INodeExecutor
     {
         private static readonly IReadOnlyCollection<string> SupportedVersions = new[] { "v2" };
 
@@ -22,10 +22,9 @@ namespace Workflow.DomainService.Nodes.TriggerErrorTriggerV2
 
         protected override Task<NodeExecutionResult> ExecuteAsync(
             NodeExecutionContext context,
-            object? nodeparameters)
+            TriggerErrorTriggerV2Parameters? nodeparameters)
         {
-            // The Error Trigger has no parameters: the failing workflow chooses it in Settings → Alert.
-            var parameters = new BsonDocument();
+            var parameters = (nodeparameters ?? new TriggerErrorTriggerV2Parameters()).ToBsonDocument();
             try
             {
                 var inputItems = context.WorkflowContext["Input"].AsBsonArray;

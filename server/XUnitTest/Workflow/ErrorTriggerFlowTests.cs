@@ -137,11 +137,11 @@ namespace XUnitTest.Workflow
             new() { Alert = new WorkflowAlert { IsEnabled = isEnabled, Mode = WorkflowAlertMode.Workflow, WorkflowId = workflowId } };
 
         /// <summary>Starts a run of A the way a trigger does, and drains the bus.</summary>
-        private async Task<string> RunAAsync(WorkflowExecutionMode mode = WorkflowExecutionMode.Production)
+        private async Task<string> RunAAsync(WorkflowExecutionMode mode = WorkflowExecutionMode.Production, string? completionNodeId = null)
         {
             var version = await _versions.GetWorkflowVersionAsync(Tenant, "wf-a-v1");
-            // A real test run always carries its test settings on the snapshot.
-            version.Snapshot.TestMeta ??= new TestWorkflowMeta();
+            // A real test run always carries its test settings on the snapshot; a step test names the node it stops at.
+            version.Snapshot.TestMeta = new TestWorkflowMeta { UserIds = ["tester"], CompletionNodeId = completionNodeId };
             var input = new BsonArray { new BsonDocument("orderId", 42) };
             var execution = new WorkflowExecutionEntity
             {
@@ -236,14 +236,87 @@ namespace XUnitTest.Workflow
             (await RunsOfBAsync()).Should().BeEmpty();
         }
 
+        /// <summary>Sets "Run on test mode" on B's saved draft only; B's published version keeps it off.</summary>
+        private async Task SetBRunOnTestModeAsync(bool on)
+        {
+            var b = (await _workflows.GetWorkflowAsync(Tenant, "wf-b"))!;
+            b.Nodes[0].Parameters = new BsonDocument("runOnTestMode", on);
+            await _workflows.UpdateWorkflowAsync(b);
+        }
+
         [Fact]
-        public async Task A_failing_test_run_sends_nothing()
+        public async Task A_failing_test_run_does_not_start_the_error_workflow_when_Run_on_test_mode_is_off()
         {
             await SeedAsync(AlertTo("wf-b"));
 
             await RunAAsync(WorkflowExecutionMode.Test);
 
+            _alerts.Should().ContainSingle();
+            (await RunsOfBAsync()).Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_failing_test_run_starts_the_error_workflow_draft_in_test_mode_when_Run_on_test_mode_is_on()
+        {
+            await SeedAsync(AlertTo("wf-b"));
+            await SetBRunOnTestModeAsync(true);
+
+            var failedId = await RunAAsync(WorkflowExecutionMode.Test);
+
+            var runs = await RunsOfBAsync();
+            runs.Should().ContainSingle();
+            var run = runs[0];
+            run.ExecutionMode.Should().Be(WorkflowExecutionMode.Test);
+            run.Status.Should().Be(WorkflowExecutionStatus.Completed);
+            run.WorkflowSnapshot.Nodes[0].Parameters["runOnTestMode"].AsBoolean.Should().BeTrue("the draft ran, not the published version");
+            run.WorkflowSnapshot.TestMeta.UserIds.Should().Equal("tester");
+            var output = await ErrorTriggerOutputAsync(run.Id!);
+            output["execution"]["id"].AsString.Should().Be(failedId);
+            output["execution"]["mode"].AsString.Should().Be("Test");
+            // The draft itself is not changed by the run.
+            (await _workflows.GetWorkflowAsync(Tenant, "wf-b"))!.TestMeta.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task A_failing_test_run_starts_an_unpublished_error_workflow()
+        {
+            await SeedAsync(AlertTo("wf-b"));
+            await SetBRunOnTestModeAsync(true);
+            var b = (await _workflows.GetWorkflowAsync(Tenant, "wf-b"))!;
+            b.IsPublished = false;
+            b.PublishedVersionId = null;
+            await _workflows.UpdateWorkflowAsync(b);
+
+            await RunAAsync(WorkflowExecutionMode.Test);
+
+            (await RunsOfBAsync()).Should().ContainSingle().Which.ExecutionMode.Should().Be(WorkflowExecutionMode.Test);
+        }
+
+        [Fact]
+        public async Task A_failing_step_test_sends_nothing()
+        {
+            await SeedAsync(AlertTo("wf-b"));
+            await SetBRunOnTestModeAsync(true);
+
+            await RunAAsync(WorkflowExecutionMode.Test, completionNodeId: "fail1");
+
             _alerts.Should().BeEmpty();
+            (await RunsOfBAsync()).Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_failing_production_run_skips_an_unpublished_error_workflow()
+        {
+            await SeedAsync(AlertTo("wf-b"));
+            await SetBRunOnTestModeAsync(true);
+            var b = (await _workflows.GetWorkflowAsync(Tenant, "wf-b"))!;
+            b.IsPublished = false;
+            b.PublishedVersionId = null;
+            await _workflows.UpdateWorkflowAsync(b);
+
+            await RunAAsync();
+
+            _alerts.Should().ContainSingle();
             (await RunsOfBAsync()).Should().BeEmpty();
         }
 
@@ -325,27 +398,32 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task The_picker_lists_only_published_workflows_with_an_Error_Trigger_and_leaves_one_out()
+        public async Task The_picker_lists_workflows_with_an_Error_Trigger_published_or_in_an_unpublished_draft_and_leaves_one_out()
         {
             await SeedAsync(alertSettings: null);
             await PublishAsync("wf-c", "Billing alerts", [Node("err", "Error Trigger", "trigger", LogicConstants.ErrorTriggerNodeType, "v2")], []);
-            // A draft Error Trigger that is not published does not count.
+            // Never published: its draft counts.
             await _workflows.CreateWorkflowAsync(new WorkflowEntity
             {
                 ItemId = "wf-d", Name = "Draft alerts", TenantId = Tenant, IsPublished = false,
                 Nodes = [Node("err", "Error Trigger", "trigger", LogicConstants.ErrorTriggerNodeType, "v2")],
             });
+            // Published without one; an Error Trigger added to the draft afterwards does not count until published.
+            await PublishAsync("wf-e", "Later alerts", [Node("hook", "Webhook", "trigger", "webhook", "v2")], []);
+            var e = (await _workflows.GetWorkflowAsync(Tenant, "wf-e"))!;
+            e.Nodes = [Node("err", "Error Trigger", "trigger", LogicConstants.ErrorTriggerNodeType, "v2")];
+            await _workflows.UpdateWorkflowAsync(e);
 
             var all = await _workflows.GetAllWorkflowsAsync(Tenant, 50, 0, null, null, hasErrorTrigger: true, excludeItemId: null);
-            all.Select(w => w.ItemId).Should().BeEquivalentTo("wf-b", "wf-c");
-            (await _workflows.GetWorkflowsCountAsync(Tenant, null, null, true, null)).Should().Be(2);
+            all.Select(w => w.ItemId).Should().BeEquivalentTo("wf-b", "wf-c", "wf-d");
+            (await _workflows.GetWorkflowsCountAsync(Tenant, null, null, true, null)).Should().Be(3);
 
             var withoutB = await _workflows.GetAllWorkflowsAsync(Tenant, 50, 0, "alerts", null, true, excludeItemId: "wf-b");
-            withoutB.Select(w => w.ItemId).Should().Equal("wf-c");
+            withoutB.Select(w => w.ItemId).Should().BeEquivalentTo("wf-c", "wf-d");
 
-            (await _workflows.GetWorkflowsCountAsync(Tenant, null, null, null, null)).Should().Be(4);
+            (await _workflows.GetWorkflowsCountAsync(Tenant, null, null, null, null)).Should().Be(5);
         }
-    
+
         // ---- Old data written before typed settings (blocks-logic#380 must not change old workflows) ----
 
         public static TheoryData<string> LegacySettings => new() { "missing", "null", "{}", "{ \"timezone\": \"UTC\" }" };

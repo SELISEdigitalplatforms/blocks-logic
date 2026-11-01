@@ -26,6 +26,8 @@ namespace XUnitTest.Workflow
             _workflows.Setup(r => r.GetWorkflowAsync(Tenant, "wf-b")).ReturnsAsync(Target("wf-b", published: true, LogicConstants.ErrorTriggerNodeType));
             _workflows.Setup(r => r.GetWorkflowAsync(Tenant, "wf-c")).ReturnsAsync(Target("wf-c", published: true, "webhook"));
             _workflows.Setup(r => r.GetWorkflowAsync(Tenant, "wf-d")).ReturnsAsync(Target("wf-d", published: false, LogicConstants.ErrorTriggerNodeType));
+            // Published without an Error Trigger; one was added to the draft afterwards.
+            _workflows.Setup(r => r.GetWorkflowAsync(Tenant, "wf-e")).ReturnsAsync(Target("wf-e", published: true, "webhook", draftTriggerType: LogicConstants.ErrorTriggerNodeType));
             _service = new WorkflowService(_workflows.Object, Mock.Of<IWorkflowVersionRepository>(), Mock.Of<IScheduleService>(),
                 Mock.Of<ILogger<WorkflowService>>(), Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>(),
                 new WorkflowUpdateSettingsValidator(_workflows.Object));
@@ -33,14 +35,22 @@ namespace XUnitTest.Workflow
 
         public void Dispose() => TestBlocksContext.Clear();
 
-        private static WorkflowEntity Target(string id, bool published, string triggerType) => new()
+        // Published: the trigger is in the published version. Unpublished: in the draft.
+        private static WorkflowEntity Target(string id, bool published, string triggerType, string? draftTriggerType = null)
         {
-            TenantId = Tenant,
-            ItemId = id,
-            IsPublished = published,
-            PublishedVersionId = published ? "ver" : null,
-            PublishedMeta = new PublishedWorkflowMeta { TriggerNodes = [new NodeEntity { Id = "t", Name = "Trigger", Version = "v2", Type = triggerType, Category = "trigger", Position = new Position() }] },
-        };
+            static NodeEntity Trigger(string type) => new() { Id = "t", Name = "Trigger", Version = "v2", Type = type, Category = "trigger", Position = new Position() };
+            var trigger = Trigger(triggerType);
+            var draftTrigger = Trigger(draftTriggerType ?? triggerType);
+            return new()
+            {
+                TenantId = Tenant,
+                ItemId = id,
+                IsPublished = published,
+                PublishedVersionId = published ? "ver" : null,
+                Nodes = [draftTrigger],
+                PublishedMeta = published ? new PublishedWorkflowMeta { TriggerNodes = [trigger] } : null,
+            };
+        }
 
         private static WorkflowUpdateSettingsRequestDto Request(bool isEnabled, string? target, WorkflowAlertMode mode = WorkflowAlertMode.Workflow) => new()
         {
@@ -59,6 +69,15 @@ namespace XUnitTest.Workflow
             result.ItemId.Should().Be("wf-a");
             _workflows.Verify(r => r.UpdateWorkflowSettingsAsync(Tenant, "wf-a", request.Settings!, "user-wf"), Times.Once);
             _workflows.Verify(r => r.UpdateWorkflowAsync(It.IsAny<WorkflowEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task AnUnpublishedWorkflow_WithAnErrorTriggerInItsDraft_CanBeChosen()
+        {
+            var result = await _service.UpdateSettingsAsync(Tenant, Request(true, "wf-d"));
+
+            result.IsSuccess.Should().BeTrue();
+            _workflows.Verify(r => r.UpdateWorkflowSettingsAsync(Tenant, "wf-a", It.IsAny<WorkflowSettings>(), "user-wf"), Times.Once);
         }
 
         [Fact]
@@ -85,7 +104,7 @@ namespace XUnitTest.Workflow
         [InlineData(" ", 1, "Settings.Alert.WorkflowId", "Select a workflow.")]
         [InlineData("wf-a", 1, "Settings.Alert.WorkflowId", "A workflow can't handle its own failures.")]
         [InlineData("wf-x", 1, "Settings.Alert.WorkflowId", "Workflow not found.")]
-        [InlineData("wf-d", 1, "Settings.Alert.WorkflowId", "The selected workflow isn't published.")]
+        [InlineData("wf-e", 1, "Settings.Alert.WorkflowId", "The selected workflow has no Error Trigger.")]
         [InlineData("wf-c", 1, "Settings.Alert.WorkflowId", "The selected workflow has no Error Trigger.")]
         [InlineData("wf-b", 2, "Settings.Alert.Mode", "Unsupported alert mode.")]
         public async Task C9_AnInvalidEnabledAlert_IsRefused_AndNothingIsStored(string? target, int mode, string key, string message)

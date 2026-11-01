@@ -33,12 +33,17 @@ namespace Workflow.DomainService.Validators
                         var target = await workflowRepository.GetWorkflowAsync(BlocksContext.GetContext().TenantId, id!);
                         if (target == null)
                             context.AddFailure("Workflow not found.");
-                        else if (!target.IsPublished || string.IsNullOrWhiteSpace(target.PublishedVersionId))
-                            context.AddFailure("The selected workflow isn't published.");
-                        else if (target.PublishedMeta?.TriggerNodes.Any(n => n.Type == LogicConstants.ErrorTriggerNodeType) != true)
+                        else if (!HasErrorTrigger(target))
                             context.AddFailure("The selected workflow has no Error Trigger.");
                     });
             });
+        }
+
+        // The same rule as the picker: the published version when there is one, else the draft.
+        private static bool HasErrorTrigger(WorkflowEntity target)
+        {
+            var nodes = target.IsPublished ? target.PublishedMeta?.TriggerNodes : target.Nodes;
+            return nodes?.Any(n => n.Type == LogicConstants.ErrorTriggerNodeType && n.Category == LogicConstants.TriggerCategory) == true;
         }
     }
 }
