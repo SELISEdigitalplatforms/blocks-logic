@@ -594,7 +594,9 @@ namespace Workflow.DomainService.Services
                 };
             }
 
-            _logger.LogInformation("Updated settings of workflow {WorkflowId}", dto.ItemId);
+            // ItemId comes from the request: strip line breaks so it can't forge a log line.
+            var workflowIdForLog = dto.ItemId.Replace("\r", string.Empty).Replace("\n", string.Empty);
+            _logger.LogInformation("Updated settings of workflow {WorkflowId}", workflowIdForLog);
             return new BaseMutationResponse { IsSuccess = true, ItemId = dto.ItemId, Errors = null };
         }
 
@@ -869,7 +871,7 @@ namespace Workflow.DomainService.Services
             updatedWorkflow.LastPublishedVersionId = workflow.LastPublishedVersionId;
             updatedWorkflow.PublishedMeta = workflow.PublishedMeta;
             updatedWorkflow.LastUpdatedDate = DateTime.UtcNow;
-            updatedWorkflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? SystemUserId; ;
+            updatedWorkflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? SystemUserId;
             await _workflowRepository.UpdateWorkflowAsync(updatedWorkflow);
             return new BaseMutationResponse
             {

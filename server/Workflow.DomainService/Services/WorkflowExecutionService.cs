@@ -1497,11 +1497,9 @@ namespace Workflow.DomainService.Services
             var triggerNodes = ancestors.Where(n => n.Category == LogicConstants.TriggerCategory).ToList();
             var hasAnyPinnedTriggerData = triggerNodes.Any(n => n.PinData != null && n.PinData.Count > 0);
             // An Error Trigger has no event to wait for in a test (test runs never alert): it runs on sample data.
-            var errorTriggerNode = triggerNodes.FirstOrDefault(n => n.Type == LogicConstants.ErrorTriggerNodeType);
-            var useErrorTriggerSample = errorTriggerNode != null && !hasAnyPinnedTriggerData && String.IsNullOrWhiteSpace(dto.SourceExecutionId);
-
-
-            var currentTriggerNodeId = "";
+            var sampleTriggerNodeId = !hasAnyPinnedTriggerData && String.IsNullOrWhiteSpace(dto.SourceExecutionId)
+                ? triggerNodes.FirstOrDefault(n => n.Type == LogicConstants.ErrorTriggerNodeType)?.Id
+                : null;
 
             // Nothing in this node's ancestry is a trigger, so there is no event to wait for: parking the
             // run in the listening state below would block on something that can never arrive, which is what
@@ -1510,61 +1508,16 @@ namespace Workflow.DomainService.Services
             // listen / pin-data path below is taken unchanged.
             if (triggerNodes.Count == 0)
             {
-                workflow.TestMeta = new TestWorkflowMeta
-                {
-                    // Not persisted (no UpdateWorkflowAsync on this path): it rides along on the execution's
-                    // snapshot purely so the engine can read CompletionNodeId, and leaves the saved workflow
-                    // out of the listening state entirely.
-                    IsListening = false,
-                    ListenerTriggerNodes = new List<NodeEntity>(),
-                    UserIds = BlocksContext.GetContext().UserId != null ? new List<string> { BlocksContext.GetContext().UserId } : new List<string>(),
-                    CompletionNodeId = dto.NodeId
-                };
-
-                var triggerlessExecution = await CreateExecutionAsync(
-                    workflow,
-                    new TriggerMetadata
-                    {
-                        TriggerNodeId = string.Empty,
-                        TriggerType = string.Empty,
-                        TriggerData = new BsonArray()
-                    },
-                    WorkflowExecutionMode.Test);
-
-                triggerlessExecution.Context[LogicConstants.ExecutionInputKey] = new BsonArray();
-                triggerlessExecution.Status = WorkflowExecutionStatus.Queued;
-                await NotifyWorkflowStartedAsync(triggerlessExecution);
-                LogStepExecution(triggerlessExecution, targetNode);
-
-                // Set here, not in an async helper (AsyncLocal; see the webhook "last" mode).
-                var triggerlessGrant = await _delegationGrantFactory.CreateForSendAsync();
-                DelegatedTokenContext.Set(triggerlessGrant);
-                WorkflowExecutionEntity? triggerlessResult;
-                try
-                {
-                    triggerlessResult = await _workflowEngineService.ExecuteStepNodeAsync(
-                        tenantId, triggerlessExecution.Id, string.Empty, dto.NodeId, dto.SourceExecutionId);
-                }
-                finally
-                {
-                    DelegatedTokenContext.Clear();
-                    await _inProcessGrants.ReleaseAsync(triggerlessGrant);
-                }
-
-                return new StepExecuteResponseDto
-                {
-                    IsSuccess = true,
-                    ItemId = triggerlessResult?.Id,
-                };
+                return await StepExecuteWithoutTriggerAsync(tenantId, workflow, targetNode, dto);
             }
 
-            if (String.IsNullOrWhiteSpace(dto.SourceExecutionId) && !hasAnyPinnedTriggerData && !useErrorTriggerSample)
+            if (String.IsNullOrWhiteSpace(dto.SourceExecutionId) && !hasAnyPinnedTriggerData && sampleTriggerNodeId == null)
             {
                 workflow.TestMeta = new TestWorkflowMeta
                 {
                     IsListening = true,
                     ListenerTriggerNodes = triggerNodes,
-                    UserIds = BlocksContext.GetContext().UserId != null ? new List<string> { BlocksContext.GetContext().UserId } : new List<string>(),
+                    UserIds = CurrentUserIds(),
                     CompletionNodeId = dto.NodeId
 
                 };
@@ -1578,20 +1531,7 @@ namespace Workflow.DomainService.Services
 
             }
 
-            if (hasAnyPinnedTriggerData)
-            {
-                currentTriggerNodeId = triggerNodes.FirstOrDefault(n => n.PinData != null && n.PinData.Count > 0)?.Id;
-            }
-
-            if (useErrorTriggerSample)
-            {
-                currentTriggerNodeId = errorTriggerNode!.Id;
-            }
-
-            if (oldExecution != null && oldExecution.TriggerMetadata != null && !String.IsNullOrWhiteSpace(oldExecution.TriggerMetadata.TriggerNodeId))
-            {
-                currentTriggerNodeId = oldExecution.TriggerMetadata.TriggerNodeId;
-            }
+            var currentTriggerNodeId = DefaultStepTriggerNodeId(triggerNodes, oldExecution, sampleTriggerNodeId);
 
             if (!String.IsNullOrWhiteSpace(dto.TriggerNodeId))
             {
@@ -1619,50 +1559,13 @@ namespace Workflow.DomainService.Services
                 };
             }
 
-            TriggerMetadata triggerMetadata = new TriggerMetadata
-            {
-                TriggerNodeId = triggerNode.Id,
-                TriggerType = triggerNode.Type,
-                TriggerData = new BsonArray()
-            };
-            if (oldExecution != null && oldExecution.TriggerMetadata != null && !String.IsNullOrWhiteSpace(oldExecution.TriggerMetadata.TriggerNodeId))
-            {
-                triggerMetadata = oldExecution.TriggerMetadata;
-            }
-            else
-            {
-                triggerMetadata = new TriggerMetadata
-                {
-                    TriggerNodeId = triggerNode.Id,
-                    TriggerType = triggerNode.Type,
-                    TriggerData = new BsonArray()
-                };
-            }
-            if (triggerNode.PinData != null && triggerNode.PinData.Count > 0)
-            {
-                triggerMetadata = new TriggerMetadata
-                {
-                    TriggerNodeId = triggerNode.Id,
-                    TriggerType = triggerNode.Type,
-                    TriggerData = new BsonArray(triggerNode.PinData)
-                };
-            }
-            else if (useErrorTriggerSample && triggerNode.Id == errorTriggerNode!.Id)
-            {
-                triggerMetadata = new TriggerMetadata
-                {
-                    TriggerNodeId = triggerNode.Id,
-                    TriggerType = triggerNode.Type,
-                    TriggerData = new BsonArray { ErrorTriggerPayload.Sample() }
-                };
-            }
-
+            var triggerMetadata = StepTriggerMetadata(triggerNode, oldExecution, sampleTriggerNodeId);
 
             workflow.TestMeta = new TestWorkflowMeta
             {
                 IsListening = true,
                 ListenerTriggerNodes = triggerNodes,
-                UserIds = BlocksContext.GetContext().UserId != null ? new List<string> { BlocksContext.GetContext().UserId } : new List<string>(),
+                UserIds = CurrentUserIds(),
                 CompletionNodeId = dto.NodeId
 
             };
@@ -1691,6 +1594,90 @@ namespace Workflow.DomainService.Services
                 ItemId = result.Id,
             };
 
+        }
+
+        private async Task<StepExecuteResponseDto> StepExecuteWithoutTriggerAsync(string tenantId, WorkflowEntity workflow, NodeEntity targetNode, StepExecuteRequestDto dto)
+        {
+            workflow.TestMeta = new TestWorkflowMeta
+            {
+                // Not persisted (no UpdateWorkflowAsync on this path): it rides along on the execution's
+                // snapshot purely so the engine can read CompletionNodeId, and leaves the saved workflow
+                // out of the listening state entirely.
+                IsListening = false,
+                ListenerTriggerNodes = new List<NodeEntity>(),
+                UserIds = CurrentUserIds(),
+                CompletionNodeId = dto.NodeId
+            };
+
+            var triggerlessExecution = await CreateExecutionAsync(
+                workflow,
+                new TriggerMetadata
+                {
+                    TriggerNodeId = string.Empty,
+                    TriggerType = string.Empty,
+                    TriggerData = new BsonArray()
+                },
+                WorkflowExecutionMode.Test);
+
+            triggerlessExecution.Context[LogicConstants.ExecutionInputKey] = new BsonArray();
+            triggerlessExecution.Status = WorkflowExecutionStatus.Queued;
+            await NotifyWorkflowStartedAsync(triggerlessExecution);
+            LogStepExecution(triggerlessExecution, targetNode);
+
+            // Set here, not in an async helper (AsyncLocal; see the webhook "last" mode).
+            var triggerlessGrant = await _delegationGrantFactory.CreateForSendAsync();
+            DelegatedTokenContext.Set(triggerlessGrant);
+            WorkflowExecutionEntity? triggerlessResult;
+            try
+            {
+                triggerlessResult = await _workflowEngineService.ExecuteStepNodeAsync(
+                    tenantId, triggerlessExecution.Id, string.Empty, dto.NodeId, dto.SourceExecutionId);
+            }
+            finally
+            {
+                DelegatedTokenContext.Clear();
+                await _inProcessGrants.ReleaseAsync(triggerlessGrant);
+            }
+
+            return new StepExecuteResponseDto
+            {
+                IsSuccess = true,
+                ItemId = triggerlessResult?.Id,
+            };
+        }
+
+        // Where a step test starts when the request names no trigger: the source run's trigger, else the
+        // Error Trigger's sample, else the first pinned trigger.
+        private static string DefaultStepTriggerNodeId(List<NodeEntity> triggerNodes, WorkflowExecutionEntity? oldExecution, string? sampleTriggerNodeId)
+        {
+            var oldTriggerNodeId = oldExecution?.TriggerMetadata?.TriggerNodeId;
+            if (!String.IsNullOrWhiteSpace(oldTriggerNodeId)) return oldTriggerNodeId;
+            if (sampleTriggerNodeId != null) return sampleTriggerNodeId;
+            return triggerNodes.FirstOrDefault(n => n.PinData != null && n.PinData.Count > 0)?.Id ?? "";
+        }
+
+        // Pin data wins, then the Error Trigger's sample, then the source run's trigger data.
+        private static TriggerMetadata StepTriggerMetadata(NodeEntity triggerNode, WorkflowExecutionEntity? oldExecution, string? sampleTriggerNodeId)
+        {
+            if (triggerNode.PinData != null && triggerNode.PinData.Count > 0)
+            {
+                return new TriggerMetadata { TriggerNodeId = triggerNode.Id, TriggerType = triggerNode.Type, TriggerData = new BsonArray(triggerNode.PinData) };
+            }
+            if (triggerNode.Id == sampleTriggerNodeId)
+            {
+                return new TriggerMetadata { TriggerNodeId = triggerNode.Id, TriggerType = triggerNode.Type, TriggerData = new BsonArray { ErrorTriggerPayload.Sample() } };
+            }
+            if (!String.IsNullOrWhiteSpace(oldExecution?.TriggerMetadata?.TriggerNodeId))
+            {
+                return oldExecution!.TriggerMetadata;
+            }
+            return new TriggerMetadata { TriggerNodeId = triggerNode.Id, TriggerType = triggerNode.Type, TriggerData = new BsonArray() };
+        }
+
+        private static List<string> CurrentUserIds()
+        {
+            var userId = BlocksContext.GetContext().UserId;
+            return userId != null ? new List<string> { userId } : new List<string>();
         }
 
 
