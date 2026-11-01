@@ -10,6 +10,7 @@
  */
 import React from "react";
 import { create } from "zustand";
+import commonEn from "./common.en.json";
 
 export type RuntimeKey = string;
 
@@ -155,7 +156,7 @@ export const useI18nStore = create<{
   registerBundle: (module: string, dictionary: Dictionary) => void;
   setRemote: (language: string, module: string, dictionary: Dictionary) => void;
 }>()((set) => ({
-  bundled: {},
+  bundled: { common: commonEn },
   remote: {},
   registerBundle: (module, dictionary) =>
     set((state) => ({

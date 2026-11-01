@@ -1,16 +1,24 @@
 import { registerTranslations } from "@seliseblocks/genesis-os";
-import shared from "./logic.shared.en.json";
 import eventTriggers from "./logic.event-triggers.en.json";
 import functions from "./logic.functions.en.json";
+import functionsComponents from "./logic.functions.components.en.json";
 import proxy from "./logic.proxy.en.json";
+import proxyComponents from "./logic.proxy.components.en.json";
 import scheduler from "./logic.scheduler.en.json";
-import workflowNodes from "./logic.workflow.nodes.en.json";
+import shared from "./logic.shared.en.json";
 import workflow from "./logic.workflow.en.json";
+import workflowNodesGuides from "./logic.workflow.nodes.guides.en.json";
+import workflowNodesInspector from "./logic.workflow.nodes.inspector.en.json";
+import workflowNodesSchemas from "./logic.workflow.nodes.schemas.en.json";
 
-registerTranslations("logic.shared", shared);
 registerTranslations("logic.event-triggers", eventTriggers);
 registerTranslations("logic.functions", functions);
+registerTranslations("logic.functions.components", functionsComponents);
 registerTranslations("logic.proxy", proxy);
+registerTranslations("logic.proxy.components", proxyComponents);
 registerTranslations("logic.scheduler", scheduler);
+registerTranslations("logic.shared", shared);
 registerTranslations("logic.workflow", workflow);
-registerTranslations("logic.workflow.nodes", workflowNodes);
+registerTranslations("logic.workflow.nodes.guides", workflowNodesGuides);
+registerTranslations("logic.workflow.nodes.inspector", workflowNodesInspector);
+registerTranslations("logic.workflow.nodes.schemas", workflowNodesSchemas);
