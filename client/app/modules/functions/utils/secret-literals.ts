@@ -35,6 +35,3 @@ export const isTypedCredential = (
   value: string | null | undefined,
 ) => isCredentialName(name) && hasTypedValue(value);
 
-/** The words both editors show under such a row. True for new values and for unchanged stored ones. */
-export const TYPED_CREDENTIAL_MESSAGE =
-  "This name looks like a credential. Save refuses a new or changed typed value here; use a configuration variable instead.";

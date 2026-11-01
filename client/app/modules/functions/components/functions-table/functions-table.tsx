@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT } from "@seliseblocks/genesis-os";
 import { ArrowRightFromLine, Copy, EllipsisVertical, Plus, Trash } from "lucide-react";
 import { FunctionIcon } from "@/constants/navigation-menus";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
@@ -42,22 +42,24 @@ const CELL_CLASS =
 
 const SKELETON_ROWS = 10;
 
-const FunctionsEmptyState = ({ onCreateFunction }: { onCreateFunction: () => void }) => (
-  <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
-    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
-      <FunctionIcon className="h-7 w-7" />
+const FunctionsEmptyState = ({ onCreateFunction }: { onCreateFunction: () => void }) => {
+  const { t } = useT("logic.functions.components");
+  return (
+    <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <FunctionIcon className="h-7 w-7" />
+      </div>
+      <h4 className="mt-5 text-lg font-semibold text-high-emphasis">{t("FUNCTIONS_TABLE.NO_FUNCTIONS_YET")}</h4>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+        {t("FUNCTIONS_TABLE.A_FUNCTION_IS_A")}
+      </p>
+      <Button className="mt-6 gap-2" size="sm" onClick={onCreateFunction}>
+        <Plus className="h-4 w-4" />
+        {t("FUNCTIONS_TABLE.NEW_FUNCTION")}
+      </Button>
     </div>
-    <h4 className="mt-5 text-lg font-semibold text-high-emphasis">No functions yet</h4>
-    <p className="mt-2 max-w-md text-sm text-muted-foreground">
-      A function is a small Node handler you deploy here. It runs in an isolated sandbox, and calls
-      may reuse a warm one. Call it over HTTP or from a workflow&apos;s Function step.
-    </p>
-    <Button className="mt-6 gap-2" size="sm" onClick={onCreateFunction}>
-      <Plus className="h-4 w-4" />
-      New function
-    </Button>
-  </div>
-);
+  );
+};
 
 /** Rows in the real frame, so the card does not change height or shape on load. */
 const FunctionsTableSkeleton = ({ rowCount }: { rowCount: number }) => (
@@ -91,13 +93,14 @@ export const FunctionsTable = ({
   rowCount = SKELETON_ROWS,
   onCreateFunction,
 }: FunctionsTableProps) => {
+  const { t } = useT("logic.functions.components");
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const [pendingDelete, setPendingDelete] = useState<IFunctionSummary | null>(null);
 
   const copyEndpoint = (functionId: string) => {
     navigator.clipboard.writeText(buildInvokeUrl(functionId));
-    showSuccessToast({ description: "Endpoint copied." });
+    showSuccessToast({ description: t("FUNCTIONS_TABLE.ENDPOINT_COPIED") });
   };
 
   const openFunction = (functionId: string) => navigate(scoped(`functions/${functionId}`));
@@ -107,7 +110,7 @@ export const FunctionsTable = ({
   if (!functions.length) {
     return hasFilters ? (
       <p className="py-14 text-center text-sm text-medium-emphasis">
-        No functions match this search.
+        {t("FUNCTIONS_TABLE.NO_FUNCTIONS_MATCH_THIS")}
       </p>
     ) : (
       <FunctionsEmptyState onCreateFunction={onCreateFunction} />
@@ -120,22 +123,22 @@ export const FunctionsTable = ({
         <TableHeader className="[&_tr]:border-0">
           <TableRow className="border-0">
             <TableHead className={HEAD_CLASS}>
-              <div className="font-bold text-medium-emphasis">Function</div>
+              <div className="font-bold text-medium-emphasis">{t("FUNCTIONS_TABLE.FUNCTION")}</div>
             </TableHead>
             <TableHead className={HEAD_CLASS}>
-              <div className="font-bold text-medium-emphasis">Invoked by</div>
+              <div className="font-bold text-medium-emphasis">{t("FUNCTIONS_TABLE.INVOKED_BY")}</div>
             </TableHead>
             <TableHead className={cn("w-[120px]", HEAD_CLASS)}>
-              <div className="font-bold text-medium-emphasis">Active</div>
+              <div className="font-bold text-medium-emphasis">{t("FUNCTIONS_TABLE.ACTIVE")}</div>
             </TableHead>
             <TableHead className={cn("w-[140px]", HEAD_CLASS)}>
-              <div className="font-bold text-medium-emphasis">Runs 24 h</div>
+              <div className="font-bold text-medium-emphasis">{t("FUNCTIONS_TABLE.RUNS_24_H")}</div>
             </TableHead>
             <TableHead className={cn("w-[180px]", HEAD_CLASS)}>
-              <div className="font-bold text-medium-emphasis">Last run</div>
+              <div className="font-bold text-medium-emphasis">{t("FUNCTIONS_TABLE.LAST_RUN")}</div>
             </TableHead>
             <TableHead className={cn("w-[80px]", HEAD_CLASS)}>
-              <span className="sr-only">Row actions</span>
+              <span className="sr-only">{t("FUNCTIONS_TABLE.ROW_ACTIONS")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -161,19 +164,18 @@ export const FunctionsTable = ({
                     <FunctionStatusChip status={fn.status} />
                     {fn.isDirty && fn.status === "Live" && (
                       <span className="whitespace-nowrap text-xs text-muted-foreground">
-                        unpublished changes
+                        {t("FUNCTIONS_TABLE.UNPUBLISHED_CHANGES")}
                       </span>
                     )}
                     {fn.hasUnboundSecrets && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="whitespace-nowrap rounded-full bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-800">
-                            Needs secret
+                            {t("FUNCTIONS_TABLE.NEEDS_SECRET")}
                           </span>
                         </TooltipTrigger>
                         <TooltipContent>
-                          Add a secret named {(fn.unboundSecrets ?? []).join(", ") || "as in Variables"} in Blocks OS
-                          secrets.
+                          {t("FUNCTIONS_TABLE.ADD_A_SECRET_NAMED")} {(fn.unboundSecrets ?? []).join(", ") || t("FUNCTIONS_TABLE.AS_IN_VARIABLES")} {t("FUNCTIONS_TABLE.IN_BLOCKS_OS_SECRETS")}
                         </TooltipContent>
                       </Tooltip>
                     )}
@@ -187,16 +189,16 @@ export const FunctionsTable = ({
               <TableCell className={CELL_CLASS}>
                 <span className="whitespace-nowrap text-sm text-muted-foreground">
                   {fn.httpEnabled && fn.workflowEnabled
-                    ? "HTTP · Workflow"
+                    ? t("FUNCTIONS_TABLE.HTTP_WORKFLOW")
                     : fn.workflowEnabled
-                      ? "Workflow"
+                      ? t("FUNCTIONS_TABLE.WORKFLOW")
                       : "HTTP"}
                 </span>
               </TableCell>
 
               <TableCell className={cn("w-[120px]", CELL_CLASS)}>
                 <code className="font-mono text-sm font-semibold text-primary">
-                  {fn.activeVersionNumber ? `v${fn.activeVersionNumber}` : "—"}
+                  {fn.activeVersionNumber ? t("FUNCTIONS_TABLE.V", { activeVersionNumber: fn.activeVersionNumber }) : "—"}
                 </code>
               </TableCell>
 
@@ -229,7 +231,7 @@ export const FunctionsTable = ({
                       <Button
                         variant="ghost"
                         className="h-5 w-5 p-0"
-                        aria-label={`Actions for ${fn.name}`}
+                        aria-label={t("FUNCTIONS_TABLE.ACTIONS_FOR", { name: fn.name })}
                       >
                         <EllipsisVertical width={20} height={20} />
                       </Button>
@@ -240,21 +242,21 @@ export const FunctionsTable = ({
                         onClick={() => openFunction(fn.id)}
                       >
                         <ArrowRightFromLine className="mr-2 h-4 w-4" />
-                        <span>Open</span>
+                        <span>{t("FUNCTIONS_TABLE.OPEN")}</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
                         onClick={() => copyEndpoint(fn.id)}
                       >
                         <Copy className="mr-2 h-4 w-4" />
-                        <span>Copy endpoint</span>
+                        <span>{t("FUNCTIONS_TABLE.COPY_ENDPOINT")}</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer text-destructive focus:text-destructive"
                         onClick={() => setPendingDelete(fn)}
                       >
                         <Trash className="mr-2 h-4 w-4" />
-                        <span>Delete</span>
+                        <span>{t("common:DELETE")}</span>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

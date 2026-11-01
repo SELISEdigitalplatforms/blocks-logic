@@ -1,4 +1,5 @@
 import { FunctionTemplate } from "../types/function.types";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 /**
  * The starters offered by the create dialog. The source itself lives server-side
@@ -12,23 +13,38 @@ export const FUNCTION_TEMPLATES: {
 }[] = [
   {
     value: "Minimal",
-    label: "Minimal handler",
-    description: "An empty handler that logs its input and returns it.",
+    get label() {
+      return tStatic("logic.functions", "TEMPLATES.MINIMAL_HANDLER");
+    },
+    get description() {
+      return tStatic("logic.functions", "TEMPLATES.AN_EMPTY_HANDLER_THAT");
+    },
   },
   {
     value: "HttpEcho",
-    label: "HTTP echo",
-    description: "Echoes the request back with the caller's identity from ctx.context.",
+    get label() {
+      return tStatic("logic.functions", "TEMPLATES.HTTP_ECHO");
+    },
+    get description() {
+      return tStatic("logic.functions", "TEMPLATES.ECHOES_THE_REQUEST_BACK");
+    },
   },
   {
     value: "FetchTransform",
-    label: "Fetch & transform",
-    description: "Calls an HTTP API with fetch(), reshapes the response and returns it.",
+    get label() {
+      return tStatic("logic.functions", "TEMPLATES.FETCH_TRANSFORM");
+    },
+    get description() {
+      return tStatic("logic.functions", "TEMPLATES.CALLS_AN_HTTP_API");
+    },
   },
   {
     value: "ReusedConnection",
-    label: "Database (reused connection)",
-    description:
-      "Connects to MongoDB once at module level and reuses it on every call — the fast pattern.",
+    get label() {
+      return tStatic("logic.functions", "TEMPLATES.DATABASE_REUSED_CONNECTION");
+    },
+    get description() {
+      return tStatic("logic.functions", "TEMPLATES.CONNECTS_TO_MONGODB_ONCE");
+    },
   },
 ];

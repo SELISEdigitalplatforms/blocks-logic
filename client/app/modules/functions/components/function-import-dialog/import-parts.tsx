@@ -3,6 +3,7 @@ import { AlertTriangle, Check, ChevronDown, Copy, FileJson, Loader2, X } from "l
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
 import { cn } from "@/lib/utils";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 /*
  * The small pieces both import dialogs are built from. Proxy keeps its own identical copy
@@ -10,41 +11,41 @@ import { cn } from "@/lib/utils";
  * here is made there too. Nothing in this file knows what is being imported.
  */
 
-const STEPS = ["Choose file", "Review changes", "Done"] as const;
-
 /** Where the user is: 0 choose a file, 1 review the preview, 2 imported. */
-export const ImportSteps = ({ current }: { current: 0 | 1 | 2 }) => (
-  <ol className="flex items-center gap-2 text-xs" aria-label="Import steps">
-    {STEPS.map((label, index) => {
-      const done = index < current;
-      const active = index === current;
-      return (
-        <li
-          key={label}
-          className="flex items-center gap-2"
-          aria-current={active ? "step" : undefined}
-        >
-          <span
-            className={cn(
-              "flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold",
-              done && "border-primary bg-primary text-primary-foreground",
-              active && "border-primary text-primary",
-              !done && !active && "border-border text-medium-emphasis",
-            )}
+export const ImportSteps = ({ current }: { current: 0 | 1 | 2 }) => {
+  const { t } = useT("logic.functions.components");
+  const steps = [t("IMPORT_PARTS.CHOOSE_FILE"), t("IMPORT_PARTS.REVIEW_CHANGES"), t("common:DONE")];
+  return (
+    <ol className="flex items-center gap-2 text-xs" aria-label={t("IMPORT_PARTS.IMPORT_STEPS")}>
+      {steps.map((label, index) => {
+        const done = index < current;
+        const active = index === current;
+        return (
+          <li
+            key={label}
+            className="flex items-center gap-2"
+            aria-current={active ? "step" : undefined}
           >
-            {done ? <Check className="h-3 w-3" aria-hidden="true" /> : index + 1}
-          </span>
-          <span className={cn(active ? "font-semibold" : "text-medium-emphasis")}>{label}</span>
-          {index < STEPS.length - 1 && <span className="h-px w-6 bg-border" aria-hidden="true" />}
-        </li>
-      );
-    })}
-  </ol>
-);
+            <span
+              className={cn(
+                "flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold",
+                done && "border-primary bg-primary text-primary-foreground",
+                active && "border-primary text-primary",
+                !done && !active && "border-border text-medium-emphasis",
+              )}
+            >
+              {done ? <Check className="h-3 w-3" aria-hidden="true" /> : index + 1}
+            </span>
+            <span className={cn(active ? "font-semibold" : "text-medium-emphasis")}>{label}</span>
+            {index < steps.length - 1 && <span className="h-px w-6 bg-border" aria-hidden="true" />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+};
 
 type DropZoneProps = {
-  /** What is being imported, for the labels: "function" or "proxy". */
-  noun: string;
   disabled?: boolean;
   /** Opens the file picker (click, Enter, Space). */
   onBrowse: () => void;
@@ -53,7 +54,8 @@ type DropZoneProps = {
 };
 
 /** Drag a file here, or click / press Enter or Space to browse. */
-export const ImportDropZone = ({ noun, disabled, onBrowse, onDropFiles }: DropZoneProps) => {
+export const ImportDropZone = ({ disabled, onBrowse, onDropFiles }: DropZoneProps) => {
+  const { t } = useT("logic.functions.components");
   const [dragging, setDragging] = useState(false);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -73,7 +75,7 @@ export const ImportDropZone = ({ noun, disabled, onBrowse, onDropFiles }: DropZo
       role="button"
       tabIndex={disabled ? -1 : 0}
       aria-disabled={disabled || undefined}
-      aria-label={`Choose a ${noun} export file, or drop it here`}
+      aria-label={t("IMPORT_PARTS.CHOOSE_A_EXPORT_FILE")}
       data-testid="import-drop-zone"
       data-dragging={dragging || undefined}
       className={cn(
@@ -95,11 +97,9 @@ export const ImportDropZone = ({ noun, disabled, onBrowse, onDropFiles }: DropZo
         <FileJson className="h-6 w-6" aria-hidden="true" />
       </div>
       <p className="text-sm font-semibold">
-        {dragging ? "Drop the file to import it" : `Drop a ${noun} export here`}
+        {dragging ? t("IMPORT_PARTS.DROP_THE_FILE_TO") : t("IMPORT_PARTS.DROP_A_EXPORT_HERE")}
       </p>
-      <p className="text-xs text-medium-emphasis">
-        or click to browse. Only .json export files can be imported.
-      </p>
+      <p className="text-xs text-medium-emphasis">{t("IMPORT_PARTS.OR_CLICK_TO_BROWSE")}</p>
     </div>
   );
 };
@@ -129,40 +129,63 @@ export const ImportFileCard = ({
   disabled,
   onReplace,
   onRemove,
-}: FileCardProps) => (
-  <div className="flex items-center gap-3 rounded-lg border p-3" data-testid="import-file-card">
-    <FileJson className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
-    <div className="min-w-0 flex-1">
-      <p className="truncate text-sm font-semibold">{name}</p>
-      <p className="text-xs text-medium-emphasis">
-        {formatFileSize(size)}
-        {checking ? " · checking…" : ""}
-      </p>
+}: FileCardProps) => {
+  const { t } = useT("logic.functions.components");
+  return (
+    <div className="flex items-center gap-3 rounded-lg border p-3" data-testid="import-file-card">
+      <FileJson className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">{name}</p>
+        <p className="text-xs text-medium-emphasis">
+          {formatFileSize(size)}
+          {checking ? t("IMPORT_PARTS.CHECKING") : ""}
+        </p>
+      </div>
+      {checking && (
+        <Loader2 className="h-4 w-4 animate-spin text-medium-emphasis" aria-hidden="true" />
+      )}
+      <Button size="xs" variant="outline" disabled={disabled} onClick={onReplace}>
+        {t("IMPORT_PARTS.REPLACE")}
+      </Button>
+      <Button
+        size="xs"
+        variant="ghost"
+        className="px-2"
+        aria-label={t("IMPORT_PARTS.REMOVE", { name })}
+        disabled={disabled}
+        onClick={onRemove}
+      >
+        <X className="h-4 w-4" />
+      </Button>
     </div>
-    {checking && (
-      <Loader2 className="h-4 w-4 animate-spin text-medium-emphasis" aria-hidden="true" />
-    )}
-    <Button size="xs" variant="outline" disabled={disabled} onClick={onReplace}>
-      Replace
-    </Button>
-    <Button
-      size="xs"
-      variant="ghost"
-      className="px-2"
-      aria-label={`Remove ${name}`}
-      disabled={disabled}
-      onClick={onRemove}
-    >
-      <X className="h-4 w-4" />
-    </Button>
-  </div>
-);
+  );
+};
 
 const STATUS_CHIPS = {
-  new: { label: "New", variant: "info" },
-  same: { label: "Same", variant: "secondary" },
-  changed: { label: "Changed", variant: "warning" },
-  blocked: { label: "Blocked", variant: "error" },
+  new: {
+    get label() {
+      return tStatic("logic.functions.components", "IMPORT_PARTS.NEW");
+    },
+    variant: "info",
+  },
+  same: {
+    get label() {
+      return tStatic("logic.functions.components", "IMPORT_PARTS.SAME");
+    },
+    variant: "secondary",
+  },
+  changed: {
+    get label() {
+      return tStatic("logic.functions.components", "IMPORT_PARTS.CHANGED");
+    },
+    variant: "warning",
+  },
+  blocked: {
+    get label() {
+      return tStatic("logic.functions.components", "IMPORT_PARTS.BLOCKED");
+    },
+    variant: "error",
+  },
 } as const;
 
 export const ImportStatusChip = ({ status }: { status: keyof typeof STATUS_CHIPS }) => (
@@ -184,27 +207,34 @@ export const ImportChoiceToggle = ({
   label: string;
   value: "mine" | "incoming";
   onChange: (value: "mine" | "incoming") => void;
-}) => (
-  <div role="group" aria-label={`Use for ${label}`} className="inline-flex rounded-md border">
-    {(["mine", "incoming"] as const).map((choice) => (
-      <button
-        key={choice}
-        type="button"
-        aria-pressed={value === choice}
-        className={cn(
-          "px-2.5 py-1 text-xs font-medium first:rounded-l-md last:rounded-r-md",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          value === choice
-            ? "bg-primary text-primary-foreground"
-            : "text-medium-emphasis hover:bg-muted/50",
-        )}
-        onClick={() => onChange(choice)}
-      >
-        {choice === "mine" ? "Mine" : "Incoming"}
-      </button>
-    ))}
-  </div>
-);
+}) => {
+  const { t } = useT("logic.functions.components");
+  return (
+    <div
+      role="group"
+      aria-label={t("IMPORT_PARTS.USE_FOR", { label })}
+      className="inline-flex rounded-md border"
+    >
+      {(["mine", "incoming"] as const).map((choice) => (
+        <button
+          key={choice}
+          type="button"
+          aria-pressed={value === choice}
+          className={cn(
+            "px-2.5 py-1 text-xs font-medium first:rounded-l-md last:rounded-r-md",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            value === choice
+              ? "bg-primary text-primary-foreground"
+              : "text-medium-emphasis hover:bg-muted/50",
+          )}
+          onClick={() => onChange(choice)}
+        >
+          {choice === "mine" ? t("IMPORT_PARTS.MINE") : t("IMPORT_PARTS.INCOMING")}
+        </button>
+      ))}
+    </div>
+  );
+};
 
 type ChangeRowProps = {
   label: string;
@@ -216,6 +246,7 @@ type ChangeRowProps = {
 
 /** One difference: its name, the Mine / Incoming switch, and an expandable detail. */
 export const ImportChangeRow = ({ label, value, onChange, children }: ChangeRowProps) => {
+  const { t } = useT("logic.functions.components");
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-lg border" data-testid="import-change-row">
@@ -223,7 +254,9 @@ export const ImportChangeRow = ({ label, value, onChange, children }: ChangeRowP
         <button
           type="button"
           aria-expanded={open}
-          aria-label={`${open ? "Hide" : "Show"} diff for ${label}`}
+          aria-label={t(open ? "IMPORT_PARTS.HIDE_DIFF_FOR" : "IMPORT_PARTS.SHOW_DIFF_FOR", {
+            label,
+          })}
           className="flex min-w-0 items-center gap-1.5 text-left text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setOpen((current) => !current)}
         >
@@ -247,27 +280,30 @@ export const ImportValuePair = ({
 }: {
   mine: string | null | undefined;
   incoming: string | null | undefined;
-}) => (
-  <div className="grid gap-3 text-xs sm:grid-cols-2">
-    {(
-      [
-        ["Mine (here now)", mine],
-        ["Incoming (file)", incoming],
-      ] as const
-    ).map(([title, value]) => (
-      <div key={title} className="min-w-0">
-        <p className="mb-1 font-medium text-medium-emphasis">{title}</p>
-        {value === null || value === undefined ? (
-          <span className="italic text-muted-foreground">not set</span>
-        ) : (
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono">
-            {value}
-          </pre>
-        )}
-      </div>
-    ))}
-  </div>
-);
+}) => {
+  const { t } = useT("logic.functions.components");
+  return (
+    <div className="grid gap-3 text-xs sm:grid-cols-2">
+      {(
+        [
+          [t("IMPORT_PARTS.MINE_HERE_NOW"), mine],
+          [t("IMPORT_PARTS.INCOMING_FILE"), incoming],
+        ] as const
+      ).map(([title, value]) => (
+        <div key={title} className="min-w-0">
+          <p className="mb-1 font-medium text-medium-emphasis">{title}</p>
+          {value === null || value === undefined ? (
+            <span className="italic text-muted-foreground">{t("IMPORT_PARTS.NOT_SET")}</span>
+          ) : (
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono">
+              {value}
+            </pre>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
 
 type SecretChecklistProps = {
   missing: string[];
@@ -285,22 +321,23 @@ export const ImportSecretChecklist = ({
   unresolved = [],
   unchecked,
 }: SecretChecklistProps) => {
+  const { t } = useT("logic.functions.components");
   if (!missing.length && !duplicate.length && !unresolved.length && !unchecked) return null;
   const rows = [
     ...missing.map((name) => ({
       name,
       icon: AlertTriangle,
-      text: "not in this environment. Add a secret with this name in Blocks OS Secrets.",
+      text: t("IMPORT_PARTS.NOT_IN_THIS_ENVIRONMENT"),
     })),
     ...duplicate.map((name) => ({
       name,
       icon: Copy,
-      text: "more than one secret here has this name. Keep one so the right one is used.",
+      text: t("IMPORT_PARTS.MORE_THAN_ONE_SECRET"),
     })),
     ...unresolved.map((name) => ({
       name,
       icon: AlertTriangle,
-      text: "had no secret where the file was exported. Set it after the import.",
+      text: t("IMPORT_PARTS.HAD_NO_SECRET_WHERE"),
     })),
   ];
   return (
@@ -308,7 +345,7 @@ export const ImportSecretChecklist = ({
       className="rounded-md border border-warning-100 bg-warning-50 p-3 text-xs text-warning-800"
       data-testid="import-secret-checklist"
     >
-      <p className="font-semibold">Secrets to check</p>
+      <p className="font-semibold">{t("IMPORT_PARTS.SECRETS_TO_CHECK")}</p>
       {rows.length > 0 && (
         <ul className="mt-1.5 space-y-1">
           {rows.map(({ name, icon: Icon, text }) => (
@@ -321,9 +358,7 @@ export const ImportSecretChecklist = ({
           ))}
         </ul>
       )}
-      {unchecked && (
-        <p className="mt-1.5">Secrets could not be checked right now. You can still import.</p>
-      )}
+      {unchecked && <p className="mt-1.5">{t("IMPORT_PARTS.SECRETS_COULD_NOT_BE")}</p>}
     </div>
   );
 };

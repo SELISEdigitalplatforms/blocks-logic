@@ -1,4 +1,6 @@
 import { TriangleAlert } from "lucide-react";
+import { renderRichText } from "@/lib/rich-text";
+import { useT } from "@seliseblocks/genesis-os";
 
 type NeedsSecretBannerProps = {
   missing?: string[];
@@ -12,6 +14,7 @@ type NeedsSecretBannerProps = {
  * with a clear message until it exists.
  */
 export const NeedsSecretBanner = ({ missing = [], duplicate = [] }: NeedsSecretBannerProps) => {
+  const { t } = useT("logic.functions.components");
   if (missing.length === 0 && duplicate.length === 0) return null;
   return (
     <div
@@ -22,14 +25,12 @@ export const NeedsSecretBanner = ({ missing = [], duplicate = [] }: NeedsSecretB
       <div className="flex flex-col gap-0.5">
         {missing.length > 0 && (
           <span>
-            Needs secret: <strong className="font-mono">{missing.join(", ")}</strong>. Add a secret
-            with this exact name in Blocks OS secrets — the next run uses it, with no other change.
+            {renderRichText(t("NEEDS_SECRET_BANNER.NEEDS_SECRET_0_0", { value: missing.join(", ") }), [(children) => <strong className="font-mono">{children}</strong>])}
           </span>
         )}
         {duplicate.length > 0 && (
           <span>
-            More than one secret is named <strong className="font-mono">{duplicate.join(", ")}</strong>.
-            Keep only one, or pick the secret in Variables.
+            {renderRichText(t("NEEDS_SECRET_BANNER.MORE_THAN_ONE_SECRET", { value: duplicate.join(", ") }), [(children) => <strong className="font-mono">{children}</strong>])}
           </span>
         )}
       </div>

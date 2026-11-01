@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT, tStatic } from "@seliseblocks/genesis-os";
 import { DiffEditor } from "@monaco-editor/react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import { AlertTriangle, CheckCircle2, Info, Loader2, XCircle } from "lucide-react";
@@ -47,10 +47,21 @@ type Props = {
 };
 
 const STATUS_TEXT: Record<IFunctionImportPreview["status"], string> = {
-  new: "This function is not here yet. Importing creates it with the same id, so its URL is the same.",
-  same: "This environment already has exactly this function. There is nothing to import.",
-  changed: "This function is already here and some parts differ. Choose what to keep.",
-  blocked: "This file cannot be imported here right now.",
+  get new() {
+    return tStatic("logic.functions.components", "FUNCTION_IMPORT_DIALOG.THIS_FUNCTION_IS_NOT");
+  },
+  get same() {
+    return tStatic(
+      "logic.functions.components",
+      "FUNCTION_IMPORT_DIALOG.THIS_ENVIRONMENT_ALREADY_HAS",
+    );
+  },
+  get changed() {
+    return tStatic("logic.functions.components", "FUNCTION_IMPORT_DIALOG.THIS_FUNCTION_IS_ALREADY");
+  },
+  get blocked() {
+    return tStatic("logic.functions.components", "FUNCTION_IMPORT_DIALOG.THIS_FILE_CANNOT_BE");
+  },
 };
 
 /**
@@ -59,6 +70,7 @@ const STATUS_TEXT: Record<IFunctionImportPreview["status"], string> = {
  * the import — "Deploy again" retries, exactly as the editor's Deploy would.
  */
 const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
+  const { t } = useT("logic.functions.components");
   const [buildId, setBuildId] = useState(result.deploy?.buildId ?? undefined);
   const [deployState, setDeployState] = useState(result.deploy?.state);
   const [version, setVersion] = useState(result.deploy?.versionNumber ?? undefined);
@@ -71,7 +83,9 @@ const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
   const buildFailed =
     deployState === "building" && !!buildId && build?.id === buildId && build.status === "Failed";
   const state = buildFailed ? "failed" : deployState;
-  const error = buildFailed ? (build?.errorMessage ?? "The build failed.") : deployError;
+  const error = buildFailed
+    ? (build?.errorMessage ?? t("FUNCTION_IMPORT_DIALOG.THE_BUILD_FAILED"))
+    : deployError;
 
   const run = (payload: { buildId?: string }) =>
     deployAsync({ functionId: result.functionId, ...payload })
@@ -114,9 +128,9 @@ const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
         {state === "live" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
         {state === "failed" && <XCircle className="h-4 w-4 text-error" />}
         <span>
-          {state === "building" && "Imported. Building and deploying…"}
+          {state === "building" && t("FUNCTION_IMPORT_DIALOG.IMPORTED_BUILDING_AND_DEPLOYING")}
           {state === "live" && `Imported and live${version ? ` as v${version}` : ""}.`}
-          {state === "failed" && "Imported, but the deploy failed. The function is saved."}
+          {state === "failed" && t("FUNCTION_IMPORT_DIALOG.IMPORTED_BUT_THE_DEPLOY")}
         </span>
       </div>
       {buildId && <BuildProgress buildId={buildId} />}
@@ -125,7 +139,7 @@ const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
           {error && <span className="text-xs text-error">{error}</span>}
           <Button size="sm" variant="outline" disabled={isPending} onClick={retry}>
             {isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-            Deploy again
+            {t("FUNCTION_IMPORT_DIALOG.DEPLOY_AGAIN")}
           </Button>
         </div>
       )}
@@ -138,6 +152,7 @@ const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
  * back and the server checks everything again, so what this dialog shows is advice only.
  */
 export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
+  const { t } = useT("logic.functions.components");
   const inputRef = useRef<HTMLInputElement>(null);
   // Bumped on every pick and every reset: an answer that arrives for an older file is dropped.
   const ticket = useRef(0);
@@ -198,7 +213,7 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
     const chosen = files[0];
     if (!chosen) return;
     if (files.length > 1) {
-      setError("Choose one file at a time.");
+      setError(t("FUNCTION_IMPORT_DIALOG.CHOOSE_ONE_FILE_AT"));
       return;
     }
     // The cheap checks run before the file is read, so a wrong file never costs a read.
@@ -219,7 +234,9 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
       if (mine !== ticket.current) return;
       setChecking(false);
       setPicked(null);
-      setError(failure instanceof Error ? failure.message : "The file could not be read.");
+      setError(
+        failure instanceof Error ? failure.message : t("FUNCTION_IMPORT_DIALOG.THE_FILE_COULD_NOT"),
+      );
     }
   };
 
@@ -251,10 +268,10 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
       showSuccessToast({
         description:
           done.status === "created"
-            ? `Imported "${done.name}".`
+            ? t("FUNCTION_IMPORT_DIALOG.IMPORTED", { name: done.name })
             : done.status === "updated"
-              ? `Updated "${done.name}" from the file.`
-              : "Nothing changed: the function already matches.",
+              ? t("FUNCTION_IMPORT_DIALOG.UPDATED_FROM_THE_FILE", { name: done.name })
+              : t("FUNCTION_IMPORT_DIALOG.NOTHING_CHANGED_THE_FUNCTION"),
       });
     } catch (failure) {
       const { status, message } = importErrorOf(failure);
@@ -275,9 +292,9 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <DialogContent className="max-h-[90vh] w-[min(96vw,1100px)] max-w-none overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Import function</DialogTitle>
+          <DialogTitle>{t("FUNCTION_IMPORT_DIALOG.IMPORT_FUNCTION")}</DialogTitle>
           <DialogDescription>
-            Choose a function export file (.json). Nothing changes until you press Import.
+            {t("FUNCTION_IMPORT_DIALOG.CHOOSE_A_FUNCTION_EXPORT")}
           </DialogDescription>
         </DialogHeader>
 
@@ -289,7 +306,7 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
             type="file"
             accept=".json,application/json"
             className="hidden"
-            aria-label="Function export file"
+            aria-label={t("FUNCTION_IMPORT_DIALOG.FUNCTION_EXPORT_FILE")}
             data-testid="function-import-input"
             onChange={(e) => {
               void pick([...(e.target.files ?? [])]);
@@ -299,7 +316,6 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
 
           {!picked && !result && (
             <ImportDropZone
-              noun="function"
               disabled={busy}
               onBrowse={() => inputRef.current?.click()}
               onDropFiles={(files) => void pick(files)}
@@ -366,13 +382,16 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm text-medium-emphasis" aria-live="polite">
-                      {takeCount} of {diffs.length} changes will be taken
+                      {t("FUNCTION_IMPORT_DIALOG.OF_CHANGES_WILL_BE", {
+                        takeCount,
+                        length: diffs.length,
+                      })}
                     </span>
                     <Button size="xs" variant="ghost" onClick={() => setAll("incoming")}>
-                      Take all incoming
+                      {t("FUNCTION_IMPORT_DIALOG.TAKE_ALL_INCOMING")}
                     </Button>
                     <Button size="xs" variant="ghost" onClick={() => setAll("mine")}>
-                      Keep all mine
+                      {t("FUNCTION_IMPORT_DIALOG.KEEP_ALL_MINE")}
                     </Button>
                   </div>
 
@@ -395,7 +414,7 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
                       onChange={(c) => choose(f.field, c)}
                     >
                       <p className="mb-2 text-xs text-medium-emphasis">
-                        Left: mine (here now). Right: incoming (file).
+                        {t("FUNCTION_IMPORT_DIALOG.LEFT_MINE_HERE_NOW")}
                       </p>
                       <DiffEditor
                         height="280px"
@@ -425,10 +444,10 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
                 <CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true" />
                 <span className="text-sm font-semibold">
                   {result.status === "created"
-                    ? `Imported "${result.name}"`
+                    ? t("FUNCTION_IMPORT_DIALOG.IMPORTED_2", { name: result.name })
                     : result.status === "updated"
-                      ? `Updated "${result.name}"`
-                      : `"${result.name}" already matches the file`}
+                      ? t("FUNCTION_IMPORT_DIALOG.UPDATED", { name: result.name })
+                      : t("FUNCTION_IMPORT_DIALOG.ALREADY_MATCHES_THE_FILE", { name: result.name })}
                 </span>
               </div>
               {result.messages.map((m) => (
@@ -450,7 +469,7 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
           {result ? (
             <>
               <Button variant="outline" onClick={close}>
-                Close
+                {t("common:CLOSE")}
               </Button>
               <Button
                 onClick={() => {
@@ -459,17 +478,17 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
                   navigate(scoped(`functions/${id}`));
                 }}
               >
-                Open function
+                {t("FUNCTION_IMPORT_DIALOG.OPEN_FUNCTION")}
               </Button>
             </>
           ) : (
             <>
               <Button variant="outline" onClick={close}>
-                Cancel
+                {t("common:CANCEL")}
               </Button>
               <Button disabled={!canApply || busy} onClick={() => void apply()}>
                 {applyMutation.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                Import
+                {t("FUNCTION_IMPORT_DIALOG.IMPORT")}
               </Button>
             </>
           )}

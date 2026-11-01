@@ -1,3 +1,4 @@
+import { tStatic } from "@seliseblocks/genesis-os";
 /**
  * Shown only until `GetLimits` resolves — the server is the source of these numbers, not this file.
  * Mirrors `FunctionLimits.Ceiling` so the first paint matches what arrives a moment later.
@@ -18,52 +19,46 @@ export const HARD_CAPS = [
   // module import are paid every time and are pure CPU, and a smaller share would only slow that
   // down — admission counts memory and slots, never CPU, so a lower value frees nothing.
   { label: "CPU", value: "100m per run" },
-  { label: "Input", value: "Size-limited; a larger request is refused" },
-  { label: "Result", value: "Size-limited; return a reference for large data" },
-  { label: "Logs", value: "Capped per run; lines past the cap are dropped" },
-  { label: "Temp disk", value: "Small /tmp only; files can't be executed" },
-  { label: "Processes", value: "Capped per sandbox" },
+  { get label() { return tStatic("logic.functions", "LIMITS_CONSTANT.INPUT"); }, value: "Size-limited; a larger request is refused" },
+  { get label() { return tStatic("logic.functions", "LIMITS_CONSTANT.RESULT"); }, value: "Size-limited; return a reference for large data" },
+  { get label() { return tStatic("logic.functions", "LIMITS_CONSTANT.LOGS"); }, value: "Capped per run; lines past the cap are dropped" },
+  { get label() { return tStatic("logic.functions", "LIMITS_CONSTANT.TEMP_DISK"); }, value: "Small /tmp only; files can't be executed" },
+  { get label() { return tStatic("logic.functions", "LIMITS_CONSTANT.PROCESSES"); }, value: "Capped per sandbox" },
 ] as const;
 
 /** The "What the sandbox gives you" reference in the Code tab's right rail. */
 export const SANDBOX_CTX_DOCS = [
   {
     name: "input",
-    description:
-      "The request: { method, path, query, headers, body }. path is whatever followed /fn/{id}; body is the parsed JSON (or text) of a POST, null on a GET. From a workflow node it is the previous node's output instead.",
+    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.THE_REQUEST_METHOD_PATH"); },
   },
   {
     name: "fetch(url)",
-    description:
-      "Standard fetch. Public internet is reachable; Blocks internals and private networks are not routed.",
+    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.STANDARD_FETCH_PUBLIC_INTERNET"); },
   },
   {
     name: "ctx.env.NAME",
-    description: "Your variables, as plain strings. Snapshotted at deploy. A variable bound to a secret arrives as its real value, masked in logs.",
+    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.YOUR_VARIABLES_AS_PLAIN"); },
   },
   {
     name: "ctx.context",
-    description:
-      "tenantId, userId, roles, permissions, isAuthenticated. Empty identity on a public call — never a privileged token.",
+    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.TENANTID_USERID_ROLES_PERMISSIONS"); },
   },
   {
     name: "await ctx.blocks.getAccessToken()",
-    description:
-      "The caller's Blocks token: pass it as accessToken to @seliseblocks/client, with ctx.context.tenantId as xBlocksKey. In a warm sandbox it is fetched only when you ask (one IAM round trip, once per call), so ask only on the path that calls Blocks. undefined when there is no signed-in caller (a public trigger, a scheduled workflow) or for a client-credentials caller — check it before calling Blocks. Masked in logs. ctx.blocks.accessToken was removed.",
+    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.THE_CALLER_S_BLOCKS"); },
   },
   {
     name: "ctx.run",
-    description:
-      "id, version, attempt, and invokedBy { type, id } — type is http, workflow, test or replay.",
+    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.ID_VERSION_ATTEMPT_AND"); },
   },
   {
     name: "ctx.log.info / warn / error",
-    description: "Structured lines kept on the run. console.log is captured too.",
+    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.STRUCTURED_LINES_KEPT_ON"); },
   },
   {
     name: "ctx.waitUntil(promise)",
-    description:
-      "Finish work after the answer is sent, within the time limit — in every mode (reused sandbox, Test run, workflow step).",
+    get description() { return tStatic("logic.functions", "LIMITS_CONSTANT.FINISH_WORK_AFTER_THE"); },
   },
 ] as const;
 
@@ -75,33 +70,33 @@ export const SANDBOX_CTX_DOCS = [
  */
 export const SANDBOX_CODE_RULES = [
   {
-    dont: "Start work and return without waiting for it.",
+    get dont() { return tStatic("logic.functions", "LIMITS_CONSTANT.START_WORK_AND_RETURN"); },
     dontCode: "saveAudit(entry); // no await",
-    fix: "Await it. If it may finish after the answer, pass it to ctx.waitUntil.",
+    get fix() { return tStatic("logic.functions", "LIMITS_CONSTANT.AWAIT_IT_IF_IT"); },
     fixCode: "ctx.waitUntil(saveAudit(entry));",
   },
   {
-    dont: "Leave a setTimeout or setInterval running after the handler returns.",
+    get dont() { return tStatic("logic.functions", "LIMITS_CONSTANT.LEAVE_A_SETTIMEOUT_OR"); },
     dontCode: "setInterval(refreshCache, 60_000);",
-    fix: "Await a delay inside the handler, or clear the timer before you return. For repeating work, use a scheduled workflow with a Function step.",
+    get fix() { return tStatic("logic.functions", "LIMITS_CONSTANT.AWAIT_A_DELAY_INSIDE"); },
     fixCode: "await new Promise((r) => setTimeout(r, 500));",
   },
   {
-    dont: "Keep ctx, ctx.log or a token from ctx.blocks.getAccessToken() for later — for example in a client's event listener or a module-level variable.",
+    get dont() { return tStatic("logic.functions", "LIMITS_CONSTANT.KEEP_CTX_CTX_LOG"); },
     dontCode: 'redis.on("error", (e) => ctx.log.error("redis", e));',
-    fix: "Read ctx only inside the handler. In listeners that outlive the call, use console.",
+    get fix() { return tStatic("logic.functions", "LIMITS_CONSTANT.READ_CTX_ONLY_INSIDE"); },
     fixCode: 'redis.on("error", (e) => console.error("redis", e.message));',
   },
   {
-    dont: "Store request data in module-level variables — the next caller can see it.",
+    get dont() { return tStatic("logic.functions", "LIMITS_CONSTANT.STORE_REQUEST_DATA_IN"); },
     dontCode: "let lastUser; // set from input.body",
-    fix: "Keep per-call data in local variables. Module level is for clients, constants and caches keyed by tenant.",
+    get fix() { return tStatic("logic.functions", "LIMITS_CONSTANT.KEEP_PER_CALL_DATA"); },
     fixCode: "const user = input.body.user; // inside the handler",
   },
   {
-    dont: "Connect and close a database client on every call.",
+    get dont() { return tStatic("logic.functions", "LIMITS_CONSTANT.CONNECT_AND_CLOSE_A"); },
     dontCode: "const db = await MongoClient.connect(url); /* … */ await db.close();",
-    fix: "Create the client once at module level and reuse it. Don't close it per call.",
+    get fix() { return tStatic("logic.functions", "LIMITS_CONSTANT.CREATE_THE_CLIENT_ONCE"); },
     fixCode: "let client; // module level\nclient ??= await MongoClient.connect(url);",
   },
 ] as const;
@@ -116,21 +111,21 @@ export const BACKOFF_DELAYS = {
 export const HTTP_METHOD_OPTIONS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
 export const FUNCTION_STATUS_LABELS: Record<string, string> = {
-  Draft: "Draft",
-  Live: "Live",
-  Paused: "Paused",
+  get Draft() { return tStatic("logic.functions", "LIMITS_CONSTANT.DRAFT"); },
+  get Live() { return tStatic("logic.functions", "LIMITS_CONSTANT.LIVE"); },
+  get Paused() { return tStatic("logic.functions", "LIMITS_CONSTANT.PAUSED"); },
 };
 
 export const RUN_STATUS_LABELS: Record<string, string> = {
-  Queued: "Queued",
-  Claimed: "Claimed",
-  Starting: "Starting",
-  Running: "Running",
-  OutputProcessing: "Output processing",
-  Succeeded: "Succeeded",
-  Failed: "Failed",
-  TimedOut: "Timed out",
-  Cancelled: "Cancelled",
-  ResourceExceeded: "Resource exceeded",
-  OutputFailed: "Output failed",
+  get Queued() { return tStatic("logic.functions", "LIMITS_CONSTANT.QUEUED"); },
+  get Claimed() { return tStatic("logic.functions", "LIMITS_CONSTANT.CLAIMED"); },
+  get Starting() { return tStatic("logic.functions", "LIMITS_CONSTANT.STARTING"); },
+  get Running() { return tStatic("logic.functions", "LIMITS_CONSTANT.RUNNING"); },
+  get OutputProcessing() { return tStatic("logic.functions", "LIMITS_CONSTANT.OUTPUT_PROCESSING"); },
+  get Succeeded() { return tStatic("logic.functions", "LIMITS_CONSTANT.SUCCEEDED"); },
+  get Failed() { return tStatic("logic.functions", "LIMITS_CONSTANT.FAILED"); },
+  get TimedOut() { return tStatic("logic.functions", "LIMITS_CONSTANT.TIMED_OUT"); },
+  get Cancelled() { return tStatic("logic.functions", "LIMITS_CONSTANT.CANCELLED"); },
+  get ResourceExceeded() { return tStatic("logic.functions", "LIMITS_CONSTANT.RESOURCE_EXCEEDED"); },
+  get OutputFailed() { return tStatic("logic.functions", "LIMITS_CONSTANT.OUTPUT_FAILED"); },
 };

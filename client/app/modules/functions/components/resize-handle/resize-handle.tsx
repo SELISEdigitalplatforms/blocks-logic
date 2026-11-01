@@ -1,6 +1,7 @@
 import { useRef, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
 import { GripHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@seliseblocks/genesis-os";
 
 /** One arrow press. Shift moves in bigger steps, as it does in most splitters. */
 const KEY_STEP = 20;
@@ -38,6 +39,7 @@ export const ResizeHandle = ({
   label,
   className,
 }: ResizeHandleProps) => {
+  const { t } = useT("logic.functions.components");
   const drag = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
 
   // The rendered height, not `height`: while the target is at its default `height` is null, and
@@ -101,7 +103,7 @@ export const ResizeHandle = ({
       // Only an explicit height is known at render; the default is resolved by the browser.
       aria-valuenow={height ?? undefined}
       tabIndex={0}
-      title="Drag to resize · double-click to reset"
+      title={t("RESIZE_HANDLE.DRAG_TO_RESIZE_DOUBLE")}
       className={cn(
         "flex h-3 shrink-0 cursor-row-resize touch-none select-none items-center justify-center",
         "text-low-emphasis hover:bg-surface-app hover:text-foreground",

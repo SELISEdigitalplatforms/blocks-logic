@@ -1,5 +1,6 @@
 import { useGetLimitsOptions } from "../../hooks/use-functions";
 import { DEFAULT_LIMITS_OPTIONS, HARD_CAPS } from "../../constants/limits.constant";
+import { useT } from "@seliseblocks/genesis-os";
 
 /**
  * What every run gets. Nothing here is a choice.
@@ -13,17 +14,18 @@ import { DEFAULT_LIMITS_OPTIONS, HARD_CAPS } from "../../constants/limits.consta
  * concurrency are shown since 2026-10-20 (user: "limits missing in ui show them").
  */
 export const LimitsForm = () => {
+  const { t } = useT("logic.functions.components");
   const { data: options } = useGetLimitsOptions();
   const profile = options ?? DEFAULT_LIMITS_OPTIONS;
 
   const rows = [
-    { label: "Memory", value: `${profile.memoryMb} MB per run` },
-    { label: "Timeout", value: `${profile.timeoutSeconds} s per run` },
+    { label: t("LIMITS_FORM.MEMORY"), value: `${profile.memoryMb} MB per run` },
+    { label: t("LIMITS_FORM.TIMEOUT"), value: `${profile.timeoutSeconds} s per run` },
     { label: "CPU", value: `${profile.cpuMillicores}m per run` },
     {
-      label: "Concurrency",
+      label: t("LIMITS_FORM.CONCURRENCY"),
       value: `${profile.concurrency} runs at a time per function`,
-      note: "Runs beyond the limit queue rather than fail.",
+      note: t("LIMITS_FORM.RUNS_BEYOND_THE_LIMIT"),
     },
     ...HARD_CAPS.filter((cap) => cap.label !== "CPU"),
   ];
@@ -44,9 +46,7 @@ export const LimitsForm = () => {
         ))}
       </dl>
       <p className="text-xs leading-relaxed text-medium-emphasis">
-        The same for every function, and not configurable. One profile is what makes a slot mean the
-        same thing whoever is running in it — so capacity is something the platform can plan, and no
-        function can make itself cheaper or more expensive than another.
+        {t("LIMITS_FORM.THE_SAME_FOR_EVERY")}
       </p>
     </div>
   );

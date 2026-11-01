@@ -1,3 +1,4 @@
+import { tStatic } from "@seliseblocks/genesis-os";
 /**
  * Ready-made setups for the services a function most often talks to. Each one names the npm
  * package, the variables its connection needs, and a handler that opens, uses and closes the
@@ -41,27 +42,36 @@ export interface IConnectionPreset {
 export const CONNECTION_PRESETS: IConnectionPreset[] = [
   {
     id: "blocks",
-    label: "Blocks APIs",
-    description:
-      "Data, mail, IAM and notifier through @seliseblocks/client, as the signed-in caller — or a client-credentials client when there is none.",
+    get label() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.BLOCKS_APIS");
+    },
+    get description() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.DATA_MAIL_IAM_AND");
+    },
     packageName: "@seliseblocks/client",
     version: "0.2.0",
     variables: [
       {
         key: "BLOCKS_API_URL",
         secret: false,
-        hint: "The project's API host: https://blocksapi.<your domain>, or the shared public host until the project has a custom domain",
+        get hint() {
+          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.THE_PROJECT_S_API");
+        },
         prefill: "blocksApiHost",
       },
       {
         key: "BLOCKS_CLIENT_ID",
         secret: true,
-        hint: "Optional: an IAM client-credentials client, used only when a run has no caller token (public trigger, scheduled workflow)",
+        get hint() {
+          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.OPTIONAL_AN_IAM_CLIENT");
+        },
       },
       {
         key: "BLOCKS_CLIENT_SECRET",
         secret: true,
-        hint: "Optional: that client's secret",
+        get hint() {
+          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.OPTIONAL_THAT_CLIENT_S");
+        },
       },
     ],
     snippet: `import { createBlocksClient } from "@seliseblocks/client";
@@ -98,7 +108,9 @@ export default async function (input, ctx) {
   {
     id: "mongodb",
     label: "MongoDB",
-    description: "Any MongoDB with a public endpoint — Atlas, Cosmos DB for MongoDB.",
+    get description() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.ANY_MONGODB_WITH_A");
+    },
     packageName: "mongodb",
     version: "7.7.0",
     variables: [
@@ -124,7 +136,9 @@ export default async function (input, ctx) {
   {
     id: "postgres",
     label: "PostgreSQL",
-    description: "Any Postgres with a public endpoint — Neon, Supabase, Azure, RDS.",
+    get description() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.ANY_POSTGRES_WITH_A");
+    },
     packageName: "pg",
     version: "8.23.1",
     variables: [
@@ -150,7 +164,9 @@ export default async function (input, ctx) {
   {
     id: "mysql",
     label: "MySQL",
-    description: "Any MySQL or MariaDB with a public endpoint — PlanetScale, Azure, RDS.",
+    get description() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.ANY_MYSQL_OR_MARIADB");
+    },
     packageName: "mysql2",
     version: "3.24.5",
     variables: [{ key: "MYSQL_URL", secret: true, hint: "mysql://user:password@host:3306/db" }],
@@ -168,8 +184,12 @@ export default async function (input, ctx) {
   },
   {
     id: "redis",
-    label: "Redis",
-    description: "Any Redis with a public TLS endpoint — Upstash, Redis Cloud, Azure Cache.",
+    get label() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.REDIS");
+    },
+    get description() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.ANY_REDIS_WITH_A");
+    },
     packageName: "ioredis",
     version: "6.0.0",
     variables: [{ key: "REDIS_URL", secret: true, hint: "rediss://default:password@host:6380" }],
@@ -192,12 +212,21 @@ export default async function (input, ctx) {
   {
     id: "rabbitmq",
     label: "RabbitMQ",
-    description: "Publish to any AMQP broker with a public endpoint — CloudAMQP, Amazon MQ.",
+    get description() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.PUBLISH_TO_ANY_AMQP");
+    },
     packageName: "amqplib",
     version: "2.2.0",
     variables: [
       { key: "AMQP_URL", secret: true, hint: "amqps://user:password@host/vhost" },
-      { key: "AMQP_QUEUE", secret: false, hint: "Queue to publish to", defaultValue: "events" },
+      {
+        key: "AMQP_QUEUE",
+        secret: false,
+        get hint() {
+          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.QUEUE_TO_PUBLISH_TO");
+        },
+        defaultValue: "events",
+      },
     ],
     snippet: `import amqp from "amqplib";
 
@@ -217,17 +246,32 @@ export default async function (input, ctx) {
   },
   {
     id: "servicebus",
-    label: "Azure Service Bus",
-    description: "Send to your own Service Bus namespace.",
+    get label() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.AZURE_SERVICE_BUS");
+    },
+    get description() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.SEND_TO_YOUR_OWN");
+    },
     packageName: "@azure/service-bus",
     version: "7.10.0",
     variables: [
       {
         key: "SERVICEBUS_CONNECTION",
         secret: true,
-        hint: "Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=…;SharedAccessKey=…",
+        get hint() {
+          return tStatic(
+            "logic.functions",
+            "CONNECTIONS_CONSTANT.ENDPOINT_SB_NAMESPACE_SERVICEBUS",
+          );
+        },
       },
-      { key: "SERVICEBUS_QUEUE", secret: false, hint: "Queue or topic name" },
+      {
+        key: "SERVICEBUS_QUEUE",
+        secret: false,
+        get hint() {
+          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.QUEUE_OR_TOPIC_NAME");
+        },
+      },
     ],
     snippet: `import { ServiceBusClient } from "@azure/service-bus";
 
@@ -245,12 +289,22 @@ export default async function (input, ctx) {
   },
   {
     id: "sqs",
-    label: "Amazon SQS",
-    description: "Send to an SQS queue with an IAM user's access key.",
+    get label() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.AMAZON_SQS");
+    },
+    get description() {
+      return tStatic("logic.functions", "CONNECTIONS_CONSTANT.SEND_TO_AN_SQS");
+    },
     packageName: "@aws-sdk/client-sqs",
     version: "3.1146.0",
     variables: [
-      { key: "AWS_REGION", secret: false, hint: "The queue's region, e.g. eu-west-1" },
+      {
+        key: "AWS_REGION",
+        secret: false,
+        get hint() {
+          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.THE_QUEUE_S_REGION");
+        },
+      },
       {
         key: "SQS_QUEUE_URL",
         secret: true,
@@ -259,9 +313,17 @@ export default async function (input, ctx) {
       {
         key: "AWS_ACCESS_KEY_ID",
         secret: true,
-        hint: "Access key of an IAM user allowed sqs:SendMessage on that queue",
+        get hint() {
+          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.ACCESS_KEY_OF_AN");
+        },
       },
-      { key: "AWS_SECRET_ACCESS_KEY", secret: true, hint: "That access key's secret" },
+      {
+        key: "AWS_SECRET_ACCESS_KEY",
+        secret: true,
+        get hint() {
+          return tStatic("logic.functions", "CONNECTIONS_CONSTANT.THAT_ACCESS_KEY_S");
+        },
+      },
     ],
     snippet: `import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 

@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useNavigate } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT, tStatic } from "@seliseblocks/genesis-os";
 import { Zap } from "lucide-react";
 import {
   Dialog,
@@ -30,19 +30,27 @@ import { cn } from "@/lib/utils";
 import { useCreateFunction } from "../../hooks/use-functions";
 import { FUNCTION_TEMPLATES } from "../../constants/templates";
 import { FunctionTemplate } from "../../types/function.types";
+import { renderRichText } from "@/lib/rich-text";
 
 // Every template the picker shows, so a new one cannot be offered and then refused by the form (FN-12).
 const TEMPLATE_VALUES = FUNCTION_TEMPLATES.map((t) => t.value) as [FunctionTemplate, ...FunctionTemplate[]];
 
 // Limits from FEATURES-AND-UI §4.2. The server allows more, deliberately: this is the form's
 // contract with the person typing, not the storage limit.
-const createFunctionFormSchema = z.object({
-  name: z.string().min(2, "This name is too short").max(64, "This name is too long"),
-  description: z.string().max(200, "This description is too long").optional(),
-  template: z.enum(TEMPLATE_VALUES),
-});
+const createFunctionFormSchema = () =>
+  z.object({
+    name: z
+      .string()
+      .min(2, tStatic("logic.functions.components", "FUNCTION_CREATE_DIALOG.NAME_TOO_SHORT"))
+      .max(64, tStatic("logic.functions.components", "FUNCTION_CREATE_DIALOG.NAME_TOO_LONG")),
+    description: z
+      .string()
+      .max(200, tStatic("logic.functions.components", "FUNCTION_CREATE_DIALOG.DESCRIPTION_TOO_LONG"))
+      .optional(),
+    template: z.enum(TEMPLATE_VALUES),
+  });
 
-type CreateFunctionFormValues = z.infer<typeof createFunctionFormSchema>;
+type CreateFunctionFormValues = z.infer<ReturnType<typeof createFunctionFormSchema>>;
 
 type FunctionCreateDialogProps = {
   open: boolean;
@@ -50,13 +58,14 @@ type FunctionCreateDialogProps = {
 };
 
 export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialogProps) => {
+  const { t: tr } = useT("logic.functions.components");
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { mutateAsync, isPending } = useCreateFunction();
 
   const form = useForm<CreateFunctionFormValues>({
     defaultValues: { name: "", description: "", template: "Minimal" },
-    resolver: zodResolver(createFunctionFormSchema),
+    resolver: zodResolver(createFunctionFormSchema()),
   });
 
   useEffect(() => {
@@ -70,12 +79,12 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
         description: values.description || null,
         template: values.template,
       });
-      showSuccessToast({ description: "Created — deploy it to get a live endpoint." });
+      showSuccessToast({ description: tr("FUNCTION_CREATE_DIALOG.CREATED_DEPLOY_IT_TO") });
       onOpenChange(false);
       navigate(scoped(`functions/${created.id}`));
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to create function" });
+      return showErrorToast({ errors: tr("FUNCTION_CREATE_DIALOG.FAILED_TO_CREATE_FUNCTION") });
     }
   };
 
@@ -87,12 +96,11 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
             <Zap className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1 space-y-0.5">
-            <DialogTitle className="tracking-tight">Create function</DialogTitle>
+            <DialogTitle className="tracking-tight">{tr("FUNCTION_CREATE_DIALOG.CREATE_FUNCTION")}</DialogTitle>
             <DialogDescription>
-              Pick a starter and name it. Its endpoint is{" "}
-              <code className="font-mono text-xs">/logic/v4/fn/{"{id}"}</code> (POST to start; more
-              methods on the Trigger tab), so
-              there is no slug to choose and nothing here has to be unique.
+              {renderRichText(tr("FUNCTION_CREATE_DIALOG.PICK_A_STARTER"), [
+                (text) => <code className="font-mono text-xs">{text}</code>,
+              ])}
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -104,9 +112,9 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>{tr("common:NAME")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. Send order confirmation" {...field} />
+                    <Input placeholder={tr("FUNCTION_CREATE_DIALOG.E_G_SEND_ORDER")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -117,8 +125,8 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
               name="template"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Template</FormLabel>
-                  <div className="flex flex-col gap-2" role="radiogroup" aria-label="Template">
+                  <FormLabel>{tr("FUNCTION_CREATE_DIALOG.TEMPLATE")}</FormLabel>
+                  <div className="flex flex-col gap-2" role="radiogroup" aria-label={tr("FUNCTION_CREATE_DIALOG.TEMPLATE")}>
                     {FUNCTION_TEMPLATES.map((template) => (
                       <button
                         key={template.value}
@@ -160,14 +168,11 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>
-                    Description
-                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                      optional
-                    </span>
+                    {renderRichText(tr("FUNCTION_CREATE_DIALOG.DESCRIPTION_0_OPTIONAL_0"), [(children) => <span className="ml-1.5 text-xs font-normal text-muted-foreground">{children}</span>])}
                   </FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="What does this function do?"
+                      placeholder={tr("FUNCTION_CREATE_DIALOG.WHAT_DOES_THIS_FUNCTION")}
                       className="min-h-[90px] resize-none"
                       {...field}
                     />
@@ -183,10 +188,10 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
                 onClick={() => onOpenChange(false)}
                 disabled={isPending}
               >
-                Cancel
+                {tr("common:CANCEL")}
               </Button>
               <Button type="submit" disabled={isPending} className="min-w-28">
-                {isPending ? "Creating…" : "Create"}
+                {isPending ? tr("FUNCTION_CREATE_DIALOG.CREATING") : tr("common:CREATE")}
               </Button>
             </div>
           </form>

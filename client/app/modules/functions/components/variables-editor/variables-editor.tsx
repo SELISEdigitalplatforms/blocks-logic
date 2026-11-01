@@ -3,8 +3,10 @@ import { Input } from "@/components/ui-kits/input/input";
 import { Button } from "@/components/ui-kits/button/button";
 import { VariableRefField, secretIdRef, soleRefKey } from "@/components/variable-picker";
 import { IVariableBinding } from "../../types/function.types";
-import { TYPED_CREDENTIAL_MESSAGE, isTypedCredential } from "../../utils/secret-literals";
+import { isTypedCredential } from "../../utils/secret-literals";
 import { soleSecretName } from "../../utils/transfer";
+import { renderRichText } from "@/lib/rich-text";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 type VariablesEditorProps = {
   value: IVariableBinding[];
@@ -30,26 +32,29 @@ const SecretNameValue = ({
   state: "missing" | "duplicate" | "bound";
   index: number;
   onClear: () => void;
-}) => (
-  <div
-    className="flex h-9 min-w-0 items-center gap-2 rounded-md border bg-surface-app px-2.5 text-xs"
-    data-testid={`variable-${index}-secret-name`}
-  >
-    <KeyRound className="h-3.5 w-3.5 shrink-0 text-medium-emphasis" />
-    <span className="truncate font-mono">{name}</span>
-    <span className={state === "bound" ? "text-medium-emphasis" : "text-warning-800"}>
-      {state === "missing" ? "(not found)" : state === "duplicate" ? "(more than one)" : "(by name)"}
-    </span>
-    <button
-      type="button"
-      aria-label={`Clear variable ${index + 1} value`}
-      className="ml-auto shrink-0 text-medium-emphasis hover:text-foreground"
-      onClick={onClear}
+}) => {
+  const { t } = useT("logic.functions.components");
+  return (
+    <div
+      className="flex h-9 min-w-0 items-center gap-2 rounded-md border bg-surface-app px-2.5 text-xs"
+      data-testid={`variable-${index}-secret-name`}
     >
-      <X className="h-3.5 w-3.5" />
-    </button>
-  </div>
-);
+      <KeyRound className="h-3.5 w-3.5 shrink-0 text-medium-emphasis" />
+      <span className="truncate font-mono">{name}</span>
+      <span className={state === "bound" ? "text-medium-emphasis" : "text-warning-800"}>
+        {state === "missing" ? t("VARIABLES_EDITOR.NOT_FOUND") : state === "duplicate" ? t("VARIABLES_EDITOR.MORE_THAN_ONE") : t("VARIABLES_EDITOR.BY_NAME")}
+      </span>
+      <button
+        type="button"
+        aria-label={t("VARIABLES_EDITOR.CLEAR_VARIABLE_VALUE", { value: index + 1 })}
+        className="ml-auto shrink-0 text-medium-emphasis hover:text-foreground"
+        onClick={onClear}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+};
 
 const KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 const MAX_VALUE_LENGTH = 4096;
@@ -57,14 +62,14 @@ const MAX_VALUE_LENGTH = 4096;
 const SECRET_LOOKING_VALUE = /^[A-Za-z0-9_\-.]{32,}$/;
 
 const keyError = (key: string, index: number, all: IVariableBinding[]) => {
-  if (!key) return "A key is required.";
-  if (!KEY_PATTERN.test(key)) return "Upper case, digits and underscore only; start with a letter.";
-  if (all.some((other, i) => i !== index && other.key === key)) return "That key is already used.";
+  if (!key) return tStatic("logic.functions.components", "VARIABLES_EDITOR.A_KEY_IS_REQUIRED");
+  if (!KEY_PATTERN.test(key)) return tStatic("logic.functions.components", "VARIABLES_EDITOR.UPPER_CASE_DIGITS_AND");
+  if (all.some((other, i) => i !== index && other.key === key)) return tStatic("logic.functions.components", "VARIABLES_EDITOR.THAT_KEY_IS_ALREADY");
   return null;
 };
 
 const valueError = (value: string) =>
-  value.length > MAX_VALUE_LENGTH ? "This value is too long." : null;
+  value.length > MAX_VALUE_LENGTH ? tStatic("logic.functions.components", "VARIABLES_EDITOR.THIS_VALUE_IS_TOO") : null;
 
 const looksLikeSecret = ({ value }: IVariableBinding) => SECRET_LOOKING_VALUE.test(value);
 
@@ -80,6 +85,7 @@ export const VariablesEditor = ({
   missingSecrets = [],
   duplicateSecrets = [],
 }: VariablesEditorProps) => {
+  const { t } = useT("logic.functions.components");
   const update = (index: number, partial: Partial<IVariableBinding>) => {
     onChange(value.map((v, i) => (i === index ? { ...v, ...partial } : v)));
   };
@@ -91,26 +97,21 @@ export const VariablesEditor = ({
       <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
         <div className="flex flex-col gap-0.5">
           <span className="flex items-center gap-2 text-sm font-semibold">
-            Variables
-            <span className="rounded-full bg-surface-app px-2 py-0.5 text-xs font-semibold text-medium-emphasis">
-              {value.length}
-            </span>
+            {renderRichText(t("VARIABLES_EDITOR.VARIABLES_0_0", { length: value.length }), [(children) => <span className="rounded-full bg-surface-app px-2 py-0.5 text-xs font-semibold text-medium-emphasis">{children}</span>])}
           </span>
           <span className="text-xs text-medium-emphasis">
-            Strings on <code className="font-mono">ctx.env</code>. Bind one to a configuration
-            variable to keep the value out of the editor.
+            {renderRichText(t("VARIABLES_EDITOR.STRINGS_ON_0_CTX"), [(children) => <code className="font-mono">{children}</code>])}
           </span>
         </div>
         <Button type="button" size="sm" className="gap-1.5" onClick={add}>
           <Plus className="h-3.5 w-3.5" />
-          Add variable
+          {t("VARIABLES_EDITOR.ADD_VARIABLE")}
         </Button>
       </div>
 
       {value.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-medium-emphasis">
-          Nothing bound yet — add a variable to read it as{" "}
-          <code className="font-mono">ctx.env.NAME</code>.
+          {renderRichText(t("VARIABLES_EDITOR.NOTHING_BOUND_YET_ADD"), [(children) => <code className="font-mono">{children}</code>])}
         </p>
       ) : (
         <>
@@ -118,9 +119,9 @@ export const VariablesEditor = ({
               button) rather than `auto`, which measured 0 in the header and 32 in each row and
               pushed every label out of line with its input. */}
           <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_minmax(0,0.9fr)_32px] gap-3 border-b px-4 py-2 text-xs font-semibold uppercase tracking-wide text-low-emphasis">
-            <span>Key</span>
-            <span>Value</span>
-            <span>Read in code as</span>
+            <span>{t("VARIABLES_EDITOR.KEY")}</span>
+            <span>{t("VARIABLES_EDITOR.VALUE")}</span>
+            <span>{t("VARIABLES_EDITOR.READ_IN_CODE_AS")}</span>
             <span />
           </div>
           {value.map((variable, index) => {
@@ -136,7 +137,7 @@ export const VariablesEditor = ({
               <div key={index} className="border-b px-4 py-2.5 last:border-b-0">
                 <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_minmax(0,0.9fr)_32px] items-center gap-3">
                   <Input
-                    aria-label={`Variable ${index + 1} key`}
+                    aria-label={t("VARIABLES_EDITOR.VARIABLE_KEY", { value: index + 1 })}
                     placeholder="STRIPE_ACCOUNT"
                     className="h-9 font-mono text-xs"
                     value={variable.key}
@@ -161,9 +162,9 @@ export const VariablesEditor = ({
                       value={variable.value}
                       onChange={(next) => update(index, { value: next })}
                       codec={secretIdRef}
-                      ariaLabel={`Variable ${index + 1} value`}
+                      ariaLabel={t("VARIABLES_EDITOR.VARIABLE_VALUE", { value: index + 1 })}
                       placeholder="acct_1P9…"
-                      hint="Stored as a reference and resolved when the run starts, so the value is never saved here."
+                      hint={t("VARIABLES_EDITOR.STORED_AS_A_REFERENCE")}
                     />
                   )}
 
@@ -174,7 +175,7 @@ export const VariablesEditor = ({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    aria-label={`Remove variable ${index + 1}`}
+                    aria-label={t("VARIABLES_EDITOR.REMOVE_VARIABLE", { value: index + 1 })}
                     className="h-8 w-8 shrink-0 text-medium-emphasis hover:text-error"
                     onClick={() => remove(index)}
                   >
@@ -188,15 +189,13 @@ export const VariablesEditor = ({
                 {!keyMessage && typedCredential && (
                   <p className="mt-1.5 flex items-start gap-1.5 text-xs text-warning-800">
                     <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
-                    {TYPED_CREDENTIAL_MESSAGE}
+                    {t("SECRET_LITERALS.TYPED_CREDENTIAL_MESSAGE")}
                   </p>
                 )}
                 {!keyMessage && secretWarning && (
                   <p className="mt-1.5 flex items-start gap-1.5 text-xs text-warning-800">
                     <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
-                    This looks like a credential. Bind it to a configuration variable instead — a
-                    typed value is stored in plain text and visible to anyone who can open this
-                    function.
+                    {t("VARIABLES_EDITOR.THIS_LOOKS_LIKE_A")}
                   </p>
                 )}
               </div>
@@ -206,9 +205,7 @@ export const VariablesEditor = ({
       )}
 
       <p className="border-t px-4 py-3 text-xs text-medium-emphasis">
-        Changes apply on the next deploy, so a version always runs with the variables it was built
-        with. A bound configuration variable is the exception: the reference is deployed and its
-        value is read at run time, so rotating one takes effect without a redeploy.
+        {t("VARIABLES_EDITOR.CHANGES_APPLY_ON_THE")}
       </p>
     </div>
   );

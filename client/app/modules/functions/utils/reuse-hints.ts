@@ -1,3 +1,4 @@
+import { tStatic } from "@seliseblocks/genesis-os";
 /**
  * Warnings shown while typing, for the mistakes that break a reused sandbox (see the Guide's
  * rules). Deliberately narrow — each pattern is one a reader would also call a bug — because a
@@ -14,12 +15,9 @@ export type ReuseHint = {
 export const REUSE_HINT_MESSAGES = {
   interval:
     "setInterval keeps running after the call ends, so the sandbox is replaced after it. Clear it before returning. For repeating work, use a scheduled workflow with a Function step.",
-  unawaitedFetch:
-    "This fetch is not awaited. If the call answers first, the request is cut off and the sandbox is replaced. Use await, return it, or ctx.waitUntil(fetch(…)).",
-  moduleVariable:
-    "Keeps this call's data in a module-level variable. The next call — maybe another user's — runs in the same sandbox and sees it. Use a variable inside the handler.",
-  listenerCtx:
-    "This listener outlives the call but uses ctx. Later events would run with an old call's ctx. Use console inside listeners.",
+  get unawaitedFetch() { return tStatic("logic.functions", "REUSE_HINTS.THIS_FETCH_IS_NOT"); },
+  get moduleVariable() { return tStatic("logic.functions", "REUSE_HINTS.KEEPS_THIS_CALL_S"); },
+  get listenerCtx() { return tStatic("logic.functions", "REUSE_HINTS.THIS_LISTENER_OUTLIVES_THE"); },
   removedAccessToken:
     "ctx.blocks.accessToken was removed. Use `await ctx.blocks.getAccessToken()` — the caller's token is now fetched only when your code asks for it.",
 } as const;

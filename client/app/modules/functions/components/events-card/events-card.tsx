@@ -15,6 +15,8 @@ import {
   payloadName,
 } from "../../utils/events";
 import { EventEditDialog } from "../event-edit-dialog";
+import { renderRichText } from "@/lib/rich-text";
+import { useT } from "@seliseblocks/genesis-os";
 
 type EventsCardProps = {
   functionId: string;
@@ -27,6 +29,7 @@ type DialogTarget = { index: number | null } | null;
 const ADDING: DialogTarget = { index: null };
 
 const CopySnippetButton = ({ event }: Readonly<{ event: IFunctionEvent }>) => {
+  const { t } = useT("logic.functions.components");
   const [copied, setCopied] = useState(false);
 
   // The clipboard API rejects without a secure context or permission; say so instead of
@@ -37,14 +40,14 @@ const CopySnippetButton = ({ event }: Readonly<{ event: IFunctionEvent }>) => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
     } catch {
-      showErrorToast({ title: "Could not copy", errors: ["Select the text and copy it by hand."] });
+      showErrorToast({ title: t("EVENTS_CARD.COULD_NOT_COPY"), errors: [t("EVENTS_CARD.SELECT_THE_TEXT_AND")] });
     }
   };
 
   return (
-    <Button type="button" variant="ghost" size="sm" onClick={handleCopy} aria-label={`Copy snippet for ${event.type}`}>
+    <Button type="button" variant="ghost" size="sm" onClick={handleCopy} aria-label={t("EVENTS_CARD.COPY_SNIPPET_FOR", { type: event.type })}>
       {copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
-      <span>{copied ? "Copied" : "Copy snippet"}</span>
+      <span>{copied ? t("common:COPIED") : t("EVENTS_CARD.COPY_SNIPPET")}</span>
     </Button>
   );
 };
@@ -59,6 +62,7 @@ type EventRowProps = {
 };
 
 const EventRow = ({ event, catalog, errors, disabled, onEdit, onRemove }: Readonly<EventRowProps>) => {
+  const { t } = useT("logic.functions.components");
   const name = event.type === "FunctionEvent" ? payloadName(event.payload) : null;
   return (
     <div className="flex flex-col gap-1.5 border-b px-4 py-3 last:border-b-0">
@@ -71,11 +75,11 @@ const EventRow = ({ event, catalog, errors, disabled, onEdit, onRemove }: Readon
           <CopySnippetButton event={event} />
           <Button type="button" variant="ghost" size="sm" onClick={onEdit} disabled={disabled}>
             <Pencil className="mr-1.5 h-3.5 w-3.5" />
-            <span>Edit</span>
+            <span>{t("common:EDIT")}</span>
           </Button>
           <Button type="button" variant="ghost" size="sm" onClick={onRemove} disabled={disabled}>
             <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-            <span>Remove</span>
+            <span>{t("common:REMOVE")}</span>
           </Button>
         </div>
       </div>
@@ -90,6 +94,7 @@ const EventRow = ({ event, catalog, errors, disabled, onEdit, onRemove }: Readon
 
 /** The Events tab: the events this function may send, each added from the catalog. */
 export const EventsCard = ({ functionId, isPublic }: Readonly<EventsCardProps>) => {
+  const { t } = useT("logic.functions.components");
   const { data: catalog } = useGetEventCatalog();
   const { data: settings, isLoading } = useGetEventSettings(functionId);
   const { mutateAsync: save, isPending } = useSaveEventSettings(functionId);
@@ -110,7 +115,7 @@ export const EventsCard = ({ functionId, isPublic }: Readonly<EventsCardProps>) 
       return true;
     } catch (error) {
       if (!isErrorWithErrors(error)) {
-        showErrorToast({ errors: "Failed to save events" });
+        showErrorToast({ errors: t("EVENTS_CARD.FAILED_TO_SAVE_EVENTS") });
         return false;
       }
       const mapped = mapSaveErrors(error.errors);
@@ -121,7 +126,7 @@ export const EventsCard = ({ functionId, isPublic }: Readonly<EventsCardProps>) 
         .flatMap(([, messages]) => messages);
       const toasts = [...mapped.trigger, ...mapped.general, ...unplaced];
       if (toasts.length > 0 || Object.keys(mapped.byEvent).length === 0) {
-        showErrorToast({ errors: toasts.length > 0 ? toasts : "Failed to save events" });
+        showErrorToast({ errors: toasts.length > 0 ? toasts : t("EVENTS_CARD.FAILED_TO_SAVE_EVENTS") });
       }
       return false;
     }
@@ -145,22 +150,21 @@ export const EventsCard = ({ functionId, isPublic }: Readonly<EventsCardProps>) 
       <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-base font-semibold">Events this function may send</span>
+            <span className="text-base font-semibold">{t("EVENTS_CARD.EVENTS_THIS_FUNCTION_MAY")}</span>
             <span className="text-xs leading-relaxed text-medium-emphasis">
-              Events are sent only after the function succeeds. A failed run sends nothing. Send one
-              from the code with <code className="font-mono">ctx.events.add(type, payload)</code>.
+              {renderRichText(t("EVENTS_CARD.EVENTS_ARE_SENT_ONLY"), [(children) => <code className="font-mono">{children}</code>])}
             </span>
           </div>
           <Button type="button" size="sm" onClick={() => setTarget(ADDING)} disabled={isLoading || isPending}>
             <Plus className="mr-1.5 h-4 w-4" />
-            <span>Add event</span>
+            <span>{t("EVENTS_CARD.ADD_EVENT")}</span>
           </Button>
         </div>
 
         {isLoading && <Skeleton className="h-16 w-full" />}
         {!isLoading && events.length === 0 && (
           <span className="rounded-lg border bg-surface-app p-4 text-xs text-medium-emphasis">
-            No events yet. Add one to let this function send it.
+            {t("EVENTS_CARD.NO_EVENTS_YET_ADD")}
           </span>
         )}
         {events.length > 0 && (
@@ -180,7 +184,7 @@ export const EventsCard = ({ functionId, isPublic }: Readonly<EventsCardProps>) 
         )}
 
         <span className="text-xs leading-relaxed text-medium-emphasis">
-          Changes apply to runs after the next Deploy. Test runs use the draft.
+          {t("EVENTS_CARD.CHANGES_APPLY_TO_RUNS")}
         </span>
       </CardContent>
 

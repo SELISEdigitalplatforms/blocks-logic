@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useProjectStore } from "@seliseblocks/genesis-os";
+import { useProjectStore, useT, tStatic } from "@seliseblocks/genesis-os";
 import { Card } from "@/components/ui-kits/card/card";
 import { showErrorToast } from "@/hooks/use-toast";
 import {
@@ -11,6 +11,7 @@ import {
   snippetBlocksKey,
 } from "../../constants/endpoint.constant";
 import { ITriggerConfig } from "../../types/function.types";
+import { renderRichText } from "@/lib/rich-text";
 
 type InvokeSnippetCardProps = {
   functionId: string;
@@ -38,7 +39,8 @@ const SSE_RESPONSE = [
 ].join("\n");
 
 /** Copy button with its own "Copied" state. */
-const CopyButton = ({ text, label = "Copy" }: { text: string; label?: string }) => {
+const CopyButton = ({ text, label }: { text: string; label?: string }) => {
+  const { t } = useT("logic.functions.components");
   const [copied, setCopied] = useState(false);
 
   // The clipboard API rejects without a secure context or permission; say so instead of
@@ -49,7 +51,7 @@ const CopyButton = ({ text, label = "Copy" }: { text: string; label?: string }) 
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
     } catch {
-      showErrorToast({ title: "Could not copy", errors: ["Select the text and copy it by hand."] });
+      showErrorToast({ title: t("INVOKE_SNIPPET_CARD.COULD_NOT_COPY"), errors: [t("INVOKE_SNIPPET_CARD.SELECT_THE_TEXT_AND")] });
     }
   };
 
@@ -59,7 +61,7 @@ const CopyButton = ({ text, label = "Copy" }: { text: string; label?: string }) 
       className="text-xs font-semibold text-primary hover:underline"
       onClick={() => void handleCopy()}
     >
-      {copied ? "Copied ✓" : label}
+      {copied ? t("INVOKE_SNIPPET_CARD.COPIED") : (label ?? t("common:COPY"))}
     </button>
   );
 };
@@ -83,24 +85,26 @@ const ModeToggle = ({ mode, onChange }: { mode: CallMode; onChange: (mode: CallM
 );
 
 const StreamResponse = () => {
+  const { t } = useT("logic.functions.components");
   return (
     <>
       <pre className="font-mono text-xs leading-relaxed">{SSE_RESPONSE}</pre>
       <span className={NOTE_CLASS}>
-        Two events. <code className="font-mono">run</code> comes at once with the run id.{" "}
-        <code className="font-mono">done</code> comes when the run ends, with the full response:
-        what the handler returned, or every piece joined if it yields them. If the run fails you
-        get <code className="font-mono">event: error</code> with{" "}
-        <code className="font-mono">{"{ runId, status, errorCode, message }"}</code>. If it is
-        still running when the wait ends, the error is{" "}
-        <code className="font-mono">STILL_RUNNING</code> with a{" "}
-        <code className="font-mono">pollToken</code>: poll for the result below.
+        {renderRichText(t("INVOKE_SNIPPET_CARD.TWO_EVENTS"), [
+          (text) => <code className="font-mono">{text}</code>,
+          (text) => <code className="font-mono">{text}</code>,
+          (text) => <code className="font-mono">{text}</code>,
+          (text) => <code className="font-mono">{text}</code>,
+          (text) => <code className="font-mono">{text}</code>,
+          (text) => <code className="font-mono">{text}</code>,
+        ])}
       </span>
     </>
   );
 };
 
 const HttpResponse = ({ isSync }: { isSync: boolean }) => {
+  const { t } = useT("logic.functions.components");
   if (!isSync) {
     return (
       <pre className="font-mono text-xs leading-relaxed">
@@ -114,11 +118,11 @@ const HttpResponse = ({ isSync }: { isSync: boolean }) => {
         {'200 OK\n{ "ok": true }   ← what the handler returned'}
       </pre>
       <span className={NOTE_CLASS}>
-        The caller waits for the answer. Return{" "}
-        <code className="font-mono">{"{ statusCode, headers, body }"}</code> to set the status,
-        headers and body yourself; anything else is sent as JSON with 200. If the run takes too
-        long, the call returns <code className="font-mono">202</code> with a{" "}
-        <code className="font-mono">pollToken</code> instead.
+        {renderRichText(t("INVOKE_SNIPPET_CARD.THE_CALLER_WAITS"), [
+          (text) => <code className="font-mono">{text}</code>,
+          (text) => <code className="font-mono">{text}</code>,
+          (text) => <code className="font-mono">{text}</code>,
+        ])}
       </span>
     </>
   );
@@ -126,9 +130,9 @@ const HttpResponse = ({ isSync }: { isSync: boolean }) => {
 
 const pollNote = (isSse: boolean, isSync: boolean) => {
   if (isSse) {
-    return "Only needed when the last event is STILL_RUNNING: use its runId and pollToken. Poll until status is final.";
+    return tStatic("logic.functions.components", "INVOKE_SNIPPET_CARD.ONLY_NEEDED_WHEN_THE");
   }
-  const base = "Use the runId and pollToken from the 202 answer. Poll until status is final.";
+  const base = tStatic("logic.functions.components", "INVOKE_SNIPPET_CARD.USE_THE_RUNID_AND");
   return isSync ? `${base} Only needed after a 202.` : base;
 };
 
@@ -138,6 +142,7 @@ const pollNote = (isSse: boolean, isSync: boolean) => {
  * toggle switches the same call between a plain HTTP request and an SSE stream.
  */
 export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProps) => {
+  const { t } = useT("logic.functions.components");
   const [mode, setMode] = useState<CallMode>("http");
   const project = useProjectStore().selectedProject;
   const realBaseUrl = getFunctionBaseUrl(project);
@@ -175,21 +180,21 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
   return (
     <Card className="overflow-hidden rounded-xl">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <span className="text-sm font-semibold">Call it</span>
+        <span className="text-sm font-semibold">{t("INVOKE_SNIPPET_CARD.CALL_IT")}</span>
         {isSync && <ModeToggle mode={mode} onChange={setMode} />}
       </div>
       <div className="flex flex-col gap-1 border-b px-4 py-3">
         <div className="flex items-center justify-between gap-3">
-          <span className={LABEL_CLASS}>Base URL</span>
+          <span className={LABEL_CLASS}>{t("INVOKE_SNIPPET_CARD.BASE_URL")}</span>
           <CopyButton text={baseUrl} />
         </div>
         <code className="break-all font-mono text-xs">{baseUrl}</code>
         {realBaseUrl ? null : (
-          <span className={NOTE_CLASS}>Add a custom domain to the project to fill this in.</span>
+          <span className={NOTE_CLASS}>{t("INVOKE_SNIPPET_CARD.ADD_A_CUSTOM_DOMAIN")}</span>
         )}
       </div>
       <div className="flex items-center justify-between gap-3 border-b px-4 py-2">
-        <span className={LABEL_CLASS}>Call it</span>
+        <span className={LABEL_CLASS}>{t("INVOKE_SNIPPET_CARD.CALL_IT")}</span>
         <CopyButton text={snippet} />
       </div>
       <pre
@@ -199,7 +204,7 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
         {snippet}
       </pre>
       <div className="flex items-center justify-between gap-3 border-y px-4 py-2">
-        <span className={LABEL_CLASS}>Poll for the result</span>
+        <span className={LABEL_CLASS}>{t("INVOKE_SNIPPET_CARD.POLL_FOR_THE_RESULT")}</span>
         <CopyButton text={pollSnippet} />
       </div>
       <pre
@@ -212,14 +217,14 @@ export const InvokeSnippetCard = ({ functionId, trigger }: InvokeSnippetCardProp
         <span className={NOTE_CLASS}>{pollNote(isSse, isSync)}</span>
       </div>
       <div className="flex flex-col gap-2 border-t px-4 py-3">
-        <span className={LABEL_CLASS}>Your handler receives</span>
+        <span className={LABEL_CLASS}>{t("INVOKE_SNIPPET_CARD.YOUR_HANDLER_RECEIVES")}</span>
         <pre className="font-mono text-xs leading-relaxed">{receives}</pre>
       </div>
       <div className="flex flex-col gap-2 border-t px-4 py-3">
-        <span className={LABEL_CLASS}>Response</span>
+        <span className={LABEL_CLASS}>{t("INVOKE_SNIPPET_CARD.RESPONSE")}</span>
         {isSse ? <StreamResponse /> : <HttpResponse isSync={isSync} />}
         <span className={NOTE_CLASS}>
-          Every trigger — HTTP, workflow or a test from the editor — is listed under Runs.
+          {t("INVOKE_SNIPPET_CARD.EVERY_TRIGGER_HTTP_WORKFLOW")}
         </span>
       </div>
     </Card>

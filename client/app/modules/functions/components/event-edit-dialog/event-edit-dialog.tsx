@@ -19,12 +19,14 @@ import {
 } from "@/components/ui-kits/select/select";
 import type { FunctionEventType, IEventCatalogItem, IFunctionEvent } from "../../types/event.types";
 import {
-  EVENT_NAME_HINT,
+  eventNameHint,
   formatPayload,
   parsePayloadJson,
   validateEventPayload,
 } from "../../utils/events";
 import { CodeEditor } from "../code-editor";
+import { useT } from "@seliseblocks/genesis-os";
+import { renderRichText } from "@/lib/rich-text";
 
 type EventEditDialogProps = {
   open: boolean;
@@ -63,6 +65,7 @@ export const EventEditDialog = ({
   serverErrors,
   onSubmit,
 }: Readonly<EventEditDialogProps>) => {
+  const { t } = useT("logic.functions.components");
   const [type, setType] = useState<string>(initial?.type ?? "");
   const [text, setText] = useState<string>(initial ? formatPayload(initial.payload) : "");
 
@@ -86,18 +89,18 @@ export const EventEditDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl sm:rounded-xl">
         <DialogHeader>
-          <DialogTitle>{initial ? "Edit event" : "Add event"}</DialogTitle>
+          <DialogTitle>{initial ? t("EVENT_EDIT_DIALOG.EDIT_EVENT") : t("EVENT_EDIT_DIALOG.ADD_EVENT")}</DialogTitle>
           <DialogDescription>
-            Pick an event from the list. Its payload is filled in; change the values you need.
+            {t("EVENT_EDIT_DIALOG.PICK_AN_EVENT_FROM")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="event-type">Event type</Label>
+            <Label htmlFor="event-type">{t("EVENT_EDIT_DIALOG.EVENT_TYPE")}</Label>
             <Select value={type} onValueChange={handleTypeChange} disabled={initial !== null}>
-              <SelectTrigger id="event-type" aria-label="Event type">
-                <SelectValue placeholder="Choose an event type" />
+              <SelectTrigger id="event-type" aria-label={t("EVENT_EDIT_DIALOG.EVENT_TYPE")}>
+                <SelectValue placeholder={t("EVENT_EDIT_DIALOG.CHOOSE_AN_EVENT_TYPE")} />
               </SelectTrigger>
               <SelectContent>
                 {available.map((item) => (
@@ -109,13 +112,12 @@ export const EventEditDialog = ({
             </Select>
             {available.length === 0 && (
               <span className="text-xs text-medium-emphasis">
-                Every event type that this function may send is already added.
+                {t("EVENT_EDIT_DIALOG.EVERY_EVENT_TYPE_THAT")}
               </span>
             )}
             {isPublic && (
               <span className="text-xs text-medium-emphasis">
-                This function has a public HTTP trigger, so only events that are safe for anonymous
-                callers are listed.
+                {t("EVENT_EDIT_DIALOG.THIS_FUNCTION_HAS_A")}
               </span>
             )}
             {selected && (
@@ -125,14 +127,15 @@ export const EventEditDialog = ({
 
           {type !== "" && (
             <div className="flex flex-col gap-1.5">
-              <Label>Payload (JSON)</Label>
+              <Label>{t("EVENT_EDIT_DIALOG.PAYLOAD_JSON")}</Label>
               <div className="overflow-hidden rounded-md border">
                 <CodeEditor language="json" value={text} onChange={setText} height="260px" />
               </div>
               {type === "FunctionEvent" && (
                 <span className="text-xs text-medium-emphasis">
-                  The name must match <code className="font-mono">^[a-z][a-z0-9_.-]{"{2,63}"}$</code>.{" "}
-                  {EVENT_NAME_HINT}
+                  {renderRichText(t("EVENT_EDIT_DIALOG.NAME_MUST_MATCH", { hint: eventNameHint() }), [
+                    (text) => <code className="font-mono">{text}</code>,
+                  ])}
                 </span>
               )}
               {problem && (
@@ -151,11 +154,11 @@ export const EventEditDialog = ({
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-            Cancel
+            {t("common:CANCEL")}
           </Button>
           <Button type="button" onClick={handleSave} disabled={!canSave}>
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <span>{isSaving ? "Saving…" : "Save"}</span>
+            <span>{isSaving ? t("EVENT_EDIT_DIALOG.SAVING") : t("common:SAVE")}</span>
           </Button>
         </DialogFooter>
       </DialogContent>

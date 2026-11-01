@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Copy, Check } from "lucide-react";
-import { useProjectStore, type IProject } from "@seliseblocks/genesis-os";
+import { useProjectStore, type IProject, useT } from "@seliseblocks/genesis-os";
 import { Button } from "@/components/ui-kits/button/button";
 import { showErrorToast } from "@/hooks/use-toast";
 import { ProxyMethodBadge } from "@/modules/proxy/components/proxy-method-badge";
@@ -12,6 +12,7 @@ import {
 } from "../../constants/endpoint.constant";
 import type { ProxyMethod } from "@/modules/proxy/types";
 import { HttpTriggerMethod } from "../../types/function.types";
+import { renderRichText } from "@/lib/rich-text";
 
 /**
  * The function's public URL, published the way a proxy's is: the project's own API host when it
@@ -44,6 +45,7 @@ export const EndpointBadge = ({
   /** Every verb the trigger accepts, when it lists several; replaces `method` on the badge. */
   methods?: ProxyMethod[];
 }) => {
+  const { t } = useT("logic.functions.components");
   const verbs = methods && methods.length > 0 ? methods : [toHttpVerb(method)];
   const [copied, setCopied] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
@@ -59,7 +61,7 @@ export const EndpointBadge = ({
       setDone(true);
       setTimeout(() => setDone(false), 2000);
     } catch {
-      showErrorToast({ title: "Could not copy", errors: ["Select the text and copy it by hand."] });
+      showErrorToast({ title: t("ENDPOINT_BADGE.COULD_NOT_COPY"), errors: [t("ENDPOINT_BADGE.SELECT_THE_TEXT_AND")] });
     }
   };
 
@@ -75,7 +77,7 @@ export const EndpointBadge = ({
         <Button
           variant="ghost"
           size="icon"
-          aria-label={copied ? "Endpoint copied" : "Copy endpoint"}
+          aria-label={copied ? t("ENDPOINT_BADGE.ENDPOINT_COPIED") : t("ENDPOINT_BADGE.COPY_ENDPOINT")}
           className="ml-auto h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
           onClick={handleCopy}
         >
@@ -92,7 +94,7 @@ export const EndpointBadge = ({
       </p>
       <div className="flex items-center gap-2 border-t pt-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Header
+          {t("ENDPOINT_BADGE.HEADER")}
         </span>
         <code
           className="break-all font-mono text-sm text-foreground"
@@ -103,7 +105,7 @@ export const EndpointBadge = ({
         <Button
           variant="ghost"
           size="icon"
-          aria-label={keyCopied ? "Header copied" : "Copy header"}
+          aria-label={keyCopied ? t("ENDPOINT_BADGE.HEADER_COPIED") : t("ENDPOINT_BADGE.COPY_HEADER")}
           className="ml-auto h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
           onClick={handleCopyHeader}
         >
@@ -115,10 +117,7 @@ export const EndpointBadge = ({
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Whatever follows the id is yours to route on — it arrives as{" "}
-        <code className="font-mono">input.path</code>, with the query, headers and body beside it.
-        Any other method is refused with{" "}
-        <code className="font-mono">405</code>.
+        {renderRichText(t("ENDPOINT_BADGE.WHATEVER_FOLLOWS_THE_ID"), [(children) => <code className="font-mono">{children}</code>, (children) => <code className="font-mono">{children}</code>])}
       </p>
     </div>
   );

@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui-kits/card/card";
 import { formatDuration } from "../../utils/format";
 import { IRunDetail, IRunTiming } from "../../types/run.types";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 /**
  * Where a call's time went, stage by stage — kept apart from the run's metrics so the sandbox
@@ -9,11 +10,11 @@ import { IRunDetail, IRunTiming } from "../../types/run.types";
  * function's own code), the Worker (saving the answer). Times only, never values.
  */
 const STAGES: { group: string; label: string; hint: string }[] = [
-  { group: "api", label: "Api, before queue", hint: "checks the caller, loads the function, records the run" },
-  { group: "queue", label: "Waiting for a runner", hint: "on the queue until a runner picks it up" },
-  { group: "handover", label: "Handover to sandbox", hint: "runner: admission, sandbox, secrets, caller token" },
-  { group: "code", label: "Your code", hint: "the handler, inside the sandbox" },
-  { group: "result", label: "Saving the result", hint: "Worker: waits, writes the run, tells the Api" },
+  { group: "api", get label() { return tStatic("logic.functions.components", "RUN_TIMING.API_BEFORE_QUEUE"); }, get hint() { return tStatic("logic.functions.components", "RUN_TIMING.CHECKS_THE_CALLER_LOADS"); } },
+  { group: "queue", get label() { return tStatic("logic.functions.components", "RUN_TIMING.WAITING_FOR_A_RUNNER"); }, get hint() { return tStatic("logic.functions.components", "RUN_TIMING.ON_THE_QUEUE_UNTIL"); } },
+  { group: "handover", get label() { return tStatic("logic.functions.components", "RUN_TIMING.HANDOVER_TO_SANDBOX"); }, get hint() { return tStatic("logic.functions.components", "RUN_TIMING.RUNNER_ADMISSION_SANDBOX_SECRETS"); } },
+  { group: "code", get label() { return tStatic("logic.functions.components", "RUN_TIMING.YOUR_CODE"); }, get hint() { return tStatic("logic.functions.components", "RUN_TIMING.THE_HANDLER_INSIDE_THE"); } },
+  { group: "result", get label() { return tStatic("logic.functions.components", "RUN_TIMING.SAVING_THE_RESULT"); }, get hint() { return tStatic("logic.functions.components", "RUN_TIMING.WORKER_WAITS_WRITES_THE"); } },
 ];
 
 interface TimingRow {
@@ -58,6 +59,7 @@ export const buildTimingRows = (run: IRunDetail): TimingRow[] => {
 };
 
 export const RunTiming = ({ run }: Readonly<{ run: IRunDetail }>) => {
+  const { t: tr } = useT("logic.functions.components");
   const rows = buildTimingRows(run);
   if (rows.length === 0) return null;
 
@@ -67,8 +69,8 @@ export const RunTiming = ({ run }: Readonly<{ run: IRunDetail }>) => {
   return (
     <Card className="overflow-hidden" data-testid="run-timing">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3">
-        <span className="text-sm font-semibold">Timing</span>
-        <span className="text-xs text-medium-emphasis">≈ {formatDuration(total)} in total</span>
+        <span className="text-sm font-semibold">{tr("RUN_TIMING.TIMING")}</span>
+        <span className="text-xs text-medium-emphasis">{tr("RUN_TIMING.IN_TOTAL", { value: formatDuration(total) })}</span>
       </div>
       {rows.map((row) => (
         <div key={row.label} className="flex flex-col gap-1 border-b px-4 py-2.5 last:border-b-0">

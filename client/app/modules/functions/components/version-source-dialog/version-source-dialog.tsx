@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useGetVersionSource } from "../../hooks/use-versions";
 import { IFunctionVersionSummary } from "../../types/version.types";
 import { CodeEditor } from "../code-editor";
+import { useT } from "@seliseblocks/genesis-os";
 
 type VersionSourceDialogProps = {
   functionId: string;
@@ -26,6 +27,7 @@ export const VersionSourceDialog = ({
   open,
   onOpenChange,
 }: VersionSourceDialogProps) => {
+  const { t } = useT("logic.functions.components");
   const [activeFile, setActiveFile] = useState<"index.js" | "package.json">("index.js");
   const { data: source, isLoading } = useGetVersionSource(
     open ? functionId : undefined,
@@ -36,10 +38,9 @@ export const VersionSourceDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Source of v{version?.number}</DialogTitle>
+          <DialogTitle>{t("VERSION_SOURCE_DIALOG.SOURCE_OF_V", { number: version?.number ?? "" })}</DialogTitle>
           <DialogDescription>
-            What this version was built from. It cannot be edited — copy from here into the
-            editor.
+            {t("VERSION_SOURCE_DIALOG.WHAT_THIS_VERSION_WAS")}
           </DialogDescription>
         </DialogHeader>
 

@@ -4,6 +4,7 @@ import { Card } from "@/components/ui-kits/card/card";
 import { useGetRunEvents } from "../../hooks/use-events";
 import type { IRunEvent, RunEventStatus } from "../../types/event.types";
 import { formatAbsoluteTime, formatRelativeTime } from "../../utils/format";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 const VARIANT_BY_STATUS: Record<RunEventStatus, "success" | "error" | "warning"> = {
   Sent: "success",
@@ -26,7 +27,7 @@ const RunEventRow = ({ event }: Readonly<{ event: IRunEvent }>) => (
     <RunEventStatusChip status={event.status} />
     <span className="truncate text-medium-emphasis">{event.error ?? "—"}</span>
     <span className="text-medium-emphasis">
-      {event.attempts} {event.attempts === 1 ? "try" : "tries"}
+      {tStatic("logic.functions.components", "RUN_EVENTS.TRIES", { count: event.attempts })}
     </span>
     <span className="text-medium-emphasis" title={formatAbsoluteTime(event.sentAt)}>
       {formatRelativeTime(event.sentAt)}
@@ -36,6 +37,7 @@ const RunEventRow = ({ event }: Readonly<{ event: IRunEvent }>) => (
 
 /** What a run sent as events. Not shown at all when it sent none and nothing was dropped. */
 export const RunEvents = ({ runId }: Readonly<{ runId: string }>) => {
+  const { t } = useT("logic.functions.components");
   const { data } = useGetRunEvents(runId);
   const items = data?.items ?? [];
   const rejected = data?.rejected ?? null;
@@ -43,14 +45,14 @@ export const RunEvents = ({ runId }: Readonly<{ runId: string }>) => {
 
   return (
     <Card className="overflow-hidden">
-      <div className="border-b px-4 py-3 text-sm font-semibold">Events</div>
+      <div className="border-b px-4 py-3 text-sm font-semibold">{t("RUN_EVENTS.EVENTS")}</div>
       {rejected && (
         <div
           role="alert"
           className="flex items-center gap-2 border-b bg-warning-100 px-4 py-2.5 text-xs text-warning-800"
         >
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>Events dropped: {rejected}</span>
+          <span>{t("RUN_EVENTS.EVENTS_DROPPED", { rejected })}</span>
         </div>
       )}
       {items.map((event) => (

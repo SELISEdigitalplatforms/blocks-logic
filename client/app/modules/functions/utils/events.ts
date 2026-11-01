@@ -5,11 +5,11 @@ import type {
   IFunctionEvent,
   ISaveEventSettingsPayload,
 } from "../types/event.types";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 /** What a FunctionEvent's `name` and a trigger event name must look like. */
 export const EVENT_NAME_PATTERN = /^[a-z][a-z0-9_.-]{2,63}$/;
-export const EVENT_NAME_HINT =
-  "3 to 64 characters: start with a lowercase letter, then lowercase letters, digits, dot, dash or underscore.";
+export const eventNameHint = () => tStatic("logic.functions", "EVENTS.EVENT_NAME_HINT");
 export const MAX_TRIGGER_EVENTS = 20;
 
 export const isValidEventName = (name: string): boolean => EVENT_NAME_PATTERN.test(name);
@@ -20,16 +20,16 @@ export type PayloadParseResult =
 
 /** The editor text as a payload: it must be valid JSON and a JSON object (not an array or a value). */
 export const parsePayloadJson = (text: string): PayloadParseResult => {
-  if (text.trim() === "") return { ok: false, error: "The payload is empty." };
+  if (text.trim() === "") return { ok: false, error: tStatic("logic.functions", "EVENTS.THE_PAYLOAD_IS_EMPTY") };
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : "not valid JSON";
-    return { ok: false, error: `Not valid JSON: ${reason}` };
+    const reason = error instanceof Error ? error.message : tStatic("logic.functions", "EVENTS.NOT_VALID_JSON_REASON");
+    return { ok: false, error: tStatic("logic.functions", "EVENTS.NOT_VALID_JSON", { reason }) };
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { ok: false, error: "The payload must be a JSON object, like { ... }." };
+    return { ok: false, error: tStatic("logic.functions", "EVENTS.THE_PAYLOAD_MUST_BE") };
   }
   return { ok: true, value: parsed as Record<string, unknown> };
 };
@@ -49,8 +49,10 @@ export const validateEventPayload = (
 ): string | null => {
   if (type !== "FunctionEvent") return null;
   const name = payloadName(payload);
-  if (name === null) return 'A FunctionEvent payload needs a "name".';
-  return isValidEventName(name) ? null : `The name is not valid. ${EVENT_NAME_HINT}`;
+  if (name === null) return tStatic("logic.functions", "EVENTS.A_FUNCTIONEVENT_PAYLOAD_NEEDS");
+  return isValidEventName(name)
+    ? null
+    : tStatic("logic.functions", "EVENTS.THE_NAME_IS_NOT_VALID", { hint: eventNameHint() });
 };
 
 /**
@@ -93,10 +95,10 @@ export type TriggerEventCheck = { ok: true; list: string[] } | { ok: false; erro
 /** Adds a trigger event name: valid, not a duplicate, at most {@link MAX_TRIGGER_EVENTS}. */
 export const addTriggerEvent = (list: string[], raw: string): TriggerEventCheck => {
   const name = raw.trim();
-  if (!isValidEventName(name)) return { ok: false, error: `Not a valid event name. ${EVENT_NAME_HINT}` };
-  if (list.includes(name)) return { ok: false, error: "This event is already in the list." };
+  if (!isValidEventName(name)) return { ok: false, error: tStatic("logic.functions", "EVENTS.NOT_A_VALID_EVENT_NAME", { hint: eventNameHint() }) };
+  if (list.includes(name)) return { ok: false, error: tStatic("logic.functions", "EVENTS.THIS_EVENT_IS_ALREADY") };
   if (list.length >= MAX_TRIGGER_EVENTS) {
-    return { ok: false, error: `At most ${MAX_TRIGGER_EVENTS} events.` };
+    return { ok: false, error: tStatic("logic.functions", "EVENTS.AT_MOST_EVENTS", { maxTriggerEvents: MAX_TRIGGER_EVENTS }) };
   }
   return { ok: true, list: [...list, name] };
 };

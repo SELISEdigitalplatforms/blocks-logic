@@ -17,6 +17,8 @@ import {
 } from "../../types/function.types";
 import { describeTriggerAccess } from "../../utils/access";
 import { EndpointBadge } from "../endpoint-badge";
+import { renderRichText } from "@/lib/rich-text";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 const KIND_OPTIONS: Array<{
   value: AuthMode;
@@ -26,16 +28,22 @@ const KIND_OPTIONS: Array<{
 }> = [
   {
     value: "Token",
-    title: "Blocks token",
-    description:
-      "The caller sends a Blocks token. Identity, roles and permissions arrive on ctx.context.",
+    get title() {
+      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.BLOCKS_TOKEN");
+    },
+    get description() {
+      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.THE_CALLER_SENDS_A");
+    },
     icon: KeyRound,
   },
   {
     value: "Public",
-    title: "Public",
-    description:
-      "Anyone with the URL and your x-blocks-key can call it. No identity, no token-scoped work.",
+    get title() {
+      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.PUBLIC");
+    },
+    get description() {
+      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.ANYONE_WITH_THE_URL");
+    },
     icon: Globe,
   },
 ];
@@ -48,33 +56,47 @@ const RESPONSE_OPTIONS: Array<{
 }> = [
   {
     value: "async",
-    title: "Background (202 + poll)",
-    description:
-      "The caller gets 202 Accepted with a run id and a poll token straight away, and collects the result later.",
+    get title() {
+      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.BACKGROUND_202_POLL");
+    },
+    get description() {
+      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.THE_CALLER_GETS_202");
+    },
     icon: Hourglass,
   },
   {
     value: "sync",
-    title: "Wait for answer (API)",
-    description:
-      "The caller gets the function's answer directly. Return { statusCode, headers, body } to control the HTTP response. If the run takes too long, the caller gets 202 + poll token as usual.",
+    get title() {
+      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.WAIT_FOR_ANSWER_API");
+    },
+    get description() {
+      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.THE_CALLER_GETS_THE");
+    },
     icon: Zap,
   },
   {
     value: "sse",
-    title: "Stream events (SSE)",
-    description:
-      "The caller gets two Server-Sent Events: run with the run id at once, then done with the full response (or error). No Accept header needed. If the run takes too long, the last event says so and carries a poll token.",
+    get title() {
+      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.STREAM_EVENTS_SSE");
+    },
+    get description() {
+      return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.THE_CALLER_GETS_TWO");
+    },
     icon: Radio,
   },
 ];
 
 /** What the HTTP endpoint answers, in one sentence per response mode. */
 const ENDPOINT_HINTS: Record<TriggerResponseMode, string> = {
-  async:
-    "Always on. The call returns 202 Accepted with a run id and a poll token — never the result itself, so nothing holds a connection open for the length of a run.",
-  sync: "Always on. The caller waits for the function's answer; a run that takes too long returns 202 Accepted with a run id and a poll token instead.",
-  sse: "Always on. The caller gets an event stream: the run id first, then the full response.",
+  get async() {
+    return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.ALWAYS_ON_THE_CALL");
+  },
+  get sync() {
+    return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.ALWAYS_ON_THE_CALLER");
+  },
+  get sse() {
+    return tStatic("logic.functions.components", "TRIGGER_HTTP_CARD.ALWAYS_ON_THE_CALLER_2");
+  },
 };
 
 /**
@@ -126,6 +148,7 @@ type TriggerHttpCardProps = {
  * so this card translates at its edges and nothing else has to know.
  */
 export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCardProps) => {
+  const { t } = useT("logic.functions.components");
   const patch = (partial: Partial<ITriggerConfig>) => onChange({ ...value, ...partial });
   const rolesQuery = useIamRoles();
   const permissionsQuery = useIamPermissions();
@@ -155,14 +178,20 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
       <CardContent className="space-y-5 p-5">
         <div className="space-y-3">
           <div>
-            <p className="text-sm font-semibold">HTTP endpoint</p>
+            <p className="text-sm font-semibold">{t("TRIGGER_HTTP_CARD.HTTP_ENDPOINT")}</p>
             <p className="text-xs text-muted-foreground">
               {ENDPOINT_HINTS[value.responseMode] ?? ENDPOINT_HINTS.async}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">Accepted methods</span>
-            <div className="flex flex-wrap gap-1" role="group" aria-label="Accepted methods">
+            <span className="text-xs text-muted-foreground">
+              {t("TRIGGER_HTTP_CARD.ACCEPTED_METHODS")}
+            </span>
+            <div
+              className="flex flex-wrap gap-1"
+              role="group"
+              aria-label={t("TRIGGER_HTTP_CARD.ACCEPTED_METHODS")}
+            >
               {FUNCTION_HTTP_VERBS.map((verb) => {
                 const pressed = accepted.includes(verb);
                 // The last accepted verb cannot be removed; say so instead of silently ignoring.
@@ -173,8 +202,8 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
                     type="button"
                     aria-pressed={pressed}
                     aria-disabled={isLast || undefined}
-                    title={isLast ? "At least one method is required" : undefined}
-                    aria-label={`Accept ${verb}`}
+                    title={isLast ? t("TRIGGER_HTTP_CARD.AT_LEAST_ONE_METHOD") : undefined}
+                    aria-label={t("TRIGGER_HTTP_CARD.ACCEPT", { verb })}
                     className={cn(
                       "rounded-md border px-2 py-0.5 font-mono text-xs transition-colors",
                       pressed
@@ -201,16 +230,16 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
 
         <div className="space-y-3">
           <div>
-            <p className="text-sm font-semibold">Response</p>
+            <p className="text-sm font-semibold">{t("TRIGGER_HTTP_CARD.RESPONSE")}</p>
             <p className="text-xs text-muted-foreground">
-              What an HTTP caller gets back. Workflow and test runs are not affected.
+              {t("TRIGGER_HTTP_CARD.WHAT_AN_HTTP_CALLER")}
             </p>
           </div>
           <RadioGroup
             value={value.responseMode}
             onValueChange={onResponseModeChange}
             className="gap-2"
-            aria-label="Response"
+            aria-label={t("TRIGGER_HTTP_CARD.RESPONSE")}
           >
             {RESPONSE_OPTIONS.map((option) => {
               const Icon = option.icon;
@@ -243,9 +272,9 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
 
         <div className="space-y-4">
           <div>
-            <p className="text-sm font-semibold">Who can call it</p>
+            <p className="text-sm font-semibold">{t("TRIGGER_HTTP_CARD.WHO_CAN_CALL_IT")}</p>
             <p className="text-xs text-muted-foreground">
-              One setting for every path of this function. Nothing is ever public by omission.
+              {t("TRIGGER_HTTP_CARD.ONE_SETTING_FOR_EVERY")}
             </p>
           </div>
 
@@ -285,8 +314,11 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm">
-                  <span className="font-semibold">Restrict further</span>
-                  <span className="text-muted-foreground"> — optional, both work together</span>
+                  <span className="font-semibold">{t("TRIGGER_HTTP_CARD.RESTRICT_FURTHER")}</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    {t("TRIGGER_HTTP_CARD.OPTIONAL_BOTH_WORK_TOGETHER")}
+                  </span>
                 </p>
                 <Tabs
                   value={value.combine}
@@ -295,7 +327,7 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
                 >
                   <TabsList
                     className="grid h-8 grid-cols-2 rounded-md bg-muted p-0.5"
-                    aria-label="How roles and permissions combine"
+                    aria-label={t("TRIGGER_HTTP_CARD.HOW_ROLES_AND_PERMISSIONS")}
                   >
                     <TabsTrigger value="Or" className="rounded px-3 text-xs">
                       OR
@@ -308,9 +340,9 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
               </div>
 
               <AccessRulePicker
-                label="Roles"
-                noun="role"
-                addLabel="Add role"
+                label={t("TRIGGER_HTTP_CARD.ROLES")}
+                kind="role"
+                addLabel={t("TRIGGER_HTTP_CARD.ADD_ROLE")}
                 rule={toRule(value.roles, value.roleMatch)}
                 options={rolesQuery.data ?? []}
                 loading={rolesQuery.isLoading}
@@ -320,9 +352,9 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
                 }}
               />
               <AccessRulePicker
-                label="Permissions"
-                noun="permission"
-                addLabel="Add permission"
+                label={t("TRIGGER_HTTP_CARD.PERMISSIONS")}
+                kind="permission"
+                addLabel={t("TRIGGER_HTTP_CARD.ADD_PERMISSION")}
                 rule={toRule(value.permissions, value.permissionMatch)}
                 options={permissionsQuery.data ?? []}
                 loading={permissionsQuery.isLoading}
@@ -338,10 +370,17 @@ export const TriggerHttpCard = ({ value, onChange, functionId }: TriggerHttpCard
             </div>
           ) : (
             <p className="text-xs text-muted-foreground" data-testid="access-summary">
-              {describeTriggerAccess(value)} <code className="font-mono">ctx.context.userId</code>{" "}
-              is <code className="font-mono">null</code> and{" "}
-              <code className="font-mono">isAuthenticated</code> is{" "}
-              <code className="font-mono">false</code>.
+              {renderRichText(
+                t("TRIGGER_HTTP_CARD.N_0_CTX_CONTEXT_USERID", {
+                  value: describeTriggerAccess(value),
+                }),
+                [
+                  (children) => <code className="font-mono">{children}</code>,
+                  (children) => <code className="font-mono">{children}</code>,
+                  (children) => <code className="font-mono">{children}</code>,
+                  (children) => <code className="font-mono">{children}</code>,
+                ],
+              )}
             </p>
           )}
         </div>

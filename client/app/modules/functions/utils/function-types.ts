@@ -1,3 +1,4 @@
+import { tStatic } from "@seliseblocks/genesis-os";
 /**
  * The type declarations the Code tab feeds Monaco so `input`, `ctx` and the tenant's own
  * variables complete and hover like they would in VS Code. This mirrors the runner's
@@ -170,8 +171,8 @@ export const buildCtxCompletions = (envKeys: string[] = []) => {
   return [
     {
       label: "env",
-      detail: "Record<string, string>",
-      documentation: "Your variables, as plain strings.",
+      detail: tStatic("logic.functions", "FUNCTION_TYPES.RECORD_STRING_STRING"),
+      documentation: tStatic("logic.functions", "FUNCTION_TYPES.YOUR_VARIABLES_AS_PLAIN"),
     },
     {
       label: "log",
@@ -193,12 +194,12 @@ export const buildCtxCompletions = (envKeys: string[] = []) => {
       label: "waitUntil",
       detail: "(promise: Promise<unknown>) => void",
       documentation:
-        "Finish work after the answer is sent, without making the reused sandbox be replaced.",
+        tStatic("logic.functions", "FUNCTION_TYPES.FINISH_WORK_AFTER_THE"),
     },
     ...keys.map((key) => ({
-      label: `env.${key}`,
+      label: tStatic("logic.functions", "FUNCTION_TYPES.ENV", { key }),
       detail: "string",
-      documentation: `Variable ${key}, snapshotted at deploy.`,
+      documentation: tStatic("logic.functions", "FUNCTION_TYPES.VARIABLE_SNAPSHOTTED_AT_DEPLOY", { key }),
     })),
   ];
 };

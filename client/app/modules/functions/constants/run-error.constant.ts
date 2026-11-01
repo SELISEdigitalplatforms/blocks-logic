@@ -1,37 +1,27 @@
 import { RunErrorCode } from "../types/run.types";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 /**
  * A run's error code as a sentence the developer can act on — §4.8 of the UI spec. The raw code is
  * still shown next to it, so nothing is hidden by the friendlier wording.
  */
 export const RUN_ERROR_EXPLANATIONS: Record<RunErrorCode, string> = {
-  MemoryLimit:
-    "The function used more memory than its limit. Hold less in memory.",
-  PidLimit: "The function started more processes or threads than a sandbox allows.",
-  UserRuntimeError: "The handler threw. The stack is in the logs below.",
-  RuntimeStartFailed:
-    "The sandbox could not start the runtime — usually a broken package.json or a package that needs a native build.",
-  ResultTooLarge: "The returned value is over the result size limit. Return a reference instead of the payload.",
-  ResultNotSerializable:
-    "The returned value could not be turned into JSON. Return plain objects, arrays and primitives.",
-  ImagePullFailed:
-    "The image could not be pulled — it is no longer on the registry. The build behind it has been invalidated, so testing or deploying again builds a new one.",
-  TimedOut:
-    "The run passed its timeout and was stopped. Do less work per call.",
-  SandboxStartFailed: "The sandbox failed to start. Nothing ran, so a replay is safe.",
-  OutputActionFailed: "The function returned successfully, but an output action did not deliver.",
-  Undeliverable:
-    "No runner ever picked this up, so nothing ran. It is safe to run again — but check the runners are healthy first, because the platform already gave up on delivering it once.",
-  EnqueueFailed:
-    "The run could not be queued, so nothing ran. The platform's queue was unavailable for a moment — running it again is safe.",
-  Abandoned:
-    "The run never reported back and the platform closed it. It may or may not have finished its work, so check for side effects before running it again.",
-  SecretUnresolved:
-    "A variable is bound to a secret that could not be read — it was deleted, locked, has no value, or is not readable by this run. Nothing ran. Rebind the variable named above to an existing secret, then run again.",
-  BuildFailed:
-    "The test's image could not be built, so nothing ran. The build log above says why — usually a package name or version in package.json that does not exist.",
-  SecretStoreUnavailable:
-    "The secret store could not be reached while the run was starting, so nothing ran. This is on the platform's side. An HTTP run of a deployed function may be retried automatically; running it again is safe.",
+  get MemoryLimit() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_FUNCTION_USED_MORE"); },
+  get PidLimit() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_FUNCTION_STARTED_MORE"); },
+  get UserRuntimeError() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_HANDLER_THREW_THE"); },
+  get RuntimeStartFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_SANDBOX_COULD_NOT"); },
+  get ResultTooLarge() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_RETURNED_VALUE_IS"); },
+  get ResultNotSerializable() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_RETURNED_VALUE_COULD"); },
+  get ImagePullFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_IMAGE_COULD_NOT"); },
+  get TimedOut() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_RUN_PASSED_ITS"); },
+  get SandboxStartFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_SANDBOX_FAILED_TO"); },
+  get OutputActionFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_FUNCTION_RETURNED_SUCCESSFULLY"); },
+  get Undeliverable() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.NO_RUNNER_EVER_PICKED"); },
+  get EnqueueFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_RUN_COULD_NOT"); },
+  get Abandoned() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_RUN_NEVER_REPORTED"); },
+  get SecretUnresolved() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.A_VARIABLE_IS_BOUND"); },
+  get BuildFailed() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_TEST_S_IMAGE"); },
+  get SecretStoreUnavailable() { return tStatic("logic.functions", "RUN_ERROR_CONSTANT.THE_SECRET_STORE_COULD"); },
 };
 
 /**
@@ -68,23 +58,12 @@ export const explainRunError = (
 
   if (message.toLowerCase().startsWith(MODULE_LOAD_PREFIX)) {
     if (HANDLER_SCOPE.test(message)) {
-      return (
-        "input and ctx are parameters of your handler — they exist only inside " +
-        "export default async function handler(input, ctx) { … }, not at the top level of the file. " +
-        "Code outside the handler runs once when the sandbox starts, which is where clients, caches " +
-        "and constants belong; anything that needs the request or the context has to be inside."
-      );
+      return tStatic("logic.functions", "RUN_ERROR_CONSTANT.HANDLER_SCOPE");
     }
     if (MISSING_PACKAGE.test(message)) {
-      return (
-        "The import could not be resolved. Add the package to package.json — pinned to an exact " +
-        "version — then run the test again, which builds a new image."
-      );
+      return tStatic("logic.functions", "RUN_ERROR_CONSTANT.MISSING_PACKAGE");
     }
-    return (
-      "The file threw while it was being imported, so the handler never ran and nothing was logged. " +
-      "The cause is in top-level code, not inside your handler."
-    );
+    return tStatic("logic.functions", "RUN_ERROR_CONSTANT.MODULE_THREW");
   }
 
   if (!errorCode) return null;

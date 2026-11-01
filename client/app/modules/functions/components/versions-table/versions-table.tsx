@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { IFunctionVersionSummary } from "../../types/version.types";
 import { formatAbsoluteTime, formatRelativeTime, formatRunCount } from "../../utils/format";
 import { VersionSourceDialog } from "../version-source-dialog";
+import { useT } from "@seliseblocks/genesis-os";
 
 // Keep header, loading placeholders, and rows on identical column tracks.
 const GRID =
@@ -26,25 +27,30 @@ export const VersionsTable = ({
   activeVersionNumber,
   isLoading,
 }: VersionsTableProps) => {
+  const { t } = useT("logic.functions.components");
   const [sourceTarget, setSourceTarget] = useState<IFunctionVersionSummary | null>(null);
 
   return (
     <div className="flex flex-col gap-3">
       <p className="max-w-[68ch] text-xs leading-relaxed text-medium-emphasis">
-        Every deploy pins an immutable build. A version cannot be changed after it is made.
+        {t("VERSIONS_TABLE.EVERY_DEPLOY_PINS_AN")}
       </p>
 
-      <div className="overflow-x-auto rounded-lg border" role="table" aria-label="Versions">
+      <div
+        className="overflow-x-auto rounded-lg border"
+        role="table"
+        aria-label={t("VERSIONS_TABLE.VERSIONS")}
+      >
         <div
           className={`${GRID} border-b bg-surface-app px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-low-emphasis`}
           role="row"
         >
-          <span role="columnheader">Version</span>
-          <span role="columnheader">Deployed</span>
-          <span role="columnheader">Note</span>
-          <span role="columnheader">Runs</span>
-          <span role="columnheader">Status</span>
-          <span role="columnheader" aria-label="Row actions" />
+          <span role="columnheader">{t("VERSIONS_TABLE.VERSION")}</span>
+          <span role="columnheader">{t("VERSIONS_TABLE.DEPLOYED")}</span>
+          <span role="columnheader">{t("VERSIONS_TABLE.NOTE")}</span>
+          <span role="columnheader">{t("VERSIONS_TABLE.RUNS")}</span>
+          <span role="columnheader">{t("common:STATUS")}</span>
+          <span role="columnheader" aria-label={t("VERSIONS_TABLE.ROW_ACTIONS")} />
         </div>
 
         {isLoading &&
@@ -65,7 +71,7 @@ export const VersionsTable = ({
 
         {!isLoading && versions.length === 0 && (
           <p className="px-5 py-9 text-center text-sm text-medium-emphasis">
-            No versions yet — the first deploy creates v1.
+            {t("VERSIONS_TABLE.NO_VERSIONS_YET_THE")}
           </p>
         )}
 
@@ -114,11 +120,11 @@ export const VersionsTable = ({
                 <div role="cell">
                   {isActive ? (
                     <span className="rounded bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-success">
-                      Active
+                      {t("VERSIONS_TABLE.ACTIVE")}
                     </span>
                   ) : (
                     <span className="text-xs text-low-emphasis">
-                      {activeVersionNumber == null ? "—" : "Inactive"}
+                      {activeVersionNumber == null ? "—" : t("VERSIONS_TABLE.INACTIVE")}
                     </span>
                   )}
                 </div>
@@ -131,13 +137,15 @@ export const VersionsTable = ({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-medium-emphasis"
-                        aria-label={`View source of v${version.number}`}
+                        aria-label={t("VERSIONS_TABLE.VIEW_SOURCE_OF_V", {
+                          number: version.number,
+                        })}
                         onClick={() => setSourceTarget(version)}
                       >
                         <FileCode2 className="h-4 w-4" aria-hidden="true" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>View source</TooltipContent>
+                    <TooltipContent>{t("VERSIONS_TABLE.VIEW_SOURCE")}</TooltipContent>
                   </Tooltip>
                 </div>
               </div>

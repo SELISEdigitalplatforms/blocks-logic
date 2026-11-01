@@ -2,12 +2,21 @@ import { useState } from "react";
 import { Loader2, CheckCircle2, XCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { useGetBuild } from "../../hooks/use-versions";
 import { cn } from "@/lib/utils";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 const LABELS: Record<string, string> = {
-  Queued: "Queued for build…",
-  Building: "Building image…",
-  Succeeded: "Build succeeded",
-  Failed: "Build failed",
+  get Queued() {
+    return tStatic("logic.functions.components", "BUILD_PROGRESS.QUEUED_FOR_BUILD");
+  },
+  get Building() {
+    return tStatic("logic.functions.components", "BUILD_PROGRESS.BUILDING_IMAGE");
+  },
+  get Succeeded() {
+    return tStatic("logic.functions.components", "BUILD_PROGRESS.BUILD_SUCCEEDED");
+  },
+  get Failed() {
+    return tStatic("logic.functions.components", "BUILD_PROGRESS.BUILD_FAILED");
+  },
 };
 
 /**
@@ -18,6 +27,7 @@ const LABELS: Record<string, string> = {
  * fetched and thrown away, so the only way to read it was the network tab.
  */
 export const BuildProgress = ({ buildId }: { buildId?: string }) => {
+  const { t } = useT("logic.functions.components");
   const { data: build } = useGetBuild(buildId);
   // null means "nobody has clicked yet", which is what lets a failed build open itself without
   // taking the toggle away: `false` from a click has to beat the default, not be equal to it.
@@ -50,7 +60,7 @@ export const BuildProgress = ({ buildId }: { buildId?: string }) => {
             ) : (
               <ChevronRight className="h-3.5 w-3.5" />
             )}
-            {showLog ? "Hide build log" : "Build log"}
+            {showLog ? t("BUILD_PROGRESS.HIDE_BUILD_LOG") : t("BUILD_PROGRESS.BUILD_LOG")}
           </button>
         )}
       </div>
@@ -78,7 +88,7 @@ export const BuildProgress = ({ buildId }: { buildId?: string }) => {
           the only statement of which versions the image contains. */}
       {build.status === "Succeeded" && build.packages && build.packages !== "[]" && (
         <p className="break-words font-mono text-[11px] leading-relaxed text-low-emphasis">
-          Installed {build.packages}
+          {t("BUILD_PROGRESS.INSTALLED", { packages: build.packages })}
         </p>
       )}
     </div>

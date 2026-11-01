@@ -1,4 +1,5 @@
 import type { IFunctionExportFile } from "../types/transfer.types";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 /** The server's ceiling for an import (FunctionTransferCodec.MaxImportBytes): checked here first. */
 export const MAX_IMPORT_BYTES = 3 * 1024 * 1024;
@@ -13,10 +14,11 @@ export const EXPORT_SCHEMA_VERSION = 2;
  * Returns the message to show, or null when the file may go on.
  */
 export const checkImportFile = (file: File): string | null => {
-  if (!file.name.toLowerCase().endsWith(".json")) return "Only .json export files can be imported.";
-  if (file.size === 0) return "This file is empty.";
+  if (!file.name.toLowerCase().endsWith(".json"))
+    return tStatic("logic.functions", "TRANSFER.ONLY_JSON_EXPORT_FILES");
+  if (file.size === 0) return tStatic("logic.functions", "TRANSFER.THIS_FILE_IS_EMPTY");
   if (file.size > MAX_IMPORT_BYTES) {
-    return "This file is larger than 3 MB, so it cannot be a function export.";
+    return tStatic("logic.functions", "TRANSFER.THIS_FILE_IS_LARGER");
   }
   return null;
 };
@@ -97,7 +99,10 @@ export const importErrorOf = (error: unknown): { status?: number; message: strin
     if (values.length) message = values.join(" ");
   }
   if (!message && typeof raw?.message === "string" && raw.message) message = raw.message;
-  return { status, message: message ?? "The request could not be completed." };
+  return {
+    status,
+    message: message ?? tStatic("logic.functions", "TRANSFER.THE_REQUEST_COULD_NOT"),
+  };
 };
 
 // ─── secrets kept by name ────────────────────────────────────────────────────

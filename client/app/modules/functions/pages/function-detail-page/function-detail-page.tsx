@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { useProjectStore, useScopedPath } from "@seliseblocks/genesis-os";
+import { useProjectStore, useScopedPath, useT, tStatic } from "@seliseblocks/genesis-os";
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import {
   Check,
@@ -73,6 +73,7 @@ import { getProxyPublicHost } from "@/modules/proxy/constants/proxy.constant";
 import { acceptedHttpVerbs } from "../../constants/endpoint.constant";
 import { checkSetup } from "../../utils/connections";
 import { payloadOf } from "../../utils/test-input";
+import { renderRichText } from "@/lib/rich-text";
 
 const RUNS_PAGE_SIZE = 20;
 
@@ -117,10 +118,10 @@ const CODE_CARD_MAX_HEIGHT = 1600;
  * `hint` is the tooltip that says what is behind the short word.
  */
 const SIDE_PANELS = [
-  { value: "test", label: "Test", hint: "Run the function with a sample request" },
-  { value: "environment", label: "Runtime", hint: "Variables, limits and sandbox rules" },
-  { value: "connections", label: "Services", hint: "Connect MongoDB, Redis and Blocks APIs" },
-  { value: "guide", label: "Guide", hint: "How to write a handler" },
+  { value: "test", get label() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.TEST"); }, get hint() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.RUN_THE_FUNCTION_WITH"); } },
+  { value: "environment", get label() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.RUNTIME"); }, get hint() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.VARIABLES_LIMITS_AND_SANDBOX"); } },
+  { value: "connections", get label() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.SERVICES"); }, get hint() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.CONNECT_MONGODB_REDIS_AND"); } },
+  { value: "guide", get label() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.GUIDE"); }, get hint() { return tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.HOW_TO_WRITE_A"); } },
 ] as const;
 type SidePanel = (typeof SIDE_PANELS)[number]["value"];
 
@@ -187,6 +188,7 @@ const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
 };
 
 export const FunctionDetailPage = () => {
+  const { t } = useT("logic.functions");
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { pathname } = useLocation();
@@ -217,11 +219,11 @@ export const FunctionDetailPage = () => {
     isBuilding,
     buildId: deployBuildId,
   } = useDeploy(functionId, {
-    onDeployed: (version) => showSuccessToast({ description: `Deployed as v${version.number}.` }),
+    onDeployed: (version) => showSuccessToast({ description: t("FUNCTION_DETAIL_PAGE.DEPLOYED_AS_V", { number: version.number }) }),
     onFailed: (error) =>
       isErrorWithErrors(error)
         ? showErrorToast({ errors: error.errors })
-        : showErrorToast({ errors: "Failed to deploy function" }),
+        : showErrorToast({ errors: t("FUNCTION_DETAIL_PAGE.FAILED_TO_DEPLOY_FUNCTION") }),
   });
   const { mutateAsync: renameAsync, isPending: isRenaming } = useUpdateFunction();
   const { mutateAsync: exportAsync, isPending: isExporting } = useExportFunction();
@@ -230,7 +232,7 @@ export const FunctionDetailPage = () => {
   const handleExport = async () => {
     try {
       downloadExportFile(await exportAsync(functionId));
-      showSuccessToast({ description: "Export downloaded. Unsaved changes are not in it." });
+      showSuccessToast({ description: t("FUNCTION_DETAIL_PAGE.EXPORT_DOWNLOADED_UNSAVED_CHANGES") });
     } catch (error) {
       showErrorToast({ errors: importErrorOf(error).message });
     }
@@ -321,7 +323,7 @@ export const FunctionDetailPage = () => {
 
   useEffect(() => {
     if (functionId && isFetched && !isLoading && !fn) {
-      showErrorToast({ errors: "Function not found" });
+      showErrorToast({ errors: tStatic("logic.functions", "FUNCTION_DETAIL_PAGE.FUNCTION_NOT_FOUND") });
       navigate(scoped("functions"));
     }
   }, [functionId, isFetched, isLoading, fn, navigate, scoped]);
@@ -338,7 +340,7 @@ export const FunctionDetailPage = () => {
       await deploy();
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to deploy function" });
+      return showErrorToast({ errors: t("FUNCTION_DETAIL_PAGE.FAILED_TO_DEPLOY_FUNCTION") });
     }
   };
 
@@ -356,7 +358,7 @@ export const FunctionDetailPage = () => {
       setRenameDraft(null);
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to rename function" });
+      return showErrorToast({ errors: t("FUNCTION_DETAIL_PAGE.FAILED_TO_RENAME_FUNCTION") });
     } finally {
       isRenameSubmitting.current = false;
     }
@@ -386,7 +388,7 @@ export const FunctionDetailPage = () => {
       ? "Deploy"
       : hasUndeployedChanges
         ? `Deploy v${fn.lastVersionNumber + 1}`
-        : "Up to date ✓";
+        : t("FUNCTION_DETAIL_PAGE.UP_TO_DATE");
 
   const runs = runsData?.data ?? [];
   const hasActiveRun = runs.some((run) => !TERMINAL_RUN_STATUSES.includes(run.status));
@@ -421,7 +423,7 @@ export const FunctionDetailPage = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Rename function"
+                    aria-label={t("FUNCTION_DETAIL_PAGE.RENAME_FUNCTION")}
                     className="h-7 w-7 text-medium-emphasis hover:text-foreground"
                     onClick={() => setRenameDraft(fn.name)}
                   >
@@ -431,7 +433,7 @@ export const FunctionDetailPage = () => {
               ) : (
                 <Input
                   ref={renameInputRef}
-                  aria-label="Function name"
+                  aria-label={t("FUNCTION_DETAIL_PAGE.FUNCTION_NAME")}
                   className="h-9 max-w-xs text-lg font-semibold"
                   value={renameDraft}
                   disabled={isRenaming}
@@ -456,7 +458,7 @@ export const FunctionDetailPage = () => {
                 </code>
                 <button
                   type="button"
-                  aria-label="Copy endpoint"
+                  aria-label={t("FUNCTION_DETAIL_PAGE.COPY_ENDPOINT")}
                   className="shrink-0 text-medium-emphasis hover:text-foreground"
                   onClick={copyEndpoint}
                 >
@@ -470,19 +472,16 @@ export const FunctionDetailPage = () => {
               <span>
                 {isDeployed ? (
                   <>
-                    active{" "}
-                    <code className="font-mono font-semibold text-primary">
-                      v{fn.activeVersionNumber}
-                    </code>
+                    {renderRichText(t("FUNCTION_DETAIL_PAGE.ACTIVE_0_V_0", { activeVersionNumber: fn.activeVersionNumber ?? "" }), [(children) => <code className="font-mono font-semibold text-primary">{children}</code>])}
                   </>
                 ) : (
-                  "not deployed"
+                  t("FUNCTION_DETAIL_PAGE.NOT_DEPLOYED")
                 )}
               </span>
               {isDirty && (
                 <span className="flex items-center gap-1.5 font-medium text-warning-800">
                   <span className="h-1.5 w-1.5 rounded-full bg-warning-800" />
-                  unsaved changes
+                  {t("FUNCTION_DETAIL_PAGE.UNSAVED_CHANGES")}
                 </span>
               )}
             </div>
@@ -501,7 +500,7 @@ export const FunctionDetailPage = () => {
               ) : (
                 <Download className="h-3.5 w-3.5" />
               )}
-              Export
+              {t("FUNCTION_DETAIL_PAGE.EXPORT")}
             </Button>
             <Button
               variant="outline"
@@ -511,7 +510,7 @@ export const FunctionDetailPage = () => {
                 requestTestRun();
               }}
             >
-              Test run
+              {t("FUNCTION_DETAIL_PAGE.TEST_RUN")}
             </Button>
             <Button
               variant="outline"
@@ -521,7 +520,7 @@ export const FunctionDetailPage = () => {
               disabled={isSaving || !isDirty}
             >
               <Save className="h-3.5 w-3.5" />
-              {isSaving ? "Saving…" : "Save"}
+              {isSaving ? t("FUNCTION_DETAIL_PAGE.SAVING") : t("common:SAVE")}
             </Button>
             <Button
               size="sm"
@@ -617,30 +616,30 @@ export const FunctionDetailPage = () => {
                 <div className="flex shrink-0 items-center gap-1">
                   <span className="hidden text-xs text-low-emphasis sm:inline">
                     {activeFile === "index.js"
-                      ? `ES modules · ${indexJs.split("\n").length} lines`
-                      : "version ranges · installed on Test and Deploy"}
+                      ? t("FUNCTION_DETAIL_PAGE.ES_MODULES_LINES", { length: indexJs.split("\n").length })
+                      : t("FUNCTION_DETAIL_PAGE.VERSION_RANGES_INSTALLED_ON")}
                   </span>
                   {/* Monaco owns all three; these only make them visible. Every one keeps its
                       keyboard shortcut, so the buttons are a discovery aid rather than the
                       only way in. */}
                   <div className="ml-2 flex items-center gap-0.5 border-l pl-2">
                     <EditorToolButton
-                      label="Search"
-                      hint="Find and replace — click again to close"
+                      label={t("common:SEARCH")}
+                      hint={t("FUNCTION_DETAIL_PAGE.FIND_AND_REPLACE_CLICK")}
                       shortcut="Ctrl+F · Esc"
                       icon={Search}
                       onClick={() => editorActions.current?.find()}
                     />
                     <EditorToolButton
-                      label="Format"
-                      hint="Format document"
+                      label={t("FUNCTION_DETAIL_PAGE.FORMAT")}
+                      hint={t("FUNCTION_DETAIL_PAGE.FORMAT_DOCUMENT")}
                       shortcut="Shift+Alt+F"
                       icon={Sparkles}
                       onClick={() => editorActions.current?.format()}
                     />
                     <EditorToolButton
-                      label="Wrap lines"
-                      hint={isWrapped ? "Stop wrapping long lines" : "Wrap long lines"}
+                      label={t("FUNCTION_DETAIL_PAGE.WRAP_LINES")}
+                      hint={isWrapped ? t("FUNCTION_DETAIL_PAGE.STOP_WRAPPING_LONG_LINES") : t("FUNCTION_DETAIL_PAGE.WRAP_LONG_LINES")}
                       icon={WrapText}
                       isActive={isWrapped}
                       onClick={() => setIsWrapped((wrapped) => !wrapped)}
@@ -683,11 +682,7 @@ export const FunctionDetailPage = () => {
                 />
               )}
               <p className="shrink-0 border-t bg-surface-app px-4 py-2.5 text-xs text-medium-emphasis">
-                Native <code className="font-mono">fetch()</code>, async/await and npm
-                packages. Variables arrive as <code className="font-mono">ctx.env.NAME</code> —
-                inside the handler, where <code className="font-mono">ctx</code> exists. Calls reuse
-                the sandbox: open connections at module level, keep request data in the handler,
-                and await everything or use <code className="font-mono">ctx.waitUntil()</code>.
+                {renderRichText(t("FUNCTION_DETAIL_PAGE.NATIVE_0_FETCH_0"), [(children) => <code className="font-mono">{children}</code>, (children) => <code className="font-mono">{children}</code>, (children) => <code className="font-mono">{children}</code>, (children) => <code className="font-mono">{children}</code>])}
               </p>
               <ResizeHandle
                 targetRef={codeCardRef}
@@ -696,7 +691,7 @@ export const FunctionDetailPage = () => {
                 max={CODE_CARD_MAX_HEIGHT}
                 onResize={setCodeCardHeight}
                 onReset={() => setCodeCardHeight(null)}
-                label="Resize code editor"
+                label={t("FUNCTION_DETAIL_PAGE.RESIZE_CODE_EDITOR")}
                 className="border-t"
               />
             </Card>
@@ -722,7 +717,7 @@ export const FunctionDetailPage = () => {
                     {panel.value === "connections" && setupIssueCount > 0 && (
                       <span
                         className="h-1.5 w-1.5 rounded-full bg-warning-700"
-                        aria-label={`${setupIssueCount} setup ${setupIssueCount === 1 ? "issue" : "issues"}`}
+                        aria-label={t("FUNCTION_DETAIL_PAGE.SETUP_ISSUES", { count: setupIssueCount })}
                       />
                     )}
                   </TabsTrigger>
@@ -821,9 +816,9 @@ export const FunctionDetailPage = () => {
               <Card>
                 <CardContent className="flex flex-col gap-4 p-5">
                   <div className="flex flex-col gap-1">
-                    <span className="text-base font-semibold">Limits</span>
+                    <span className="text-base font-semibold">{t("FUNCTION_DETAIL_PAGE.LIMITS")}</span>
                     <span className="text-xs leading-relaxed text-medium-emphasis">
-                      Applied to every invocation, the same for every function.
+                      {t("FUNCTION_DETAIL_PAGE.APPLIED_TO_EVERY_INVOCATION")}
                     </span>
                   </div>
                   <LimitsForm />
@@ -832,9 +827,9 @@ export const FunctionDetailPage = () => {
               <Card>
                 <CardContent className="flex flex-col gap-4 p-5">
                   <div className="flex flex-col gap-1">
-                    <span className="text-base font-semibold">Retries</span>
+                    <span className="text-base font-semibold">{t("FUNCTION_DETAIL_PAGE.RETRIES")}</span>
                     <span className="text-xs leading-relaxed text-medium-emphasis">
-                      What happens when a run fails.
+                      {t("FUNCTION_DETAIL_PAGE.WHAT_HAPPENS_WHEN_A")}
                     </span>
                   </div>
                   <RetryForm />

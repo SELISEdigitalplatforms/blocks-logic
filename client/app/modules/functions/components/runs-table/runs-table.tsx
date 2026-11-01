@@ -20,6 +20,7 @@ import {
 } from "../../utils/format";
 import { RunStatusChip } from "../run-status-chip";
 import { useCancelRun, useReplayRun } from "../../hooks/use-runs";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 /**
  * Design's grid: Run · Status · Triggered by · Duration · Peak mem · Version · row actions.
@@ -31,11 +32,21 @@ const GRID =
 
 const TRIGGER_LABELS: Record<string, string> = {
   Http: "HTTP",
-  Workflow: "Workflow",
-  Test: "Test",
-  Replay: "Replay",
-  Schedule: "Schedule",
-  Event: "Event",
+  get Workflow() {
+    return tStatic("logic.functions.components", "RUNS_TABLE.WORKFLOW");
+  },
+  get Test() {
+    return tStatic("logic.functions.components", "RUNS_TABLE.TEST");
+  },
+  get Replay() {
+    return tStatic("logic.functions.components", "RUNS_TABLE.REPLAY");
+  },
+  get Schedule() {
+    return tStatic("logic.functions.components", "RUNS_TABLE.SCHEDULE");
+  },
+  get Event() {
+    return tStatic("logic.functions.components", "RUNS_TABLE.EVENT");
+  },
 };
 
 type RunsTableProps = {
@@ -57,47 +68,52 @@ export const RunsTable = ({
   isDeployed,
   onOpenRun,
 }: RunsTableProps) => {
+  const { t } = useT("logic.functions.components");
   const { mutateAsync: replayAsync } = useReplayRun();
   const { mutateAsync: cancelAsync } = useCancelRun();
 
   const handleReplay = async (runId: string) => {
     try {
       await replayAsync(runId);
-      showSuccessToast({ description: "Replay started." });
+      showSuccessToast({ description: t("RUNS_TABLE.REPLAY_STARTED") });
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to replay run" });
+      return showErrorToast({ errors: t("RUNS_TABLE.FAILED_TO_REPLAY_RUN") });
     }
   };
 
   const handleCancel = async (runId: string) => {
     try {
       await cancelAsync(runId);
-      showSuccessToast({ description: "Cancel requested." });
+      showSuccessToast({ description: t("RUNS_TABLE.CANCEL_REQUESTED") });
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to cancel run" });
+      return showErrorToast({ errors: t("RUNS_TABLE.FAILED_TO_CANCEL_RUN") });
     }
   };
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-hidden rounded-lg border" role="grid" aria-label="Runs">
+      <div
+        className="overflow-hidden rounded-lg border"
+        role="grid"
+        aria-label={t("RUNS_TABLE.RUNS")}
+      >
         <div
           className={`${GRID} border-b bg-surface-app px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-low-emphasis`}
           role="row"
         >
-          <span role="columnheader">Run</span>
-          <span role="columnheader">Status</span>
+          <span role="columnheader">{t("RUNS_TABLE.RUN")}</span>
+          <span role="columnheader">{t("common:STATUS")}</span>
           <span role="columnheader" className="whitespace-nowrap">
-            Triggered by
+            {t("RUNS_TABLE.TRIGGERED_BY")}
           </span>
-          <span role="columnheader">Duration</span>
+          <span role="columnheader">{t("RUNS_TABLE.DURATION")}</span>
           <span role="columnheader" className="whitespace-nowrap">
-            Peak mem
+            {t("RUNS_TABLE.PEAK_MEM")}
           </span>
-          <span role="columnheader">Version</span>
-          <span role="columnheader" aria-label="Row actions" />
+          <span role="columnheader">{t("RUNS_TABLE.VERSION")}</span>
+          <span role="columnheader" aria-label={t("RUNS_TABLE.ROW_ACTIONS")} />
         </div>
 
         {isLoading &&
@@ -120,10 +136,10 @@ export const RunsTable = ({
         {!isLoading && runs.length === 0 && (
           <p className="px-5 py-9 text-center text-sm text-medium-emphasis">
             {hasFilters
-              ? "No runs match this filter."
+              ? t("RUNS_TABLE.NO_RUNS_MATCH_THIS")
               : isDeployed
-                ? "No runs yet — call the endpoint or run a test from the Code tab."
-                : "No runs yet — deploy the function and call its endpoint."}
+                ? t("RUNS_TABLE.NO_RUNS_YET_CALL")
+                : t("RUNS_TABLE.NO_RUNS_YET_DEPLOY")}
           </p>
         )}
 
@@ -161,7 +177,7 @@ export const RunsTable = ({
 
                 <span className="min-w-0 truncate text-xs text-medium-emphasis" role="gridcell">
                   {TRIGGER_LABELS[run.invokedBy] ?? run.invokedBy}
-                  {run.attempt > 1 ? ` · attempt ${run.attempt}` : ""}
+                  {run.attempt > 1 ? t("RUNS_TABLE.ATTEMPT", { attempt: run.attempt }) : ""}
                 </span>
 
                 <span className="whitespace-nowrap text-xs" role="gridcell">
@@ -170,9 +186,9 @@ export const RunsTable = ({
                   {run.reused != null && (
                     <span
                       className="text-low-emphasis"
-                      title={run.reused ? "Warm (reused)" : "Cold start"}
+                      title={run.reused ? t("RUNS_TABLE.WARM_REUSED") : t("RUNS_TABLE.COLD_START")}
                     >
-                      {run.reused ? " · warm" : " · cold"}
+                      {run.reused ? t("RUNS_TABLE.WARM") : t("RUNS_TABLE.COLD")}
                     </span>
                   )}
                 </span>
@@ -194,7 +210,7 @@ export const RunsTable = ({
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
-                        aria-label={`Actions for run ${run.id}`}
+                        aria-label={t("RUNS_TABLE.ACTIONS_FOR_RUN", { id: run.id })}
                         className="h-6 w-6 shrink-0 p-0"
                       >
                         <EllipsisVertical className="h-4 w-4" />
@@ -206,7 +222,7 @@ export const RunsTable = ({
                         onClick={() => onOpenRun(run.id)}
                       >
                         <ArrowRightFromLine className="mr-2 h-4 w-4" />
-                        <span>Open</span>
+                        <span>{t("RUNS_TABLE.OPEN")}</span>
                       </DropdownMenuItem>
                       {isActive ? (
                         <DropdownMenuItem
@@ -214,7 +230,7 @@ export const RunsTable = ({
                           onClick={() => void handleCancel(run.id)}
                         >
                           <Ban className="mr-2 h-4 w-4" />
-                          <span>Cancel</span>
+                          <span>{t("common:CANCEL")}</span>
                         </DropdownMenuItem>
                       ) : (
                         <DropdownMenuItem
@@ -222,7 +238,7 @@ export const RunsTable = ({
                           onClick={() => void handleReplay(run.id)}
                         >
                           <RotateCcw className="mr-2 h-4 w-4" />
-                          <span>Replay</span>
+                          <span>{t("RUNS_TABLE.REPLAY")}</span>
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuContent>
@@ -233,9 +249,7 @@ export const RunsTable = ({
           })}
       </div>
 
-      <p className="text-xs text-medium-emphasis">
-        Every trigger — HTTP, workflow or a test from the editor — lands here.
-      </p>
+      <p className="text-xs text-medium-emphasis">{t("RUNS_TABLE.EVERY_TRIGGER_HTTP_WORKFLOW")}</p>
     </div>
   );
 };

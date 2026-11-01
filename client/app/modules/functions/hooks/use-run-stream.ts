@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { functionService } from "../services/function.service";
 import { readSse } from "../utils/sse";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 /** Most of a streamed answer the panel keeps on screen; the run's result keeps its start anyway. */
 export const RUN_STREAM_MAX_CHARS = 1024 * 1024;
@@ -27,7 +28,7 @@ const errorMessageOf = (data: string) => {
   } catch {
     // Not JSON: the text itself is the best message there is.
   }
-  return data || "The stream ended with an error.";
+  return data || tStatic("logic.functions", "USE_RUN_STREAM.THE_STREAM_ENDED_WITH");
 };
 
 /**

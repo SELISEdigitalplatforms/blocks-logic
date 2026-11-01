@@ -33,6 +33,8 @@ import { RunStatusChip } from "../run-status-chip";
 import { RunTiming } from "../run-timing";
 import { RunEvents } from "../run-events";
 import { triggeredByLabel } from "../../utils/events";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
+import { renderRichText } from "@/lib/rich-text";
 
 const LOG_LEVEL_FILTERS = ["All", "Info", "Warn", "Error"] as const;
 
@@ -48,11 +50,21 @@ const LOG_LEVEL_CLASS: Record<string, string> = {
 
 const TRIGGER_LABELS: Record<string, string> = {
   Http: "HTTP",
-  Workflow: "Workflow",
-  Test: "Test",
-  Replay: "Replay",
-  Schedule: "Schedule",
-  Event: "Event",
+  get Workflow() {
+    return tStatic("logic.functions.components", "RUN_DETAIL.WORKFLOW");
+  },
+  get Test() {
+    return tStatic("logic.functions.components", "RUN_DETAIL.TEST");
+  },
+  get Replay() {
+    return tStatic("logic.functions.components", "RUN_DETAIL.REPLAY");
+  },
+  get Schedule() {
+    return tStatic("logic.functions.components", "RUN_DETAIL.SCHEDULE");
+  },
+  get Event() {
+    return tStatic("logic.functions.components", "RUN_DETAIL.EVENT");
+  },
 };
 
 /**
@@ -64,8 +76,16 @@ const buildStages = (run: IRunDetail) => {
   const stages: { label: string; at?: string | null; isTerminal?: boolean }[] = [
     { label: "QUEUED", at: run.createdDate },
   ];
-  if (run.startedAt) stages.push({ label: "RUNNING", at: run.startedAt });
-  if (run.outputResults.length > 0) stages.push({ label: "OUTPUTS", at: run.completedAt });
+  if (run.startedAt)
+    stages.push({
+      label: tStatic("logic.functions.components", "RUN_DETAIL.RUNNING"),
+      at: run.startedAt,
+    });
+  if (run.outputResults.length > 0)
+    stages.push({
+      label: tStatic("logic.functions.components", "RUN_DETAIL.OUTPUTS"),
+      at: run.completedAt,
+    });
   if (TERMINAL_RUN_STATUSES.includes(run.status)) {
     stages.push({
       label: run.status.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase(),
@@ -89,6 +109,7 @@ const JsonPane = ({
   emptyText: string;
   onUseAsTestInput?: (value: string) => void;
 }) => {
+  const { t } = useT("logic.functions.components");
   const [isPretty, setIsPretty] = useState(false);
 
   // Not every value is valid JSON (or even present) — fall back to the raw string rather than
@@ -115,14 +136,16 @@ const JsonPane = ({
                 className="px-2 text-xs"
                 onClick={() => onUseAsTestInput(value)}
               >
-                Use as test input
+                {t("RUN_DETAIL.USE_AS_TEST_INPUT")}
               </Button>
             )}
             <Button
               variant="ghost"
               size="icon"
               aria-label={
-                isPretty ? `Show raw ${title.toLowerCase()}` : `Pretty-print ${title.toLowerCase()}`
+                isPretty
+                  ? t("RUN_DETAIL.SHOW_RAW", { value: title.toLowerCase() })
+                  : t("RUN_DETAIL.PRETTY_PRINT", { value: title.toLowerCase() })
               }
               aria-pressed={isPretty}
               className={cn("h-7 w-7", isPretty ? "text-primary" : "text-medium-emphasis")}
@@ -133,7 +156,7 @@ const JsonPane = ({
             <Button
               variant="ghost"
               size="icon"
-              aria-label={`Copy ${title.toLowerCase()}`}
+              aria-label={t("RUN_DETAIL.COPY", { value: title.toLowerCase() })}
               className="h-7 w-7 text-medium-emphasis"
               onClick={() => navigator.clipboard.writeText(displayValue ?? value)}
             >
@@ -172,6 +195,7 @@ export const RunDetail = ({
   onUseAsTestInput,
   onBack,
 }: RunDetailProps) => {
+  const { t } = useT("logic.functions.components");
   const { data: run, isLoading } = useGetRun({ runId });
   const { data: logsData, isLoading: isLogsLoading } = useGetRunLogs(runId, 0, LOG_PAGE_SIZE);
   const { mutateAsync: replayAsync, isPending: isReplaying } = useReplayRun();
@@ -221,9 +245,9 @@ export const RunDetail = ({
     isPrimary?: boolean;
     isWarning?: boolean;
   }[] = [
-    { label: "Duration", value: formatDuration(run.durationMs), hint: durationHint },
+    { label: t("RUN_DETAIL.DURATION"), value: formatDuration(run.durationMs), hint: durationHint },
     {
-      label: "Peak memory",
+      label: t("RUN_DETAIL.PEAK_MEMORY"),
       value: formatMemoryAgainstLimit(run.peakMemoryBytes, memoryLimitMb),
     },
     {
@@ -234,24 +258,24 @@ export const RunDetail = ({
       ...describeRunCpu(run.cpuUsageMs, run.cpuWindowMs, cpuLimitMillicores),
     },
     {
-      label: "Attempts",
+      label: t("RUN_DETAIL.ATTEMPTS"),
       value: String(run.attempt),
       isWarning: run.attempt > 1,
     },
-    { label: "Version", value: `v${run.versionNumber}`, isPrimary: true },
+    { label: t("RUN_DETAIL.VERSION"), value: `v${run.versionNumber}`, isPrimary: true },
     // Only a function with "Reuse sandbox" on reports these; an older run has neither. A run
     // cancelled before it got a sandbox reports one too, but there was no sandbox to describe.
     ...(run.reused != null && !neverGotSandbox
       ? [
           {
             // Warm or cold only; how long the hand-over took is in the Timing group below.
-            label: "Sandbox",
-            value: run.reused ? "Warm (reused)" : "Cold start",
+            label: t("RUN_DETAIL.SANDBOX"),
+            value: run.reused ? t("RUN_DETAIL.WARM_REUSED") : t("RUN_DETAIL.COLD_START"),
           },
         ]
       : []),
     {
-      label: "Triggered by",
+      label: t("RUN_DETAIL.TRIGGERED_BY"),
       value: TRIGGER_LABELS[run.invokedBy] ?? run.invokedBy,
       // The workflow execution (or, for a replay, the original run) that caused this one. Without
       // it "Workflow" says a workflow ran the function but not which one, which is the whole
@@ -264,21 +288,21 @@ export const RunDetail = ({
     try {
       await replayAsync(run.id);
       showSuccessToast({
-        description: "Replayed as a new run with the same input, on the live version.",
+        description: t("RUN_DETAIL.REPLAYED_AS_A_NEW"),
       });
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to replay run" });
+      return showErrorToast({ errors: t("RUN_DETAIL.FAILED_TO_REPLAY_RUN") });
     }
   };
 
   const handleCancel = async () => {
     try {
       await cancelAsync(run.id);
-      showSuccessToast({ description: "Cancel requested." });
+      showSuccessToast({ description: t("RUN_DETAIL.CANCEL_REQUESTED") });
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to cancel run" });
+      return showErrorToast({ errors: t("RUN_DETAIL.FAILED_TO_CANCEL_RUN") });
     }
   };
 
@@ -303,7 +327,7 @@ export const RunDetail = ({
               className="w-fit px-2 text-primary hover:text-primary"
               onClick={onBack}
             >
-              ‹ All runs
+              {t("RUN_DETAIL.ALL_RUNS")}
             </Button>
           )}
         </div>
@@ -317,7 +341,7 @@ export const RunDetail = ({
               onClick={() => void handleCancel()}
             >
               <Ban className="h-3.5 w-3.5" />
-              Cancel
+              {t("common:CANCEL")}
             </Button>
           ) : (
             <Button
@@ -328,7 +352,7 @@ export const RunDetail = ({
               onClick={() => void handleReplay()}
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              Replay
+              {t("RUN_DETAIL.REPLAY")}
             </Button>
           )}
         </div>
@@ -340,8 +364,11 @@ export const RunDetail = ({
             <code className="font-mono text-sm font-semibold">{run.id}</code>
             <RunStatusChip status={run.status} />
             <span className="text-xs text-medium-emphasis">
-              {formatRelativeTime(run.createdDate)} ({formatAbsoluteTime(run.createdDate)}) ·
-              triggered by {triggeredByLabel(run.invokedBy, run.invokedById, TRIGGER_LABELS)}
+              {t("RUN_DETAIL.TRIGGERED_BY_2", {
+                value: formatRelativeTime(run.createdDate),
+                value2: formatAbsoluteTime(run.createdDate),
+                value3: triggeredByLabel(run.invokedBy, run.invokedById, TRIGGER_LABELS),
+              })}
             </span>
           </div>
 
@@ -401,7 +428,7 @@ export const RunDetail = ({
         >
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 break-words">
-            Sandbox replaced after this call:{" "}
+            {t("RUN_DETAIL.SANDBOX_REPLACED_AFTER_THIS")}{" "}
             {explainDiscardReason(run.discardReason) ? (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -443,20 +470,20 @@ export const RunDetail = ({
 
       {run.attempts.length > 1 && (
         <Card className="overflow-hidden">
-          <div className="border-b px-4 py-3 text-sm font-semibold">Attempts</div>
+          <div className="border-b px-4 py-3 text-sm font-semibold">{t("RUN_DETAIL.ATTEMPTS")}</div>
           {run.attempts.map((attempt) => (
             <div
               key={attempt.number}
               className="flex flex-wrap items-center gap-3 border-b px-4 py-2.5 last:border-b-0"
             >
               <span className="w-[74px] shrink-0 text-xs font-semibold">
-                Attempt {attempt.number}
+                {t("RUN_DETAIL.ATTEMPT", { number: attempt.number })}
               </span>
               <RunStatusChip status={attempt.status} />
               <span className="min-w-0 flex-1 break-words text-xs text-medium-emphasis">
                 {attempt.errorMessage ??
                   (attempt.durationMs != null
-                    ? `finished in ${formatDuration(attempt.durationMs)}`
+                    ? t("RUN_DETAIL.FINISHED_IN", { value: formatDuration(attempt.durationMs) })
                     : "—")}
               </span>
             </div>
@@ -466,13 +493,13 @@ export const RunDetail = ({
 
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5">
-          <span className="text-sm font-semibold">Logs</span>
+          <span className="text-sm font-semibold">{t("RUN_DETAIL.LOGS")}</span>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-medium-emphasis" />
               <Input
-                aria-label="Search logs"
-                placeholder="Search"
+                aria-label={t("RUN_DETAIL.SEARCH_LOGS")}
+                placeholder={t("common:SEARCH")}
                 className="h-8 w-36 pl-7 text-xs"
                 value={logSearch}
                 onChange={(e) => setLogSearch(e.target.value)}
@@ -504,7 +531,7 @@ export const RunDetail = ({
               onClick={downloadLogs}
             >
               <Download className="h-3.5 w-3.5" />
-              Download
+              {t("common:DOWNLOAD")}
             </Button>
           </div>
         </div>
@@ -513,7 +540,9 @@ export const RunDetail = ({
           {isLogsLoading && <Loader2 className="h-4 w-4 animate-spin text-medium-emphasis" />}
           {!isLogsLoading && visibleLogs.length === 0 && (
             <p className="text-xs text-medium-emphasis">
-              {logs.length === 0 ? "No logs recorded." : "No log lines match this filter."}
+              {logs.length === 0
+                ? t("RUN_DETAIL.NO_LOGS_RECORDED")
+                : t("RUN_DETAIL.NO_LOG_LINES_MATCH")}
             </p>
           )}
           {visibleLogs.map((line) => (
@@ -542,26 +571,34 @@ export const RunDetail = ({
         </div>
 
         <p className="border-t px-4 py-2.5 text-xs text-low-emphasis">
-          Captured from <code className="font-mono">ctx.log</code> and{" "}
-          <code className="font-mono">console</code>, up to the run&apos;s log limit
-          {run.logsTruncated ? " — this run hit that cap" : " — this run stayed under it"}.
-          {logs.length >= LOG_PAGE_SIZE ? " Showing the first lines only." : ""}
+          {renderRichText(
+            t(
+              run.logsTruncated
+                ? "RUN_DETAIL.LOGS_CAPTURED_TRUNCATED"
+                : "RUN_DETAIL.LOGS_CAPTURED_COMPLETE",
+            ),
+            [
+              (text) => <code className="font-mono">{text}</code>,
+              (text) => <code className="font-mono">{text}</code>,
+            ],
+          )}
+          {logs.length >= LOG_PAGE_SIZE ? ` ${t("RUN_DETAIL.SHOWING_THE_FIRST_LINES")}` : ""}
         </p>
       </Card>
 
       <div className="flex flex-wrap gap-3.5">
         <JsonPane
-          title="Input"
+          title={t("RUN_DETAIL.INPUT")}
           value={run.input}
-          emptyText="No input was sent."
+          emptyText={t("RUN_DETAIL.NO_INPUT_WAS_SENT")}
           onUseAsTestInput={onUseAsTestInput}
         />
         <JsonPane
-          title="Returned value"
+          title={t("RUN_DETAIL.RETURNED_VALUE")}
           value={run.result}
           emptyText={
             run.status === "Succeeded"
-              ? "The handler returned nothing."
+              ? t("RUN_DETAIL.THE_HANDLER_RETURNED_NOTHING")
               : "— no value returned; the run did not finish successfully"
           }
         />
@@ -571,7 +608,9 @@ export const RunDetail = ({
 
       {run.outputResults.length > 0 && (
         <Card className="overflow-hidden">
-          <div className="border-b px-4 py-3 text-sm font-semibold">Output actions</div>
+          <div className="border-b px-4 py-3 text-sm font-semibold">
+            {t("RUN_DETAIL.OUTPUT_ACTIONS")}
+          </div>
           {run.outputResults.map((outputResult, index) => (
             <div
               key={outputResult.actionId}
@@ -585,7 +624,9 @@ export const RunDetail = ({
               </span>
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-xs font-semibold">
-                  {outputResult.kind === "ExternalHttp" ? "External HTTP call" : outputResult.kind}
+                  {outputResult.kind === "ExternalHttp"
+                    ? t("RUN_DETAIL.EXTERNAL_HTTP_CALL")
+                    : outputResult.kind}
                 </span>
                 <code className="truncate font-mono text-xs text-medium-emphasis">
                   {outputResult.actionId}
@@ -601,12 +642,20 @@ export const RunDetail = ({
                       : "bg-error/10 text-error",
                 )}
               >
-                {outputResult.ok ? "Sent" : outputResult.statusCode == null ? "Skipped" : "Failed"}
+                {outputResult.ok
+                  ? t("RUN_DETAIL.SENT")
+                  : outputResult.statusCode == null
+                    ? t("RUN_DETAIL.SKIPPED")
+                    : t("RUN_DETAIL.FAILED")}
               </span>
               <span className="truncate whitespace-nowrap text-xs text-medium-emphasis">
-                {outputResult.statusCode ? `${outputResult.statusCode} in ` : ""}
+                {outputResult.statusCode
+                  ? t("RUN_DETAIL.IN", { statusCode: outputResult.statusCode })
+                  : ""}
                 {formatDuration(outputResult.durationMs)}
-                {outputResult.attempts > 1 ? ` · ${outputResult.attempts} attempts` : ""}
+                {outputResult.attempts > 1
+                  ? t("RUN_DETAIL.ATTEMPTS_2", { attempts: outputResult.attempts })
+                  : ""}
               </span>
             </div>
           ))}

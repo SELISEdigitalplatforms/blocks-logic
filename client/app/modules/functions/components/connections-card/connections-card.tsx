@@ -26,6 +26,8 @@ import {
   presetStatus,
   resolveLatestVersion,
 } from "../../utils/connections";
+import { renderRichText } from "@/lib/rich-text";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 type ConnectionsCardProps = {
   indexJs: string;
@@ -52,6 +54,7 @@ export const ConnectionsCard = ({
   onEditVariables,
   blocksApiHost,
 }: ConnectionsCardProps) => {
+  const { t } = useT("logic.functions.components");
   const [openId, setOpenId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   // The npm lookup is async: merge into what the editor holds when it answers, not what it held
@@ -104,15 +107,19 @@ export const ConnectionsCard = ({
     if (!target) return;
     const result = pinVersion(latest.current.packageJson, preset.packageName, target.to);
     if (!result.ok) {
-      showErrorToast({ title: `Could not update ${preset.packageName}`, errors: [result.reason] });
+      showErrorToast({
+        title: t("CONNECTIONS_CARD.COULD_NOT_UPDATE", { packageName: preset.packageName }),
+        errors: [result.reason],
+      });
       return;
     }
     onPackageJsonChange(result.packageJson);
     showSuccessToast({
-      title: `${preset.packageName} updated`,
-      description: `${target.from} → ${target.to}.${
-        target.breaking ? " This is a breaking release — check its changelog and run a test." : ""
-      } Save to keep it.`,
+      title: t("CONNECTIONS_CARD.UPDATED", { packageName: preset.packageName }),
+      description: t(
+        target.breaking ? "CONNECTIONS_CARD.UPDATED_BREAKING" : "CONNECTIONS_CARD.UPDATED_SAVE",
+        { from: target.from, to: target.to },
+      ),
     });
   };
 
@@ -137,7 +144,10 @@ export const ConnectionsCard = ({
       resolved?.version,
     );
     if (!result.ok) {
-      showErrorToast({ title: `Could not add ${preset.label}`, errors: [result.reason] });
+      showErrorToast({
+        title: t("CONNECTIONS_CARD.COULD_NOT_ADD", { label: preset.label }),
+        errors: [result.reason],
+      });
       return false;
     }
     if (result.addedPackage) onPackageJsonChange(result.packageJson);
@@ -155,13 +165,17 @@ export const ConnectionsCard = ({
           }.`
         : `${preset.packageName} was already listed (${result.existingVersion}) and was left as is.`,
       result.addedKeys.length > 0 ? `Added ${result.addedKeys.join(", ")}.` : null,
-      result.filledKeys.length > 0 ? `Filled in ${result.filledKeys.join(", ")}.` : null,
+      result.filledKeys.length > 0
+        ? t("CONNECTIONS_CARD.FILLED_IN", { value: result.filledKeys.join(", ") })
+        : null,
       secrets.length > 0
-        ? `Bind ${secrets.map((variable) => variable.key).join(", ")} to a configuration variable before deploying.`
+        ? t("CONNECTIONS_CARD.BIND_TO_A_CONFIGURATION", {
+            value: secrets.map((variable) => variable.key).join(", "),
+          })
         : null,
     ];
     showSuccessToast({
-      title: `${preset.label} set up`,
+      title: t("CONNECTIONS_CARD.SET_UP", { label: preset.label }),
       description: parts.filter(Boolean).join(" "),
     });
     return true;
@@ -179,22 +193,24 @@ export const ConnectionsCard = ({
         <div className="flex flex-col gap-0.5">
           <span className="flex items-center gap-2 text-sm font-semibold">
             <Plug className="h-3.5 w-3.5" />
-            Connections
+            {t("CONNECTIONS_CARD.CONNECTIONS")}
           </span>
           <span className="text-xs leading-relaxed text-medium-emphasis">
-            Adds the package and the variables a service needs.
+            {t("CONNECTIONS_CARD.ADDS_THE_PACKAGE_AND")}
           </span>
         </div>
 
         {hasIssues && (
           <div
             role="status"
-            aria-label="Setup check"
+            aria-label={t("CONNECTIONS_CARD.SETUP_CHECK")}
             className="flex flex-col gap-2 rounded-md border border-warning-200 bg-warning-50 p-2.5 text-xs"
           >
             {!setup.manifestValid && (
               <SetupIssue>
-                <code className="font-mono">package.json</code> is not valid JSON.
+                {renderRichText(t("CONNECTIONS_CARD.N_0_PACKAGE_JSON_0"), [
+                  (children) => <code className="font-mono">{children}</code>,
+                ])}
               </SetupIssue>
             )}
             {setup.missingPackages.map((name) => {
@@ -202,7 +218,9 @@ export const ConnectionsCard = ({
               return (
                 <SetupIssue key={name}>
                   <span className="min-w-0 [overflow-wrap:anywhere]">
-                    <code className="font-mono">{name}</code> is imported but not in package.json.
+                    {renderRichText(t("CONNECTIONS_CARD.N_0_0_IS_IMPORTED", { name }), [
+                      (children) => <code className="font-mono">{children}</code>,
+                    ])}
                   </span>
                   {preset ? (
                     <button
@@ -211,10 +229,14 @@ export const ConnectionsCard = ({
                       onClick={() => void add(preset)}
                       disabled={pendingId !== null}
                     >
-                      {pendingId === preset.id ? "Checking npm…" : `Add ${name}`}
+                      {pendingId === preset.id
+                        ? t("CONNECTIONS_CARD.CHECKING_NPM")
+                        : t("CONNECTIONS_CARD.ADD", { name })}
                     </button>
                   ) : (
-                    <span className="text-medium-emphasis">Add it with an exact version.</span>
+                    <span className="text-medium-emphasis">
+                      {t("CONNECTIONS_CARD.ADD_IT_WITH_AN")}
+                    </span>
                   )}
                 </SetupIssue>
               );
@@ -227,7 +249,9 @@ export const ConnectionsCard = ({
                       <code className="font-mono">ctx.env.{key}</code>{" "}
                     </Fragment>
                   ))}
-                  {setup.missingVariables.length === 1 ? "is" : "are"} read but not defined.
+                  {t("CONNECTIONS_CARD.READ_BUT_NOT_DEFINED", {
+                    count: setup.missingVariables.length,
+                  })}
                 </span>
                 <button
                   type="button"
@@ -236,7 +260,7 @@ export const ConnectionsCard = ({
                     onVariablesChange(addMissingVariables(variables, setup.missingVariables))
                   }
                 >
-                  Add {setup.missingVariables.length === 1 ? "variable" : "variables"}
+                  {t("CONNECTIONS_CARD.ADD_VARIABLES", { count: setup.missingVariables.length })}
                 </button>
               </SetupIssue>
             )}
@@ -248,7 +272,7 @@ export const ConnectionsCard = ({
                       <code className="font-mono">{key}</code>{" "}
                     </Fragment>
                   ))}
-                  {setup.emptyVariables.length === 1 ? "has" : "have"} no value.
+                  {t("CONNECTIONS_CARD.NO_VALUE", { count: setup.emptyVariables.length })}
                 </span>
                 {fillable.filledKeys.length > 0 && (
                   <button
@@ -256,7 +280,7 @@ export const ConnectionsCard = ({
                     className="font-semibold text-primary hover:underline"
                     onClick={() => onVariablesChange(fillable.variables)}
                   >
-                    Fill in {fillable.filledKeys.join(", ")}
+                    {t("CONNECTIONS_CARD.FILL_IN", { value: fillable.filledKeys.join(", ") })}
                   </button>
                 )}
                 <button
@@ -264,7 +288,7 @@ export const ConnectionsCard = ({
                   className="font-semibold text-primary hover:underline"
                   onClick={onEditVariables}
                 >
-                  Edit variables ›
+                  {t("CONNECTIONS_CARD.EDIT_VARIABLES")}
                 </button>
               </SetupIssue>
             )}
@@ -282,9 +306,12 @@ export const ConnectionsCard = ({
                 type="button"
                 className="flex items-center justify-between gap-3 border-b py-2 text-left last:border-b-0 hover:bg-surface-app"
                 onClick={() => setOpenId(preset.id)}
-                aria-label={`${preset.label}: ${
-                  available ? `update to ${available.to} available` : STATUS_LABEL[status]
-                }`}
+                aria-label={t("CONNECTIONS_CARD.PRESET_STATUS", {
+                  label: preset.label,
+                  status: available
+                    ? t("CONNECTIONS_CARD.UPDATE_AVAILABLE", { to: available.to })
+                    : statusLabel(status),
+                })}
               >
                 <span className="flex min-w-0 flex-col">
                   <span className="text-xs font-semibold">{preset.label}</span>
@@ -299,17 +326,19 @@ export const ConnectionsCard = ({
                     title={`${available.from} → ${available.to}`}
                   >
                     <ArrowUpCircle className="h-3 w-3" />
-                    Update
+                    {t("common:UPDATE")}
                   </Badge>
                 ) : status === "added" ? (
                   <Badge variant="success" className="gap-1">
                     <Check className="h-3 w-3" />
-                    Added
+                    {t("CONNECTIONS_CARD.ADDED")}
                   </Badge>
                 ) : status === "partial" ? (
-                  <Badge variant="warning">Incomplete</Badge>
+                  <Badge variant="warning">{t("CONNECTIONS_CARD.INCOMPLETE")}</Badge>
                 ) : (
-                  <span className="text-xs font-semibold text-primary">Set up ›</span>
+                  <span className="text-xs font-semibold text-primary">
+                    {t("CONNECTIONS_CARD.SET_UP_2")}
+                  </span>
                 )}
               </button>
             );
@@ -317,9 +346,7 @@ export const ConnectionsCard = ({
         </div>
 
         <p className="text-xs leading-relaxed text-low-emphasis">
-          Only public endpoints are reachable — private networks and the VPN are blocked. The
-          examples connect and close inside one call to stay short; in your function, create the
-          client once at module level and reuse it.
+          {t("CONNECTIONS_CARD.ONLY_PUBLIC_ENDPOINTS_ARE")}
         </p>
       </CardContent>
 
@@ -343,7 +370,13 @@ export const ConnectionsCard = ({
   );
 };
 
-const STATUS_LABEL = { added: "added", partial: "incomplete", none: "not set up" } as const;
+const statusLabel = (status: "added" | "partial" | "none") => {
+  if (status === "added")
+    return tStatic("logic.functions.components", "CONNECTIONS_CARD.STATUS_ADDED");
+  if (status === "partial")
+    return tStatic("logic.functions.components", "CONNECTIONS_CARD.STATUS_INCOMPLETE");
+  return tStatic("logic.functions.components", "CONNECTIONS_CARD.STATUS_NOT_SET_UP");
+};
 
 const SetupIssue = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-start gap-2">
@@ -374,6 +407,7 @@ const ConnectionDialogBody = ({
   isAdding,
   blocksApiHost,
 }: ConnectionDialogBodyProps) => {
+  const { t } = useT("logic.functions.components");
   const [copied, setCopied] = useState(false);
   const status = presetStatus(preset, dependencies, variables);
   const keys = new Set(variables.map((variable) => variable.key));
@@ -391,8 +425,8 @@ const ConnectionDialogBody = ({
       setTimeout(() => setCopied(false), 1400);
     } catch {
       showErrorToast({
-        title: "Could not copy",
-        errors: ["Select the example and copy it by hand."],
+        title: t("CONNECTIONS_CARD.COULD_NOT_COPY"),
+        errors: [t("CONNECTIONS_CARD.SELECT_THE_EXAMPLE_AND")],
       });
     }
   };
@@ -406,7 +440,7 @@ const ConnectionDialogBody = ({
 
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-low-emphasis">
-          Package
+          {t("CONNECTIONS_CARD.PACKAGE")}
         </span>
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-md border px-3 py-2">
           <code className="min-w-0 font-mono text-xs [overflow-wrap:anywhere]">
@@ -414,30 +448,34 @@ const ConnectionDialogBody = ({
           </code>
           {update ? (
             <span className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-medium-emphasis">{update.to} is the latest</span>
+              <span className="text-xs text-medium-emphasis">
+                {t("CONNECTIONS_CARD.IS_THE_LATEST", { to: update.to })}
+              </span>
               <Button type="button" size="sm" variant="outline" onClick={onUpdate}>
-                Update to {update.to}
+                {t("CONNECTIONS_CARD.UPDATE_TO", { to: update.to })}
               </Button>
             </span>
           ) : listed !== undefined ? (
-            <span className="text-xs text-medium-emphasis">in package.json — left as is</span>
+            <span className="text-xs text-medium-emphasis">
+              {t("CONNECTIONS_CARD.IN_PACKAGE_JSON_LEFT")}
+            </span>
           ) : (
             <span className="text-xs text-medium-emphasis">
-              today&apos;s latest, pinned exactly when added
+              {t("CONNECTIONS_CARD.TODAY_S_LATEST_PINNED")}
             </span>
           )}
         </div>
         {update?.breaking && (
           <span className="flex items-start gap-1.5 text-xs text-warning-800">
             <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            {update.to} is a breaking release. Check its changelog and run a test before deploying.
+            {t("CONNECTIONS_CARD.IS_A_BREAKING_RELEASE", { to: update.to })}
           </span>
         )}
       </div>
 
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-low-emphasis">
-          Variables
+          {t("CONNECTIONS_CARD.VARIABLES")}
         </span>
         <div className="flex flex-col rounded-md border">
           {preset.variables.map((variable) => (
@@ -450,17 +488,22 @@ const ConnectionDialogBody = ({
                 {variable.secret && (
                   <Badge variant="warning" className="gap-1">
                     <KeyRound className="h-3 w-3" />
-                    Bind to a secret
+                    {t("CONNECTIONS_CARD.BIND_TO_A_SECRET")}
                   </Badge>
                 )}
                 {keys.has(variable.key) && (
-                  <span className="text-xs text-medium-emphasis">already defined</span>
+                  <span className="text-xs text-medium-emphasis">
+                    {t("CONNECTIONS_CARD.ALREADY_DEFINED")}
+                  </span>
                 )}
               </span>
               <span className="break-all text-xs text-medium-emphasis">{variable.hint}</span>
               {fillsTo(variable) && (
                 <span className="break-all text-xs">
-                  Will be set to <code className="font-mono">{fillsTo(variable)}</code>
+                  {renderRichText(
+                    t("CONNECTIONS_CARD.WILL_BE_SET_TO", { value: fillsTo(variable) }),
+                    [(children) => <code className="font-mono">{children}</code>],
+                  )}
                 </span>
               )}
             </div>
@@ -471,14 +514,14 @@ const ConnectionDialogBody = ({
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wide text-low-emphasis">
-            Example
+            {t("CONNECTIONS_CARD.EXAMPLE")}
           </span>
           <button
             type="button"
             className="text-xs font-semibold text-primary hover:underline"
             onClick={copy}
           >
-            {copied ? "Copied ✓" : "Copy"}
+            {copied ? t("CONNECTIONS_CARD.COPIED") : t("common:COPY")}
           </button>
         </div>
         <pre className="overflow-x-auto rounded-md bg-surface-app px-3 py-2.5 font-mono text-xs leading-relaxed">
@@ -494,7 +537,11 @@ const ConnectionDialogBody = ({
           className="gap-1.5"
         >
           {isAdding && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {status === "added" ? "Already set up" : isAdding ? "Checking npm…" : "Add to function"}
+          {status === "added"
+            ? t("CONNECTIONS_CARD.ALREADY_SET_UP")
+            : isAdding
+              ? t("CONNECTIONS_CARD.CHECKING_NPM")
+              : t("CONNECTIONS_CARD.ADD_TO_FUNCTION")}
         </Button>
       </DialogFooter>
     </DialogContent>

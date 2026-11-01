@@ -9,6 +9,7 @@ import {
 } from "@/components/ui-kits/select/select";
 import { cn } from "@/lib/utils";
 import { useFunctionsFilterQueryParams } from "../../hooks/use-functions-filter-query-params";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 /**
  * Segmented status filter, per FEATURES-AND-UI §4.1 — "" is All. `Paused` is not in the spec's
@@ -16,10 +17,30 @@ import { useFunctionsFilterQueryParams } from "../../hooks/use-functions-filter-
  * a paused function is reachable only through All and the control implies it cannot exist.
  */
 const STATUS_OPTIONS = [
-  { label: "All", value: "" },
-  { label: "Live", value: "Live" },
-  { label: "Draft", value: "Draft" },
-  { label: "Paused", value: "Paused" },
+  {
+    get label() {
+      return tStatic("logic.functions.components", "common:ALL");
+    },
+    value: "",
+  },
+  {
+    get label() {
+      return tStatic("logic.functions.components", "FUNCTIONS_FILTER_TOOLBAR.LIVE");
+    },
+    value: "Live",
+  },
+  {
+    get label() {
+      return tStatic("logic.functions.components", "FUNCTIONS_FILTER_TOOLBAR.DRAFT");
+    },
+    value: "Draft",
+  },
+  {
+    get label() {
+      return tStatic("logic.functions.components", "FUNCTIONS_FILTER_TOOLBAR.PAUSED");
+    },
+    value: "Paused",
+  },
 ];
 
 /**
@@ -27,11 +48,22 @@ const STATUS_OPTIONS = [
  * lives in the run-stats collection and would need a lookup to sort by.
  */
 const SORT_OPTIONS = [
-  { label: "Recently updated", value: "Updated" },
-  { label: "Name", value: "Name" },
+  {
+    get label() {
+      return tStatic("logic.functions.components", "FUNCTIONS_FILTER_TOOLBAR.RECENTLY_UPDATED");
+    },
+    value: "Updated",
+  },
+  {
+    get label() {
+      return tStatic("logic.functions.components", "common:NAME");
+    },
+    value: "Name",
+  },
 ];
 
 export const FunctionsFilterToolBar = () => {
+  const { t } = useT("logic.functions.components");
   const { queryParams, setQueryParams } = useFunctionsFilterQueryParams();
 
   const patch = (partial: Record<string, unknown>) =>
@@ -46,15 +78,19 @@ export const FunctionsFilterToolBar = () => {
       */}
       <div className="min-w-[220px] flex-1">
         <SearchInput
-          aria-label="Search functions"
-          placeholder="Search by name"
+          aria-label={t("FUNCTIONS_FILTER_TOOLBAR.SEARCH_FUNCTIONS")}
+          placeholder={t("FUNCTIONS_FILTER_TOOLBAR.SEARCH_BY_NAME")}
           className="h-8 w-full"
           value={queryParams.search}
           onChange={(search) => patch({ search })}
         />
       </div>
 
-      <div className="flex overflow-hidden rounded-md border" role="group" aria-label="Status">
+      <div
+        className="flex overflow-hidden rounded-md border"
+        role="group"
+        aria-label={t("common:STATUS")}
+      >
         {STATUS_OPTIONS.map((option) => (
           <button
             key={option.label}
@@ -78,7 +114,10 @@ export const FunctionsFilterToolBar = () => {
         value={queryParams.sort || "Updated"}
         onValueChange={(sort) => patch({ sort: sort === "Updated" ? "" : sort })}
       >
-        <SelectTrigger className="h-9 w-[170px] shrink-0" aria-label="Sort">
+        <SelectTrigger
+          className="h-9 w-[170px] shrink-0"
+          aria-label={t("FUNCTIONS_FILTER_TOOLBAR.SORT")}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

@@ -22,6 +22,8 @@ import { TERMINAL_RUN_STATUSES } from "../../types/run.types";
 import { formatDuration, formatMegabytes } from "../../utils/format";
 import { payloadOf } from "../../utils/test-input";
 import { testHttpVerb } from "../../constants/endpoint.constant";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
+import { renderRichText } from "@/lib/rich-text";
 
 type TestPanelProps = {
   functionId: string;
@@ -40,20 +42,44 @@ type TestPanelProps = {
  * status, so the row that spins is what the platform is doing now, never a guess.
  */
 const STEPS = [
-  { title: "Save code", hint: "Saving the code on screen, so the test runs exactly that." },
   {
-    title: "Wait for a runner",
-    hint: "The test is queued. A runner picks it up when it has a free slot.",
+    get title() {
+      return tStatic("logic.functions.components", "TEST_PANEL.SAVE_CODE");
+    },
+    get hint() {
+      return tStatic("logic.functions.components", "TEST_PANEL.SAVING_THE_CODE_ON");
+    },
   },
   {
-    title: "Build and start sandbox",
-    hint: "Installing your packages and starting a fresh sandbox. Every test builds its own image, so this is the slow step.",
+    get title() {
+      return tStatic("logic.functions.components", "TEST_PANEL.WAIT_FOR_A_RUNNER");
+    },
+    get hint() {
+      return tStatic("logic.functions.components", "TEST_PANEL.THE_TEST_IS_QUEUED");
+    },
   },
   {
-    title: "Run handler",
-    hint: "Your handler is running. A streamed answer shows below as it arrives; logs and result appear when it ends.",
+    get title() {
+      return tStatic("logic.functions.components", "TEST_PANEL.BUILD_AND_START_SANDBOX");
+    },
+    get hint() {
+      return tStatic("logic.functions.components", "TEST_PANEL.INSTALLING_YOUR_PACKAGES_AND");
+    },
   },
-  { title: "Result", hint: "" },
+  {
+    get title() {
+      return tStatic("logic.functions.components", "TEST_PANEL.RUN_HANDLER");
+    },
+    get hint() {
+      return tStatic("logic.functions.components", "TEST_PANEL.YOUR_HANDLER_IS_RUNNING");
+    },
+  },
+  {
+    get title() {
+      return tStatic("logic.functions.components", "TEST_PANEL.RESULT");
+    },
+    hint: "",
+  },
 ] as const;
 
 const stepIndex = (isSaving: boolean, isBuilding: boolean, status?: string) => {
@@ -72,7 +98,8 @@ const retryAfterSeconds = (message: string) => {
 };
 
 const errorText = (error: unknown) => {
-  if (!isErrorWithErrors(error)) return "The test could not be started.";
+  if (!isErrorWithErrors(error))
+    return tStatic("logic.functions.components", "TEST_PANEL.THE_TEST_COULD_NOT");
   const { errors } = error;
   // The Test endpoint's refusals are { code, message }; the rest are { field: message }.
   if (typeof errors.message === "string") return errors.message;
@@ -106,6 +133,7 @@ const LOG_LEVEL_CLASS: Record<string, string> = {
 
 /** Test input + the result of the last test, in the Code tab's right rail. Ctrl+Enter runs it. */
 export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: TestPanelProps) => {
+  const { t } = useT("logic.functions.components");
   const testInput = useFunctionEditorStore((s) => s.testInput);
   const setTestInput = useFunctionEditorStore((s) => s.setTestInput);
   const httpMethod = useFunctionEditorStore((s) => s.trigger.httpMethod);
@@ -188,7 +216,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
       try {
         JSON.parse(testInput || "{}");
       } catch {
-        return setInputError("That is not valid JSON.");
+        return setInputError(tStatic("logic.functions.components", "TEST_PANEL.THAT_IS_NOT_VALID"));
       }
       setInputError(null);
       setRequestError(null);
@@ -236,7 +264,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
         // A 429's own text names the test window, which is not a decided number: say it plainly.
         setRequestError(
           status === 429
-            ? "This function was tested a moment ago. Wait for the countdown, then run it again."
+            ? tStatic("logic.functions.components", "TEST_PANEL.THIS_FUNCTION_WAS_TESTED")
             : message,
         );
       } finally {
@@ -289,7 +317,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
       setTestInput(JSON.stringify(JSON.parse(testInput || "{}"), null, 2));
       setInputError(null);
     } catch {
-      setInputError("That is not valid JSON.");
+      setInputError(t("TEST_PANEL.THAT_IS_NOT_VALID"));
     }
   };
 
@@ -313,24 +341,25 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
   const buttonLabel = isActive
     ? "Running…"
     : cooldownSeconds > 0
-      ? `Next test in ${cooldownSeconds}s`
+      ? t("TEST_PANEL.NEXT_TEST_IN_S", { cooldownSeconds })
       : runId
-        ? "Run again"
-        : "Run test";
+        ? t("TEST_PANEL.RUN_AGAIN")
+        : t("TEST_PANEL.RUN_TEST");
 
   return (
     <div className="flex flex-col gap-3">
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-          <span className="text-sm font-semibold">Test input</span>
+          <span className="text-sm font-semibold">{t("TEST_PANEL.TEST_INPUT")}</span>
           <span className="text-xs text-low-emphasis">
-            sent as{" "}
-            <code className="font-mono">{testVerb === "GET" ? "input.query" : "input.body"}</code> ·
-            same limits as production
+            {renderRichText(
+              t(testVerb === "GET" ? "TEST_PANEL.SENT_AS_QUERY" : "TEST_PANEL.SENT_AS_BODY"),
+              [(text) => <code className="font-mono">{text}</code>],
+            )}
           </span>
         </div>
         <Textarea
-          aria-label="Test input JSON"
+          aria-label={t("TEST_PANEL.TEST_INPUT_JSON")}
           spellCheck={false}
           className="min-h-[150px] resize-y rounded-none border-0 font-mono text-xs focus-visible:ring-0 focus-visible:ring-offset-0"
           value={testInput}
@@ -340,7 +369,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
         <div className="flex items-center justify-between gap-2 border-t px-4 py-2">
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="xs" className="px-2 text-xs" onClick={formatInput}>
-              Format
+              {t("TEST_PANEL.FORMAT")}
             </Button>
             <Button
               variant="ghost"
@@ -349,7 +378,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               disabled={!lastRun?.input}
               onClick={() => lastRun?.input && setTestInput(payloadOf(lastRun.input))}
             >
-              Use last run input
+              {t("TEST_PANEL.USE_LAST_RUN_INPUT")}
             </Button>
           </div>
         </div>
@@ -373,7 +402,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
                 onClick={() => cancelRun(runId)}
               >
                 <Square className="h-3.5 w-3.5" />
-                Stop
+                {t("TEST_PANEL.STOP")}
               </Button>
             )}
           </div>
@@ -384,8 +413,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
           )}
           {cooldownSeconds > 0 && (
             <p className="text-xs leading-relaxed text-medium-emphasis">
-              One test per function at a time, with a short wait between tests — each test builds
-              and runs on a shared runner.
+              {t("TEST_PANEL.ONE_TEST_PER_FUNCTION")}
             </p>
           )}
         </div>
@@ -398,7 +426,9 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               {run ? (
                 <RunStatusChip status={run.status} />
               ) : (
-                <span className="text-xs font-semibold text-medium-emphasis">Starting…</span>
+                <span className="text-xs font-semibold text-medium-emphasis">
+                  {t("TEST_PANEL.STARTING")}
+                </span>
               )}
               {elapsedSeconds != null && (
                 <span className="text-xs tabular-nums text-medium-emphasis">{elapsedSeconds}s</span>
@@ -413,12 +443,15 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
                 className="shrink-0 text-xs font-semibold text-primary hover:underline"
                 onClick={() => onOpenRun(runId)}
               >
-                Open run ›
+                {t("TEST_PANEL.OPEN_RUN")}
               </button>
             )}
           </div>
 
-          <ol className="flex flex-col gap-2.5 border-b px-4 py-3" aria-label="Test progress">
+          <ol
+            className="flex flex-col gap-2.5 border-b px-4 py-3"
+            aria-label={t("TEST_PANEL.TEST_PROGRESS")}
+          >
             {STEPS.map((step, index) => {
               const isDone = index < currentStep || (index === 4 && currentStep === 4 && !failed);
               const isCurrent = index === currentStep && currentStep < 4;
@@ -492,13 +525,16 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
           {hasStream && (
             <div className="border-b">
               <p className="flex items-center gap-1.5 px-4 pt-2.5 text-xs font-semibold">
-                Streamed answer
+                {t("TEST_PANEL.STREAMED_ANSWER")}
                 {stream.state === "streaming" && (
-                  <Loader2 aria-label="Streaming" className="h-3 w-3 animate-spin text-primary" />
+                  <Loader2
+                    aria-label={t("TEST_PANEL.STREAMING")}
+                    className="h-3 w-3 animate-spin text-primary"
+                  />
                 )}
               </p>
               <pre
-                aria-label="Streamed answer"
+                aria-label={t("TEST_PANEL.STREAMED_ANSWER")}
                 aria-live="polite"
                 className="max-h-52 overflow-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11px] leading-relaxed"
               >
@@ -506,12 +542,12 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               </pre>
               {stream.clipped && (
                 <p className="px-4 pb-2 text-[11px] text-low-emphasis">
-                  Only the first 1 MB is shown here.
+                  {t("TEST_PANEL.ONLY_THE_FIRST_1")}
                 </p>
               )}
               {stream.error && (
                 <p role="alert" className="px-4 pb-2 text-[11px] text-error">
-                  The stream stopped: {stream.error}
+                  {t("TEST_PANEL.THE_STREAM_STOPPED", { error: stream.error })}
                 </p>
               )}
             </div>
@@ -519,9 +555,9 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
 
           {result && (
             <div className="border-b">
-              <p className="px-4 pt-2.5 text-xs font-semibold">Returned</p>
+              <p className="px-4 pt-2.5 text-xs font-semibold">{t("TEST_PANEL.RETURNED")}</p>
               <pre
-                aria-label="Returned value"
+                aria-label={t("TEST_PANEL.RETURNED_VALUE")}
                 className="max-h-52 overflow-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11px] leading-relaxed"
               >
                 {result}
@@ -529,11 +565,11 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
             </div>
           )}
 
-          <p className="px-4 pt-2.5 text-xs font-semibold">Logs</p>
+          <p className="px-4 pt-2.5 text-xs font-semibold">{t("TEST_PANEL.LOGS")}</p>
           <CardContent className="max-h-52 overflow-auto bg-surface-app p-4 pt-2">
             {(logs?.data ?? []).length === 0 ? (
               <p className="text-xs text-low-emphasis">
-                {isActive ? "Logs appear when the run ends." : "No log lines."}
+                {isActive ? t("TEST_PANEL.LOGS_APPEAR_WHEN_THE") : t("TEST_PANEL.NO_LOG_LINES")}
               </p>
             ) : (
               <div className="flex flex-col gap-1">
