@@ -60,7 +60,8 @@ namespace XUnitTest.Workflow
                 Mock.Of<IHttpContextAccessor>(),
                 Mock.Of<IDelegationGrantFactory>(),
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>());
+                Mock.Of<IInProcessGrantReleaser>(),
+                Mock.Of<IWebhookIntake>());
             _sut = new BlocksEventTriggerService(
                 _workflows.Object,
                 _versions.Object,

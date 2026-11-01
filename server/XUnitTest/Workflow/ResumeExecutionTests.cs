@@ -72,7 +72,8 @@ namespace XUnitTest.Workflow
                 Mock.Of<IWorkflowEngineService>(), Mock.Of<IWorkflowVersionRepository>(), Mock.Of<IWorkflowNotificationService>(),
                 Mock.Of<IWorkflowAuthService>(), Mock.Of<IHttpContextAccessor>(), Mock.Of<IDelegationGrantFactory>(),
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>());
+                Mock.Of<IInProcessGrantReleaser>(),
+                Mock.Of<IWebhookIntake>());
             return (service, repo, messages);
         }
 

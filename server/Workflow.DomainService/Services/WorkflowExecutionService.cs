@@ -43,6 +43,7 @@ namespace Workflow.DomainService.Services
         private readonly IDelegationGrantFactory _delegationGrantFactory;
         private readonly IWorkflowExecutionLogger _executionLogger;
         private readonly IInProcessGrantReleaser _inProcessGrants;
+        private readonly IWebhookIntake _webhookIntake;
 
         public WorkflowExecutionService(
             IWorkflowRepository workflowRepository,
@@ -56,9 +57,11 @@ namespace Workflow.DomainService.Services
             IHttpContextAccessor httpContextAccessor,
             IDelegationGrantFactory delegationGrantFactory,
             IWorkflowExecutionLogger executionLogger,
-            IInProcessGrantReleaser inProcessGrants
+            IInProcessGrantReleaser inProcessGrants,
+            IWebhookIntake webhookIntake
             )
         {
+            _webhookIntake = webhookIntake;
             _inProcessGrants = inProcessGrants;
             _executionLogger = executionLogger;
             _workflowRepository = workflowRepository;
@@ -126,7 +129,7 @@ namespace Workflow.DomainService.Services
             return created;
         }
 
-        public async Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input)
+        public async Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, HttpRequest request)
         {
             var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, workflowId);
             if (workflow == null)
@@ -175,10 +178,10 @@ namespace Workflow.DomainService.Services
                     Status = "Something went wrong"
                 };
             }
-            return await HandleWebhookExecutionAsync(workfowSnapshot, WorkflowExecutionMode.Production, triggerId, input);
+            return await HandleWebhookExecutionAsync(workfowSnapshot, WorkflowExecutionMode.Production, triggerId, request);
         }
 
-        public async Task<WorkflowWebhookResponseDto> TriggerTestWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input)
+        public async Task<WorkflowWebhookResponseDto> TriggerTestWebhookAsync(string workflowId, string triggerId, string tenantId, HttpRequest request)
         {
             var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, workflowId);
             if (workflow == null)
@@ -199,11 +202,12 @@ namespace Workflow.DomainService.Services
                     Status = $"The requested webhook {triggerId} is not listening for test executions. Please activate the test mode in the workflow",
                 };
             }
-            return await HandleWebhookExecutionAsync(workflow, WorkflowExecutionMode.Test, triggerId, input);
+            return await HandleWebhookExecutionAsync(workflow, WorkflowExecutionMode.Test, triggerId, request);
         }
-        private async Task<WorkflowWebhookResponseDto?> HandleWebhookExecutionAsync(WorkflowEntity workflow, WorkflowExecutionMode executionMode, string triggerId, JsonElement input)
+        private async Task<WorkflowWebhookResponseDto?> HandleWebhookExecutionAsync(WorkflowEntity workflow, WorkflowExecutionMode executionMode, string triggerId, HttpRequest request)
         {
             WorkflowExecutionEntity execution;
+            WebhookIntakeResult? intake = null;
             try
             {
 
@@ -218,24 +222,40 @@ namespace Workflow.DomainService.Services
                     };
                 }
                 var authType = triggerNode.Parameters.GetValue("authType")?.ToString();
+                BlocksContext? caller = null;
 
                 if (string.Equals(authType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
                 {
-                    var isAuthenticatedUser = await _workflowAuthService.IsAuthenticated(_httpContextAccessor.HttpContext.Request, workflow.TenantId);
+                    var isAuthenticatedUser = await _workflowAuthService.IsAuthenticated(request, workflow.TenantId);
                     if (!isAuthenticatedUser) throw new UnauthorizedAccessException();
+                    caller = _workflowAuthService.BuildCallerContext(request, workflow.TenantId);
                 }
                 else if (string.Equals(authType, "blocksAuthorization", StringComparison.OrdinalIgnoreCase))
                 {
                     var authConfig = ParseAuthorizationConfig(triggerNode.Parameters);
                     if (authConfig is null) throw new UnauthorizedAccessException();
                     var (isAuthorizedUser, context) = await _workflowAuthService.IsAuthorized(
-                        _httpContextAccessor.HttpContext.Request, workflow.TenantId, authConfig);
+                        request, workflow.TenantId, authConfig);
                     if (!isAuthorizedUser) throw new UnauthorizedAccessException();
                     BlocksContext.SetContext(context);
+                    caller = context;
                 }
 
-                // After auth on purpose: an unauthenticated caller gets 401, not a hint about the body shape.
-                var normalizedInput = WebhookBodyNormalizer.Normalize(input);
+                // The body is read only now, in both modes (SPEC8 A1): an unauthenticated caller gets 401 and
+                // a missing/unpublished workflow its status, never a hint about the body, and no file is stored
+                // for a caller who may not run this webhook.
+                var settings = WebhookIntakeSettings.From(triggerNode.Parameters);
+                BsonArray normalizedInput;
+                if (settings.IsAnyContent)
+                {
+                    intake = await _webhookIntake.ReadAnyContentAsync(
+                        request, settings, workflow.TenantId, caller, request.HttpContext?.RequestAborted ?? default);
+                    normalizedInput = intake.Items;
+                }
+                else
+                {
+                    normalizedInput = await _webhookIntake.ReadLegacyAsync(request, request.HttpContext?.RequestAborted ?? default);
+                }
 
                 var triggerMetadata = new TriggerMetadata
                 {
@@ -244,12 +264,30 @@ namespace Workflow.DomainService.Services
                     TriggerData = normalizedInput,
                 };
 
-                execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
-                execution.Context[LogicConstants.ExecutionInputKey] = normalizedInput;
-                execution.Status = WorkflowExecutionStatus.Queued;
-                execution.ActiveNodeIds.Add(triggerId);
+                try
+                {
+                    execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
+                    execution.Context[LogicConstants.ExecutionInputKey] = normalizedInput;
+                    execution.Status = WorkflowExecutionStatus.Queued;
+                    execution.ActiveNodeIds.Add(triggerId);
 
-                await _executionRepository.UpdateAsync(execution);
+                    await _executionRepository.UpdateAsync(execution);
+                }
+                catch when (intake is not null)
+                {
+                    // No run holds these files, so nothing would ever reference them.
+                    await _webhookIntake.DiscardAsync(intake);
+                    throw;
+                }
+
+                if (intake is not null)
+                {
+                    // Counts only: never header values, body content, file names or ids.
+                    _executionLogger.For(execution).Info(
+                        ExecutionLogStages.TriggerWebhookIntake,
+                        "Webhook body read: format {BodyFormat:l}, {Items} item(s), {Files} file(s), {KiB} KiB.",
+                        intake.BodyFormat, intake.Items.Count, intake.StoredFileIds.Count, (intake.Bytes + 1023) / 1024);
+                }
                 await NotifyWorkflowStartedAsync(execution);
 
                 var payload = new AddExcuationNodeEvent
@@ -360,6 +398,10 @@ namespace Workflow.DomainService.Services
             catch (InvalidWebhookBodyException)
             {
                 throw; // the controller answers 400
+            }
+            catch (WebhookIntakeException)
+            {
+                throw; // the controller answers its status (400/403/413/415/422/503)
             }
             catch (Exception ex)
             {

@@ -5,6 +5,7 @@ using Workflow.DomainService.Nodes.TriggerDataV1;
 using Workflow.DomainService.Nodes.TriggerScheduleV1;
 using Mail.DomainService.Mails;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Blocks.Genesis.Entities.Logic;
 
 
@@ -14,8 +15,14 @@ namespace Workflow.DomainService.Services
 
     public interface IWorkflowExecutionService
     {
-        Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input);
-        Task<WorkflowWebhookResponseDto> TriggerTestWebhookAsync(string workflowId, string triggerId, string tenantId, JsonElement input);
+        /// <summary>
+        /// Runs the published workflow behind a webhook. The body is read from <paramref name="request"/> only after
+        /// the workflow, trigger and the trigger's auth checks pass, according to the trigger's <c>bodyMode</c>.
+        /// </summary>
+        Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, HttpRequest request);
+
+        /// <summary>The <c>webhook-test</c> twin of <see cref="TriggerWebhookAsync"/>, for a listening draft.</summary>
+        Task<WorkflowWebhookResponseDto> TriggerTestWebhookAsync(string workflowId, string triggerId, string tenantId, HttpRequest request);
         Task<WorkflowExecutionEntity> CreateExecutionAsync(WorkflowEntity workflow, TriggerMetadata triggerMetadata, WorkflowExecutionMode executionMode);
         Task<WorkflowExecutionsGetResponseDto> GetExecutionsByWorkflowIdAsync(string tenantId, WorkflowExecutionsGetRequestDto dto);
         Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string tenantId, WorkflowExecutionGetRequestDto dto);

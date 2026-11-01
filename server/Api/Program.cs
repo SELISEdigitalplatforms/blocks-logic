@@ -12,6 +12,7 @@ using DomainService.Notification;
 using DomainService.Shared;
 using DomainService.Utilities;
 using Workflow.DomainService;
+using Workflow.DomainService.Services;
 using Workflow.DomainService.Utils;
 using Proxy.DomainService;
 using Mail.DomainService.Shared.Utilities;
@@ -44,7 +45,10 @@ ApplicationConfigurations.ConfigureServices(builder.Services, LogicConstants.Get
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 15 * 1024 * 1024; // 15 MB
+    // Global, not per action: Genesis can read a webhook's form while resolving the tenant for a bearer
+    // token, before any action filter applies (SPEC8 A5). CertificateController keeps 15 MB on its own.
+    options.MultipartBodyLengthLimit = WebhookIntakeLimits.FileRequestMaxBytes;
+    options.ValueLengthLimit = (int)WebhookIntakeLimits.NonFileMaxBytes;
 });
 
 var services = builder.Services;
@@ -169,6 +173,10 @@ if (File.Exists(indexHtml))
     });
 }
 
+static bool IsWebhookPath(PathString path) =>
+    path.StartsWithSegments("/api/Workflow/Webhook", StringComparison.OrdinalIgnoreCase)
+    || path.StartsWithSegments("/api/Workflow/webhook-test", StringComparison.OrdinalIgnoreCase);
+
 static bool LooksLikeAFile(PathString path)
 {
     var value = path.Value;
@@ -177,6 +185,21 @@ static bool LooksLikeAFile(PathString path)
     var lastSegment = value.AsSpan(value.LastIndexOf('/') + 1);
     return lastSegment.Contains('.');
 }
+
+// Webhook routes accept up to 50 MiB of files. Raise Kestrel's body limit for them here, ahead of the
+// authentication middleware, which may read the form before the action's [RequestSizeLimit] applies.
+app.Use(async (context, next) =>
+{
+    if (IsWebhookPath(context.Request.Path))
+    {
+        var bodySize = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
+        if (bodySize is { IsReadOnly: false })
+        {
+            bodySize.MaxRequestBodySize = WebhookIntakeLimits.RequestSizeLimitBytes;
+        }
+    }
+    await next(context);
+});
 
 ApplicationConfigurations.ConfigureMiddleware(app, tenantValidationPrefixes: new[] { "api/notificationHub" });
 // A connection is closed when its token expires; the client reconnects with a fresh login.
