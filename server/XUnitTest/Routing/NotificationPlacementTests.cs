@@ -19,6 +19,7 @@ namespace XUnitTest.Routing;
 
 public class NotificationPlacementTests : IDisposable
 {
+    private static readonly InboxViewer Viewer = new("same-user", [], null);
     private readonly TenantPlacementFixture _fixture = new();
     public void Dispose() => _fixture.Dispose();
 
@@ -47,19 +48,19 @@ public class NotificationPlacementTests : IDisposable
             ReadByUserIds = [], CreatedTime = DateTime.UtcNow
         });
 
-        var page = await repository.GetNotificationsAsync(new GetNotificationsRequest { Page = 0, PageSize = 1 });
+        var page = await repository.GetNotificationsAsync(new GetNotificationsRequest { Page = 0, PageSize = 1 }, Viewer);
         Assert.Equal("dev-new", Assert.Single(page.Notifications).Id);
         Assert.Equal(2, page.TotalNotificationsCount);
         Assert.Equal(2, page.UnReadNotificationsCount);
-        var secondPage = await repository.GetNotificationsAsync(new GetNotificationsRequest { Page = 1, PageSize = 1 });
+        var secondPage = await repository.GetNotificationsAsync(new GetNotificationsRequest { Page = 1, PageSize = 1 }, Viewer);
         Assert.Equal("dev-old", Assert.Single(secondPage.Notifications).Id);
 
-        await repository.UpdateNotificationAsReadByUserIdAsync("same-user", "dev-new");
+        await repository.MarkAsReadAsync(Viewer, "dev-new");
         var devNew = await _fixture.Dev.GetCollection<OfflineNotification>(collectionName)
             .Find(n => n.Id == "dev-new").SingleAsync();
         Assert.Contains("same-user", devNew.ReadByUserIds);
 
-        await repository.UpdateNotificationAsReadByUserIdAsync("same-user");
+        await repository.MarkAllAsReadAsync(Viewer);
         var devOld = await _fixture.Dev.GetCollection<OfflineNotification>(collectionName)
             .Find(n => n.Id == "dev-old").SingleAsync();
         Assert.Contains("same-user", devOld.ReadByUserIds);

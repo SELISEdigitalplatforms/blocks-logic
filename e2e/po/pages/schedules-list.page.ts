@@ -43,8 +43,26 @@ export class SchedulesListPage {
     return this.page.getByRole("button", { name: "Add Schedule" }).first();
   }
 
+  /**
+   * A loaded schedule row: real rows link to `/schedule/:id`; the loading
+   * skeleton rows (rendered under the same column headers) have no link.
+   */
+  get loadedDataRow(): Locator {
+    return this.page.getByRole("row").filter({ has: this.page.getByRole("link") }).first();
+  }
+
+  /**
+   * While the list query is loading, ScheduleList renders the table headers
+   * with skeleton rows and only then swaps in the empty state, so wait for the
+   * list to settle (empty state or a real row) before deciding.
+   */
+  async waitForListSettled(timeout = 15_000): Promise<void> {
+    await expect(this.emptyHeading.or(this.loadedDataRow)).toBeVisible({ timeout });
+  }
+
   async isEmptyState(): Promise<boolean> {
-    return this.emptyHeading.isVisible({ timeout: 5_000 }).catch(() => false);
+    await this.waitForListSettled().catch(() => undefined);
+    return this.emptyHeading.isVisible();
   }
 
   async expectEmptyState(): Promise<void> {
@@ -104,8 +122,16 @@ export class SchedulesListPage {
     return row.locator("button").first();
   }
 
+  /**
+   * A forced click skips Playwright's hit-target check and on the current UI
+   * lands on another element, so the Radix trigger never opens. Use a normal
+   * (actionability-checked) click and wait for the menu itself. (Once the
+   * modal menu is open Radix hides the rest of the page from the a11y tree,
+   * so the row-based trigger locator no longer resolves.)
+   */
   async openFirstRowMenu(): Promise<void> {
-    await this.rowMenuTrigger(this.firstDataRow).click({ force: true });
+    await this.rowMenuTrigger(this.firstDataRow).click();
+    await expect(this.page.getByRole("menu")).toBeVisible();
   }
 
   get rowMenuItem(): (name: string) => Locator {

@@ -116,23 +116,30 @@ jobs:
 
       - name: Generate SBOM with cdxgen
         working-directory: ${{ inputs.WORKING_DIRECTORY }}
+        env:
+          IN_CDXGEN_VERSION: ${{ inputs.CDXGEN_VERSION }}
+          IN_INCLUDE_FORMULATION: ${{ inputs.INCLUDE_FORMULATION }}
+          IN_SBOM_FILENAME: ${{ inputs.SBOM_FILENAME }}
+          IN_SPEC_VERSION: ${{ inputs.SPEC_VERSION }}
         run: |
-          npm install -g @cyclonedx/cdxgen@${{ inputs.CDXGEN_VERSION }}
+          npm install -g @cyclonedx/cdxgen@"${IN_CDXGEN_VERSION}"
 
           FORMULATION_FLAG=""
-          [ "${{ inputs.INCLUDE_FORMULATION }}" = "true" ] && FORMULATION_FLAG="--include-formulation"
+          [ "${IN_INCLUDE_FORMULATION}" = "true" ] && FORMULATION_FLAG="--include-formulation"
 
           cdxgen \
             -t js \
-            -o ${{ inputs.SBOM_FILENAME }} \
-            --spec-version ${{ inputs.SPEC_VERSION }} \
+            -o "${IN_SBOM_FILENAME}" \
+            --spec-version "${IN_SPEC_VERSION}" \
             $FORMULATION_FLAG \
             .
 
       - name: Validate SBOM
         working-directory: ${{ inputs.WORKING_DIRECTORY }}
+        env:
+          IN_SBOM_FILENAME: ${{ inputs.SBOM_FILENAME }}
         run: |
-          BOM="${{ inputs.SBOM_FILENAME }}"
+          BOM="${IN_SBOM_FILENAME}"
           [ ! -s "$BOM" ] && echo "❌ SBOM missing or empty" && exit 1
           jq empty "$BOM" || { echo "❌ SBOM is not valid JSON"; exit 1; }
 
@@ -158,19 +165,25 @@ jobs:
       - name: Upload to Dependency-Track
         working-directory: ${{ inputs.WORKING_DIRECTORY }}
         env:
+          IN_PROJECT_VERSION: ${{ inputs.PROJECT_VERSION }}
+          IN_DEPENDENCY_TRACK_HOST: ${{ inputs.DEPENDENCY_TRACK_HOST }}
+          IN_AUTO_CREATE_PROJECT: ${{ inputs.AUTO_CREATE_PROJECT }}
+          IN_PROJECT_NAME: ${{ inputs.PROJECT_NAME }}
+          IN_SBOM_FILENAME: ${{ inputs.SBOM_FILENAME }}
+          IN_DEPENDENCY_TRACK_FRONTEND_URL: ${{ inputs.DEPENDENCY_TRACK_FRONTEND_URL }}
           DT_API_KEY: ${{ secrets.DEPENDENCY_TRACK_API_KEY }}
         run: |
-          VERSION="${{ inputs.PROJECT_VERSION }}"
+          VERSION="${IN_PROJECT_VERSION}"
           [ -z "$VERSION" ] && VERSION="${GITHUB_REF_NAME}"
 
           BODY=$(mktemp)
           CODE=$(curl -sS -o "$BODY" -w '%{http_code}' \
-            -X POST "https://${{ inputs.DEPENDENCY_TRACK_HOST }}/api/v1/bom" \
+            -X POST "https://${IN_DEPENDENCY_TRACK_HOST}/api/v1/bom" \
             -H "X-Api-Key: $DT_API_KEY" \
-            -F "autoCreate=${{ inputs.AUTO_CREATE_PROJECT }}" \
-            -F "projectName=${{ inputs.PROJECT_NAME }}" \
+            -F "autoCreate=${IN_AUTO_CREATE_PROJECT}" \
+            -F "projectName=${IN_PROJECT_NAME}" \
             -F "projectVersion=$VERSION" \
-            -F "bom=@${{ inputs.SBOM_FILENAME }}")
+            -F "bom=@${IN_SBOM_FILENAME}")
 
           echo "HTTP $CODE"
           cat "$BODY"
@@ -189,6 +202,6 @@ jobs:
           {
             echo "### ✅ Uploaded to Dependency-Track"
             echo ""
-            echo "- Project: \`${{ inputs.PROJECT_NAME }}\` @ \`$VERSION\`"
-            echo "- Dashboard: https://${{ inputs.DEPENDENCY_TRACK_FRONTEND_URL }}/projects"
+            echo "- Project: \`${IN_PROJECT_NAME}\` @ \`$VERSION\`"
+            echo "- Dashboard: https://${IN_DEPENDENCY_TRACK_FRONTEND_URL}/projects"
           } >> $GITHUB_STEP_SUMMARY

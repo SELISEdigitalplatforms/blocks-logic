@@ -15,7 +15,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui-kits/tooltip/tooltip";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { showErrorToast } from "@/hooks/use-toast";
 
@@ -50,11 +50,16 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
   const [isRenaming, setIsRenaming] = useState(false);
   const [editName, setEditName] = useState(node?.name || "");
 
-  useEffect(() => {
-    if (!isRenaming && node?.name) {
-      setEditName(node.name);
+  // Keep the draft name in sync with the node while not renaming; adjusted during render when
+  // node name / renaming state change (React's "adjust state when a prop changes" pattern).
+  const nodeName = node?.name;
+  const [nameSyncedFrom, setNameSyncedFrom] = useState({ nodeName, isRenaming });
+  if (nameSyncedFrom.nodeName !== nodeName || nameSyncedFrom.isRenaming !== isRenaming) {
+    setNameSyncedFrom({ nodeName, isRenaming });
+    if (!isRenaming && nodeName) {
+      setEditName(nodeName);
     }
-  }, [node?.name, isRenaming]);
+  }
 
   const handleRenameSubmit = () => {
     const newName = editName.trim();

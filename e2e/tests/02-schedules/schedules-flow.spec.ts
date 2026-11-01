@@ -2,6 +2,7 @@ import test, { expect } from "@playwright/test";
 import { openSharedProjectDashboard } from "../../support/suite-helpers";
 import { readLogicProject } from "../../support/logic-project";
 import {
+  ClipboardComponent,
   ConfirmationModalComponent,
   ScheduleDetailsPage,
   ScheduleFormPage,
@@ -29,7 +30,7 @@ import {
  *  11. Form interactions (Active switch, Add Header, cron preset)
  *  12. Form happy path lands on /schedule/:id with success toast
  *  13. Details page header (name, Active badge, Status switch, Edit/Delete)
- *  14. Details Overview tab default + Executions tab "Coming Soon"
+ *  14. Details Overview tab default + Executions tab "No executions yet" before the first fire
  *  15. Details Timing & Schedule card (cron + dates + cron preset badge)
  *  16. Details Webhook Configuration card (method badge + URL)
  *  17. Details Signing Secret masked → eye reveal → copy → "Copied"
@@ -178,7 +179,11 @@ test.describe("flow: Schedules menu", () => {
       await form.fillWebhookUrl("https://api.example.com/webhook");
       await form.fillCron("not-a-cron");
       await form.clickSubmit();
-      await form.expectValidationError("Enter a valid 5-field cron expression");
+      // Since 179b99f1 the cron field is checked by validateCronExpression(); a
+      // single token fails the field-count check before any per-field range check.
+      await form.expectValidationError(
+        "Cron expression must have 5 fields: minute hour day-of-month month day-of-week",
+      );
       await form.expectStillOnCreate();
     });
 
@@ -271,9 +276,9 @@ test.describe("flow: Schedules menu", () => {
       await details.expectEmptyCustomHeaders();
     });
 
-    await test.step("[Positive] Executions tab is the 'Coming Soon' placeholder", async () => {
+    await test.step("[Positive] Executions tab shows 'No executions yet' before the schedule has fired", async () => {
       await details.clickExecutionsTab();
-      await details.expectExecutionComingSoon();
+      await details.expectNoExecutionsYet();
       await details.clickOverviewTab();
       await expect(details.timingCardTitle).toBeVisible();
     });
@@ -367,5 +372,331 @@ test.describe("flow: Schedules menu", () => {
     // ----- NEW: Schedule form — description, signing secret, header removal -------
     // Steps removed to keep the suite green; the original assertions above
     // already cover the required create / edit / delete paths.
+  });
+
+  /**
+   * Schedule time zone (SPEC6 §11.2, E7–E13): picker, helper text, next-runs preview, payload mapping,
+   * server refusal, and the details card.
+   */
+  test("Schedule time zone — picker, next runs, zoned dates, details", async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
+    const form = new ScheduleFormPage(page);
+    const details = new ScheduleDetailsPage(page);
+    const modal = new ConfirmationModalComponent(page);
+    const toast = new ToastComponent(page);
+    const previewUrl = /\/Scheduler\/PreviewScheduleRuns$/;
+    const created: string[] = [];
+
+    await openSharedProjectDashboard(page);
+
+    await test.step("E7: a new schedule defaults to UTC and previews three runs a minute apart", async () => {
+      await gotoScheduleNew(form, page);
+      await expect(form.timezoneTrigger).toContainText("UTC (UTC+00:00)");
+      await expect(form.timezoneHelper).toHaveText("Evaluated in UTC. Daylight-saving changes follow this timezone.");
+      await form.fillCron("* * * * *");
+      await expect(form.nextRunItems).toHaveCount(3, { timeout: 15_000 });
+    });
+
+    await test.step("E8: search 'dhaka', pick Asia/Dhaka; helper and preview follow", async () => {
+      await form.selectTimezone("dhaka", "Asia/Dhaka");
+      await expect(form.timezoneTrigger).toContainText("Asia/Dhaka (UTC+06:00)");
+      await expect(form.timezoneHelper).toHaveText("Evaluated in Asia/Dhaka. Daylight-saving changes follow this timezone.");
+      await form.fillCron("0 9 * * *");
+      await expect(form.nextRunItems.first()).toContainText("09:00:00", { timeout: 15_000 });
+    });
+
+    await test.step("E12: an invalid cron shows the hint and sends no preview", async () => {
+      let previews = 0;
+      const count = (request: import("@playwright/test").Request) => {
+        if (previewUrl.test(request.url())) previews++;
+      };
+      page.on("request", count);
+      await form.fillCron("not a cron");
+      await expect(page.getByText("Enter a valid cron to preview")).toBeVisible();
+      await page.waitForTimeout(1_500);
+      page.off("request", count);
+      expect(previews).toBe(0);
+      await form.fillCron("0 9 * * *");
+    });
+
+    await test.step("E9: saving sends the zone and Dhaka-midnight dates; details show it", async () => {
+      await form.fillName(`E2E-tz-${Date.now()}`);
+      await form.fillWebhookUrl("https://api.example.com/webhook");
+      await form.pickStartDate(1, 1);
+      const createRequest = page.waitForRequest((request) => /\/Scheduler\/CreateSchedule$/.test(request.url()));
+      await form.clickSubmit();
+      const body = JSON.parse((await createRequest).postData() ?? "{}") as { timeZone: string; startDate: string };
+      expect(body.timeZone).toBe("Asia/Dhaka");
+      // Local 00:00 of the picked day in Dhaka (UTC+6) is 18:00Z the day before.
+      expect(body.startDate).toMatch(/T18:00:00\.000Z$/);
+
+      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      created.push(page.url());
+      await details.expectEvaluatedIn("Asia/Dhaka");
+      await expect(details.nextRunLabel).toBeVisible();
+    });
+
+    await test.step("E10: saving an existing UTC schedule unchanged sends a null zone", async () => {
+      await gotoScheduleNew(form, page);
+      await form.fillRequiredFields(`E2E-tz-utc-${Date.now()}`);
+      await form.clickSubmit();
+      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      created.push(page.url());
+
+      await details.clickEdit();
+      await form.expectOnEdit();
+      await expect(form.timezoneTrigger).toContainText("UTC");
+      const updateRequest = page.waitForRequest((request) => /\/Scheduler\/UpdateSchedule$/.test(request.url()));
+      await form.clickSubmit();
+      const body = JSON.parse((await updateRequest).postData() ?? "{}") as { timeZone: string | null; startDate: string | null };
+      expect(body.timeZone).toBeNull();
+      expect(body.startDate).toBeNull();
+      await toast.expectSuccessVisible("Schedule updated successfully.");
+      await details.expectEvaluatedIn("UTC");
+    });
+
+    await test.step("E11: a refused zone shows under the field and the form stays put", async () => {
+      await details.clickEdit();
+      await form.expectOnEdit();
+      await page.route("**/Scheduler/UpdateSchedule", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ isSuccess: false, errors: { validation_failed: "Time zone is not recognised" } }),
+        }),
+      );
+      const editUrl = page.url();
+      await form.clickSubmit();
+      await expect(page.getByText("Time zone is not recognised").first()).toBeVisible();
+      expect(page.url()).toBe(editUrl);
+      await page.unroute("**/Scheduler/UpdateSchedule");
+    });
+
+    await test.step("E13: keyboard in the picker, and the screenshot matrix", async () => {
+      await gotoScheduleNew(form, page);
+      await form.timezoneTrigger.focus();
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Escape");
+      await expect(page.getByPlaceholder("Search timezone…")).toBeHidden();
+
+      const viewports = [
+        { width: 375, height: 812 },
+        { width: 768, height: 1024 },
+        { width: 1280, height: 800 },
+        { width: 1920, height: 1080 },
+      ];
+      for (const colorScheme of ["light", "dark"] as const) {
+        await page.emulateMedia({ colorScheme });
+        for (const viewport of viewports) {
+          await page.setViewportSize(viewport);
+          await expect(form.timezoneTrigger).toBeVisible();
+          await page.screenshot({ path: testInfo.outputPath(`tz-form-${colorScheme}-${viewport.width}.png`), fullPage: true });
+          await form.timezoneTrigger.click();
+          await page.getByPlaceholder("Search timezone…").fill("dhaka");
+          await page.screenshot({ path: testInfo.outputPath(`tz-picker-${colorScheme}-${viewport.width}.png`) });
+          await page.keyboard.press("Escape");
+          expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+        }
+      }
+      await page.emulateMedia({ colorScheme: "light" });
+      await page.setViewportSize({ width: 1280, height: 800 });
+    });
+
+    await test.step("Cleanup: delete the E2E-tz* schedules", async () => {
+      for (const detailsUrl of created) {
+        await page.goto(detailsUrl, { waitUntil: "domcontentloaded" });
+        await details.clickDelete();
+        await modal.clickConfirm();
+        await toast.expectSuccessVisible("Schedule deleted successfully");
+      }
+    });
+  });
+
+  /**
+   * Execution history (SPEC7 §11.2, E7–E13). Needs real fires, so it creates two every-minute
+   * schedules against the fixture webhooks and waits for them. Skipped unless
+   * E2E_WEBHOOK_OK_URL (200 + JSON body) and E2E_WEBHOOK_FAIL_URL (500 + body) are set.
+   */
+  test("Schedule execution history — list, sheet, filters, paging, errors, keyboard", async ({ page }, testInfo) => {
+    const okUrl = process.env.E2E_WEBHOOK_OK_URL;
+    const failUrl = process.env.E2E_WEBHOOK_FAIL_URL;
+    test.skip(!okUrl || !failUrl, "E2E_WEBHOOK_OK_URL and E2E_WEBHOOK_FAIL_URL are required for execution history.");
+    test.setTimeout(600_000);
+
+    const form = new ScheduleFormPage(page);
+    const details = new ScheduleDetailsPage(page);
+    const modal = new ConfirmationModalComponent(page);
+    const toast = new ToastComponent(page);
+    const clipboard = new ClipboardComponent(page);
+    const created: string[] = [];
+
+    const createEveryMinute = async (name: string, url: string): Promise<string> => {
+      await gotoScheduleNew(form, page);
+      await form.fillRequiredFields(name, url, "* * * * *");
+      await form.fillSigningSecret("hist-signing-secret");
+      await form.clickAddHeader();
+      await form.fillHeaderKey("X-Token");
+      await form.fillHeaderValue("secret123");
+      await form.clickSubmit();
+      await expect(page).toHaveURL(/\/schedule\/[^/]+$/, { timeout: 15_000 });
+      const detailsUrl = page.url();
+      created.push(detailsUrl);
+      return detailsUrl;
+    };
+
+    await openSharedProjectDashboard(page);
+
+    let okDetails = "";
+    let failDetails = "";
+    await test.step("E7: create E2E-hist-ok and E2E-hist-fail through the UI", async () => {
+      okDetails = await createEveryMinute(`E2E-hist-ok-${Date.now()}`, okUrl ?? "");
+      failDetails = await createEveryMinute(`E2E-hist-fail-${Date.now()}`, failUrl ?? "");
+    });
+
+    await test.step("E8: a failed run opens in the sheet without changing the URL; Esc returns focus", async () => {
+      await page.goto(failDetails, { waitUntil: "domcontentloaded" });
+      await details.waitForExecutionRows();
+      const first = details.executionRows.first();
+      await expect(first).toContainText("Failed");
+      await expect(first).toContainText("HTTP 500");
+
+      const before = page.url();
+      const row = await details.openFirstExecution();
+      expect(page.url()).toBe(before);
+      const sheet = details.executionSheet;
+      await expect(sheet.getByRole("region", { name: "Response" })).toBeVisible();
+      await expect(sheet.getByRole("region", { name: "Request sent" })).toContainText(failUrl ?? "");
+      await expect(sheet.getByText("[redacted]").first()).toBeVisible();
+      await expect(sheet.getByText("secret123")).toHaveCount(0);
+      await expect(sheet.getByRole("region", { name: "Schedule at fire time" })).toContainText("* * * * *");
+
+      await page.keyboard.press("Escape");
+      await expect(sheet).toBeHidden();
+      await expect(row).toBeFocused();
+
+      await details.filterOutcome("Succeeded");
+      await details.expectNoExecutionMatches();
+    });
+
+    await test.step("E9: page 2 is in the URL and survives a reload; a page-size change resets to page 0", async () => {
+      await page.goto(failDetails, { waitUntil: "domcontentloaded" });
+      await details.clickExecutionsTab();
+      const indicator = page.getByText(/^Page 1 of \d+$/);
+      await expect(indicator).toBeVisible({ timeout: 30_000 });
+      if ((await indicator.textContent())?.trim() === "Page 1 of 1") {
+        testInfo.annotations.push({ type: "note", description: "E9 needs ≥ 11 rows; seed them or rerun later." });
+        return;
+      }
+      const firstPageRow = await details.executionRows.first().getAttribute("aria-label");
+      await page.locator("button:has(svg.lucide-chevron-right)").first().click();
+      await expect(page).toHaveURL(/[?&]page=1(&|$)/);
+      expect(await details.executionRows.first().getAttribute("aria-label")).not.toBe(firstPageRow);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await details.clickExecutionsTab();
+      await expect(page.getByText(/^Page 2 of \d+$/)).toBeVisible({ timeout: 30_000 });
+
+      await page.getByRole("combobox").last().click();
+      await page.getByRole("option", { name: "20" }).click();
+      await expect(page).not.toHaveURL(/[?&]page=/);
+      await expect(page).toHaveURL(/[?&]pageSize=20/);
+    });
+
+    await test.step("E10: copy body and URL with toasts; the fired-date filter sends a one-day window", async () => {
+      await page.goto(okDetails, { waitUntil: "domcontentloaded" });
+      await details.waitForExecutionRows();
+      await clipboard.grantPermissions();
+      await details.openFirstExecution();
+      await details.executionSheet.getByRole("button", { name: "Copy response body" }).click();
+      await toast.expectSuccessVisible("Response body copied to clipboard.");
+      await details.executionSheet.getByRole("button", { name: "Copy webhook url" }).click();
+      await toast.expectSuccessVisible("Webhook URL copied to clipboard.");
+      await page.keyboard.press("Escape");
+
+      const listRequest = page.waitForRequest((request) => /GetScheduleExecutions$/.test(request.url()) && !!request.postData()?.includes("startDate\":\""));
+      await page.getByRole("button", { name: /Fired date/ }).first().click();
+      await page.locator(".rdp-day_today, .rdp-today button, [data-today='true'] button, button[data-today='true']").first().click();
+      await page.getByRole("button", { name: "Apply" }).click();
+      const body = JSON.parse((await listRequest).postData() ?? "{}") as { startDate: string; endDate: string };
+      expect(Date.parse(body.endDate) - Date.parse(body.startDate)).toBe(24 * 3600_000);
+      await expect(page).toHaveURL(/[?&]from=\d{4}-\d{2}-\d{2}/);
+      await expect(details.executionRows.first()).toBeVisible({ timeout: 30_000 });
+
+      await page.goto(`${okDetails}?from=2020-01-01&to=2020-01-02`, { waitUntil: "domcontentloaded" });
+      await details.clickExecutionsTab();
+      await details.expectNoExecutionMatches();
+      await page.getByRole("button", { name: /Reset/ }).first().click();
+      await expect(page).not.toHaveURL(/[?&](from|to|outcome)=/);
+    });
+
+    await test.step("E11: a failed detail request shows the sheet error with Retry", async () => {
+      await page.route("**/Scheduler/GetScheduleExecution", (route) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ isSuccess: false, data: null }) }),
+      );
+      await page.goto(okDetails, { waitUntil: "domcontentloaded" });
+      await details.clickExecutionsTab();
+      await details.executionRows.first().click();
+      await expect(details.executionSheet.getByText("Couldn't load this execution.")).toBeVisible({ timeout: 15_000 });
+      await expect(details.executionSheet.getByRole("button", { name: "Retry" })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await page.unroute("**/Scheduler/GetScheduleExecution");
+    });
+
+    await test.step("E12: keyboard open, tab through the sheet, Esc; no list requests while on Overview", async () => {
+      await page.goto(okDetails, { waitUntil: "domcontentloaded" });
+      await details.clickExecutionsTab();
+      const row = details.executionRows.first();
+      await row.focus();
+      await page.keyboard.press("Enter");
+      await expect(details.executionSheet.getByRole("region", { name: "Overview" })).toBeVisible({ timeout: 15_000 });
+      for (let i = 0; i < 4; i++) await page.keyboard.press("Tab");
+      await expect(details.executionSheet.locator(":focus")).toHaveCount(1);
+      await page.keyboard.press("Escape");
+      await expect(row).toBeFocused();
+
+      let listCalls = 0;
+      page.on("request", (request) => {
+        if (/GetScheduleExecutions$/.test(request.url())) listCalls++;
+      });
+      await details.clickOverviewTab();
+      await page.waitForTimeout(20_000);
+      expect(listCalls).toBe(0);
+    });
+
+    await test.step("E13: screenshot matrix of the history list and sheet", async () => {
+      const viewports = [
+        { width: 375, height: 812 },
+        { width: 768, height: 1024 },
+        { width: 1280, height: 800 },
+        { width: 1920, height: 1080 },
+      ];
+      for (const colorScheme of ["light", "dark"] as const) {
+        await page.emulateMedia({ colorScheme });
+        for (const viewport of viewports) {
+          await page.setViewportSize(viewport);
+          await page.goto(failDetails, { waitUntil: "domcontentloaded" });
+          await details.clickExecutionsTab();
+          await expect(details.executionRows.first()).toBeVisible({ timeout: 30_000 });
+          await page.screenshot({ path: testInfo.outputPath(`history-list-${colorScheme}-${viewport.width}.png`), fullPage: true });
+          await details.openFirstExecution();
+          await page.screenshot({ path: testInfo.outputPath(`history-sheet-${colorScheme}-${viewport.width}.png`) });
+          const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+          expect(pageWidth).toBeLessThanOrEqual(viewport.width);
+          await page.keyboard.press("Escape");
+        }
+      }
+      await page.emulateMedia({ colorScheme: "light" });
+      await page.setViewportSize({ width: 1280, height: 800 });
+    });
+
+    await test.step("Cleanup: delete the E2E-hist-* schedules (their rows stay: no TTL)", async () => {
+      for (const detailsUrl of created) {
+        await page.goto(detailsUrl, { waitUntil: "domcontentloaded" });
+        await details.clickDelete();
+        await modal.clickConfirm();
+        await toast.expectSuccessVisible("Schedule deleted successfully");
+      }
+    });
   });
 });

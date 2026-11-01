@@ -156,9 +156,17 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
    * from another field. Mirrors `fixedKeysDependencies`.
    */
   optionsDependencies?: string[];
+  /**
+   * Async `options` only: reload them when the window regains focus (at most once every 2 s), e.g. after the
+   * user changed what is selectable in another tab. The current value is kept. Default false: every other
+   * select keeps its fetch-once behaviour.
+   */
+  refetchOnWindowFocus?: boolean;
   copyable?: boolean;
   /** `number` only: "blur" reports the value on blur or Enter instead of on every keystroke. */
   commitOn?: "blur";
+  /** `number` only: accept digits only, so a decimal point, sign or exponent can never be typed or pasted. */
+  wholeNumber?: boolean;
   maxLength?: number;
   minLength?: number;
   min?: number;

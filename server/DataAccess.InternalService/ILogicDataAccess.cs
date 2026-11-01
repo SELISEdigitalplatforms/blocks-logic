@@ -21,12 +21,12 @@ public static class LogicSchemas
     public const string ProxyVersionEntity = "ProxyVersionEntity";
     public const string ProxyExecutionEntity = "ProxyExecutionEntity";
     public const string Schedule = "Schedule";
+    public const string ScheduleExecution = "ScheduleExecution";
     public const string MailBoxEntity = "MailBoxEntity";
     public const string MailBoxSyncCursor = "MailBoxSyncCursor";
     public const string NotificationConnection = "NotificationConnection";
     public const string NotificationSubscription = "NotificationSubscription";
     public const string OfflineNotification = "OfflineNotification";
-    public const string FirebaseConfiguration = "FirebaseConfiguration";
 }
 
 /// <summary>

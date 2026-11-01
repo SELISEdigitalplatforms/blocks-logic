@@ -10,6 +10,7 @@ using DomainService.Storage;
 using FluentValidation;
 using Mail.DomainService.Shared.Utilities;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Storage.DomainService.Storage;
 using Storage.DomainService.Storage.Validators;
 
@@ -27,6 +28,9 @@ namespace DomainService.Shared
             services.AddSingleton<IPeopleRepository, PeopleRepository>();
             services.AddSingleton<IServiceManagement, ServiceManagement>();
             services.AddSingleton<IServiceManagementRepository, ServiceManagementRepository>();
+            // Singleton with a DI scope per read for the scoped ISecretService (AddBlocksSecrets()
+            // in the host). TryAdd because hosts call AddApplicationServices more than once.
+            services.TryAddSingleton<IServiceBusConnectionStringResolver, ServiceBusConnectionStringResolver>();
 
             // Drivers
             services.AddTransient<IValidator<UpdateFileRequest>, UpdateFileRequestValidator>(); 

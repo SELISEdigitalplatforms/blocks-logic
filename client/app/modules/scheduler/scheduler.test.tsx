@@ -8,6 +8,10 @@ import { ScheduleDetails } from "./pages/schedule-details";
 import { ScheduleFormPage } from "./pages/schedule-form-page";
 import { scheduleService } from "./services/schedule.service";
 import { ISchedule, ScheduleKind, ScheduleTriggerType } from "./types/schedule.service.type";
+import { format } from "date-fns";
+import { formatDate, parseDateString } from "@/lib/utils";
+import { toIsoOrNull } from "./components/schedule-form-dialog/utils";
+import { localDate } from "./utils/execution-date-range";
 
 vi.mock("@monaco-editor/react", () => ({
   default: ({ value, onChange }: { value?: string; onChange?: (val: string) => void }) => (
@@ -150,8 +154,13 @@ describe("Scheduler Feature", () => {
       expect(screen.getByText("Bearer token123")).toBeTruthy();
     });
 
-    it("switches to Executions tab and displays Coming Soon state", async () => {
+    it("switches to Executions tab and loads the execution history", async () => {
       const user = userEvent.setup();
+      const getExecutions = vi.spyOn(scheduleService, "getScheduleExecutions").mockResolvedValue({
+        isSuccess: true,
+        data: [],
+        totalCount: 0,
+      });
       renderWithProviders(
         <MemoryRouter initialEntries={["/schedule/sched-1"]}>
           <Routes>
@@ -164,11 +173,16 @@ describe("Scheduler Feature", () => {
         expect(screen.getByRole("heading", { name: "Daily Report" })).toBeTruthy();
       });
 
+      expect(getExecutions).not.toHaveBeenCalled();
       const executionsTab = screen.getByRole("tab", { name: /executions/i });
       await user.click(executionsTab);
 
-      expect(screen.getByText("Execution History Coming Soon")).toBeTruthy();
-      expect(screen.getByText(/detailed execution logs, delivery attempts/i)).toBeTruthy();
+      expect(await screen.findByText("No executions yet")).toBeTruthy();
+      expect(screen.queryByText("Execution History Coming Soon")).toBeNull();
+      expect(getExecutions).toHaveBeenCalledTimes(1);
+      expect(getExecutions).toHaveBeenCalledWith(
+        expect.objectContaining({ scheduleId: "sched-1", pageNumber: 0, pageSize: 10 }),
+      );
     });
 
     it("opens delete confirmation modal when Delete button is clicked", async () => {
@@ -190,6 +204,119 @@ describe("Scheduler Feature", () => {
 
       expect(screen.getByText("Delete Schedule")).toBeTruthy();
       expect(screen.getByText("Are you sure you want to delete this schedule?")).toBeTruthy();
+    });
+  });
+
+  describe("Time zone (SPEC6)", () => {
+    const dhakaSchedule: ISchedule = {
+      ...mockSchedule,
+      timeZone: "Asia/Dhaka",
+      startDate: "2026-10-31T18:00:00.000Z",
+      endDate: null,
+      nextRunAtUtc: "2026-10-27T03:00:00Z",
+    };
+
+    beforeEach(() => {
+      vi.spyOn(scheduleService, "previewScheduleRuns").mockResolvedValue({
+        isSuccess: true,
+        data: { occurrencesUtc: [] },
+      });
+    });
+
+    const renderEdit = (schedule: ISchedule) =>
+      renderWithProviders(
+        <MemoryRouter>
+          <ScheduleForm mode="edit" schedule={schedule} />
+        </MemoryRouter>,
+      );
+
+    it("defaults a new schedule to UTC with the UTC helper text", () => {
+      renderWithProviders(
+        <MemoryRouter>
+          <ScheduleForm mode="create" />
+        </MemoryRouter>,
+      );
+      expect(screen.getByRole("combobox", { name: "Timezone" }).textContent).toContain("UTC (UTC+00:00)");
+      expect(screen.getByText("Evaluated in UTC. Daylight-saving changes follow this timezone.")).toBeTruthy();
+    });
+
+    it("saves an unchanged UTC schedule exactly as before: null zone, same date strings", async () => {
+      const update = vi.spyOn(scheduleService, "updateSchedule").mockResolvedValue({ isSuccess: true, itemId: "sched-1" });
+      renderEdit(mockSchedule);
+
+      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+      await waitFor(() => expect(update).toHaveBeenCalled());
+      expect(update.mock.calls[0][0]).toMatchObject({
+        timeZone: null,
+        startDate: toIsoOrNull(format(parseDateString(mockSchedule.startDate ?? ""), "yyyy-MM-dd")),
+        endDate: toIsoOrNull(format(parseDateString(mockSchedule.endDate ?? ""), "yyyy-MM-dd")),
+      });
+    });
+
+    it("saves a Dhaka schedule with its zone and Dhaka-midnight dates", async () => {
+      const update = vi.spyOn(scheduleService, "updateSchedule").mockResolvedValue({ isSuccess: true, itemId: "sched-1" });
+      renderEdit(dhakaSchedule);
+
+      expect(screen.getByRole("combobox", { name: "Timezone" }).textContent).toContain("Asia/Dhaka (UTC+06:00)");
+      expect(screen.getByText("Evaluated in Asia/Dhaka. Daylight-saving changes follow this timezone.")).toBeTruthy();
+      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+      await waitFor(() => expect(update).toHaveBeenCalled());
+      expect(update.mock.calls[0][0]).toMatchObject({
+        timeZone: "Asia/Dhaka",
+        startDate: "2026-10-31T18:00:00.000Z",
+        endDate: null,
+      });
+    });
+
+    it("shows a refused zone under the Timezone field and stays on the form", async () => {
+      vi.spyOn(scheduleService, "updateSchedule").mockResolvedValue({
+        isSuccess: false,
+        errors: { validation_failed: "Time zone is not recognised" },
+      });
+      const onSuccess = vi.fn();
+      renderWithProviders(
+        <MemoryRouter>
+          <ScheduleForm mode="edit" schedule={dhakaSchedule} onSuccess={onSuccess} />
+        </MemoryRouter>,
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+      expect(await screen.findByText("Time zone is not recognised")).toBeTruthy();
+      expect(onSuccess).not.toHaveBeenCalled();
+      expect((screen.getByPlaceholderText("Schedule name") as HTMLInputElement).value).toBe("Daily Report");
+    });
+
+    it("shows the zone and next run on the details page", async () => {
+      vi.spyOn(scheduleService, "getSchedules").mockResolvedValue({ data: [dhakaSchedule], totalCount: 1, errors: null });
+      renderWithProviders(
+        <MemoryRouter initialEntries={["/schedule/sched-1"]}>
+          <Routes>
+            <Route path="/schedule/:scheduleId" element={<ScheduleDetails />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(await screen.findByText("Evaluated in Asia/Dhaka")).toBeTruthy();
+      expect(screen.getByText("Next run")).toBeTruthy();
+      expect(screen.getByText("Oct 27, 2026, 09:00:00")).toBeTruthy();
+      expect(screen.getByText(formatDate(localDate("2026-11-01")))).toBeTruthy();
+    });
+
+    it("shows UTC and a dash for a UTC schedule without a next run", async () => {
+      vi.spyOn(scheduleService, "getSchedules").mockResolvedValue({ data: [mockSchedule], totalCount: 1, errors: null });
+      renderWithProviders(
+        <MemoryRouter initialEntries={["/schedule/sched-1"]}>
+          <Routes>
+            <Route path="/schedule/:scheduleId" element={<ScheduleDetails />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(await screen.findByText("Evaluated in UTC")).toBeTruthy();
+      expect(screen.getByText(formatDate(parseDateString(mockSchedule.startDate ?? "")))).toBeTruthy();
     });
   });
 

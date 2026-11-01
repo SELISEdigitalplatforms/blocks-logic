@@ -3,7 +3,7 @@ import { SheetHeader, SheetTitle } from "@/components/ui-kits/sheet/sheet";
 import { useWorkflow, useHandleExecuteStep } from "@blocks-workflow/hooks";
 import { BookOpen, Pen, Rocket, X } from "lucide-react";
 import { getNodeDefinition } from "../node-library-panel";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { showErrorToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@radix-ui/react-tooltip";
 
@@ -29,11 +29,19 @@ export const NodeInspectorHeader = ({
   const [isRenaming, setIsRenaming] = useState(false);
   const [editName, setEditName] = useState(selectedNode?.name || "");
 
-  useEffect(() => {
-    if (!isRenaming && selectedNode?.name) {
-      setEditName(selectedNode.name);
+  // Keep the draft name in sync with the node while not renaming; adjusted during render when
+  // node name / renaming state change (React's "adjust state when a prop changes" pattern).
+  const selectedNodeName = selectedNode?.name;
+  const [nameSyncedFrom, setNameSyncedFrom] = useState({ selectedNodeName, isRenaming });
+  if (
+    nameSyncedFrom.selectedNodeName !== selectedNodeName ||
+    nameSyncedFrom.isRenaming !== isRenaming
+  ) {
+    setNameSyncedFrom({ selectedNodeName, isRenaming });
+    if (!isRenaming && selectedNodeName) {
+      setEditName(selectedNodeName);
     }
-  }, [selectedNode?.name, isRenaming]);
+  }
 
   if (!selectedNode) return null;
 

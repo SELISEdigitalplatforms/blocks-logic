@@ -41,6 +41,8 @@ namespace XUnitTest.Notifications
             BlocksContext.IsTestMode = false;
         }
 
+        private static InboxViewer Viewer() => new("user-1", [], null);
+
         private static void SetContext(string userId = "user-1", bool impersonated = false) =>
             BlocksContext.SetContext(BlocksContext.Create(
                 "tenant-1", null, userId, true, null, null,
@@ -236,13 +238,13 @@ namespace XUnitTest.Notifications
         }
 
         [Fact]
-        public async Task UpdateNotificationAsReadByUserIdAsync_RunsBothTheInitialiseAndTheAddToSet()
+        public async Task MarkAllAsReadAsync_RunsBothTheInitialiseAndTheAddToSet()
         {
             SetContext();
             var col = Collection<OfflineNotification>(NotificationCollection);
             var sut = Build();
 
-            await sut.UpdateNotificationAsReadByUserIdAsync("user-1");
+            await sut.MarkAllAsReadAsync(Viewer());
 
             // One pass seeds a null ReadByUserIds to an empty list so $addToSet can apply, the
             // second adds the user. Both are required, so both are asserted.
@@ -252,13 +254,13 @@ namespace XUnitTest.Notifications
         }
 
         [Fact]
-        public async Task UpdateNotificationAsReadByUserIdAsync_MarksASingleNotification()
+        public async Task MarkAsReadAsync_MarksASingleNotification()
         {
             SetContext();
             var col = Collection<OfflineNotification>(NotificationCollection);
             var sut = Build();
 
-            await sut.UpdateNotificationAsReadByUserIdAsync("user-1", "n-1");
+            await sut.MarkAsReadAsync(Viewer(), "n-1");
 
             col.Verify(c => c.UpdateOneAsync(
                 It.IsAny<FilterDefinition<OfflineNotification>>(), It.IsAny<UpdateDefinition<OfflineNotification>>(),
@@ -275,7 +277,7 @@ namespace XUnitTest.Notifications
             ]);
             var sut = Build();
 
-            var result = await sut.GetNotificationsAsync(new GetNotificationsRequest { Page = 0, PageSize = 10 });
+            var result = await sut.GetNotificationsAsync(new GetNotificationsRequest { Page = 0, PageSize = 10 }, Viewer());
 
             result.Notifications.Should().HaveCount(2);
             result.TotalNotificationsCount.Should().Be(2);
@@ -292,27 +294,10 @@ namespace XUnitTest.Notifications
             ]);
             var sut = Build();
 
-            var result = await sut.GetNotificationsAsync(new GetNotificationsRequest { Page = 0, PageSize = 10 });
+            var result = await sut.GetNotificationsAsync(new GetNotificationsRequest { Page = 0, PageSize = 10 }, Viewer());
 
             result.Notifications.Single(n => n.Id == "n2").IsRead.Should().BeTrue();
             result.Notifications.Single(n => n.Id == "n1").IsRead.Should().BeFalse();
-        }
-
-        [Fact]
-        public async Task GetNotificationsAsync_LeavesTheReadFlagAloneForAnUnreadOnlyQuery()
-        {
-            SetContext();
-            Collection(NotificationCollection, [Notification("n1", readBy: "user-1")]);
-            var sut = Build();
-
-            var result = await sut.GetNotificationsAsync(new GetNotificationsRequest
-            {
-                Page = 0,
-                PageSize = 10,
-                IsUnreadOnly = true,
-            });
-
-            result.Notifications.Single().IsRead.Should().BeFalse("an unread-only query does not backfill the flag");
         }
 
         [Fact]
@@ -322,7 +307,7 @@ namespace XUnitTest.Notifications
             Collection<OfflineNotification>(NotificationCollection);
             var sut = Build();
 
-            var result = await sut.GetNotificationsAsync(new GetNotificationsRequest { Page = 0, PageSize = 10 });
+            var result = await sut.GetNotificationsAsync(new GetNotificationsRequest { Page = 0, PageSize = 10 }, Viewer());
 
             result.Notifications.Should().BeEmpty();
             result.TotalNotificationsCount.Should().Be(0);
@@ -335,7 +320,7 @@ namespace XUnitTest.Notifications
             _provider.Setup(p => p.GetDatabase("tenant-1")).Throws(new TimeoutException());
 
             await Assert.ThrowsAsync<TimeoutException>(() => Build().GetNotificationsAsync(
-                new GetNotificationsRequest { Page = 0, PageSize = 10 }));
+                new GetNotificationsRequest { Page = 0, PageSize = 10 }, Viewer()));
         }
     }
 }

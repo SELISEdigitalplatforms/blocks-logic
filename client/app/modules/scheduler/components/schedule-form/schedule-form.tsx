@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { type Resolver, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import Editor, { type OnMount } from "@monaco-editor/react";
@@ -33,15 +33,21 @@ import { cn, parseDateString } from "@/lib/utils";
 import { isErrorWithErrors } from "@/lib/error";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { useCreateSchedule, useUpdateSchedule } from "../../hooks/use-schedule-api";
-import { ISchedule } from "../../types/schedule.service.type";
+import { IBaseResponse, ISchedule } from "../../types/schedule.service.type";
+import { UTC } from "../../utils/timezone";
+import { TimezoneSelect } from "../timezone-select";
+import { ScheduleNextRuns } from "../schedule-next-runs";
 import {
   CRON_PRESETS,
   scheduleFormDefaultValues,
   scheduleFormSchema,
   ScheduleFormValues,
-  toIsoOrNull,
+  toFormDate,
+  toPayloadDate,
+  toPayloadTimeZone,
   WEBHOOK_METHODS,
   webhookHeadersToArray,
+  timeZoneErrorFrom,
   webhookHeadersToRecord,
 } from "../schedule-form-dialog/utils";
 
@@ -132,16 +138,22 @@ export const ScheduleForm = ({
 
   const form = useForm<ScheduleFormValues>({
     defaultValues: scheduleFormDefaultValues,
-    resolver: zodResolver(scheduleFormSchema),
+    // Typed as @hookform/resolvers 3 inferred it; v5 infers separate input/output types.
+    resolver: zodResolver(scheduleFormSchema) as Resolver<ScheduleFormValues>,
   });
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "webhook.headers",
   });
+  const [watchedCron, watchedTimeZone, watchedStartDate, watchedEndDate] = useWatch({
+    control: form.control,
+    name: ["cronExpression", "timeZone", "startDate", "endDate"],
+  });
 
   useEffect(() => {
     if (isEdit && schedule) {
+      const timeZone = schedule.timeZone ?? UTC;
       form.reset({
         name: schedule.name ?? "",
         description: schedule.description ?? "",
@@ -153,10 +165,9 @@ export const ScheduleForm = ({
         },
         cronExpression: schedule.cronExpression,
         payload: schedule.payload,
-        startDate: schedule.startDate
-          ? format(parseDateString(schedule.startDate), "yyyy-MM-dd")
-          : "",
-        endDate: schedule.endDate ? format(parseDateString(schedule.endDate), "yyyy-MM-dd") : "",
+        startDate: toFormDate(schedule.startDate, timeZone),
+        endDate: toFormDate(schedule.endDate, timeZone),
+        timeZone,
         isActive: schedule.isActive,
       });
     } else if (!isEdit) {
@@ -185,14 +196,22 @@ export const ScheduleForm = ({
       description: values.description || null,
       payload: values.payload,
       cronExpression: values.cronExpression,
-      startDate: toIsoOrNull(values.startDate),
-      endDate: toIsoOrNull(values.endDate),
+      startDate: toPayloadDate(values.startDate, values.timeZone),
+      endDate: toPayloadDate(values.endDate, values.timeZone),
+      timeZone: toPayloadTimeZone(values.timeZone),
       webhook: {
         url: values.webhook.url,
         method: values.webhook.method,
         headers: webhookHeadersToRecord(values.webhook.headers),
         signingSecret: values.webhook.signingSecret || null,
       },
+    };
+
+    // A refused zone is also shown under its field; the values stay and nothing navigates.
+    const reportFailure = (res: IBaseResponse) => {
+      const zoneError = timeZoneErrorFrom(res.errors);
+      if (zoneError) form.setError("timeZone", { message: zoneError });
+      return showErrorToast({ errors: res.errors });
     };
 
     try {
@@ -203,14 +222,14 @@ export const ScheduleForm = ({
           isActive: values.isActive,
         });
 
-        if (!res.isSuccess) return showErrorToast({ errors: res.errors });
+        if (!res.isSuccess) return reportFailure(res);
         showSuccessToast({
           description: "Schedule updated successfully.",
         });
         onSuccess?.(schedule.itemId);
       } else {
         const res = await createMutation.mutateAsync(basePayload);
-        if (!res.isSuccess) return showErrorToast({ errors: res.errors });
+        if (!res.isSuccess) return reportFailure(res);
         showSuccessToast({
           description: "Schedule successfully created.",
         });
@@ -378,12 +397,33 @@ export const ScheduleForm = ({
                           </button>
                         ))}
                       </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="timeZone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Timezone</FormLabel>
+                      <FormControl>
+                        <TimezoneSelect value={field.value} onChange={field.onChange} />
+                      </FormControl>
                       <p className="text-xs text-muted-foreground">
-                        Evaluated in UTC time.
+                        Evaluated in {field.value}. Daylight-saving changes follow this timezone.
                       </p>
                       <FormMessage />
                     </FormItem>
                   )}
+                />
+
+                <ScheduleNextRuns
+                  cronExpression={watchedCron}
+                  timeZone={watchedTimeZone}
+                  startDate={watchedStartDate}
+                  endDate={watchedEndDate}
                 />
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

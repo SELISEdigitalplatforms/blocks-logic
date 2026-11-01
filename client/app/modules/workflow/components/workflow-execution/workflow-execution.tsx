@@ -19,13 +19,13 @@ export const WorkflowExecutions = () => {
   const prevHeightRef = useRef(0);
   const prevTopRef = useRef(0);
   const lastPrependRef = useRef(0);
-  const seenWorkflowRef = useRef(workflowId);
+  const [seenWorkflow, setSeenWorkflow] = useState(workflowId);
 
   const { rows, hasMore, isLoading, isLoadingMore, loadMore, prependCount } =
     useWorkflowExecutionHistory(workflowId || "");
 
-  if (seenWorkflowRef.current !== workflowId) {
-    seenWorkflowRef.current = workflowId;
+  if (seenWorkflow !== workflowId) {
+    setSeenWorkflow(workflowId);
     setSelectedExecution(undefined);
   }
 

@@ -49,7 +49,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
         key: "collectionName_composite",
         required: true,
         searchable: true,
-        options: (_data, config) => {
+        options: (_data, _config) => {
           return dataService
             .getSchemaList({
               pageNo: 1,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
@@ -21,7 +21,7 @@ const Harness = ({
     resolver: zodResolver(proxyFormSchema) as never,
     mode: "onChange",
   });
-  const value = form.watch("requestsPerMinute");
+  const value = useWatch({ control: form.control, name: "requestsPerMinute" });
   return (
     <Form {...form}>
       <ProxyRateLimitCard control={form.control} />

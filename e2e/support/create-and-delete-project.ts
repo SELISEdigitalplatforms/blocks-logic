@@ -8,24 +8,43 @@ const ENV_BUTTON =
 const isVisibleNow = async (locator: { isVisible: (opts: { timeout: number }) => Promise<boolean> }) =>
   locator.isVisible({ timeout: 500 }).catch(() => false)
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
-/** Match e2e-created names: `Test Project 123` and `${PROJECT_NAME} 123`. */
-function orphanProjectPatterns(): RegExp[] {
+/** Prefixes of e2e-created names: `Test Project 123` and `${PROJECT_NAME} 123`. */
+function orphanProjectPrefixes(): string[] {
   const prefixes = new Set(["Test Project"])
   const configured = process.env.PROJECT_NAME?.trim()
   if (configured) prefixes.add(configured)
-  return [...prefixes].map((prefix) => new RegExp(`${escapeRegExp(prefix)} \\d+`, "g"))
+  return [...prefixes]
+}
+
+const isAsciiDigit = (ch: string) => ch >= "0" && ch <= "9"
+
+/**
+ * Every non-overlapping `<prefix> <digits>` in `text`, scanning left to right (the same matches a global
+ * `/<escaped prefix> \d+/g` gives) — a plain string scan, so the configured prefix is never compiled as a pattern.
+ */
+function findNumberedNames(text: string, prefix: string): string[] {
+  const needle = `${prefix} `
+  const found: string[] = []
+  let at = text.indexOf(needle)
+  while (at !== -1) {
+    let end = at + needle.length
+    while (end < text.length && isAsciiDigit(text[end])) end++
+    if (end > at + needle.length) {
+      found.push(text.slice(at, end))
+      at = text.indexOf(needle, end)
+    } else {
+      at = text.indexOf(needle, at + 1)
+    }
+  }
+  return found
 }
 
 async function listOrphanProjectNames(page: Page): Promise<string[]> {
   const bodyText = await page.locator("body").innerText().catch(() => "")
   const names = new Set<string>()
-  for (const pattern of orphanProjectPatterns()) {
-    for (const match of bodyText.matchAll(pattern)) {
-      names.add(match[0])
+  for (const prefix of orphanProjectPrefixes()) {
+    for (const name of findNumberedNames(bodyText, prefix)) {
+      names.add(name)
     }
   }
   return [...names]
@@ -74,14 +93,19 @@ async function waitForProjectCard(page: Page, projectName: string, host: "logic"
   for (let attempt = 0; attempt < 6; attempt++) {
     await ensureConsole(page, host)
 
+    // The console renders skeleton cards until the project list query
+    // resolves; wait for the named card itself instead of an instant
+    // isVisible() check followed by a fixed sleep.
     const card = namedProjectCard(page, projectName)
-    if (await card.isVisible({ timeout: 1_500 }).catch(() => false)) {
+    try {
+      await expect(card).toBeVisible({ timeout: 10_000 })
       return card
+    } catch {
+      // Not rendered yet; reload and try again.
     }
 
     if (attempt < 5) {
       await page.reload({ waitUntil: "domcontentloaded" })
-      await page.waitForTimeout(500)
     }
   }
 
@@ -182,6 +206,12 @@ export async function openNamedProjectDashboard(
     const envButton = card.getByRole("button", { name: ENV_BUTTON }).first()
     await expect(envButton).toBeVisible({ timeout: 10_000 })
     await envButton.click({ force: true })
+    // The env chip navigates client-side; until it does, the console heading
+    // is still on screen and waitForLogicDashboardReady would read it as a
+    // bounce back to the console.
+    await page
+      .waitForURL((url) => !/\/app\/console\/?$/i.test(url.pathname), { timeout: 15_000 })
+      .catch(() => undefined)
 
     try {
       await waitForLogicDashboardReady(page, projectName)
@@ -412,7 +442,7 @@ export async function deleteCreatedProject(
       }
       return deleted
     } catch (error) {
-      console.warn(`[e2e] Failed to delete project "${projectName}" on OS:`, error)
+      console.warn('[e2e] Failed to delete project "%s" on OS:', projectName, error)
       return false
     }
   })

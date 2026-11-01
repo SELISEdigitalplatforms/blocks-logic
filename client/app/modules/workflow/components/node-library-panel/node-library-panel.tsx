@@ -120,6 +120,9 @@ export const NodeLibraryPanel = ({
       deselectHandle();
       closeNodeLibraryPanel();
     },
+    // selectedHandle is deliberately left out (unchanged from before): adding it changes which
+    // handle value this callback reads, i.e. behavior. Tracked separately as a possible stale read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [addNode, closeNodeLibraryPanel, nodes, selectedNode, createEdge, selectNode, deselectAllEdges, getNodeNextSource, deselectHandle],
   );
   return (

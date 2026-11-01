@@ -56,7 +56,6 @@ import { NodeSchemasDefinition } from "./node-schemas";
 import { NodeSchemaTriggerWebhookV1 } from "./node-schema-trigger-webhook-v1";
 import { NodeSchemaTriggerEmailV1 } from "./node-schema-trigger-email-v1";
 import { NodeSchemaTriggerDataGatewayV1 } from "./node-schema-trigger-dataGateway-v1";
-import { NodeSchemaTriggerScheduleV1 } from "./node-schema-trigger-schedule-v1";
 import { NodeSchemaActionAiAgentV1 } from "./node-schema-action-aiAgent-v1";
 import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
 import { NodeSchemaActionHttpRequestV1 } from "./node-schema-action-httpRequest-v1";
@@ -116,8 +115,11 @@ describe("NodeSchemasDefinition registry", () => {
       const v2Key = `${v1Key.slice(0, -2)}v2`;
       expect(NodeSchemasDefinition[v2Key]).toBe(NodeSchemasDefinition[v1Key]);
     }
-    // 13 v1 keys, their 13 v2 aliases, logicswitchv2, transformsplitOutv2 and transformmergev2 (new types start at v2 with no v1).
-    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(29);
+    // 13 v1 keys, their 13 v2 aliases, logicswitchv2, transformsplitOutv2, transformmergev2, triggerblocksEventv2
+    // and transformlimitv2 (new types start at v2 with no v1).
+    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(31);
+    expect(NodeSchemasDefinition.triggerblocksEventv1).toBeUndefined();
+    expect(NodeSchemasDefinition.transformlimitv1).toBeUndefined();
     expect(NodeSchemasDefinition.transformmergev1).toBeUndefined();
     expect(NodeSchemasDefinition.transformsplitOutv1).toBeUndefined();
     expect(NodeSchemasDefinition.logicswitchv1).toBeUndefined();
@@ -1083,6 +1085,36 @@ describe("transform/splitOut v2 (SPEC2)", () => {
     expect(field.dependsOn).toEqual({ key: "include", value: "selectedOtherFields" });
     expect(field.defaultValue).toEqual([]);
     expect(field.placeholder).toBe("e.g. email, name");
+  });
+});
+
+describe("transform/limit v2 (SPEC10)", () => {
+  const schema = NodeSchemasDefinition.transformlimitv2;
+
+  it("H3: defaults to Max Items 1 and Keep first, with no settings", () => {
+    expect(schema.schema).toMatchObject({ type: "limit", category: "transform", version: "v2" });
+    expect(schema.defaults).toEqual({ parameters: { maxItems: 1, keep: "first" }, settings: {} });
+    expect(schema.schema.settings).toEqual([]);
+    expect(schema.guide).toBeDefined();
+  });
+
+  it("H3/C8: Max Items is a required whole-number field from 1, with no info text", () => {
+    const field = schema.schema.parameters.find((f) => f.key === "maxItems")!;
+    expect(field).toMatchObject({ type: "number", label: "Max Items", required: true, min: 1, max: 2147483647, step: 1, wholeNumber: true, defaultValue: 1 });
+    expect(field.info).toBeUndefined();
+    // Saved on blur or Enter, so the field can be cleared and retyped without snapping back to the default 1.
+    expect(field.commitOn).toBe("blur");
+  });
+
+  it("H4: Keep offers exactly First Items and Last Items, saved as first and last", () => {
+    const field = schema.schema.parameters.find((f) => f.key === "keep")!;
+    expect(field).toMatchObject({ type: "select", label: "Keep", defaultValue: "first" });
+    expect(field.info).toBeUndefined();
+    expect(field.options).toEqual([
+      { value: "first", label: "First Items" },
+      { value: "last", label: "Last Items" },
+    ]);
+    expect(schema.schema.parameters.map((f) => f.key)).toEqual(["maxItems", "keep"]);
   });
 });
 

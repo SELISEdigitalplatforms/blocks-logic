@@ -1,13 +1,12 @@
-using System.Linq.Expressions;
 using DomainService.Notification;
 using DomainService.Shared;
 using FluentAssertions;
 using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.Extensions.Logging;
+using MongoDB.Driver;
 using Moq;
 using XUnitTest.TestHelpers;
-using IConfigurationRepository = DomainService.Configuration.Services.IConfigurationRepository;
 using Blocks.Genesis.Entities.Logic;
 using Blocks.Genesis.Entities.Os;
 
@@ -24,6 +23,7 @@ namespace XUnitTest.Notification
         private const string UserId = "user-unread";
 
         private readonly Mock<INotificationRepository> _repository = new();
+        private readonly Mock<INotificationUserRepository> _users = new();
         private readonly NotificationService _sut;
 
         public NotificationServiceUnreadQueriesTests()
@@ -32,20 +32,15 @@ namespace XUnitTest.Notification
             subscriptionValidator
                 .Setup(v => v.ValidateAsync(It.IsAny<Subscription>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new ValidationResult());
-            var notifyValidator = new Mock<IValidator<NotifyRequest>>();
-            notifyValidator
-                .Setup(v => v.ValidateAsync(It.IsAny<NotifyRequest>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new ValidationResult());
 
             TestBlocksContext.Set("tenant-unread", UserId);
+            _users.Setup(u => u.GetOrganizationIdsAsync(UserId)).ReturnsAsync([]);
 
             _sut = new NotificationService(
                 _repository.Object,
                 subscriptionValidator.Object,
-                notifyValidator.Object,
-                Mock.Of<ILogger<NotificationService>>(),
-                Mock.Of<INotifierServiceFactory>(),
-                Mock.Of<IConfigurationRepository>());
+                _users.Object,
+                Mock.Of<ILogger<NotificationService>>());
         }
 
         public void Dispose()
@@ -55,8 +50,7 @@ namespace XUnitTest.Notification
         }
 
         private void SetupNotifications(params OfflineNotification[] notifications) =>
-            _repository.Setup(r => r.GetItemsAsync<OfflineNotification>(
-                    It.IsAny<Expression<Func<OfflineNotification, bool>>>(), It.IsAny<string>()))
+            _repository.Setup(r => r.GetInboxItemsAsync(It.IsAny<FilterDefinition<OfflineNotification>>()))
                 .ReturnsAsync(notifications.ToList());
 
         private static OfflineNotification Notification(
@@ -98,8 +92,7 @@ namespace XUnitTest.Notification
                 Request(OfflineNotificationOrder.CreatedTime, "orders"));
 
             result.Select(n => n.Id).Should().Equal("n-new", "n-middle", "n-old");
-            _repository.Verify(r => r.GetItemsAsync<OfflineNotification>(
-                It.IsAny<Expression<Func<OfflineNotification, bool>>>(), It.IsAny<string>()), Times.Once);
+            _repository.Verify(r => r.GetInboxItemsAsync(It.IsAny<FilterDefinition<OfflineNotification>>()), Times.Once);
         }
 
         [Fact]
@@ -142,8 +135,7 @@ namespace XUnitTest.Notification
                 Request(OfflineNotificationOrder.CreatedTime, null));
 
             result.Should().BeEmpty("without a filter there is nothing to select on");
-            _repository.Verify(r => r.GetItemsAsync<OfflineNotification>(
-                It.IsAny<Expression<Func<OfflineNotification, bool>>>(), It.IsAny<string>()), Times.Never);
+            _repository.Verify(r => r.GetInboxItemsAsync(It.IsAny<FilterDefinition<OfflineNotification>>()), Times.Never);
         }
 
         [Fact]
@@ -185,34 +177,33 @@ namespace XUnitTest.Notification
             });
 
             result.Should().BeEmpty();
-            _repository.Verify(r => r.GetItemsAsync<OfflineNotification>(
-                It.IsAny<Expression<Func<OfflineNotification, bool>>>(), It.IsAny<string>()), Times.Never);
+            _repository.Verify(r => r.GetInboxItemsAsync(It.IsAny<FilterDefinition<OfflineNotification>>()), Times.Never);
         }
 
         [Fact]
         public async Task MarkAllNotificationAsRead_ReportsTheFailureInsteadOfThrowing()
         {
-            _repository.Setup(r => r.UpdateNotificationAsReadByUserIdAsync(It.IsAny<string>()))
+            _repository.Setup(r => r.MarkAllAsReadAsync(It.IsAny<InboxViewer>()))
                        .ThrowsAsync(new InvalidOperationException("mongo down"));
 
             var result = await _sut.MarkAllNotificationAsRead();
 
             result.IsSuccess.Should().BeFalse();
             result.Errors.Should().ContainKey("Exception");
-            result.Errors["Exception"].Should().Contain("mongo down");
+            result.Errors["Exception"].Should().NotContain("mongo down", "a driver message can carry ids");
         }
 
         [Fact]
         public async Task MarkNotificationAsRead_ReportsTheFailureInsteadOfThrowing()
         {
-            _repository.Setup(r => r.UpdateNotificationAsReadByUserIdAsync(It.IsAny<string>(), It.IsAny<string>()))
+            _repository.Setup(r => r.MarkAsReadAsync(It.IsAny<InboxViewer>(), It.IsAny<string>()))
                        .ThrowsAsync(new InvalidOperationException("mongo down"));
 
             var result = await _sut.MarkNotificationAsRead(new MarkNotificationAsReadRequest { Id = "n-1" });
 
             result.IsSuccess.Should().BeFalse();
             result.Errors.Should().ContainKey("Exception");
-            result.Errors["Exception"].Should().Contain("mongo down");
+            result.Errors["Exception"].Should().NotContain("mongo down", "a driver message can carry ids");
         }
     }
 }

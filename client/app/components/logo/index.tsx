@@ -6,11 +6,7 @@ interface LogoProps {
   className?: string;
 }
 
-import { useTheme } from "@seliseblocks/genesis-os/hooks";
-
 export function Logo({ src, alt, width, height, className }: LogoProps) {
-  const { resolvedTheme } = useTheme();
-
   if (src) {
     return <img src={src} alt={alt ?? "SELISE Logo"} width={width} height={height} className={className} />;
   }

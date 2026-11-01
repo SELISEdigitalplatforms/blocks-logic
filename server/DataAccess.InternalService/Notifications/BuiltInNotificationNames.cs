@@ -8,7 +8,6 @@ public static class BuiltInNotificationNames
     public const string FunctionBuildFinished = "logic-function-build-finished";
     public const string FunctionRunFailed = "logic-function-run-failed";
     public const string MailSendFailed = "logic-mail-send-failed";
-    public const string MailboxSyncFailing = "logic-mailbox-sync-failing";
     public const string ScheduleRegistrationFailed = "logic-schedule-registration-failed";
     public const string FunctionChangedByOther = "logic-function-changed-by-other";
 }

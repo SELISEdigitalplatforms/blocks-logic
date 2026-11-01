@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui-kits/tabs/tabs";
 import { Button } from "@/components/ui-kits/button/button";
 import {
-  ScrollText,
   Save,
   Loader2,
   AlertCircle,
@@ -66,7 +65,7 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
   // Workflows whose legacy client credential fields were already saved away, so a refetch never repeats it.
   const migratedWorkflowIds = useRef(new Set<string>());
 
-  const { data, isLoading, isFetched, isFetching, isFetchedAfterMount, refetch } =
+  const { data, isLoading, isFetched, isFetchedAfterMount, refetch } =
     useGetWorkflowById({ id: workflowId });
   const { data: lastExecutionData, isFetched: isLastExecutionFetched } =
     useGetLastSuccessfulExecution({ workflowId });
@@ -103,6 +102,9 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
         navigate(scoped("/app/workflow"));
       }
     }
+    // `scoped` is deliberately not a dependency (unchanged from before): a new scoped-path function
+    // would re-run this effect and re-apply the fetched workflow to the store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, isFetched, isFetchedAfterMount, setWorkflow, navigate, workflowStore, updateWorkflow]);
 
   const { isSaving, saveNow } = useAutoSaveWorkflow({
@@ -117,9 +119,14 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
   const showDirtyBanner =
     !isLoading && isFetchedAfterMount && data?.data?.isDirty && !isDirtyBannerDismissed;
 
-  useEffect(() => {
+  // Re-show the dirty banner when the workflow or its dirty flag changes; adjusted during render
+  // (React's "adjust state when a prop changes" pattern).
+  const isDirty = data?.data?.isDirty;
+  const [bannerResetFrom, setBannerResetFrom] = useState({ workflowId, isDirty });
+  if (bannerResetFrom.workflowId !== workflowId || bannerResetFrom.isDirty !== isDirty) {
+    setBannerResetFrom({ workflowId, isDirty });
     setIsDirtyBannerDismissed(false);
-  }, [workflowId, data?.data?.isDirty]);
+  }
 
   const workflowName = data?.data?.name || "";
   return (

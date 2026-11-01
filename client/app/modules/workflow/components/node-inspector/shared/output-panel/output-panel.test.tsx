@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { OutputPanel } from "./output-panel";
+import { NodeExecutionStatus } from "@blocks-workflow/utils/workflow-execution-editor.util";
 
 const toasts = vi.hoisted(() => ({
   showErrorToast: vi.fn(),
@@ -373,6 +374,41 @@ describe("OutputPanel", () => {
       renderWithProviders(<OutputPanel />, {
         seedWorkflow: seedSplitOutRun({ fields: [{ fieldName: "lines", outputFieldName: "" }] }, [{ lines: [1] }], 1, { pinData: [{ a: 1 }] }),
       });
+      expect(screen.queryByText(/items? in →/)).toBeNull();
+    });
+  });
+
+  describe("Limit run summary", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seedLimitRun = (inputCount: number, outputCount: number, extra: Record<string, unknown> = {}, status = 2) => (store: any) => {
+      const n = node({ type: "limit", category: "transform", version: "v2", parameters: { maxItems: 2, keep: "first" }, ...extra });
+      store.getState().addNode(n);
+      store.setState({
+        selectedNode: n,
+        editorMode: "run",
+        executedNodes: [{ id: "ne1", nodeId: "n1", runIndex: 0, status, input: [], output: [], inputItemCount: inputCount, outputItemCount: outputCount }],
+        executedItems: Array.from({ length: outputCount }, (_, i) => ({ nodeId: "n1", itemIndex: i, branch: "source", data: { Output: { id: i + 1 } } })),
+      });
+    };
+
+    it("shows how many items went in and how many were kept", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedLimitRun(5, 2) });
+      expect(screen.getByText("5 items in → 2 items out")).toBeTruthy();
+    });
+
+    it("uses the singular for one item", () => {
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedLimitRun(1, 1) });
+      expect(screen.getByText("1 item in → 1 item out")).toBeTruthy();
+    });
+
+    it("is not shown before a run, with pinned data, or after a failed run", () => {
+      const { unmount } = renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ type: "limit", parameters: { maxItems: 2, keep: "first" } }) });
+      expect(screen.queryByText(/items? in →/)).toBeNull();
+      unmount();
+      const pinned = renderWithProviders(<OutputPanel />, { seedWorkflow: seedLimitRun(5, 2, { pinData: [{ a: 1 }] }) });
+      expect(screen.queryByText(/items? in →/)).toBeNull();
+      pinned.unmount();
+      renderWithProviders(<OutputPanel />, { seedWorkflow: seedLimitRun(5, 0, {}, NodeExecutionStatus.Failed) });
       expect(screen.queryByText(/items? in →/)).toBeNull();
     });
   });

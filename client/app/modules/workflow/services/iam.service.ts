@@ -2,16 +2,15 @@
 import { serviceInstances } from "@/lib/http-client";
 import { getRuntimeEnv } from "@seliseblocks/genesis-os";
 import { getLogicBaseUrl } from "@/lib/logic-base-url";
-import { IClientConfigResponse, IGetOrganizationsResponse, IGetPermissionsResponse, IGetRolesResponse } from "../models/iam";
-import { AUTH_CLIENT_ENDPOINTS, IAM_AUTHORIZATION_ENDPOINTS } from "../constants/iam.endpoint.constant";
 import {
+  IClientConfigResponse,
   IGetOrganizationsPayload,
+  IGetOrganizationsResponse,
   IGetPermissionsPayload,
-  IGetRolesPayload,
-  IOrganization,
-  IPermission,
-  IRole,
+  IGetPermissionsResponse,
+  IGetRolesResponse,
 } from "../models/iam";
+import { AUTH_CLIENT_ENDPOINTS, IAM_AUTHORIZATION_ENDPOINTS } from "../constants/iam.endpoint.constant";
 
 export class AuthClientsService {
   private readonly IamHttpClient = serviceInstances.iamService;

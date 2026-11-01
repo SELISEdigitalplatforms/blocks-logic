@@ -29,6 +29,7 @@ namespace Workflow.DomainService.Repositories
             var projection = Builders<ClientCredential>.Projection
                 .Include(c => c.ItemId)
                 .Include(c => c.ClientSecret)
+                .Include(c => c.ClientSecretReference)
                 .Include(c => c.IsActive);
 
             return await collection.Find(filter).Project<ClientCredential>(projection).FirstOrDefaultAsync();

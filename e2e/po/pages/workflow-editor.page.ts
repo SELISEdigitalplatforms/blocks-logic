@@ -6,7 +6,7 @@ import { e2eBaseUrl } from "../../support/env";
  *
  * Three tabs: Editor (default) / Executions / Versions. The Editor view
  * contains:
- *   - Header: status badge (Published/Unpublished) + last-saved label
+ *   - Header: publish-status button (Published/Publish) + last-saved label
  *   - Yellow "dirty" banner when there are unadapted changes
  *   - "Save" button (disabled unless dirty)
  *   - "Add first step" CTA when the canvas is empty
@@ -47,11 +47,14 @@ export class WorkflowEditorPage {
 
   // ---- Editor view content -------------------------------------------------
 
-  /** Either "Published" or "Unpublished" badge visible. */
+  /**
+   * Publish status in the Editor header. Since e06dc579 the separate
+   * Published/Unpublished text badge is gone; the split publish action's main
+   * button carries the status instead: "Published" (green dot) when published
+   * and clean, "Publish" otherwise.
+   */
   get statusBadge(): Locator {
-    return this.page
-      .getByText("Published", { exact: true })
-      .or(this.page.getByText("Unpublished", { exact: true }));
+    return this.page.getByRole("button", { name: /^(Published|Publish)$/ }).first();
   }
 
   /** "Last saved: …" label or "Not saved yet" placeholder. */

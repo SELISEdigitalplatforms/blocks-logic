@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useScopedPath } from "@seliseblocks/genesis-os";
 import {
@@ -27,7 +27,6 @@ import {
   TableRow,
 } from "@/components/ui-kits/table/table";
 import { Badge } from "@/components/ui-kits/badge/badge";
-import { Switch } from "@/components/ui-kits/switch/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,9 +35,6 @@ import {
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { Button } from "@/components/ui-kits/button/button";
 import { cn, formatDate, parseDateString } from "@/lib/utils";
-import { isErrorWithErrors } from "@/lib/error";
-import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
-import { useUpdateSchedule } from "../../hooks/use-schedule-api";
 import { ISchedule, ScheduleKind } from "../../types/schedule.service.type";
 import { DeleteScheduleDialog } from "../delete-schedule";
 
@@ -111,35 +107,6 @@ export const ScheduleList = ({
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const [modal, setModal] = useState<ModalState>({ type: null, schedule: null });
-  const { mutateAsync: updateScheduleAsync, isPending: isUpdating } =
-    useUpdateSchedule();
-
-  const handleToggleActive = useCallback(
-    async (schedule: ISchedule, next: boolean) => {
-      try {
-        const res = await updateScheduleAsync({
-          itemId: schedule.itemId,
-          name: schedule.name ?? "Schedule",
-          description: schedule.description ?? null,
-          payload: schedule.payload,
-          cronExpression: schedule.cronExpression,
-          startDate: schedule.startDate ?? null,
-          endDate: schedule.endDate ?? null,
-          isActive: next,
-          webhook: schedule.webhook,
-        });
-        if (!res.isSuccess) return showErrorToast({ errors: res.errors });
-        showSuccessToast({
-          description: next ? "Schedule activated." : "Schedule deactivated.",
-        });
-      } catch (error) {
-        if (isErrorWithErrors(error))
-          return showErrorToast({ errors: error.errors });
-        return showErrorToast({ errors: "Failed to update schedule" });
-      }
-    },
-    [updateScheduleAsync],
-  );
 
   const columns: ColumnDef<ISchedule>[] = [
     {
@@ -270,6 +237,9 @@ export const ScheduleList = ({
     },
   ];
 
+  // TanStack Table returns non-memoizable functions; the React compiler skips this component
+  // either way and there is no compatible alternative API.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: schedules || [],
     columns,

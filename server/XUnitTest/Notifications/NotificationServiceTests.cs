@@ -23,10 +23,7 @@ namespace XUnitTest.Notifications
     {
         private readonly Mock<INotificationRepository> _repo = new();
         private readonly Mock<IValidator<Subscription>> _subscriptionValidator = new();
-        private readonly Mock<IValidator<NotifyRequest>> _notifyValidator = new();
-        private readonly Mock<INotifierServiceFactory> _notifierFactory = new();
-        private readonly Mock<IConfigurationRepository> _configRepo = new();
-        private readonly Mock<INotifier> _notifier = new();
+        private readonly Mock<INotificationUserRepository> _users = new();
         private readonly NotificationService _sut;
 
         public NotificationServiceTests()
@@ -34,25 +31,15 @@ namespace XUnitTest.Notifications
             _subscriptionValidator
                 .Setup(v => v.ValidateAsync(It.IsAny<Subscription>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new ValidationResult());
-            _notifyValidator
-                .Setup(v => v.ValidateAsync(It.IsAny<NotifyRequest>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new ValidationResult());
-            _notifierFactory
-                .Setup(f => f.GetNotifierServiceProvider(It.IsAny<NotifierTypes>()))
-                .Returns(_notifier.Object);
-            _configRepo
-                .Setup(c => c.GetByNameAsync(It.IsAny<string>()))
-                .ReturnsAsync(new NotificationConfiguration { Name = "cfg", ChannelToNotify = NotifierTypes.SignalR });
+            _users.Setup(u => u.GetOrganizationIdsAsync(It.IsAny<string>())).ReturnsAsync(["org-1"]);
 
             BlocksContext.IsTestMode = true;
 
             _sut = new NotificationService(
                 _repo.Object,
                 _subscriptionValidator.Object,
-                _notifyValidator.Object,
-                NullLogger<NotificationService>.Instance,
-                _notifierFactory.Object,
-                _configRepo.Object);
+                _users.Object,
+                NullLogger<NotificationService>.Instance);
         }
 
         public void Dispose()
@@ -148,45 +135,6 @@ namespace XUnitTest.Notifications
         }
 
         [Fact]
-        public async Task NotifyAsync_ResolvesTheConfigurationAndHandsOffToItsProvider()
-        {
-            var request = new NotifyRequest { ConfigurationName = "welcome-email", ConnectionId = "conn-1" };
-
-            var result = await _sut.NotifyAsync(request);
-
-            result.IsSuccess.Should().BeTrue();
-            _configRepo.Verify(c => c.GetByNameAsync("welcome-email"), Times.Once);
-            _notifierFactory.Verify(f => f.GetNotifierServiceProvider(NotifierTypes.SignalR), Times.Once);
-            _notifier.Verify(n => n.Notify(request, It.IsAny<NotificationConfiguration>()), Times.Once);
-        }
-
-        [Fact]
-        public async Task NotifyAsync_AnswersAnUnknownConfigurationInsteadOfThrowing()
-        {
-            _configRepo.Setup(c => c.GetByNameAsync("missing")).ReturnsAsync((NotificationConfiguration)null!);
-
-            var result = await _sut.NotifyAsync(new NotifyRequest { ConfigurationName = "missing", ConnectionId = "conn-1" });
-
-            result.IsSuccess.Should().BeFalse();
-            result.Errors.Should().ContainKey("ConfigurationName");
-            _notifier.Verify(n => n.Notify(It.IsAny<NotifyRequest>(), It.IsAny<NotificationConfiguration>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task NotifyAsync_ReturnsTheValidationErrorsWithoutNotifying()
-        {
-            _notifyValidator
-                .Setup(v => v.ValidateAsync(It.IsAny<NotifyRequest>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(Invalid("ConfigurationName", "ConfigurationName is required"));
-
-            var result = await _sut.NotifyAsync(new NotifyRequest());
-
-            result.IsSuccess.Should().BeFalse();
-            result.Errors.Should().ContainKey("ConfigurationName");
-            _notifier.Verify(n => n.Notify(It.IsAny<NotifyRequest>(), It.IsAny<NotificationConfiguration>()), Times.Never);
-        }
-
-        [Fact]
         public async Task RemoveCollectionAsync_DropsBothTheConnectionAndItsSubscriptions()
         {
             await _sut.RemoveCollectionAsync("conn-1");
@@ -242,7 +190,7 @@ namespace XUnitTest.Notifications
             var result = await _sut.MarkAllNotificationAsRead();
 
             result.Should().NotBeNull();
-            _repo.Verify(r => r.UpdateNotificationAsReadByUserIdAsync("user-9"), Times.Once);
+            _repo.Verify(r => r.MarkAllAsReadAsync(It.Is<InboxViewer>(v => v.UserId == "user-9" && v.OrganizationIds.Contains("org-1"))), Times.Once);
         }
 
         [Fact]
@@ -253,20 +201,46 @@ namespace XUnitTest.Notifications
             var result = await _sut.MarkNotificationAsRead(new MarkNotificationAsReadRequest { Id = "n-1" });
 
             result.Should().NotBeNull();
-            _repo.Verify(r => r.UpdateNotificationAsReadByUserIdAsync("user-9", "n-1"), Times.Once);
+            _repo.Verify(r => r.MarkAsReadAsync(It.Is<InboxViewer>(v => v.UserId == "user-9"), "n-1"), Times.Once);
         }
 
         [Fact]
-        public async Task GetNotificationsAsync_PassesTheRequestThroughToTheRepository()
+        public async Task GetNotificationsAsync_ReadsAsTheTokenUserWithTheirOrganizations()
         {
+            SetUser("user-9");
             var request = new GetNotificationsRequest();
-            _repo.Setup(r => r.GetNotificationsAsync(request))
+            _repo.Setup(r => r.GetNotificationsAsync(request, It.IsAny<InboxViewer>()))
                  .ReturnsAsync(new GetNotificationsResponse());
 
             var result = await _sut.GetNotificationsAsync(request);
 
             result.Should().NotBeNull();
-            _repo.Verify(r => r.GetNotificationsAsync(request), Times.Once);
+            _repo.Verify(r => r.GetNotificationsAsync(request,
+                It.Is<InboxViewer>(v => v.UserId == "user-9" && v.OrganizationIds.Contains("org-1") && v.ProjectTenantId == null)), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetNotificationsAsync_WithoutAUser_IsRefused_NeverEveryRowWithoutAUser()
+        {
+            var act = () => _sut.GetNotificationsAsync(new GetNotificationsRequest());
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+            _repo.Verify(r => r.GetNotificationsAsync(It.IsAny<GetNotificationsRequest>(), It.IsAny<InboxViewer>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task GetNotificationsAsync_ImpersonatedRootUser_ReadsOnlyTheProjectTheyWorkIn()
+        {
+            BlocksContext.SetContext(BlocksContext.Create(
+                "project-1", null, "root-user", true, null, null,
+                DateTime.UtcNow.AddHours(1), null, null, null, null, null, null, "", "root", true));
+            _repo.Setup(r => r.GetNotificationsAsync(It.IsAny<GetNotificationsRequest>(), It.IsAny<InboxViewer>()))
+                 .ReturnsAsync(new GetNotificationsResponse());
+
+            await _sut.GetNotificationsAsync(new GetNotificationsRequest());
+
+            _repo.Verify(r => r.GetNotificationsAsync(It.IsAny<GetNotificationsRequest>(),
+                It.Is<InboxViewer>(v => v.UserId == "root-user" && v.ProjectTenantId == "project-1")), Times.Once);
         }
     }
 }

@@ -49,7 +49,26 @@ namespace DomainService.Configuration.Services
             var collection = ResolveNotificationDb().GetCollection<NotificationConfiguration>(_collectionName);
 
             var filter = Builders<NotificationConfiguration>.Filter.Eq(mc => mc.Name, name);
-            return await (await collection.FindAsync(filter)).FirstOrDefaultAsync();
+            var fromCollection = await (await collection.FindAsync(filter)).FirstOrDefaultAsync();
+            if (fromCollection is not null || blocksContext.Impersonated)
+            {
+                return fromCollection!;
+            }
+
+            return (await RootBuiltInAsync(name))!;
+        }
+
+        /// <summary>
+        /// The root tenant's row, used only when it is a built-in: Console built-ins are kept in root only, but Blocks
+        /// services still send them with a project's key (genesis reads them the same way). A root custom config never
+        /// leaks out.
+        /// </summary>
+        private async Task<NotificationConfiguration?> RootBuiltInAsync(string? name)
+        {
+            var fromRoot = await _keyValueStore.GetAsync<NotificationConfiguration>(
+                NotificationKeyPrefix + (name ?? "").Trim(),
+                impersonated: false);
+            return fromRoot is { IsBuiltIn: true } ? fromRoot : null;
         }
 
         public async Task<NotificationConfiguration> GetByIdAsync(string id)

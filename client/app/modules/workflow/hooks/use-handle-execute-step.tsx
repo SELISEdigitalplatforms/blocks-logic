@@ -103,7 +103,7 @@ export const useHandleExecuteStep = () => {
         }
         setNextExecutionId(stepResp.itemId);
       }
-    } catch (e) {
+    } catch {
       showErrorToast({ title: "Error", errors: "Failed to execute step" });
     }
   };

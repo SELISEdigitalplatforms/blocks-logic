@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -20,7 +19,6 @@ using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using XUnitTest.TestHelpers;
 using Blocks.Genesis.Entities.Logic;
-using Blocks.Genesis.Entities.Os;
 
 namespace XUnitTest.Security
 {
@@ -49,7 +47,7 @@ namespace XUnitTest.Security
                    .Returns(() => new HttpClient(new EchoHandler(HttpStatusCode.Unauthorized, body), disposeHandler: false));
             var logger = new CapturingLogger<ClientCredentialTokenService>();
             var sut = new ClientCredentialTokenService(logger, factory.Object, new ConfigurationBuilder().Build(),
-                Mock.Of<IClientCredentialRepository>());
+                Mock.Of<IClientCredentialRepository>(), XUnitTest.Links.ClientCredentialTokenServiceTests.SecretScopes());
 
             var token = await sut.GetTokenAsync(new ClientCredential { ItemId = "client-1", ClientSecret = Secret }, "tenant-1");
 
@@ -74,12 +72,12 @@ namespace XUnitTest.Security
         public async Task Notifier_logs_the_request_shape_never_its_values()
         {
             var logger = new CapturingLogger<NotifierController>();
-            var service = new Mock<INotificationService>();
+            var service = new Mock<INotifyService>();
             service.Setup(s => s.NotifyAsync(It.IsAny<NotifyRequest>())).ReturnsAsync(new BaseResponse { IsSuccess = true });
             var guard = new Mock<INotifierSendGuard>();
             guard.Setup(g => g.IsAllowedAsync(It.IsAny<string?>(), It.IsAny<Func<Task<NotifierCallerToken>>>(), It.IsAny<string>()))
                  .ReturnsAsync(true);
-            var controller = new NotifierController(service.Object, guard.Object,
+            var controller = new NotifierController(Mock.Of<INotificationService>(), service.Object, guard.Object,
                 Mock.Of<BlocksTemplate.Api.Security.INotifierSendPermission>(), logger)
             {
                 ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
@@ -102,35 +100,6 @@ namespace XUnitTest.Security
             logger.All.Should().NotContain(Secret).And.Contain("cfg");
         }
 
-        // ----- Firebase: logging the response object logged the request's "key=<server key>" ---------
-
-        private sealed class OkHandler : HttpMessageHandler
-        {
-            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-                Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}"), RequestMessage = request });
-        }
-
-        [Fact]
-        public async Task Firebase_never_logs_the_server_key_or_the_payload()
-        {
-            var logger = new CapturingLogger<FirebaseNotificationServiceProvider>();
-            var repository = new Mock<INotificationRepository>();
-            repository.Setup(r => r.GetItemAsync(It.IsAny<Expression<Func<FirebaseConfiguration, bool>>>(), It.IsAny<string>()))
-                      .ReturnsAsync(new FirebaseConfiguration { AuthorizationKey = "server-key-" + Secret });
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?> { ["FirebaseUri"] = "https://firebase.test/send" })
-                .Build();
-            using var http = new HttpClient(new OkHandler());
-            var sut = new FirebaseNotificationServiceProvider(logger, repository.Object, configuration, http);
-
-            await sut.Notify(
-                new NotifyRequest { ConfigurationName = "cfg", UserIds = ["user-1"], DenormalizedPayload = $"{{\"otp\":\"{Secret}\"}}" },
-                new NotificationConfiguration { Name = "cfg", ChannelToNotify = NotifierTypes.Firebase });
-
-            logger.Lines.Should().NotBeEmpty();
-            logger.All.Should().NotContain(Secret);
-        }
-
         // ----- WorkflowService.CreateAsync logged the whole entity, node ClientSecret included --------
 
         [Fact]
@@ -141,7 +110,7 @@ namespace XUnitTest.Security
             {
                 var logger = new CapturingLogger<WorkflowService>();
                 var sut = new WorkflowService(Mock.Of<IWorkflowRepository>(), Mock.Of<IWorkflowVersionRepository>(),
-                    Mock.Of<IScheduleService>(), logger);
+                    Mock.Of<IScheduleService>(), logger, Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>());
                 // The marker rides in a node field: the point is that no node content reaches the log at all.
                 var nodes = new List<NodeDto>
                 {

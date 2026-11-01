@@ -12,6 +12,7 @@ using MongoDB.Bson;
 using Newtonsoft.Json;
 using Scheduler.DomainService.Dtos.Requests;
 using Scheduler.DomainService.Services;
+using Workflow.DomainService.BlocksEvents;
 using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
@@ -19,15 +20,21 @@ namespace Workflow.DomainService.Services
     [ExcludeFromCodeCoverage]
     public class WorkflowService : IWorkflowService
     {
+        private const string MessageKey = "Message";
+        private const string WorkflowNotFoundMessage = "Workflow not found";
+        private const string SomethingWentWrongMessage = "Something went wrong";
+
         private readonly IWorkflowRepository _workflowRepository;
         private readonly IWorkflowVersionRepository _workflowVersionRepository;
         private readonly IScheduleService _scheduleService;
         private readonly ILogger<WorkflowService> _logger;
+        private readonly IBlocksEventCatalogService _blocksEventCatalog;
 
 
 
-        public WorkflowService(IWorkflowRepository workflowRepository, IWorkflowVersionRepository workflowVersionRepository, IScheduleService scheduleService, ILogger<WorkflowService> logger)
+        public WorkflowService(IWorkflowRepository workflowRepository, IWorkflowVersionRepository workflowVersionRepository, IScheduleService scheduleService, ILogger<WorkflowService> logger, IBlocksEventCatalogService blocksEventCatalog)
         {
+            _blocksEventCatalog = blocksEventCatalog;
             _workflowRepository = workflowRepository;
             _workflowVersionRepository = workflowVersionRepository;
             _scheduleService = scheduleService;
@@ -44,7 +51,7 @@ namespace Workflow.DomainService.Services
             {
                 IsSuccess = false,
                 ItemId = null,
-                Errors = new Dictionary<string, string> { { "Message", $"Project key is not found {tenantId}" } }
+                Errors = new Dictionary<string, string> { { MessageKey, $"Project key is not found {tenantId}" } }
             };
         }
 
@@ -58,7 +65,7 @@ namespace Workflow.DomainService.Services
             {
                 IsSuccess = false,
                 ItemId = null,
-                Errors = new Dictionary<string, string> { { "Message", ex.Message } }
+                Errors = new Dictionary<string, string> { { MessageKey, ex.Message } }
             };
         }
 
@@ -72,7 +79,7 @@ namespace Workflow.DomainService.Services
             {
                 IsSuccess = false,
                 ItemId = null,
-                Errors = new Dictionary<string, string> { { "Message", ex.Message } }
+                Errors = new Dictionary<string, string> { { MessageKey, ex.Message } }
             };
         }
 
@@ -123,7 +130,7 @@ namespace Workflow.DomainService.Services
                     {
                         IsSuccess = false,
                         ItemId = null,
-                        Errors = result.Errors ?? new Dictionary<string, string> { { "Message", "Failed to delete workflow schedules" } }
+                        Errors = result.Errors ?? new Dictionary<string, string> { { MessageKey, "Failed to delete workflow schedules" } }
                     };
                 }
             }
@@ -134,7 +141,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     ItemId = null,
-                    Errors = new Dictionary<string, string> { { "Message", "Failed to delete workflow schedules" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, "Failed to delete workflow schedules" } }
                 };
             }
 
@@ -162,7 +169,7 @@ namespace Workflow.DomainService.Services
                     {
                         IsSuccess = false,
                         ItemId = null,
-                        Errors = new Dictionary<string, string> { { "Message", $"Schedule trigger node {node.Id} has no cron expression" } }
+                        Errors = new Dictionary<string, string> { { MessageKey, $"Schedule trigger node {node.Id} has no cron expression" } }
                     });
                 }
 
@@ -183,7 +190,7 @@ namespace Workflow.DomainService.Services
                         {
                             IsSuccess = false,
                             ItemId = null,
-                            Errors = result.Errors ?? new Dictionary<string, string> { { "Message", "Failed to create workflow schedule" } }
+                            Errors = result.Errors ?? new Dictionary<string, string> { { MessageKey, "Failed to create workflow schedule" } }
                         });
                     }
 
@@ -196,7 +203,7 @@ namespace Workflow.DomainService.Services
                     {
                         IsSuccess = false,
                         ItemId = null,
-                        Errors = new Dictionary<string, string> { { "Message", "Failed to create workflow schedule" } }
+                        Errors = new Dictionary<string, string> { { MessageKey, "Failed to create workflow schedule" } }
                     });
                 }
             }
@@ -208,9 +215,39 @@ namespace Workflow.DomainService.Services
         /// Creates deep-copied snapshots of the trigger nodes so PublishedMeta
         /// never aliases (or mutates) the live workflow nodes.
         /// </summary>
+        /// <summary>
+        /// A Blocks Event trigger may only be published for an event enabled for workflows in the tenant's
+        /// catalog; otherwise the published workflow would silently never run. Null when every one is fine.
+        /// </summary>
+        private async Task<BaseMutationResponse?> ValidateBlocksEventTriggersAsync(string tenantId, IEnumerable<NodeEntity> nodes)
+        {
+            var eventNames = nodes
+                .Where(n => n.Category == LogicConstants.TriggerCategory && n.Type == LogicConstants.BlocksEventNodeType)
+                .Select(n => n.Parameters != null && n.Parameters.TryGetValue("eventName", out var value) && value.IsString
+                    ? value.AsString.Trim()
+                    : string.Empty)
+                .Distinct();
+
+            foreach (var eventName in eventNames)
+            {
+                if (eventName.Length > 0 && await _blocksEventCatalog.IsEnabledForWorkflowAsync(tenantId, eventName))
+                    continue;
+
+                _logger.LogWarning("Publish rejected: Blocks Event '{EventName}' is not enabled for workflows", eventName);
+                return new BaseMutationResponse
+                {
+                    IsSuccess = false,
+                    ItemId = null,
+                    Errors = new Dictionary<string, string> { { MessageKey, $"Event '{eventName}' is not enabled for workflows" } }
+                };
+            }
+
+            return null;
+        }
+
         private static List<NodeEntity> CloneTriggerNodes(IEnumerable<NodeEntity> nodes)
         {
-            return nodes.Where(n => n.Category == "trigger").Select(n => new NodeEntity
+            return nodes.Where(n => n.Category == LogicConstants.TriggerCategory).Select(n => new NodeEntity
             {
                 Id = n.Id,
                 Name = n.Name,
@@ -296,7 +333,7 @@ namespace Workflow.DomainService.Services
                     return new BaseMutationResponse
                     {
                         IsSuccess = false,
-                        Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                        Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                         ItemId = null
                     };
                 }
@@ -337,7 +374,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Something went wrong" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, SomethingWentWrongMessage } },
                     ItemId = null
                 };
             }
@@ -389,7 +426,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     data = null,
-                    Errors = new Dictionary<string, string> { { "Message", $"Project key is not found {tenantId}" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, $"Project key is not found {tenantId}" } }
                 };
             }
             catch (Exception ex)
@@ -398,7 +435,7 @@ namespace Workflow.DomainService.Services
                 return new WorkflowGetResponseDto
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Something went wrong" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, SomethingWentWrongMessage } },
                     data = null
                 };
             }
@@ -409,7 +446,7 @@ namespace Workflow.DomainService.Services
                 return new WorkflowGetResponseDto
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                     data = null
                 };
             }
@@ -491,7 +528,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     ItemId = null,
-                    Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } }
                 };
             }
 
@@ -539,7 +576,7 @@ namespace Workflow.DomainService.Services
                     return new BaseMutationResponse
                     {
                         IsSuccess = false,
-                        Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } }
+                        Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } }
                     };
                 }
                 // Scheduler orchestration: best-effort cleanup — the workflow is being removed,
@@ -568,7 +605,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     ItemId = null,
-                    Errors = new Dictionary<string, string> { { "Message", "Something went wrong" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, SomethingWentWrongMessage } }
                 };
             }
         }
@@ -584,7 +621,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                     ItemId = null
                 };
             }
@@ -602,6 +639,13 @@ namespace Workflow.DomainService.Services
                 CreatedBy = BlocksContext.GetContext().UserId ?? "system",
                 LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system",
             };
+
+            // Before anything changes: a rejected publish leaves the workflow and its schedules untouched.
+            var blocksEventError = await ValidateBlocksEventTriggersAsync(tenantId, workflow.Nodes);
+            if (blocksEventError != null)
+            {
+                return blocksEventError;
+            }
 
             // Scheduler orchestration: delete schedules from the previous publish (if any)
             // before flipping publish state; failure leaves the workflow untouched.
@@ -633,7 +677,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     ItemId = null,
-                    Errors = new Dictionary<string, string> { { "Message", "Workflow publish failed" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, "Workflow publish failed" } }
                 };
             }
             try
@@ -666,7 +710,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     ItemId = null,
-                    Errors = new Dictionary<string, string> { { "Message", "Workflow publish failed" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, "Workflow publish failed" } }
                 };
             }
 
@@ -682,7 +726,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                     ItemId = null
                 };
             }
@@ -695,7 +739,7 @@ namespace Workflow.DomainService.Services
                     return new BaseMutationResponse
                     {
                         IsSuccess = false,
-                        Errors = new Dictionary<string, string> { { "Message", "No version to publish" } },
+                        Errors = new Dictionary<string, string> { { MessageKey, "No version to publish" } },
                         ItemId = null
                     };
                 }
@@ -709,9 +753,16 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Version not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, "Version not found" } },
                     ItemId = null
                 };
+            }
+
+            // Before anything changes: a rejected publish leaves the workflow and its schedules untouched.
+            var blocksEventError = await ValidateBlocksEventTriggersAsync(tenantId, version.Snapshot.Nodes);
+            if (blocksEventError != null)
+            {
+                return blocksEventError;
             }
 
             // Scheduler orchestration: delete schedules from the previous publish (if any)
@@ -756,7 +807,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                     ItemId = null
                 };
             }
@@ -767,7 +818,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Version to restore not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, "Version to restore not found" } },
                     ItemId = null
                 };
             }
@@ -804,7 +855,7 @@ namespace Workflow.DomainService.Services
                     return new BaseMutationResponse
                     {
                         IsSuccess = false,
-                        Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                        Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                         ItemId = null
                     };
                 }
@@ -843,7 +894,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     ItemId = null,
-                    Errors = new Dictionary<string, string> { { "Message", "Something went wrong" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, SomethingWentWrongMessage } }
                 };
             }
         }
@@ -858,7 +909,7 @@ namespace Workflow.DomainService.Services
                 {
                     IsSuccess = false,
                     data = null,
-                    Errors = new Dictionary<string, string> { { "Message", "Version not found" } }
+                    Errors = new Dictionary<string, string> { { MessageKey, "Version not found" } }
                 };
             }
             var snapShot = version.Snapshot;
@@ -907,7 +958,7 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Workflow not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, WorkflowNotFoundMessage } },
                     ItemId = null
                 };
             }
@@ -927,17 +978,17 @@ namespace Workflow.DomainService.Services
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "TriggerId is required when enabling listener" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, "TriggerId is required when enabling listener" } },
                     ItemId = null
                 };
             }
-            var triggerNode = workflow.Nodes.FirstOrDefault(n => n.Id == dto.TriggerId && n.Category == "trigger");
+            var triggerNode = workflow.Nodes.FirstOrDefault(n => n.Id == dto.TriggerId && n.Category == LogicConstants.TriggerCategory);
             if (triggerNode == null)
             {
                 return new BaseMutationResponse
                 {
                     IsSuccess = false,
-                    Errors = new Dictionary<string, string> { { "Message", "Trigger node not found" } },
+                    Errors = new Dictionary<string, string> { { MessageKey, "Trigger node not found" } },
                     ItemId = null
                 };
             }
@@ -949,7 +1000,7 @@ namespace Workflow.DomainService.Services
                     return new BaseMutationResponse
                     {
                         IsSuccess = false,
-                        Errors = new Dictionary<string, string> { { "Message", "Completion node not found" } },
+                        Errors = new Dictionary<string, string> { { MessageKey, "Completion node not found" } },
                         ItemId = null
                     };
                 }
@@ -975,7 +1026,7 @@ namespace Workflow.DomainService.Services
 
         private static List<NodeEntity> GetSchedulerNodes(IEnumerable<NodeEntity> nodes)
         {
-            return nodes.Where(n => n.Category == "trigger" && n.Type == "schedule").ToList();
+            return nodes.Where(n => n.Category == LogicConstants.TriggerCategory && n.Type == "schedule").ToList();
         }
         private static List<string> GetPublishedSchedulesId(WorkflowEntity workflow)
         {

@@ -100,6 +100,78 @@ export const FileUploader = forwardRef<
       }
     }, [isFileTooBig]);
 
+    const onDrop = useCallback(
+      (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
+        const files = acceptedFiles;
+
+        if (!files) {
+          toast.error("file error , probably too big");
+          return;
+        }
+
+        const newValues: File[] = value ? [...value] : [];
+
+        if (reSelectAll) {
+          newValues.splice(0, newValues.length);
+        }
+
+        files.forEach((file) => {
+          if (newValues.length < maxFiles) {
+            newValues.push(file);
+          }
+        });
+
+        onValueChange(newValues);
+
+        if (rejectedFiles.length > 0) {
+          for (const rejectedFile of rejectedFiles) {
+            if (rejectedFile.errors[0]?.code === "file-too-large") {
+              showErrorToast({
+                errors: `File is too large. Max size is ${maxSize / 1024 / 1024}MB`
+              });
+              break;
+            }
+            if (rejectedFile.errors[0]?.code === "file-invalid-type") {
+              showErrorToast({
+                errors: "Invalid file type"
+              });
+              break;
+            }
+            if (rejectedFile.errors[0]?.message) {
+              toast.error(rejectedFile.errors[0].message);
+              showErrorToast({
+                errors: rejectedFile.errors[0].message
+              });
+              break;
+            }
+          }
+        }
+      },
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [reSelectAll, value],
+    );
+
+    // Recompute the "limit of files reached" flag whenever value/maxFiles change,
+    // during render (React's "adjust state when a prop changes" pattern) instead of
+    // in an effect. A null value keeps the previous flag, as before. The initial NaN
+    // never equals maxFiles, so the first render always computes the flag.
+    const [lofSource, setLofSource] = useState<{ value: File[] | null | undefined; maxFiles: number }>(
+      { value: undefined, maxFiles: Number.NaN },
+    );
+    if (lofSource.value !== value || lofSource.maxFiles !== maxFiles) {
+      setLofSource({ value, maxFiles });
+      if (value) setIsLOF(value.length === maxFiles);
+    }
+
+    const opts = dropzoneOptions || { accept, maxFiles, maxSize, multiple };
+
+    const dropzoneState = useDropzone({
+      ...opts,
+      onDrop,
+      // onDropRejected: () => setIsFileTooBig(true),
+      onDropAccepted: () => setIsFileTooBig(false),
+    });
+
     const handleKeyDown = useCallback(
       // eslint-disable-next-line no-undef
       (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -156,75 +228,6 @@ export const FileUploader = forwardRef<
       // eslint-disable-next-line react-hooks/exhaustive-deps
       [value, activeIndex, removeFileFromSet],
     );
-
-    const onDrop = useCallback(
-      (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
-        const files = acceptedFiles;
-
-        if (!files) {
-          toast.error("file error , probably too big");
-          return;
-        }
-
-        const newValues: File[] = value ? [...value] : [];
-
-        if (reSelectAll) {
-          newValues.splice(0, newValues.length);
-        }
-
-        files.forEach((file) => {
-          if (newValues.length < maxFiles) {
-            newValues.push(file);
-          }
-        });
-
-        onValueChange(newValues);
-
-        if (rejectedFiles.length > 0) {
-          for (let i = 0; i < rejectedFiles.length; i++) {
-            if (rejectedFiles[i].errors[0]?.code === "file-too-large") {
-              showErrorToast({
-                errors: `File is too large. Max size is ${maxSize / 1024 / 1024}MB`
-              });
-              break;
-            }
-            if (rejectedFiles[i].errors[0]?.code === "file-invalid-type") {
-              showErrorToast({
-                errors: "Invalid file type"
-              });
-              break;
-            }
-            if (rejectedFiles[i].errors[0]?.message) {
-              toast.error(rejectedFiles[i].errors[0].message);
-              showErrorToast({
-                errors: rejectedFiles[i].errors[0].message
-              });
-              break;
-            }
-          }
-        }
-      },
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      [reSelectAll, value],
-    );
-
-    useEffect(() => {
-      if (!value) return;
-      if (value.length === maxFiles) {
-        setIsLOF(true);
-        return;
-      }
-      setIsLOF(false);
-    }, [value, maxFiles]);
-
-    const opts = dropzoneOptions ? dropzoneOptions : { accept, maxFiles, maxSize, multiple };
-
-    const dropzoneState = useDropzone({
-      ...opts,
-      onDrop,
-      // onDropRejected: () => setIsFileTooBig(true),
-      onDropAccepted: () => setIsFileTooBig(false),
-    });
 
     return (
       <FileUploaderContext.Provider
@@ -346,7 +349,6 @@ export const FileInput = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
           {children}
         </div>
         <Input
-          ref={dropzoneState.inputRef}
           disabled={isLOF}
           {...dropzoneState.getInputProps()}
           className={`${isLOF ? "cursor-not-allowed" : ""}`}
