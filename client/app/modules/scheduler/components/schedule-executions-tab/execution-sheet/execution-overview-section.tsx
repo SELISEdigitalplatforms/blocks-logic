@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
 import { IScheduleExecution } from "../../../types/schedule.service.type";
-import { CopyIconButton } from "../copy-icon-button";
 import { OutcomeBadge } from "../outcome-badge";
 import { formatDuration } from "../status-label";
 import { StatusChip } from "../status-chip";
@@ -56,12 +55,6 @@ export const ExecutionOverviewSection = ({
       <Row label="Duration">{formatDuration(execution.durationMs)}</Row>
       <Row label="Schedule name">
         <ScheduleName stored={execution.scheduleName} current={currentName} />
-      </Row>
-      <Row label="Execution id">
-        <div className="flex items-center gap-1">
-          <span className="min-w-0 break-all font-mono text-xs">{execution.id}</span>
-          <CopyIconButton value={execution.id} label="Execution id" />
-        </div>
       </Row>
     </dl>
   </ExecutionSection>

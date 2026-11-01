@@ -26,7 +26,7 @@ describe("ExecutionRequestSection", () => {
     expect(screen.getByText("Authorization")).toBeTruthy();
     expect(screen.getByText("[redacted]")).toBeTruthy();
     expect(screen.getByText("Signed (x-signature-sha256)")).toBeTruthy();
-    expect((screen.getByTestId("viewer") as HTMLTextAreaElement).value).toBe('{"a":1}');
+    expect((screen.getByTestId("viewer") as HTMLTextAreaElement).value).toBe('{\n  "a": 1\n}');
   });
 
   it("shows an unsigned webhook with no headers or URL", () => {

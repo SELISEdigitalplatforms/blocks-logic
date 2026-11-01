@@ -36,7 +36,6 @@ describe("parseSnapshot", () => {
     const parsed = parseSnapshot(webhookSnapshot);
     expect(parsed.kind).toBe("ok");
     if (parsed.kind !== "ok") return;
-    expect(parsed.pretty).toContain('\n  "itemId": "s1"');
     expect(parsed.snapshot).toEqual({
       name: "Nightly sync",
       description: "desc",

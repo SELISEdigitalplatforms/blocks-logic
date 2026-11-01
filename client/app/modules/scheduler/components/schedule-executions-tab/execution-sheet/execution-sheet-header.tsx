@@ -1,9 +1,5 @@
-import { Braces } from "lucide-react";
-import { Button } from "@/components/ui-kits/button/button";
 import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui-kits/sheet/sheet";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
-import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { IScheduleExecution } from "../../../types/schedule.service.type";
 import { formatInZone } from "../../../utils/timezone";
 import { OutcomeBadge } from "../outcome-badge";
@@ -29,23 +25,6 @@ const HeaderPlaceholder = ({ loading }: Readonly<{ loading: boolean }>) => (
   </>
 );
 
-const CopyJsonButton = ({ execution }: Readonly<{ execution: IScheduleExecution }>) => {
-  const { copy, isCopying } = useCopyToClipboard();
-  const onCopy = () =>
-    copy(
-      JSON.stringify(execution, null, 2),
-      () => showSuccessToast({ description: "Execution JSON copied to clipboard." }),
-      () => showErrorToast({ errors: "Couldn't copy the execution JSON." }),
-    );
-
-  return (
-    <Button type="button" variant="outline" size="xs" className="gap-1.5" disabled={isCopying} onClick={onCopy}>
-      <Braces className="h-3.5 w-3.5" aria-hidden />
-      Copy JSON
-    </Button>
-  );
-};
-
 export const ExecutionSheetHeader = ({
   execution,
   statusLabel,
@@ -62,9 +41,6 @@ export const ExecutionSheetHeader = ({
         <div className="flex flex-wrap items-center gap-2">
           <OutcomeBadge outcome={execution.outcome} />
           <StatusChip label={statusLabel} />
-          <div className="ml-auto">
-            <CopyJsonButton execution={execution} />
-          </div>
         </div>
       </>
     ) : (
