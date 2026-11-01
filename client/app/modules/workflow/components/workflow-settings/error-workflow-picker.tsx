@@ -26,14 +26,13 @@ type Props = {
   onChange: (workflowId: string) => void;
 };
 
-/** Published workflows that contain an Error Trigger, searched by name on the server. */
+/** Workflows that contain an Error Trigger (in the published version, or in the draft if unpublished), searched by name on the server. */
 export const ErrorWorkflowPicker = ({ id, currentWorkflowId, value, onChange }: Props) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
 
   const { data: list, isLoading } = useGetWorkflows({
-    isPublished: true,
     hasErrorTrigger: true,
     excludeItemId: currentWorkflowId,
     search: debouncedSearch ? escapeRegex(debouncedSearch) : undefined,

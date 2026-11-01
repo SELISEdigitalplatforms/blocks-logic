@@ -54,11 +54,12 @@ describe("WorkflowSettings", () => {
     expect(screen.getByRole("combobox").textContent).toContain("Ops alerts");
   });
 
-  it("H4: the picker asks for published workflows with an Error Trigger, without this one", () => {
+  it("H4: the picker asks for all workflows with an Error Trigger, without this one", () => {
     renderModal({ alert: { isEnabled: true, mode: WorkflowAlertMode.Workflow, workflowId: null } });
     expect(api.getWorkflows).toHaveBeenCalledWith(
-      expect.objectContaining({ isPublished: true, hasErrorTrigger: true, excludeItemId: "wf-a", pageSize: 50 }),
+      expect.objectContaining({ hasErrorTrigger: true, excludeItemId: "wf-a", pageSize: 50 }),
     );
+    expect(vi.mocked(api.getWorkflows).mock.calls[0][0]).not.toHaveProperty("isPublished");
   });
 
   it("H5: turning the alert on, choosing a workflow and saving sends the alert", async () => {
