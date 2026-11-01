@@ -35,19 +35,22 @@ export const readImportFile = async (file: File): Promise<IFunctionExportFile> =
   try {
     parsed = JSON.parse(await file.text());
   } catch {
-    throw new Error("This file is not valid JSON.");
+    throw new Error(tStatic("logic.functions", "TRANSFER.THIS_FILE_IS_NOT_VALID_JSON"));
   }
   const head =
     parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as { format?: unknown; schemaVersion?: unknown })
       : null;
   if (head?.format === "blocks.proxy.export") {
-    throw new Error("This is a proxy export, not a function export.");
+    throw new Error(tStatic("logic.functions", "TRANSFER.THIS_IS_A_PROXY_EXPORT"));
   }
-  if (head?.format !== EXPORT_FORMAT) throw new Error("This is not a function export file.");
+  if (head?.format !== EXPORT_FORMAT) throw new Error(tStatic("logic.functions", "TRANSFER.THIS_IS_NOT_A_FUNCTION_EXPORT"));
   if (head.schemaVersion !== EXPORT_SCHEMA_VERSION) {
     throw new Error(
-      `This export uses schema version ${String(head.schemaVersion ?? "(none)")}, but this environment reads version ${EXPORT_SCHEMA_VERSION}. Export the function again and import the new file.`,
+      tStatic("logic.functions", "TRANSFER.SCHEMA_VERSION_MISMATCH", {
+        found: String(head.schemaVersion ?? "(none)"),
+        expected: EXPORT_SCHEMA_VERSION,
+      }),
     );
   }
   return parsed as IFunctionExportFile;
