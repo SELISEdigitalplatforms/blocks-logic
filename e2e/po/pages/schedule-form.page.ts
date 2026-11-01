@@ -255,7 +255,10 @@ export class ScheduleFormPage {
   async selectTimezone(search: string, zoneId: string): Promise<void> {
     await this.timezoneTrigger.click();
     await this.page.getByPlaceholder("Search timezone…").fill(search);
-    await this.page.getByRole("option", { name: new RegExp(`^${zoneId.replace("/", "\\/")}UTC`) }).click();
+    // The option reads "<zone id> UTC±hh:mm" (with or without a space before UTC), so match on text, not a RegExp built from input.
+    const option = this.page.getByRole("option").filter({ hasText: zoneId }).filter({ hasText: "UTC" });
+    await expect(option).toHaveCount(1);
+    await option.click();
     await expect(this.timezoneTrigger).toContainText(zoneId);
   }
 
