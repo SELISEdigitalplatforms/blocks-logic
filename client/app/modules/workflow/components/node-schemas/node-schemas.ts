@@ -17,6 +17,7 @@ import { NodeSchemaLogicSwitchV2 } from "./node-schema-logic-switch-v2";
 import { NodeSchemaLogicFilterV2 } from "./node-schema-logic-filter-v2";
 import { NodeSchemaTransformSplitOutV2 } from "./node-schema-transform-splitOut-v2";
 import { NodeSchemaTransformMergeV2 } from "./node-schema-transform-merge-v2";
+import { NodeSchemaActionNotification } from "./node-schema-action-notification";
 import { NodeSchemaTransformLimitV2 } from "./node-schema-transform-limit-v2";
 
 const V1_SCHEMAS: Record<string, NodeSchemaDefinition> = {
@@ -49,6 +50,7 @@ export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   logicfilterv2: NodeSchemaLogicFilterV2,
   transformsplitOutv2: NodeSchemaTransformSplitOutV2,
   transformmergev2: NodeSchemaTransformMergeV2,
+  actionnotificationv2: NodeSchemaActionNotification,
   transformlimitv2: NodeSchemaTransformLimitV2,
   triggerblocksEventv2: NodeSchemaTriggerBlocksEventV2,
 };

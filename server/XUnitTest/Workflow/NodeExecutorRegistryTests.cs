@@ -17,9 +17,13 @@ namespace XUnitTest.Workflow
             public Task<NodeExecutionResult> RunAsync(NodeExecutionContext context) => Task.FromResult(NodeExecutionResult.Empty());
         }
 
+        /// <summary>Types added after SPEC6: they start at v2 and have no v1.</summary>
+        private static bool IsV2Only(INodeExecutor e) =>
+            e.NodeType is "switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit" or "notification";
+
         /// <summary>The 13 node types that existed before SPEC6; they must keep resolving exactly as before.</summary>
         private static List<INodeExecutor> ProductionExecutors() =>
-            AllProductionExecutors().Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit")).ToList();
+            AllProductionExecutors().Where(e => !IsV2Only(e)).ToList();
 
         /// <summary>Every production executor class, read without running its constructor (NodeType/Versions need no state).</summary>
         private static List<INodeExecutor> AllProductionExecutors() =>
@@ -92,7 +96,7 @@ namespace XUnitTest.Workflow
                 var act = () => registry.Resolve("switch", version);
                 act.Should().Throw<InvalidOperationException>($"version '{version}'");
             }
-            foreach (var executor in all.Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit")))
+            foreach (var executor in all.Where(e => !IsV2Only(e)))
             {
                 registry.Resolve(executor.NodeType, "v1").Executor.Should().BeSameAs(executor);
             }
@@ -107,6 +111,18 @@ namespace XUnitTest.Workflow
             var act = () => registry.Resolve("filter", "v2");
 
             act.Should().Throw<InvalidOperationException>().WithMessage("No executor for node type.");
+        }
+
+        [Fact]
+        public void Notification_ResolvesOnlyAsV2_AndNeverFallsBack()
+        {
+            var all = AllProductionExecutors();
+            var registry = new NodeExecutorRegistry(all);
+            var notification = all.Single(e => e.NodeType == "notification");
+
+            registry.Resolve("notification", "v2").Should().Be(new NodeExecutorResolution(notification, false));
+            var act = () => registry.Resolve("notification", "v1");
+            act.Should().Throw<InvalidOperationException>();
         }
 
         [Fact]

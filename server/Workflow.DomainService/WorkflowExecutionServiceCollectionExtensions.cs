@@ -10,6 +10,7 @@ using Workflow.DomainService.Nodes.ActionSendMailV1;
 using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 using Workflow.DomainService.Nodes.ActionDataV1;
 using Workflow.DomainService.Nodes.ActionProxy;
+using Workflow.DomainService.Nodes.ActionNotification;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -89,6 +90,7 @@ namespace Workflow.DomainService
             services.AddSingleton<INodeExecutor, ActionHttpRequestV1Node>();
             services.AddSingleton<INodeExecutor, ActionDataV1Node>();
             services.AddSingleton<INodeExecutor, ActionProxyNode>();
+            services.AddSingleton<INodeExecutor, ActionNotificationNode>();
 
 
             // end register node executors
