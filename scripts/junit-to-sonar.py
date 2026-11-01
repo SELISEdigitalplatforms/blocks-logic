@@ -18,7 +18,34 @@ report if any path is unknown.
 import os
 import sys
 import xml.etree.ElementTree as ET
+from xml.parsers import expat
 from xml.sax.saxutils import escape, quoteattr
+
+
+def _refuse_dtd(*_):
+    raise ValueError("junit-to-sonar: DTDs and entity declarations are not allowed in the JUnit report")
+
+
+def parse_junit(path):
+    """Parse the report with the stdlib only, refusing any DTD.
+
+    CI runs this with the runner's bare python3 (nothing is pip-installed), so
+    defusedxml is not available. A JUnit report never needs a DOCTYPE, so the
+    expat parser rejects one outright - that rules out entity expansion
+    ("billion laughs") and external entities - and builds the same element
+    tree ElementTree.parse would.
+    """
+    builder = ET.TreeBuilder()
+    parser = expat.ParserCreate()
+    parser.StartDoctypeDeclHandler = _refuse_dtd
+    parser.EntityDeclHandler = _refuse_dtd
+    parser.ExternalEntityRefHandler = _refuse_dtd
+    parser.StartElementHandler = builder.start
+    parser.EndElementHandler = builder.end
+    parser.CharacterDataHandler = builder.data
+    with open(path, "rb") as fh:
+        parser.ParseFile(fh)
+    return builder.close()
 
 
 def duration_ms(node):
@@ -35,7 +62,7 @@ def main():
     junit_path, out_path = sys.argv[1], sys.argv[2]
     prefix = sys.argv[3].strip("/") if len(sys.argv) > 3 else ""
 
-    root = ET.parse(junit_path).getroot()
+    root = parse_junit(junit_path)
     suites = root.iter("testsuite") if root.tag == "testsuites" else [root]
 
     files = {}

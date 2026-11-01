@@ -4,6 +4,10 @@ using DomainService.Configuration.Services;
 
 namespace DomainService.Configuration.Validators
 {
+    // Inside the namespace: Storage.DomainService (a package Mail.DomainService brings in) has a type of the same
+    // name in an enclosing namespace, which would win over a file-level using.
+    using IConfigurationRepository = DomainService.Configuration.Services.IConfigurationRepository;
+
     public class ConfigurationValidator : AbstractValidator<SaveConfigurationRequest>
     {
         private readonly IConfigurationRepository _configurationRepository;

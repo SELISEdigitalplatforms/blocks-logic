@@ -2,6 +2,7 @@ using DataAccess.InternalService;
 using Blocks.Extension.DependencyInjection;
 using Blocks.Extensions.DependencyInjection;
 using Blocks.Genesis;
+using Blocks.Genesis.Notifications;
 using Blocks.Secrets;
 using BlocksTemplate.Api;
 using BlocksTemplate.Api.Security;
@@ -79,10 +80,8 @@ services.RegisterBlocksEurolmServices();
 services.RegisterAllMailApplicationServices();
 services.RegisterBlocksObservabilityServices();
 services.AddWorkflowExecutionEngine();
-if (!string.IsNullOrWhiteSpace(secret.CacheConnectionString))
-{
-    services.AddSignalR().AddStackExchangeRedis(secret.CacheConnectionString);
-}
+// Genesis notifications: the publisher, its background sender, and SignalR over the Redis backplane (the hub below).
+services.AddBlocksNotifications();
 services.AddProxyServices();
 services.AddCloudConfigurationServices();
 services.AddSchedulerServices();

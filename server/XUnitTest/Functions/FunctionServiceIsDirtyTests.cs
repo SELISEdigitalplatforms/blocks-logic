@@ -61,5 +61,26 @@ namespace XUnitTest.Functions
             FunctionService.IsDirty(Function(manifest: "{\"type\":\"module\",\"dependencies\":{}}"), version)
                 .Should().BeTrue();
         }
+
+        [Fact]
+        public void List_row_without_source_is_clean_when_the_stored_hash_matches_the_active_version()
+        {
+            var deployed = Function();
+            // As the list reads it: Source projected away, SourceHash still on the document.
+            var row = new FunctionEntity { ItemId = "fn_1", SourceHash = FunctionHashing.SourceHash(deployed.Source) };
+            var version = new FunctionVersionEntity { Source = deployed.Source };
+
+            FunctionService.IsDirtyByStoredHash(row, version).Should().BeFalse();
+        }
+
+        [Fact]
+        public void List_row_is_dirty_when_the_stored_hash_differs_or_nothing_is_deployed()
+        {
+            var row = new FunctionEntity { ItemId = "fn_1", SourceHash = FunctionHashing.SourceHash(Function("edited").Source) };
+
+            FunctionService.IsDirtyByStoredHash(row, new FunctionVersionEntity { Source = Function("original").Source })
+                .Should().BeTrue();
+            FunctionService.IsDirtyByStoredHash(row, null).Should().BeTrue();
+        }
     }
 }

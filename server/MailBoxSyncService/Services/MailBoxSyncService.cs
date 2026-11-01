@@ -17,6 +17,7 @@ namespace MailBoxSyncService.Services
         private readonly IMailRepository _repository;
         private readonly IMessageClient _messageClient;
         private readonly IImapClientFactory _imapClientFactory;
+        private readonly IMailPasswordResolver _passwordResolver;
 
         /// <summary>
         /// Live IMAP sessions, keyed by tenant, configuration and provider.
@@ -36,11 +37,13 @@ namespace MailBoxSyncService.Services
             IMailRepository repository,
             IMessageClient messageClient,
             IImapClientFactory imapClientFactory,
+            IMailPasswordResolver passwordResolver,
             ILogger<MailBoxSyncService>? logger = null)
         {
             _repository = repository;
             _messageClient = messageClient;
             _imapClientFactory = imapClientFactory;
+            _passwordResolver = passwordResolver;
             _logger = logger ?? NullLogger<MailBoxSyncService>.Instance;
             _mapClientMapper = new ConcurrentDictionary<string, IImapClientWrapper>();
         }
@@ -189,7 +192,7 @@ namespace MailBoxSyncService.Services
                 CleanupClient(key, client);
             }
 
-            return await ConnectImapClientAsync(config, key, saslMechanism);
+            return await ConnectImapClientAsync(config, key, tenantId, saslMechanism);
         }
 
         /// <summary>
@@ -207,8 +210,15 @@ namespace MailBoxSyncService.Services
         private async Task<IImapClientWrapper> ConnectImapClientAsync(
             MailServerConfiguration config,
             string key,
+            string tenantId,
             SaslMechanism? saslMechanism)
         {
+            // Password auth reads its password first, once per (re)connect: a failed read then
+            // opens no connection and caches no client. A cached client is reused without a read.
+            var password = saslMechanism is null
+                ? await ResolvePasswordAsync(config, tenantId)
+                : null;
+
             var client = _imapClientFactory.Create();
 
             try
@@ -223,7 +233,7 @@ namespace MailBoxSyncService.Services
                 {
                     await client.AuthenticateAsync(
                         config.SenderUserName,
-                        config.AccountPassword);
+                        password!);
                 }
 
                 // Replacing an entry disposes whatever it displaced: a reconnect that raced
@@ -241,6 +251,43 @@ namespace MailBoxSyncService.Services
                 client.Dispose();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// The account password for one connect, kept in a local by the caller and never written
+        /// back to the record.
+        /// </summary>
+        /// <remarks>
+        /// A failed read surfaces as <see cref="MailCredentialException"/>, which carries only the
+        /// failure class and the exception type: the worker logs the exception object it catches,
+        /// and a Secret* exception's message carries the reference id.
+        /// </remarks>
+        private async Task<string?> ResolvePasswordAsync(MailServerConfiguration config, string tenantId)
+        {
+            MailPasswordResult resolved;
+            try
+            {
+                resolved = await _passwordResolver.ResolveAsync(config, tenantId);
+            }
+            catch (Exception ex)
+            {
+                // The resolver maps its own failures; anything escaping it is still reduced to a type.
+                resolved = MailPasswordResult.Failure(MailPasswordResult.Unexpected, ex.GetType().Name);
+            }
+
+            if (resolved.Succeeded)
+            {
+                return resolved.Password;
+            }
+
+            _logger.LogError(
+                "MAIL FAILED (credential): inbound configId={ConfigId} tenant={TenantId} failureClass={FailureClass} exceptionType={ExceptionType}. The account password could not be read from Blocks Secrets; no IMAP connection was attempted.",
+                config.ItemId,
+                tenantId,
+                resolved.FailureClass,
+                resolved.ExceptionType ?? MailLog.None);
+
+            throw new MailCredentialException(resolved.FailureClass!, resolved.ExceptionType);
         }
 
         private void CleanupClient(string key, IImapClientWrapper client)

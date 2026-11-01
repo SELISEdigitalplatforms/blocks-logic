@@ -14,14 +14,14 @@ public sealed record BuiltInNotificationPayload(
     IReadOnlyDictionary<string, string?>? Ids = null);
 
 /// <summary>
-/// Sends one built-in notification (a configuration seeded in every tenant) to the Notifier. Best effort:
-/// it never throws and never waits longer than the timeout, so an action can call it after its own write
+/// Sends one built-in notification (a configuration seeded in every tenant) through the genesis notification
+/// publisher. Best effort: it never throws and never waits for I/O, so an action can call it after its own write
 /// without risk.
 /// </summary>
 public interface IBuiltInNotificationSender
 {
     /// <summary>Sends to named users. <paramref name="throttleKey"/> limits repeats of the same alert.</summary>
-    /// <returns>True only when the Notifier answered success.</returns>
+    /// <returns>True when the notification was queued (not skipped or throttled).</returns>
     Task<bool> SendAsync(
         string tenantId,
         string configurationName,
@@ -30,7 +30,8 @@ public interface IBuiltInNotificationSender
         string? throttleKey = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Sends to the users who hold a tenant admin role (<c>BuiltInNotification:AdminRoles</c>).</summary>
+    /// <summary>Sends without named users: the configuration's audience decides who receives it (for example the
+    /// users with an admin permission).</summary>
     Task<bool> SendToTenantAdminsAsync(
         string tenantId,
         string configurationName,

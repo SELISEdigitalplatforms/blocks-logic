@@ -87,7 +87,7 @@ export const NodeSchemaActionHttpRequestV1: NodeSchemaDefinition = {
         key: "clientId",
         required: false,
         searchable: true,
-        options: (_data, config) => {
+        options: (_data, _config) => {
           return authClientService.clients
             .getClientCredentials()
             .then((res) =>

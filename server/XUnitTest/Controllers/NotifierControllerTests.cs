@@ -14,7 +14,8 @@ namespace XUnitTest.Controllers
 {
     public class NotifierControllerTests
     {
-        private readonly Mock<INotificationService> _service = new();
+        private readonly Mock<INotifyService> _service = new();
+        private readonly Mock<INotificationService> _inbox = new();
         private readonly Mock<INotifierSendGuard> _guard = new();
         private readonly Mock<INotifierSendPermission> _permission = new();
         private readonly NotifierController _controller;
@@ -22,7 +23,7 @@ namespace XUnitTest.Controllers
         public NotifierControllerTests()
         {
             GuardReturns(true);
-            _controller = new NotifierController(_service.Object, _guard.Object, _permission.Object,
+            _controller = new NotifierController(_inbox.Object, _service.Object, _guard.Object, _permission.Object,
                 Mock.Of<ILogger<NotifierController>>())
             {
                 ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
@@ -137,7 +138,7 @@ namespace XUnitTest.Controllers
         public async Task GetUnreadNotifications_ReturnsList()
         {
             var list = new List<OfflineNotification> { new() };
-            _service.Setup(s => s.GetUnreadNotificationsBySubscriptionFilter(
+            _inbox.Setup(s => s.GetUnreadNotificationsBySubscriptionFilter(
                 It.IsAny<GetUnreadNotificationsRequestBySubscriptionFilter>())).ReturnsAsync(list);
 
             var result = await _controller.GetUnreadNotificationsBySubscriptionFilter(
@@ -150,7 +151,7 @@ namespace XUnitTest.Controllers
         public async Task MarkAllNotificationAsRead_ReturnsResponse()
         {
             var response = new BaseResponse { IsSuccess = true };
-            _service.Setup(s => s.MarkAllNotificationAsRead()).ReturnsAsync(response);
+            _inbox.Setup(s => s.MarkAllNotificationAsRead()).ReturnsAsync(response);
 
             var result = await _controller.MarkAllNotificationAsRead();
 
@@ -161,7 +162,7 @@ namespace XUnitTest.Controllers
         public async Task MarkNotificationAsRead_ReturnsResponse()
         {
             var response = new BaseResponse { IsSuccess = true };
-            _service.Setup(s => s.MarkNotificationAsRead(It.IsAny<MarkNotificationAsReadRequest>()))
+            _inbox.Setup(s => s.MarkNotificationAsRead(It.IsAny<MarkNotificationAsReadRequest>()))
                 .ReturnsAsync(response);
 
             var result = await _controller.MarkNotificationAsRead(new MarkNotificationAsReadRequest { Id = "n1" });
@@ -173,7 +174,7 @@ namespace XUnitTest.Controllers
         public async Task GetNotifications_ReturnsResponse()
         {
             var response = new GetNotificationsResponse();
-            _service.Setup(s => s.GetNotificationsAsync(It.IsAny<GetNotificationsRequest>()))
+            _inbox.Setup(s => s.GetNotificationsAsync(It.IsAny<GetNotificationsRequest>()))
                 .ReturnsAsync(response);
 
             var result = await _controller.GetNotifications(new GetNotificationsRequest());

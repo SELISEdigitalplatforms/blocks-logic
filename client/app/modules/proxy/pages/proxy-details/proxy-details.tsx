@@ -318,7 +318,7 @@ const ProxyOverviewSkeleton = () => (
                   <Skeleton className="h-4 w-36" />
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-[max-content_1fr]">
-                  {Array.from({ length: 4 }).map((__, rowIndex) => (
+                  {Array.from({ length: 4 }).map((_cell, rowIndex) => (
                     <Skeleton
                       key={rowIndex}
                       className={cn("h-4", rowIndex % 2 === 0 ? "w-24" : "w-full")}

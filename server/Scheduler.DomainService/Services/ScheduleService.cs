@@ -15,17 +15,23 @@ namespace Scheduler.DomainService.Services
 {
     public class ScheduleService : IScheduleService
     {
+        private const string ValidationFailed = "validation_failed";
+        private const string InvalidCronMessage = "Cron expression is not valid";
+
         private readonly IScheduleRepository _scheduleRepository;
         private readonly IMessageClient _messageClient;
         private readonly ILogger<ScheduleService> _logger;
         private readonly IBuiltInNotificationSender? _builtIn;
+        private readonly TimeProvider _timeProvider;
 
         public ScheduleService(IScheduleRepository scheduleRepository,
                                IMessageClient messageClient,
                                ILogger<ScheduleService> logger,
-                               IBuiltInNotificationSender? builtInNotifications = null)
+                               IBuiltInNotificationSender? builtInNotifications = null,
+                               TimeProvider? timeProvider = null)
         {
             _builtIn = builtInNotifications;
+            _timeProvider = timeProvider ?? TimeProvider.System;
             _scheduleRepository = scheduleRepository;
             _messageClient = messageClient;
             _logger = logger;
@@ -33,13 +39,18 @@ namespace Scheduler.DomainService.Services
 
         public async Task<BaseMutationResponse> CreateScheduleAsync(CreateScheduleRequestDto request)
         {
-            var isValidCronExp = Helper.IsValidCronExpression(request.CronExpression);
+            var isValidCronExp = Helper.IsValidApplicationCronExpression(request.CronExpression);
             if (!isValidCronExp)
             {
-                return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");
+                return CreateMutationErrorResponse(ValidationFailed, InvalidCronMessage);
+            }
+            if (!ScheduleTimeZones.TryNormalize(request.TimeZone, out var timeZone))
+            {
+                return CreateMutationErrorResponse(ValidationFailed, ScheduleTimeZones.InvalidMessage);
             }
             var schedule = new Schedule
             {
+                TimeZone = timeZone,
                 ItemId = Guid.NewGuid().ToString(),
                 Name = request.Name.Trim(),
                 Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
@@ -89,10 +100,14 @@ namespace Scheduler.DomainService.Services
 
         public async Task<BaseMutationResponse> UpdateScheduleAsync(UpdateScheduleRequestDto request)
         {
-            var isValidCronExp = Helper.IsValidCronExpression(request.CronExpression);
+            var isValidCronExp = Helper.IsValidApplicationCronExpression(request.CronExpression);
             if (!isValidCronExp)
             {
-                return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");
+                return CreateMutationErrorResponse(ValidationFailed, InvalidCronMessage);
+            }
+            if (!ScheduleTimeZones.TryNormalize(request.TimeZone, out var timeZone))
+            {
+                return CreateMutationErrorResponse(ValidationFailed, ScheduleTimeZones.InvalidMessage);
             }
             var schedule = await _scheduleRepository.GetByIdAsync(request.ItemId);
             if (schedule is null)
@@ -111,6 +126,8 @@ namespace Scheduler.DomainService.Services
             schedule.CronExpression = request.CronExpression;
             schedule.StartDate = request.StartDate;
             schedule.EndDate = request.EndDate;
+            // Full replace, like every other field: omitting it stores UTC (null).
+            schedule.TimeZone = timeZone;
             schedule.IsActive = request.IsActive;
             schedule.TriggerType = ScheduleTriggerType.Webhook;
             schedule.Webhook = request.Webhook;
@@ -191,7 +208,7 @@ namespace Scheduler.DomainService.Services
         {
             if (string.IsNullOrWhiteSpace(request.WorkflowId) || string.IsNullOrWhiteSpace(request.NodeId))
             {
-                return CreateMutationErrorResponse("validation_failed", "WorkflowId and NodeId are required");
+                return CreateMutationErrorResponse(ValidationFailed, "WorkflowId and NodeId are required");
             }
 
             var tenantId = string.IsNullOrWhiteSpace(request.TenantId)
@@ -200,7 +217,7 @@ namespace Scheduler.DomainService.Services
 
             if (!Helper.IsValidCronExpression(request.CronExpression))
             {
-                return CreateMutationErrorResponse("validation_failed", "Cron expression is not valid");
+                return CreateMutationErrorResponse(ValidationFailed, InvalidCronMessage);
             }
 
             var payload = System.Text.Json.JsonSerializer.Serialize(new
@@ -398,6 +415,7 @@ namespace Scheduler.DomainService.Services
             {
                 var result = await _scheduleRepository.GetAllAsync(request.SearchKey, request.PageNumber, request.PageSize, ScheduleKind.Application);
                 _logger.LogInformation($"Schedules count {result.TotalCount}");
+                var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
                 return new GetSchedulesResponseDto
                 {
                     Data = result.Items?.Select(item => new ScheduleDto
@@ -412,8 +430,11 @@ namespace Scheduler.DomainService.Services
                         Webhook = item.Webhook,
                         StartDate = item.StartDate,
                         EndDate = item.EndDate,
-                        Payload = item.Payload
-
+                        Payload = item.Payload,
+                        TimeZone = item.TimeZone,
+                        NextRunAtUtc = item.IsActive
+                            ? ScheduleTimeZones.NextOccurrenceUtc(item.CronExpression, item.TimeZone, utcNow, item.StartDate, item.EndDate)
+                            : null,
                     }).ToList(),
                     TotalCount = result.TotalCount
                 };
@@ -428,6 +449,58 @@ namespace Scheduler.DomainService.Services
             }
 
 
+        }
+
+        private const int MaxPreviewCronLength = 100;
+
+        public Task<PreviewScheduleRunsResponseDto> PreviewScheduleRunsAsync(PreviewScheduleRunsRequestDto request)
+        {
+            static PreviewScheduleRunsResponseDto Invalid(string message) => new()
+            {
+                IsSuccess = false,
+                Errors = new Dictionary<string, string> { { ValidationFailed, message } },
+            };
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(request.CronExpression)
+                    || request.CronExpression.Length > MaxPreviewCronLength
+                    || !Helper.IsValidApplicationCronExpression(request.CronExpression))
+                {
+                    return Task.FromResult(Invalid(InvalidCronMessage));
+                }
+                if (!ScheduleTimeZones.TryNormalize(request.TimeZone, out var timeZone))
+                {
+                    return Task.FromResult(Invalid(ScheduleTimeZones.InvalidMessage));
+                }
+                if (request.Count is < 1 or > 5)
+                {
+                    return Task.FromResult(Invalid("Count must be between 1 and 5"));
+                }
+
+                var occurrences = new List<DateTime>(request.Count);
+                var from = _timeProvider.GetUtcNow().UtcDateTime;
+                while (occurrences.Count < request.Count
+                       && ScheduleTimeZones.NextOccurrenceUtc(request.CronExpression, timeZone, from, request.StartDate, request.EndDate) is { } next)
+                {
+                    occurrences.Add(next);
+                    from = next;
+                }
+
+                return Task.FromResult(new PreviewScheduleRunsResponseDto
+                {
+                    IsSuccess = true,
+                    Data = new PreviewScheduleRunsDto { OccurrencesUtc = occurrences },
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to preview schedule runs.");
+                return Task.FromResult(new PreviewScheduleRunsResponseDto
+                {
+                    Errors = new Dictionary<string, string> { { "Message", "Something went wrong" } },
+                });
+            }
         }
     }
 }

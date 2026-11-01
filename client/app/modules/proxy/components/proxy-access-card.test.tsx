@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
@@ -30,7 +30,7 @@ const Harness = ({ access = defaultProxyAccess() }: { access?: ProxyAccess }) =>
   const form = useForm<ProxyFormValues>({
     defaultValues: { ...proxyFormDefaultValues, access },
   });
-  const value = form.watch("access");
+  const value = useWatch({ control: form.control, name: "access" });
   return (
     <Form {...form}>
       <ProxyAccessCard control={form.control} />

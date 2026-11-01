@@ -22,6 +22,12 @@ namespace XUnitTest.Controllers
             Row(typeof(CertificateController), "UploadCertificate", "blocks-os::project::mutate-token-validation-params"),
             Row(typeof(NotificationController), "Gets", "blocks-os::notification::gets"),
             Row(typeof(NotificationController), "Get", "blocks-os::notification::gets"),
+            // Push runtime for admins: same permissions as the os notification configuration endpoints.
+            Row(typeof(global::Api.Controllers.NotifierPushStatusController), "GetPushStatus", "blocks-os::notification::gets"),
+            Row(typeof(global::Api.Controllers.NotifierPushTestController), "SendPushTest", "blocks-os::notification::save"),
+            Row(typeof(global::Api.Controllers.NotifierPushTestController), "SendNotificationPushTest", "blocks-os::notification::save"),
+            Row(typeof(global::Api.Controllers.NotifierDeviceAdminController), "GetAllDevices", "blocks-os::notification::gets"),
+            Row(typeof(global::Api.Controllers.NotifierDeviceAdminController), "RemoveAnyDevice", "blocks-os::notification::save"),
             Row(typeof(global::Api.Controllers.ProjectController), "Gets", "blocks-os::project::projects"),
             Row(typeof(global::Api.Controllers.ProjectController), "Get", "blocks-os::project::projects"),
             Row(typeof(global::Api.Controllers.PeopleController), "Gets", "blocks-os::people::gets"),
@@ -76,7 +82,7 @@ namespace XUnitTest.Controllers
             Row(typeof(StorageController), "GetFile", L + "storage-file::read"),
             Row(typeof(StorageController), "GetFiles", L + "storage-file::read"),
             Row(typeof(StorageController), "DeleteFile", L + "storage-file::manage"),
-            Row(typeof(MailController), "SendToAny", L + "mail::manage"),
+            Row(typeof(MailController), "SendToAny", L + "mail::send-any"),
             Row(typeof(MailController), "Send", L + "mail::manage"),
             Row(typeof(MailController), "GetMailBoxMails", L + "mail::read"),
             Row(typeof(MailController), "GetMailBoxMail", L + "mail::read"),
@@ -97,10 +103,16 @@ namespace XUnitTest.Controllers
             Row(typeof(global::Api.Controllers.NotifierController), "MarkAllNotificationAsRead", L + "notifier::manage"),
             Row(typeof(global::Api.Controllers.NotifierController), "MarkNotificationAsRead", L + "notifier::manage"),
             Row(typeof(global::Api.Controllers.NotifierController), "GetNotifications", L + "notifier::read"),
+            Row(typeof(global::Api.Controllers.NotifierDevicesController), "RegisterDevice", L + "notifier::manage"),
+            Row(typeof(global::Api.Controllers.NotifierDevicesController), "RemoveDevice", L + "notifier::manage"),
+            Row(typeof(global::Api.Controllers.NotifierPushWebConfigController), "GetPushWebConfig", L + "notifier::manage"),
             Row(typeof(SchedulerController), "CreateSchedule", L + "scheduler::manage"),
             Row(typeof(SchedulerController), "UpdateSchedule", L + "scheduler::manage"),
             Row(typeof(SchedulerController), "DeleteSchedule", L + "scheduler::manage"),
             Row(typeof(SchedulerController), "GetSchedules", L + "scheduler::read"),
+            Row(typeof(SchedulerController), "PreviewScheduleRuns", L + "scheduler::read"),
+            Row(typeof(ScheduleExecutionsController), "GetScheduleExecutions", L + "scheduler::read"),
+            Row(typeof(ScheduleExecutionsController), "GetScheduleExecution", L + "scheduler::read"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "GetAll", L + "workflow::read"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "Get", L + "workflow::read"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "Create", L + "workflow::manage"),
@@ -123,6 +135,12 @@ namespace XUnitTest.Controllers
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "ResumeExecution", L + "workflow::manage"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "GetExecutionLogs", L + "workflow::read"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "LastSuccessfullExecution", L + "workflow::read"),
+            // Blocks Event Trigger catalog (blocks-logic#375): reads need workflow read, changes need workflow manage.
+            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "GetAll", L + "workflow::read"),
+            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "GetWorkflowEvents", L + "workflow::read"),
+            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "GetUsage", L + "workflow::read"),
+            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "CanManage", L + "workflow::manage"),
+            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "Update", L + "workflow::manage"),
         };
 
         [Theory]
@@ -139,8 +157,8 @@ namespace XUnitTest.Controllers
         [Fact]
         public void NewLogicPermissionListIsComplete()
         {
-            NewLogicPermissions().Should().HaveCount(52);
-            NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(14);
+            NewLogicPermissions().Should().HaveCount(63, "the Blocks Event Trigger catalog endpoints added 2026-10-31");
+            NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(15, "mail::send-any was split from mail::manage, 2026-10-28");
         }
 
         // Open by design (data plane with its own check, or a public callback): no named permission, no [Authorize].

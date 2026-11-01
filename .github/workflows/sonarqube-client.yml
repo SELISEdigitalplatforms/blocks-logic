@@ -112,7 +112,9 @@ jobs:
         id: tests
         working-directory: ${{ inputs.WORKING_DIRECTORY }}
         continue-on-error: true
-        run: npm run ${{ inputs.TEST_COMMAND }}
+        env:
+          IN_TEST_COMMAND: ${{ inputs.TEST_COMMAND }}
+        run: npm run "${IN_TEST_COMMAND}"
 
       - name: Normalize coverage paths
         working-directory: ${{ inputs.WORKING_DIRECTORY }}
@@ -170,14 +172,20 @@ jobs:
 
       - name: Analysis summary
         if: always()
+        env:
+          TESTS_OUTCOME: ${{ steps.tests.outcome }}
+          IN_SONAR_PROJECT_KEY: ${{ inputs.SONAR_PROJECT_KEY }}
+          IN_SONARQUBE_HOST: ${{ inputs.SONARQUBE_HOST }}
+          IN_WORKING_DIRECTORY: ${{ inputs.WORKING_DIRECTORY }}
+          IN_SONAR_SOURCES: ${{ inputs.SONAR_SOURCES }}
         run: |
           {
             echo "### 🔍 SonarQube (Client)"
             echo ""
             echo "| Item | Value |"
             echo "|---|---|"
-            echo "| Project key | \`${{ inputs.SONAR_PROJECT_KEY }}\` |"
-            echo "| Host | ${{ inputs.SONARQUBE_HOST }} |"
-            echo "| Sources | \`${{ inputs.WORKING_DIRECTORY }}/${{ inputs.SONAR_SOURCES }}\` |"
-            echo "| Tests | ${{ steps.tests.outcome }} |"
+            echo "| Project key | \`${IN_SONAR_PROJECT_KEY}\` |"
+            echo "| Host | ${IN_SONARQUBE_HOST} |"
+            echo "| Sources | \`${IN_WORKING_DIRECTORY}/${IN_SONAR_SOURCES}\` |"
+            echo "| Tests | ${TESTS_OUTCOME} |"
           } >> $GITHUB_STEP_SUMMARY

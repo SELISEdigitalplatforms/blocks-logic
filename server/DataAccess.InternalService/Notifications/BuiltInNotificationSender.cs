@@ -1,21 +1,21 @@
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Blocks.Genesis;
+using Blocks.Genesis.Notifications;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace DataAccess.InternalService.Notifications;
 
 /// <inheritdoc cref="IBuiltInNotificationSender"/>
+/// <remarks>
+/// Publishes through genesis <see cref="INotificationPublisher"/>: it returns at once and never throws, and the tenant's
+/// configuration decides who receives the notification and on which channels. The named users are the users the event
+/// is about.
+/// </remarks>
 public sealed class BuiltInNotificationSender : IBuiltInNotificationSender
 {
-    /// <summary>Hard limit for one send.</summary>
-    internal static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(5);
-
-    internal const string UrlSetting = "NotificationServiceUrl";
-    internal const string AdminRolesSetting = "BuiltInNotification:AdminRoles";
     internal const string ThrottleSecondsSetting = "BuiltInNotification:ThrottleSeconds";
     internal const int DefaultThrottleSeconds = 300;
     internal const int MaxThrottleKeys = 1000;
@@ -29,34 +29,26 @@ public sealed class BuiltInNotificationSender : IBuiltInNotificationSender
 
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastSent = new();
     private readonly IConfiguration _configuration;
-    private readonly ITenants _tenants;
-    private readonly ICryptoService _crypto;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly INotificationPublisher _publisher;
     private readonly ILogger<BuiltInNotificationSender> _logger;
     private readonly TimeProvider _time;
 
     public BuiltInNotificationSender(
         IConfiguration configuration,
-        ITenants tenants,
-        ICryptoService crypto,
-        IHttpClientFactory httpClientFactory,
+        INotificationPublisher publisher,
         ILogger<BuiltInNotificationSender> logger)
-        : this(configuration, tenants, crypto, httpClientFactory, logger, TimeProvider.System)
+        : this(configuration, publisher, logger, TimeProvider.System)
     {
     }
 
     internal BuiltInNotificationSender(
         IConfiguration configuration,
-        ITenants tenants,
-        ICryptoService crypto,
-        IHttpClientFactory httpClientFactory,
+        INotificationPublisher publisher,
         ILogger<BuiltInNotificationSender> logger,
         TimeProvider time)
     {
         _configuration = configuration;
-        _tenants = tenants;
-        _crypto = crypto;
-        _httpClientFactory = httpClientFactory;
+        _publisher = publisher;
         _logger = logger;
         _time = time;
     }
@@ -76,109 +68,56 @@ public sealed class BuiltInNotificationSender : IBuiltInNotificationSender
             return Task.FromResult(false);
         }
 
-        return SendCoreAsync(tenantId, configurationName, users, [], payload, throttleKey, cancellationToken);
+        return Task.FromResult(Publish(tenantId, configurationName, users, payload, throttleKey));
     }
 
+    /// <summary>
+    /// No named user: who receives it is only the configuration's audience (for example "Selected" with an admin
+    /// permission). With "Affected users only" nobody does.
+    /// </summary>
     public Task<bool> SendToTenantAdminsAsync(
         string tenantId,
         string configurationName,
         BuiltInNotificationPayload payload,
         string? throttleKey = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(Publish(tenantId, configurationName, [], payload, throttleKey));
+
+    private bool Publish(string tenantId, string configurationName, List<string> userIds, BuiltInNotificationPayload payload, string? throttleKey)
     {
-        var roles = AdminRoles();
-        if (roles.Count == 0)
+        if (string.IsNullOrWhiteSpace(tenantId))
         {
-            _logger.LogDebug("Built-in notification {ConfigurationName} skipped (tenant {TenantId}): no admin role configured", configurationName, tenantId);
-            return Task.FromResult(false);
+            _logger.LogDebug("Built-in notification {ConfigurationName} skipped: no tenant", configurationName);
+            return false;
         }
 
-        return SendCoreAsync(tenantId, configurationName, [], roles, payload, throttleKey, cancellationToken);
+        if (IsThrottled(tenantId, configurationName, throttleKey))
+        {
+            _logger.LogDebug("Built-in notification {ConfigurationName} skipped (tenant {TenantId}): repeated within the throttle window", configurationName, tenantId);
+            return false;
+        }
+
+        _publisher.Publish(new NotificationRequest
+        {
+            Name = configurationName,
+            TenantId = tenantId,
+            NamedUserIds = userIds,
+            OrganizationId = ContextOrganization(tenantId),
+            Payload = BuildPayload(payload),
+            ResponseKey = configurationName,
+            ResponseValue = payload.IsSuccess?.ToString() ?? "Sent",
+        });
+        return true;
     }
 
-    private async Task<bool> SendCoreAsync(
-        string tenantId,
-        string configurationName,
-        List<string> userIds,
-        List<string> roles,
-        BuiltInNotificationPayload payload,
-        string? throttleKey,
-        CancellationToken cancellationToken)
+    /// <summary>The current context's organization, only when it is of the same tenant.</summary>
+    private static string? ContextOrganization(string tenantId)
     {
-        string status;
-        try
-        {
-            if (string.IsNullOrWhiteSpace(tenantId))
-            {
-                _logger.LogDebug("Built-in notification {ConfigurationName} skipped: no tenant", configurationName);
-                return false;
-            }
-
-            var url = _configuration[UrlSetting];
-            if (string.IsNullOrWhiteSpace(url))
-            {
-                _logger.LogWarning("Built-in notification {ConfigurationName} not sent (tenant {TenantId}): {Setting} is not set", configurationName, tenantId, UrlSetting);
-                return false;
-            }
-
-            var salt = _tenants.GetTenantByID(tenantId)?.TenantSalt;
-            if (string.IsNullOrWhiteSpace(salt))
-            {
-                _logger.LogWarning("Built-in notification {ConfigurationName} not sent (tenant {TenantId}): tenant salt not available", configurationName, tenantId);
-                return false;
-            }
-
-            if (IsThrottled(tenantId, configurationName, throttleKey))
-            {
-                _logger.LogDebug("Built-in notification {ConfigurationName} skipped (tenant {TenantId}): repeated within the throttle window", configurationName, tenantId);
-                return false;
-            }
-
-            var body = new
-            {
-                ConnectionId = string.Empty,
-                Roles = roles,
-                UserIds = userIds,
-                DenormalizedPayload = BuildPayload(payload),
-                SaveDenormalizedPayloadAsAnObject = false,
-                ConfigurationName = configurationName,
-                ContentAvailable = true,
-                ResponseKey = configurationName,
-                ResponseValue = payload.IsSuccess?.ToString() ?? "Sent",
-            };
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(SendTimeout);
-
-            var client = _httpClientFactory.CreateClient();
-            using var request = new HttpRequestMessage(HttpMethod.Post, url)
-            {
-                Content = new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json"),
-            };
-            request.Headers.TryAddWithoutValidation("x-blocks-key", tenantId);
-            request.Headers.TryAddWithoutValidation("Secret", _crypto.Hash(tenantId, salt));
-
-            using var response = await client.SendAsync(request, timeout.Token);
-            if (response.IsSuccessStatusCode)
-            {
-                _logger.LogInformation("Built-in notification {ConfigurationName} sent (tenant {TenantId})", configurationName, tenantId);
-                return true;
-            }
-
-            status = $"HTTP {(int)response.StatusCode}";
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            status = "timeout";
-        }
-        catch (Exception ex)
-        {
-            // Type only: an exception message can carry the URL or a header.
-            status = ex.GetType().Name;
-        }
-
-        _logger.LogWarning("Built-in notification {ConfigurationName} not sent (tenant {TenantId}): {Status}", configurationName, tenantId, status);
-        return false;
+        var context = BlocksContext.GetContext();
+        return context is not null && string.Equals(context.TenantId, tenantId, StringComparison.Ordinal)
+               && !string.IsNullOrWhiteSpace(context.OrganizationId)
+            ? context.OrganizationId
+            : null;
     }
 
     private static string BuildPayload(BuiltInNotificationPayload payload)
@@ -208,12 +147,6 @@ public sealed class BuiltInNotificationSender : IBuiltInNotificationSender
 
     private static string Truncate(string text) =>
         text.Length <= MaxDescriptionLength ? text : text[..MaxDescriptionLength];
-
-    private List<string> AdminRoles() =>
-        (_configuration[AdminRolesSetting] ?? "admin")
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
 
     /// <summary>True when the same alert was sent inside the window. Records the send otherwise.</summary>
     private bool IsThrottled(string tenantId, string configurationName, string? throttleKey)

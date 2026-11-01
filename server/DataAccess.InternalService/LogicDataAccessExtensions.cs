@@ -15,7 +15,8 @@ public static class LogicDataAccessExtensions
         services.AddBlocksDataAccess();
         services.AddSingleton<IAccessPrincipalAccessor, BlocksContextPrincipalAccessor>();
         services.AddSingleton<ILogicDataAccess, LogicDataAccess>();
-        // The one sender of the built-in notifications; every host that calls this gets it.
+        // The one sender of the built-in notifications; every host that calls this gets it. It publishes through
+        // genesis INotificationPublisher, so the host must also call AddBlocksNotifications().
         services.AddSingleton<IBuiltInNotificationSender, BuiltInNotificationSender>();
         return services;
     }

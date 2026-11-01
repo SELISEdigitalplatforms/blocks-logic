@@ -1,4 +1,5 @@
 ﻿using Blocks.Genesis;
+using Blocks.Genesis.Notifications;
 using DataAccess.InternalService;
 using Blocks.Secrets;
 using Workflow.DomainService.Utils;
@@ -39,6 +40,8 @@ builder.Services.AddSingleton<IInboundMailPoller, Office365GraphInboxPoller>();
 // Blocks Secrets. The token provider opens its own scope for the scoped ISecretService.
 builder.Services.AddBlocksSecrets();
 builder.Services.AddLogicDataAccess();
+// The built-in notification sender (AddLogicDataAccess) publishes through genesis.
+builder.Services.AddBlocksNotifications();
 builder.Services.RegisterOffice365TokenServices();
 builder.Services.AddHttpClient(Office365GraphInboxSessionFactory.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(100));
 builder.Services.AddSingleton<IOffice365GraphInboxSessionFactory, Office365GraphInboxSessionFactory>();

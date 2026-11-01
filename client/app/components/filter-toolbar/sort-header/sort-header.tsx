@@ -1,6 +1,5 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { parseAsBoolean, parseAsString, useQueryStates } from "nuqs";
-import { MouseEvent, useCallback } from "react";
+import { MouseEvent } from "react";
 
 export type SortValue = { property: string; isDescending: boolean };
 

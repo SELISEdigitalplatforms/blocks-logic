@@ -70,7 +70,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         key: "clientId",
         required: false,
         searchable: true,
-        options: (_data, config) => {
+        options: (_data, _config) => {
           return authClientService.clients
             .getClientCredentials()
             .then((res) =>
@@ -108,7 +108,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
         key: "collectionName_composite",
         required: true,
         searchable: true,
-        options: (_data, config) => {
+        options: (_data, _config) => {
           return dataService
             .getSchemaList({
               pageNo: 1,
@@ -116,7 +116,7 @@ export const NodeSchemaActionDataActionV1: NodeSchemaDefinition = {
               sortDescending: true,
               sortBy: "CreatedDate",
               keyword: "",
-              schemaType: "",
+              schemaType: 1,
             })
             .then((res) =>
               res.data.items.map((item) => ({

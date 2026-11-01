@@ -14,6 +14,7 @@ namespace Mail.DomainService.Services
     public class MailRepository : IMailRepository
     {
         private const string LastAccumulator = "$last";
+        private const string EmailField = "Email";
         private readonly IDbContextProvider _dbContextProvider;
 
         private readonly ILogicDataAccess _dataAccess;
@@ -83,14 +84,43 @@ namespace Mail.DomainService.Services
 
             var collection = GetCollectionByName<BsonDocument>("Users");
 
-            var filter = Builders<BsonDocument>.Filter.In("Email", emails);
+            var filter = Builders<BsonDocument>.Filter.In(EmailField, emails);
 
-            var projection = Builders<BsonDocument>.Projection.Include("Email");
+            var projection = Builders<BsonDocument>.Projection.Include(EmailField);
 
             var results = await collection.Find(filter).Project(projection).ToListAsync();
 
-            return results.Select(doc => doc["Email"].AsString).Distinct().ToList();
+            return results.Select(doc => doc[EmailField].AsString).Distinct().ToList();
         }
+        public async Task<List<string>> GetPhoneEmailAddressesOfUsers(IEnumerable<string> addresses)
+        {
+            var found = new List<string>();
+            var collection = GetCollectionByName<BsonDocument>("Users");
+
+            foreach (var address in (addresses ?? []).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var pattern = PhoneEmail.UserPhonePattern(address);
+                if (pattern != null
+                    && await collection.Find(Builders<BsonDocument>.Filter.Regex("PhoneNumber", new BsonRegularExpression(pattern))).AnyAsync())
+                {
+                    found.Add(address);
+                }
+            }
+
+            return found;
+        }
+
+        public async Task<string?> GetUserEmailAsync(string tenantId, string userId)
+        {
+            // By tenant id, not the request's database: an impersonating caller is a user of the root tenant.
+            var collection = _dbContextProvider.GetCollection<BsonDocument>(tenantId, "Users");
+            var user = await collection.Find(Builders<BsonDocument>.Filter.Eq("_id", userId))
+                .Project(Builders<BsonDocument>.Projection.Include(EmailField))
+                .FirstOrDefaultAsync();
+
+            return user is not null && user.TryGetValue(EmailField, out var email) && email.IsString ? email.AsString : null;
+        }
+
         public Task<MailServerConfiguration> GetMailServerConfigurationByTenantId(string tenantId)
         {
             var mailServerConfigurationCollection = GetCollection<MailServerConfiguration>();

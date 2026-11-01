@@ -200,9 +200,9 @@ RUNNER__ReservedHostMemoryMb=2048
 # install runs inside a gVisor sandbox like any other tenant code.
 # RUNNER__DenyPrivateScriptsOnBuild=false
 
-# --- Sandbox reuse (sandbox/REUSE.md). Off by default: one fresh sandbox per run, as before ---
+# --- Sandbox reuse (sandbox/REUSE.md). On by default; set false for one fresh sandbox per run ---
 # RUNNER__BuildImage=
-# RUNNER__SandboxReuse=false
+# RUNNER__SandboxReuse=true
 # RUNNER__WarmIdleSeconds=600
 # RUNNER__WarmExtraIdleSeconds=60
 # RUNNER__WarmMaxCalls=1000

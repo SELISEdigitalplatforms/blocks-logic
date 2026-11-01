@@ -18,5 +18,11 @@ namespace Scheduler.DomainService.Dtos.Responses
         public ScheduleTriggerType TriggerType { get; set; } = ScheduleTriggerType.Queue;
         public WebhookConfiguration? Webhook { get; set; }
         public QueueConfiguration? Queue { get; set; }
+
+        /// <summary>The stored IANA zone; null = UTC.</summary>
+        public string? TimeZone { get; set; }
+
+        /// <summary>The next fire (UTC) within the active window; null when inactive or none is due.</summary>
+        public DateTime? NextRunAtUtc { get; set; }
     }
 }

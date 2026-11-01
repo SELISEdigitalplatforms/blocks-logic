@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { type Resolver, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
@@ -79,7 +79,8 @@ export const ProxyForm = ({
 
   const form = useForm<ProxyFormValues>({
     defaultValues: proxyFormDefaultValues,
-    resolver: zodResolver(proxyFormSchema),
+    // Typed as @hookform/resolvers 3 inferred it; v5 infers separate input/output types.
+    resolver: zodResolver(proxyFormSchema) as Resolver<ProxyFormValues>,
   });
 
   const name = useWatch({ control: form.control, name: "name" });
@@ -196,7 +197,7 @@ export const ProxyForm = ({
 
   return (
     <Form {...form}>
-      <form noValidate onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <form noValidate onSubmit={(event) => form.handleSubmit(handleSubmit)(event)} className="space-y-6">
         <div className="sticky top-0 z-30 -mx-6 -mt-4 bg-surface-app px-6 pb-4 pt-4 shadow-sm">
           {headerContent ? <div className="pb-6">{headerContent}</div> : null}
           <ProxyFormHeader isEdit={isEdit} isPending={isPending} onCancel={onCancel} />

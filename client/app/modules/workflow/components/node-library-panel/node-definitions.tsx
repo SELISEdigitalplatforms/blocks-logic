@@ -16,6 +16,9 @@ import {
 	Split,
 	Signpost,
 	Merge,
+	Filter,
+	BetweenHorizontalStart,
+	Zap,
 } from "lucide-react";
 import { deriveMergeHandle } from "@blocks-workflow/utils/merge-handles";
 import { deriveSwitchHandle, switchHandleLabel } from "@blocks-workflow/utils/switch-handles";
@@ -60,6 +63,20 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		category: "trigger",
 		version: "v2",
 		defaultName: "Data Trigger",
+		handle: {
+			sources: [{ key: "source", label: "" }],
+			targets: [],
+		},
+	},
+	{
+		id: "trigger-blocksEvent-v2",
+		icon: <Zap className="h-5 w-5 text-amber-500" />,
+		title: "Blocks Event",
+		description: "Starts the workflow when a Blocks service sends the selected event.",
+		type: "blocksEvent",
+		category: "trigger",
+		version: "v2",
+		defaultName: "Blocks Event",
 		handle: {
 			sources: [{ key: "source", label: "" }],
 			targets: [],
@@ -204,6 +221,20 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		handleLabel: switchHandleLabel,
 	},
 	{
+		id: "logic-filter-v2",
+		icon: <Filter className="h-5 w-5 text-success" />,
+		title: "Filter",
+		description: "Keep only the items that match the conditions.",
+		type: "filter",
+		category: "logic",
+		version: "v2",
+		defaultName: "Filter",
+		handle: {
+			sources: [{ key: "source", label: "" }],
+			targets: [{ key: "target", label: "" }],
+		},
+	},
+	{
 		id: "transform-setfield-v2",
 		icon: <SquarePen className="h-5 w-5 text-blue-500" />,
 		title: "Set Field",
@@ -226,6 +257,20 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		category: "transform",
 		version: "v2",
 		defaultName: "Split Out",
+		handle: {
+			sources: [{ key: "source", label: "" }],
+			targets: [{ key: "target", label: "" }],
+		},
+	},
+	{
+		id: "transform-limit-v2",
+		icon: <BetweenHorizontalStart className="h-5 w-5 text-blue-500" />,
+		title: "Limit",
+		description: "Keep at most a set number of items, from the start or the end of the list.",
+		type: "limit",
+		category: "transform",
+		version: "v2",
+		defaultName: "Limit",
 		handle: {
 			sources: [{ key: "source", label: "" }],
 			targets: [{ key: "target", label: "" }],

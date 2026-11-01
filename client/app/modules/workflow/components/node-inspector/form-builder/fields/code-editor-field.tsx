@@ -1,7 +1,7 @@
 "use client";
 
 import Editor, { useMonaco, type Monaco, type OnMount } from "@monaco-editor/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import { FieldProps } from "../form-field.types";
 import { cn } from "@/lib/utils";
@@ -102,7 +102,9 @@ export const CodeEditorField = ({
   const theme = resolvedTheme === "dark" ? "vs-dark" : "vs";
   const isDisabled = typeof field.disabled === "function" ? readOnly : field.disabled || readOnly;
 
-  const upstreamKeys = (config as { upstreamKeys?: string[] } | undefined)?.upstreamKeys ?? [];
+  const configUpstreamKeys = (config as { upstreamKeys?: string[] } | undefined)?.upstreamKeys;
+  // Stable empty fallback so the completion provider is not re-registered on every render.
+  const upstreamKeys = useMemo(() => configUpstreamKeys ?? [], [configUpstreamKeys]);
   const monaco = useMonaco();
   const providerRef = useRef<{ dispose: () => void } | null>(null);
 

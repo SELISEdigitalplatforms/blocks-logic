@@ -2,7 +2,7 @@ import { API_BASES } from "@/constants/endpoint.constant";
 import { NodeGuideTriggerWebhookV1 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { WorkflowExecutionMode } from "../../models/workflow.model";
-import { authClientService, iamService } from "../../services/iam.service";
+import { iamService } from "../../services/iam.service";
 import { ConditionalMultiselectValue } from "../node-inspector/form-builder/form-field.types";
 
 const AUTHORIZATION_DEPENDENCY = {

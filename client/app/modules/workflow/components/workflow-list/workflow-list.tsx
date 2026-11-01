@@ -375,16 +375,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
         ),
       },
     ],
-    [
-      exportWorkflow,
-      isExporting,
-      publishDescription,
-      publishNew,
-      publishVersionName,
-      publishUnversioned,
-      scoped,
-      unpublish,
-    ],
+    [exportWorkflow, isExporting, scoped],
   );
 
   const handleRowClick = useCallback(
@@ -394,6 +385,9 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
     [navigate, scoped],
   );
 
+  // TanStack Table returns non-memoizable functions; the React compiler skips this component
+  // either way and there is no compatible alternative API.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: workflow || [],
     columns,

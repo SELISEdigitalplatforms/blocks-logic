@@ -1,0 +1,153 @@
+import { useMemo, useState } from "react";
+import { AlertCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui-kits/alert/alert";
+import { Button } from "@/components/ui-kits/button/button";
+import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui-kits/dialog/dialog";
+import { EventTriggerList, pendingKey, READ_ONLY_TOOLTIP } from "../../components/event-trigger-list/event-trigger-list";
+import { EventTriggerToolbar } from "../../components/event-trigger-toolbar/event-trigger-toolbar";
+import { useCanManageEventTriggers, useGetEventTriggers } from "../../hooks/use-event-triggers-api";
+import { useEventTriggerToggle } from "../../hooks/use-event-trigger-toggle";
+import { BlocksEventFlag, IBlocksEventCatalogItem } from "../../types/event-triggers.type";
+import {
+  DEFAULT_EVENT_TRIGGER_FILTERS,
+  EventTriggerFilters,
+  filterEvents,
+  serviceKeysOf,
+} from "../../utils/filter-events";
+
+export const NOT_SEEDED_MESSAGE =
+  "The event catalog is not set up for this project. Ask a platform operator to run the Blocks Event Trigger seed.";
+
+const LoadError = ({ onRetry }: { onRetry: () => void }) => (
+  <Alert variant="destructive">
+    <AlertCircle className="h-4 w-4" />
+    <AlertTitle>Could not load the event catalog</AlertTitle>
+    <AlertDescription className="flex flex-wrap items-center gap-3">
+      Check your connection and try again.
+      <Button size="sm" variant="outline" onClick={onRetry}>
+        Retry
+      </Button>
+    </AlertDescription>
+  </Alert>
+);
+
+const NotSeeded = () => (
+  <Alert>
+    <AlertCircle className="h-4 w-4" />
+    <AlertTitle>Event catalog not set up</AlertTitle>
+    <AlertDescription>{NOT_SEEDED_MESSAGE}</AlertDescription>
+  </Alert>
+);
+
+type CatalogBodyProps = {
+  items: IBlocksEventCatalogItem[];
+  visible: IBlocksEventCatalogItem[];
+  isLoading: boolean;
+  isFiltered: boolean;
+  canManage: boolean;
+  pending: ReadonlySet<string>;
+  onToggle: (item: IBlocksEventCatalogItem, flag: BlocksEventFlag, next: boolean) => void;
+};
+
+/** The table, or why there are no rows. */
+const CatalogBody = ({ items, visible, isLoading, isFiltered, canManage, pending, onToggle }: CatalogBodyProps) => {
+  if (isLoading || visible.length > 0) {
+    return (
+      <EventTriggerList items={visible} isLoading={isLoading} canManage={canManage} pending={pending} onToggle={onToggle} />
+    );
+  }
+  const message = isFiltered || items.length > 0 ? "No events match your filters." : "The catalog has no events.";
+  return <p className="py-12 text-center text-sm text-muted-foreground">{message}</p>;
+};
+
+export const EventTriggers = () => {
+  const { data, isLoading, isError, refetch } = useGetEventTriggers();
+  const { canManage, isLoading: isCheckingAccess } = useCanManageEventTriggers();
+  const { pending, optimistic, pendingDisable, cancelDisable, handleToggle, confirmDisable } =
+    useEventTriggerToggle(canManage);
+  const [filters, setFilters] = useState<EventTriggerFilters>(DEFAULT_EVENT_TRIGGER_FILTERS);
+
+  const items = useMemo(
+    () =>
+      (data?.items ?? []).map((item) => ({
+        ...item,
+        isValidForWorkflow: optimistic[pendingKey(item.eventName, "isValidForWorkflow")] ?? item.isValidForWorkflow,
+        isValidForFunction: optimistic[pendingKey(item.eventName, "isValidForFunction")] ?? item.isValidForFunction,
+      })),
+    [data, optimistic],
+  );
+  const visible = useMemo(() => filterEvents(items, filters), [items, filters]);
+  const serviceKeys = useMemo(() => serviceKeysOf(items), [items]);
+  const isNotSeeded = !isLoading && data?.isSeeded === false;
+
+  let content;
+  if (isError) {
+    content = <LoadError onRetry={() => refetch()} />;
+  } else if (isNotSeeded) {
+    content = <NotSeeded />;
+  } else {
+    content = (
+      <Card>
+        <CardHeader className="mb-0 flex flex-col gap-3 md:flex-row md:items-center">
+          <EventTriggerToolbar filters={filters} serviceKeys={serviceKeys} onChange={setFilters} />
+        </CardHeader>
+        <CardContent>
+          <CatalogBody
+            items={items}
+            visible={visible}
+            isLoading={isLoading}
+            isFiltered={filters !== DEFAULT_EVENT_TRIGGER_FILTERS}
+            canManage={canManage}
+            pending={pending}
+            onToggle={handleToggle}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <section className="flex flex-col gap-6 p-4">
+      <div className="flex min-h-10 flex-col justify-center gap-1">
+        <h3 className="text-2xl font-bold tracking-tight">Event Triggers</h3>
+        <p className="text-sm text-muted-foreground">
+          Choose which platform events can start workflows and functions in this project.
+        </p>
+        {!canManage && !isCheckingAccess && (
+          // The switches are disabled for this user; say why where keyboard and screen-reader users read it too.
+          <p className="text-sm text-muted-foreground">{READ_ONLY_TOOLTIP} to change these settings.</p>
+        )}
+      </div>
+
+      {content}
+
+      <Dialog open={pendingDisable !== null} onOpenChange={(open) => !open && cancelDisable()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Disable {pendingDisable?.item.label} for workflows?</DialogTitle>
+            <DialogDescription>
+              {pendingDisable?.count} published workflow(s) use this event and will stop running until it is enabled
+              again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelDisable}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDisable}>
+              Disable
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+};

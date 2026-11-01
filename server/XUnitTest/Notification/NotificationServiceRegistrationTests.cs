@@ -1,5 +1,7 @@
 using DomainService.Configuration.Validators;
+using Blocks.Genesis.Notifications;
 using DomainService.Notification;
+using DomainService.Notification.Push;
 using DomainService.Shared;
 using DomainService.Utilities;
 using FluentAssertions;
@@ -15,7 +17,8 @@ namespace XUnitTest.Notification
 {
     /// <summary>
     /// Unit tests for <see cref="ApplicationServiceCollectionExtensions"/>. The registration is
-    /// inspected on the descriptors, so the wiring is asserted without standing up SignalR.
+    /// inspected on the descriptors. The genesis hub resolves <see cref="INotificationHubHandler"/>: without it every
+    /// connection fails.
     /// </summary>
     public class NotificationServiceRegistrationTests
     {
@@ -32,8 +35,13 @@ namespace XUnitTest.Notification
         [Theory]
         [InlineData(typeof(INotificationService), typeof(NotificationService))]
         [InlineData(typeof(INotificationRepository), typeof(NotificationRepository))]
-        [InlineData(typeof(INotifierServiceFactory), typeof(NotifierServiceFactory))]
-        [InlineData(typeof(IStrategicClientProviderFactory), typeof(StrategicClientProviderFactory))]
+        [InlineData(typeof(INotifyService), typeof(NotifyService))]
+        [InlineData(typeof(INotificationHubHandler), typeof(NotificationHubHandler))]
+        [InlineData(typeof(IPushRequestHandler), typeof(PushRequestHandler))]
+        [InlineData(typeof(IPushTestService), typeof(PushTestService))]
+        [InlineData(typeof(IPushDeviceAdminService), typeof(PushDeviceAdminService))]
+        [InlineData(typeof(IPushWebConfigService), typeof(PushWebConfigService))]
+        [InlineData(typeof(IPushDeviceService), typeof(PushDeviceService))]
         [InlineData(typeof(IConfigurationService), typeof(ConfigurationService))]
         [InlineData(typeof(IConfigurationRepository), typeof(ConfigurationRepository))]
         public void RegisterAllNotificationApplicationServices_RegistersTheServicesAsSingletons(
@@ -42,19 +50,6 @@ namespace XUnitTest.Notification
             var descriptor = _services.Single(d => d.ServiceType == service);
 
             descriptor.ImplementationType.Should().Be(implementation);
-            descriptor.Lifetime.Should().Be(ServiceLifetime.Singleton);
-        }
-
-        [Theory]
-        [InlineData(typeof(SignalRNotificationServiceProvider))]
-        [InlineData(typeof(FirebaseNotificationServiceProvider))]
-        [InlineData(typeof(BroadcastReceiver))]
-        [InlineData(typeof(UserSpecificReceiver))]
-        [InlineData(typeof(FilterSpecificReceiver))]
-        public void RegisterAllNotificationApplicationServices_RegistersEveryStrategyItsFactoriesResolve(Type strategy)
-        {
-            var descriptor = _services.Single(d => d.ServiceType == strategy);
-
             descriptor.Lifetime.Should().Be(ServiceLifetime.Singleton);
         }
 
@@ -71,12 +66,6 @@ namespace XUnitTest.Notification
             _services.Where(d => d.ServiceType.IsGenericType
                                  && d.ServiceType.GetGenericTypeDefinition() == typeof(IValidator<>))
                      .Should().OnlyContain(d => d.Lifetime == ServiceLifetime.Transient);
-        }
-
-        [Fact]
-        public void RegisterAllNotificationApplicationServices_AddsSignalR()
-        {
-            _services.Should().Contain(d => d.ServiceType.FullName!.Contains("SignalR", StringComparison.Ordinal));
         }
     }
 }

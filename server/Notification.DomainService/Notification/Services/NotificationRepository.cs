@@ -34,7 +34,6 @@ namespace DomainService.Notification
             nameof(OfflineNotification) => LogicSchemas.OfflineNotification,
             nameof(NotificationConnection) => LogicSchemas.NotificationConnection,
             nameof(NotificationSubscription) => LogicSchemas.NotificationSubscription,
-            nameof(FirebaseConfiguration) => LogicSchemas.FirebaseConfiguration,
             _ => null,
         };
 
@@ -167,60 +166,52 @@ namespace DomainService.Notification
             return database.GetCollection<T>(typeof(T).Name + "s").AsQueryable();
         }
 
-        public async Task UpdateNotificationAsReadByUserIdAsync(string userId)
+        public async Task MarkAllAsReadAsync(InboxViewer viewer)
         {
             var builder = Builders<OfflineNotification>.Filter;
-
-            // Match all notifications visible to this user (aligned with GetNotificationsAsync scope)
-            var userNotificationFilter = builder.Or(
-                builder.Eq(q => q.Payload.UserId, null),
-                builder.Eq(q => q.Payload.UserId, ""),
-                builder.Eq(q => q.Payload.UserId, userId)
-            );
-
-            // Exclude notifications already read by this user
-            var alreadyReadFilter = builder.Where(p => p.ReadByUserIds.Contains(userId));
-            var unreadFilter = userNotificationFilter & builder.Not(alreadyReadFilter);
-
-            // First, initialize null ReadByUserIds to empty list (required for $addToSet)
-            var nullReadByUserIdsFilter = unreadFilter & builder.Eq(q => q.ReadByUserIds, null);
-            var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds, userId);
+            var unreadFilter = InboxFilters.Visible(viewer, includeLegacyBroadcast: true) & InboxFilters.Unread(viewer);
             var collection = NotificationCollection();
-            var nullFilter = await EditAsync(LogicSchemas.OfflineNotification, nullReadByUserIdsFilter, "UpdateNotificationAsReadByUserId.InitList");
+
+            // $addToSet needs an array: first turn a missing or null ReadByUserIds into an empty list.
+            var nullFilter = await EditAsync(LogicSchemas.OfflineNotification,
+                unreadFilter & builder.Eq(q => q.ReadByUserIds, null), "MarkAllAsRead.InitList");
             if (nullFilter is not null)
             {
                 await collection.UpdateManyAsync(nullFilter,
-                    new UpdateDefinitionBuilder<OfflineNotification>().Set(p => p.ReadByUserIds, new List<string>()));
+                    Builders<OfflineNotification>.Update.Set(p => p.ReadByUserIds, new List<string>()));
             }
-            // Then add userId to ReadByUserIds for all unread notifications.
-            var readFilter = await EditAsync(LogicSchemas.OfflineNotification, unreadFilter, "UpdateNotificationAsReadByUserId");
+
+            var readFilter = await EditAsync(LogicSchemas.OfflineNotification, unreadFilter, "MarkAllAsRead");
             if (readFilter is null) return;
-            await collection.UpdateManyAsync(readFilter, updateDefinition);
+            await collection.UpdateManyAsync(readFilter, Builders<OfflineNotification>.Update.AddToSet(p => p.ReadByUserIds, viewer.UserId));
         }
 
-        public async Task UpdateNotificationAsReadByUserIdAsync(string userId, string notificationId)
+        /// <summary>
+        /// Adds only the viewer to the row's ReadByUserIds, so an organization row read by one user stays unread for
+        /// the others. A row the viewer cannot see is not touched.
+        /// </summary>
+        public async Task MarkAsReadAsync(InboxViewer viewer, string notificationId)
         {
-            var builder = Builders<OfflineNotification>.Filter;
-            var filter = builder.Where(p => p.Id == notificationId);
+            var filter = Builders<OfflineNotification>.Filter.Eq(p => p.Id, notificationId)
+                & InboxFilters.Visible(viewer, includeLegacyBroadcast: true);
 
-            var updateDefinition = new UpdateDefinitionBuilder<OfflineNotification>().AddToSet(p => p.ReadByUserIds,
-                userId.ToString());
-
-            var editFilter = await EditAsync(LogicSchemas.OfflineNotification, filter, "UpdateNotificationAsReadById");
+            var editFilter = await EditAsync(LogicSchemas.OfflineNotification, filter, "MarkAsRead");
             if (editFilter is null) return;
-            await NotificationCollection().UpdateOneAsync(editFilter, updateDefinition);
+            await NotificationCollection().UpdateOneAsync(editFilter,
+                Builders<OfflineNotification>.Update.AddToSet(p => p.ReadByUserIds, viewer.UserId));
         }
 
-        public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request)
+        public async Task<List<OfflineNotification>> GetInboxItemsAsync(FilterDefinition<OfflineNotification> filter)
         {
-            var userId = BlocksContext.GetContext()?.UserId;
-            if (string.IsNullOrWhiteSpace(userId))
-                throw new InvalidOperationException("User context is required to read notifications.");
+            var scope = await ReadAsync(LogicSchemas.OfflineNotification, filter, "GetInboxItems");
+            return scope.Granted ? await scope.Apply(NotificationCollection()).ToListAsync() : [];
+        }
 
-            var builder = Builders<OfflineNotification>.Filter;
-            var userFilter = builder.Where(n => !string.IsNullOrWhiteSpace(n.Payload.UserId) && n.Payload.UserId == userId);
-            var unreadFilter = userFilter & builder.Where(n => !n.ReadByUserIds.Contains(userId));
-            var pageFilter = request.IsUnreadOnly ? unreadFilter : userFilter;
+        public async Task<GetNotificationsResponse> GetNotificationsAsync(GetNotificationsRequest request, InboxViewer viewer)
+        {
+            var visibleFilter = InboxFilters.Visible(viewer, includeLegacyBroadcast: false);
+            var unreadFilter = visibleFilter & InboxFilters.Unread(viewer);
+            var pageFilter = request.IsUnreadOnly ? unreadFilter : visibleFilter;
 
             var options = new FindOptions<OfflineNotification>
             {
@@ -243,17 +234,9 @@ namespace DomainService.Notification
             var unreadCount = await collection.CountDocumentsAsync(unreadScope.Filter);
             var totalCount = await collection.CountDocumentsAsync(pageScope.Filter);
 
-            if (!request.IsUnreadOnly)
-            {
-                foreach (var notification in notifications)
-                {
-                    notification.IsRead = notification.ReadByUserIds != null && notification.ReadByUserIds.Contains(userId);
-                }
-            }
-
             return new GetNotificationsResponse
             {
-                Notifications = notifications,
+                Notifications = InboxRows.ForViewer(notifications, viewer.UserId),
                 UnReadNotificationsCount = unreadCount,
                 TotalNotificationsCount = totalCount
             };

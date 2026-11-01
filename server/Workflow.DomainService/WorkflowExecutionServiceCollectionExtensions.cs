@@ -1,3 +1,5 @@
+using Workflow.DomainService.BlocksEvents;
+using Workflow.DomainService.Nodes.TriggerBlocksEventV2;
 using Workflow.DomainService.Repositories;
 using Workflow.DomainService.Services;
 using Workflow.DomainService.Import;
@@ -18,10 +20,12 @@ using Workflow.DomainService.Nodes.TriggerDataV1;
 using Workflow.DomainService.Nodes.TriggerScheduleV1;
 using Workflow.DomainService.Nodes.LogicIFV1;
 using Workflow.DomainService.Nodes.LogicSwitchV2;
+using Workflow.DomainService.Nodes.LogicFilterV2;
 using Workflow.DomainService.Nodes.TriggerWebhookV1;
 using Workflow.DomainService.Nodes.TransformSetFieldV1;
 using Workflow.DomainService.Nodes.TransformSplitOutV2;
 using Workflow.DomainService.Nodes.TransformMergeV2;
+using Workflow.DomainService.Nodes.TransformLimitV2;
 using Workflow.DomainService.Nodes.TransformCodeV1;
 using Workflow.DomainService.Services;
 using DomainService.Utilities;
@@ -53,6 +57,9 @@ namespace Workflow.DomainService
             services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
             services.AddSingleton<IWorkflowVersionRepository, WorkflowVersionRepository>();
             services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
+            services.AddSingleton<IBlocksEventCatalogRepository, BlocksEventCatalogRepository>();
+            services.AddSingleton<IBlocksEventCatalogService, BlocksEventCatalogService>();
+            services.AddSingleton<IBlocksEventTriggerService, BlocksEventTriggerService>();
 
             //  rigister node executors
 
@@ -61,16 +68,19 @@ namespace Workflow.DomainService
             services.AddSingleton<INodeExecutor, TriggerEmailV1Node>();
             services.AddSingleton<INodeExecutor, TriggerDataV1Node>();
             services.AddSingleton<INodeExecutor, TriggerScheduleV1Node>();
+            services.AddSingleton<INodeExecutor, TriggerBlocksEventV2Node>();
 
             // Logic nodes
             services.AddSingleton<INodeExecutor, LogicIfV1Node>();
             services.AddSingleton<INodeExecutor, LogicSwitchV2Node>();
+            services.AddSingleton<INodeExecutor, LogicFilterV2Node>();
 
 
             // Transform nodes
             services.AddSingleton<INodeExecutor, TransformSetFieldV1Node>();
             services.AddSingleton<INodeExecutor, TransformSplitOutV2Node>();
             services.AddSingleton<INodeExecutor, TransformMergeV2Node>();
+            services.AddSingleton<INodeExecutor, TransformLimitV2Node>();
             services.AddSingleton<INodeExecutor, TransformCodeV1Node>();
 
             // Action nodes

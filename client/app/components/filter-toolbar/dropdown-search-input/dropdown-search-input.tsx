@@ -35,15 +35,20 @@ export const DropdownSearchInput: React.FC<DropdownSearchInputProps> = ({
   const [state, setState] = useState<ValueType>(value);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  // Follow the controlled value: adjusted during render when it changes
+  // (React's "adjust state when a prop changes" pattern).
+  const [syncedValue, setSyncedValue] = useState<ValueType>(value);
+  if (syncedValue !== value) {
+    setSyncedValue(value);
     setState(value);
-  }, [value]);
+  }
 
-  const debounced = useRef(
+  // Created once (lazy state initializer); keeps the first onChange, as before.
+  const [debounced] = useState(() =>
     debounce((val: ValueType) => {
       onChange(val);
     }, 300),
-  ).current;
+  );
 
   useEffect(() => {
     return () => {

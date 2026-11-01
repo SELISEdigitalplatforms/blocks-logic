@@ -67,7 +67,8 @@ namespace XUnitTest.Api
         {
             var policy = ContentSecurityPolicy.Build(Config(new() { ["FrontendRuntime:BLOCKS_LOGIC_BASE_URL"] = "http://logic.example.com" }));
 
-            policy.Should().NotContain("ws://logic.example.com");
+            // Uri.UriSchemeWs ("ws"): the plain-WebSocket origin that must NOT be allowed for a plain-HTTP host.
+            policy.Should().NotContain($"{Uri.UriSchemeWs}://logic.example.com");
         }
 
         [Fact]

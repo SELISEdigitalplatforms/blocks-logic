@@ -23,15 +23,17 @@ namespace Api.Controllers
         private const string SecretHeader = "Secret";
 
         private readonly INotificationService _notificationService;
+        private readonly INotifyService _notifyService;
         private readonly INotifierSendGuard _sendGuard;
         private readonly INotifierSendPermission _sendPermission;
         private readonly ILogger<NotifierController> _logger;
 
-        /// <summary>Takes the notification service, the send guard, the send permission check and a logger.</summary>
-        public NotifierController(INotificationService notificationService, INotifierSendGuard sendGuard,
+        /// <summary>Takes the inbox service, the send service, the send guard, the send permission check and a logger.</summary>
+        public NotifierController(INotificationService notificationService, INotifyService notifyService, INotifierSendGuard sendGuard,
             INotifierSendPermission sendPermission, ILogger<NotifierController> logger)
         {
             _notificationService = notificationService;
+            _notifyService = notifyService;
             _sendGuard = sendGuard;
             _sendPermission = sendPermission;
             _logger = logger;
@@ -56,7 +58,10 @@ namespace Api.Controllers
             _logger.LogInformation("Notification handled: success {IsSuccess}, {ErrorCount} error(s)",
                 response?.IsSuccess, response?.Errors?.Count ?? 0);
 
-        /// <summary><c>POST</c> — delivers a notification through the configured channels.</summary>
+        /// <summary>
+        /// <c>POST</c> — validates the request and queues it (genesis publisher). Success means accepted: the
+        /// configuration decides receivers and channels after the answer.
+        /// </summary>
         [HttpPost]
         [NotifierOptionalToken]
         public async Task<ActionResult<BaseResponse>> Notify([FromBody] NotifyRequest notifyRequest,
@@ -66,7 +71,7 @@ namespace Api.Controllers
                 return Refused();
 
             LogReceived(notifyRequest);
-            var response= await _notificationService.NotifyAsync(notifyRequest);
+            var response= await _notifyService.NotifyAsync(notifyRequest);
             LogHandled(response);
             return response;
         }
@@ -86,7 +91,7 @@ namespace Api.Controllers
 
             LogReceived(notifyRequest);
 
-            var response = await _notificationService.NotifyAsync(notifyRequest);
+            var response = await _notifyService.NotifyAsync(notifyRequest);
 
             LogHandled(response);
             return response;

@@ -56,7 +56,6 @@ import { NodeSchemasDefinition } from "./node-schemas";
 import { NodeSchemaTriggerWebhookV1 } from "./node-schema-trigger-webhook-v1";
 import { NodeSchemaTriggerEmailV1 } from "./node-schema-trigger-email-v1";
 import { NodeSchemaTriggerDataGatewayV1 } from "./node-schema-trigger-dataGateway-v1";
-import { NodeSchemaTriggerScheduleV1 } from "./node-schema-trigger-schedule-v1";
 import { NodeSchemaActionAiAgentV1 } from "./node-schema-action-aiAgent-v1";
 import { NodeSchemaActionSendMailV1 } from "./node-schema-action-sendMail-v1";
 import { NodeSchemaActionHttpRequestV1 } from "./node-schema-action-httpRequest-v1";
@@ -69,6 +68,8 @@ import {
 import { NodeSchemaTransformSetFieldV1 } from "./node-schema-transform-setfield-v1";
 import { NodeSchemaTransformCodeV1 } from "./node-schema-transform-code-v1";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
+import { NodeSchemaLogicFilterV2 } from "./node-schema-logic-filter-v2";
+import { NodeGuideLogicFilterV2 } from "../node-guides";
 
 type AnyRec = Record<string, unknown>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -116,8 +117,13 @@ describe("NodeSchemasDefinition registry", () => {
       const v2Key = `${v1Key.slice(0, -2)}v2`;
       expect(NodeSchemasDefinition[v2Key]).toBe(NodeSchemasDefinition[v1Key]);
     }
-    // 13 v1 keys, their 13 v2 aliases, logicswitchv2, transformsplitOutv2 and transformmergev2 (new types start at v2 with no v1).
-    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(29);
+    // 13 v1 keys, their 13 v2 aliases, logicswitchv2, logicfilterv2, transformsplitOutv2, transformmergev2,
+    // triggerblocksEventv2 and transformlimitv2 (new types start at v2 with no v1).
+    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(32);
+    expect(NodeSchemasDefinition.logicfilterv2).toBe(NodeSchemaLogicFilterV2);
+    expect(NodeSchemasDefinition.logicfilterv1).toBeUndefined();
+    expect(NodeSchemasDefinition.triggerblocksEventv1).toBeUndefined();
+    expect(NodeSchemasDefinition.transformlimitv1).toBeUndefined();
     expect(NodeSchemasDefinition.transformmergev1).toBeUndefined();
     expect(NodeSchemasDefinition.transformsplitOutv1).toBeUndefined();
     expect(NodeSchemasDefinition.logicswitchv1).toBeUndefined();
@@ -1086,6 +1092,36 @@ describe("transform/splitOut v2 (SPEC2)", () => {
   });
 });
 
+describe("transform/limit v2 (SPEC10)", () => {
+  const schema = NodeSchemasDefinition.transformlimitv2;
+
+  it("H3: defaults to Max Items 1 and Keep first, with no settings", () => {
+    expect(schema.schema).toMatchObject({ type: "limit", category: "transform", version: "v2" });
+    expect(schema.defaults).toEqual({ parameters: { maxItems: 1, keep: "first" }, settings: {} });
+    expect(schema.schema.settings).toEqual([]);
+    expect(schema.guide).toBeDefined();
+  });
+
+  it("H3/C8: Max Items is a required whole-number field from 1, with no info text", () => {
+    const field = schema.schema.parameters.find((f) => f.key === "maxItems")!;
+    expect(field).toMatchObject({ type: "number", label: "Max Items", required: true, min: 1, max: 2147483647, step: 1, wholeNumber: true, defaultValue: 1 });
+    expect(field.info).toBeUndefined();
+    // Saved on blur or Enter, so the field can be cleared and retyped without snapping back to the default 1.
+    expect(field.commitOn).toBe("blur");
+  });
+
+  it("H4: Keep offers exactly First Items and Last Items, saved as first and last", () => {
+    const field = schema.schema.parameters.find((f) => f.key === "keep")!;
+    expect(field).toMatchObject({ type: "select", label: "Keep", defaultValue: "first" });
+    expect(field.info).toBeUndefined();
+    expect(field.options).toEqual([
+      { value: "first", label: "First Items" },
+      { value: "last", label: "Last Items" },
+    ]);
+    expect(schema.schema.parameters.map((f) => f.key)).toEqual(["maxItems", "keep"]);
+  });
+});
+
 describe("transform/merge v2 (SPEC3)", () => {
   const schema = NodeSchemasDefinition.transformmergev2;
 
@@ -1122,5 +1158,31 @@ describe("transform/merge v2 (SPEC3)", () => {
   it("Mode is a dropdown with Append only", () => {
     const field = schema.schema.parameters.find((f) => f.key === "mode")!;
     expect(field.options).toEqual([{ value: "append", label: "Append" }]);
+  });
+});
+
+describe("logic/filter v2 (SPEC9)", () => {
+  const schema = NodeSchemaLogicFilterV2;
+
+  it("H3/H4: one unlabelled, transient filter-conditions field and the Filter guide (H12)", () => {
+    expect(schema.schema).toMatchObject({ type: "filter", category: "logic", version: "v2", settings: [] });
+    expect(schema.schema.parameters).toHaveLength(1);
+    expect(schema.schema.parameters[0]).toMatchObject({ id: "filterConditions", type: "filter-conditions", key: "filterConditions", transient: true });
+    expect(schema.schema.parameters[0].label).toBeUndefined();
+    expect(schema.guide).toBe(NodeGuideLogicFilterV2);
+  });
+
+  it("H3/C11: each new node gets its own AND parameters with one blank string condition", () => {
+    const a = schema.transform!({ id: "a", position: { x: 0, y: 0 }, data: {}, parameters: {} } as never);
+    const b = schema.transform!({ id: "b", position: { x: 0, y: 0 }, data: {}, parameters: {} } as never);
+    expect(a.parameters).toEqual({ conditionType: "and", conditions: [{ left: "", operator: "equals", right: "", type: "string" }] });
+    expect(a.parameters).not.toBe(b.parameters);
+    expect((a.parameters as AnyRec).conditions).not.toBe((b.parameters as AnyRec).conditions);
+    expect(a.id).toBe("a");
+  });
+
+  it("H5: the field's onChange saves both real keys", () => {
+    const conditions = [{ left: "{{ $json.status }}", operator: "equals", right: "paid", type: "string" }];
+    expect(schema.schema.parameters[0].onChange!({ conditions, conditionType: "or" }, {}, {} as never)).toEqual({ conditions, conditionType: "or" });
   });
 });

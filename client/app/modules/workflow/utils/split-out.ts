@@ -35,15 +35,21 @@ export const listToText = (value: unknown): string =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** Whether every segment is an own property, walking down from `current`. Read-only. */
+const hasOwnSegments = (current: unknown, segments: string[]): boolean => {
+  if (segments.length === 0) return true;
+  const [segment, ...rest] = segments;
+  return (
+    isRecord(current) &&
+    Object.hasOwn(current, segment) &&
+    hasOwnSegments(current[segment], rest)
+  );
+};
+
 const hasPath = (item: unknown, path: string, dotNotation: boolean): boolean => {
   if (!isRecord(item)) return false;
   if (!dotNotation) return Object.prototype.hasOwnProperty.call(item, path);
-  let current: unknown = item;
-  for (const segment of path.split(".")) {
-    if (!isRecord(current) || !Object.prototype.hasOwnProperty.call(current, segment)) return false;
-    current = current[segment];
-  }
-  return true;
+  return hasOwnSegments(item, path.split("."));
 };
 
 /** The fields to split out that no input item has (n8n's "wasn't found in any input item" hint). */

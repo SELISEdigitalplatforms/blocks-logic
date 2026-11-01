@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -132,7 +132,7 @@ const ValidatingHarness = () => {
     },
     resolver: zodResolver(proxyFormSchema),
   });
-  const methods = form.watch("methods");
+  const methods = useWatch({ control: form.control, name: "methods" });
 
   return (
     <Form {...form}>
@@ -202,7 +202,7 @@ const InheritanceHarness = ({
     },
     resolver: validate ? zodResolver(proxyFormSchema) : undefined,
   });
-  const routes = form.watch("routes");
+  const routes = useWatch({ control: form.control, name: "routes" });
 
   return (
     <Form {...form}>
