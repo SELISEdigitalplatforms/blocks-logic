@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { Trash2 as RemoveIcon } from "lucide-react";
 import { buttonVariants } from "@/components/ui-kits/button/button";
 import { showErrorToast } from "@/hooks/use-toast";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 type DirectionOptions = "rtl" | "ltr" | undefined;
 
@@ -70,6 +71,7 @@ export const FileUploader = forwardRef<
     },
     ref,
   ) => {
+  const { t } = useT("logic.shared");
     const [isFileTooBig, setIsFileTooBig] = useState(false);
     const [isLOF, setIsLOF] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
@@ -96,7 +98,7 @@ export const FileUploader = forwardRef<
 
     useEffect(() => {
       if (isFileTooBig) {
-        showErrorToast({ errors: "The file size is more than 5MB" });
+        showErrorToast({ errors: tStatic("logic.shared", "FILE_UPLOADER.FILE_SIZE_MORE_THAN_5MB") });
       }
     }, [isFileTooBig]);
 
@@ -105,7 +107,7 @@ export const FileUploader = forwardRef<
         const files = acceptedFiles;
 
         if (!files) {
-          toast.error("file error , probably too big");
+          toast.error(t("FILE_UPLOADER.FILE_ERROR_PROBABLY_TOO"));
           return;
         }
 
@@ -127,13 +129,13 @@ export const FileUploader = forwardRef<
           for (const rejectedFile of rejectedFiles) {
             if (rejectedFile.errors[0]?.code === "file-too-large") {
               showErrorToast({
-                errors: `File is too large. Max size is ${maxSize / 1024 / 1024}MB`
+                errors: t("FILE_UPLOADER.FILE_TOO_LARGE", { size: maxSize / 1024 / 1024 })
               });
               break;
             }
             if (rejectedFile.errors[0]?.code === "file-invalid-type") {
               showErrorToast({
-                errors: "Invalid file type"
+                errors: t("FILE_UPLOADER.INVALID_FILE_TYPE")
               });
               break;
             }
@@ -264,11 +266,12 @@ FileUploader.displayName = "FileUploader";
 // eslint-disable-next-line no-undef
 export const FileUploaderContent = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ children, className, ...props }, ref) => {
+  const { t } = useT("logic.shared");
     const { orientation } = useFileUpload();
     const containerRef = useRef<HTMLDivElement>(null);
 
     return (
-      <div className={cn("w-full px-1")} ref={containerRef} aria-description="content file holder">
+      <div className={cn("w-full px-1")} ref={containerRef} aria-description={t("FILE_UPLOADER.CONTENT_FILE_HOLDER")}>
         <div
           {...props}
           ref={ref}
@@ -292,6 +295,7 @@ export const FileUploaderItem = forwardRef<
   // eslint-disable-next-line no-undef
   { index: number } & React.HTMLAttributes<HTMLDivElement>
 >(({ className, index, children, ...props }, ref) => {
+  const { t } = useT("logic.shared");
   const { removeFileFromSet, activeIndex, direction } = useFileUpload();
   const isSelected = index === activeIndex;
   return (
@@ -313,7 +317,7 @@ export const FileUploaderItem = forwardRef<
         className={cn("absolute", direction === "rtl" ? "left-1 top-1" : "right-1 top-1")}
         onClick={() => removeFileFromSet(index)}
       >
-        <span className="sr-only">remove item {index}</span>
+        <span className="sr-only">{t("FILE_UPLOADER.REMOVE_ITEM", { index })}</span>
         <RemoveIcon className="h-4 w-4 duration-200 ease-in-out hover:stroke-destructive" />
       </button>
     </div>

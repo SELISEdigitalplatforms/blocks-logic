@@ -1,4 +1,5 @@
 import * as React from "react";
+import { tStatic } from "@seliseblocks/genesis-os";
 import type { ToastActionElement, ToastProps } from "@/components/ui-kits/toaster/toast";
 import { handleErrorMessages } from "@/lib/error";
 
@@ -176,7 +177,7 @@ type ErrorToastOptions = {
   customMessages?: Record<string, string>;
 };
 
-export const showSuccessToast = ({ title = "Success", description }: SuccessToastOptions) => {
+export const showSuccessToast = ({ title = tStatic("logic.shared", "common:SUCCESS"), description }: SuccessToastOptions) => {
   toast({
     variant: "success",
     title,
@@ -184,7 +185,7 @@ export const showSuccessToast = ({ title = "Success", description }: SuccessToas
   });
 };
 
-export const showInfoToast = ({ title = "Info", description }: InfoToastOptions) => {
+export const showInfoToast = ({ title = tStatic("logic.shared", "USE_TOAST.INFO"), description }: InfoToastOptions) => {
   toast({
     variant: "info",
     title,
@@ -193,7 +194,7 @@ export const showInfoToast = ({ title = "Info", description }: InfoToastOptions)
 };
 
 export const showErrorToast = ({
-  title = "Failed",
+  title = tStatic("logic.shared", "USE_TOAST.FAILED"),
   errors,
   customMessages,
 }: ErrorToastOptions) => {

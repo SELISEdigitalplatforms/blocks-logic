@@ -14,6 +14,7 @@ import {
   toDisplayValue,
   unresolvableRefKeys,
 } from "./variable-ref";
+import { useT } from "@seliseblocks/genesis-os";
 
 export type VariableTokenFieldProps = {
   value: string;
@@ -63,6 +64,7 @@ export const VariableTokenField = ({
   className,
   variablePickMode = "insert",
 }: VariableTokenFieldProps) => {
+  const { t } = useT("logic.shared");
   // Skipped entirely when the caller supplies the rows, so a form that already has them does
   // not fetch the same list once per field.
   const query = useVariableCatalog({}, { enabled: !variables });
@@ -111,7 +113,7 @@ export const VariableTokenField = ({
         {locked ? (
           <div className="flex h-9 min-w-0 flex-1 items-center rounded-md border border-error/40 bg-error/5 px-2">
             <span className="truncate text-xs italic text-error">
-              References a variable that no longer exists
+              {t("VARIABLE_TOKEN_FIELD.REFERENCES_A_VARIABLE_THAT")}
             </span>
           </div>
         ) : multiline ? (
@@ -126,7 +128,9 @@ export const VariableTokenField = ({
             variables={catalog}
             isLoading={isLoading}
             isError={isError}
-            ariaLabel={`Insert a configuration variable into ${ariaLabel.toLowerCase()}`}
+            ariaLabel={t("VARIABLE_TOKEN_FIELD.INSERT_A_CONFIGURATION_VARIABLE", {
+              value: ariaLabel.toLowerCase(),
+            })}
             onPick={(variable) => pick(displayToken(variable, codec))}
           />
           {locked && (
@@ -137,7 +141,7 @@ export const VariableTokenField = ({
               className="h-8 text-xs"
               onClick={() => onChange("")}
             >
-              Clear
+              {t("common:CLEAR")}
             </Button>
           )}
         </div>
@@ -145,7 +149,7 @@ export const VariableTokenField = ({
 
       {!locked && hasRef(value, codec) && (
         <Badge variant="secondary" className="w-fit rounded px-1.5 py-0 text-[10px]">
-          uses a variable
+          {t("VARIABLE_TOKEN_FIELD.USES_A_VARIABLE")}
         </Badge>
       )}
     </div>

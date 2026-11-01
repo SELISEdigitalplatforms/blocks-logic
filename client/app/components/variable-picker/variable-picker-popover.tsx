@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/po
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { SecretListItem } from "@/models/secret";
 import { VariablePicker } from "./variable-picker";
+import { useT } from "@seliseblocks/genesis-os";
 
 export type VariablePickerPopoverProps = {
   variables: SecretListItem[];
@@ -31,20 +32,22 @@ export const VariablePickerPopover = ({
   onPick,
   selectedId,
   variant = "button",
-  label = "Insert variable",
+  label,
   ariaLabel,
   hint,
 }: VariablePickerPopoverProps) => {
+  const { t } = useT("logic.shared");
+  const buttonLabel = label ?? t("VARIABLE_PICKER_POPOVER.INSERT_VARIABLE");
   const [open, setOpen] = useState(false);
   const disabled = Boolean(isLoading) || Boolean(isError) || variables.length === 0;
 
   const reason = isError
-    ? "Unable to load variables"
+    ? t("VARIABLE_PICKER_POPOVER.UNABLE_TO_LOAD_VARIABLES")
     : isLoading
-      ? "Loading variables…"
+      ? t("VARIABLE_PICKER_POPOVER.LOADING_VARIABLES")
       : variables.length === 0
-        ? "No variables — add one in Secret management"
-        : label;
+        ? t("VARIABLE_PICKER_POPOVER.NO_VARIABLES_ADD_ONE")
+        : buttonLabel;
 
   const trigger = (
     <Button
@@ -56,7 +59,7 @@ export const VariablePickerPopover = ({
       className={variant === "icon" ? "h-9 shrink-0 gap-0.5 px-2" : "h-8 gap-1.5 px-2 text-xs"}
     >
       <KeyRound className="h-3.5 w-3.5" />
-      {variant === "button" ? label : <ChevronDown className="h-3 w-3 opacity-60" />}
+      {variant === "button" ? buttonLabel : <ChevronDown className="h-3 w-3 opacity-60" />}
     </Button>
   );
 

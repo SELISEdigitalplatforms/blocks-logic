@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui-kits/badge/badge";
 import { Input } from "@/components/ui-kits/input/input";
 import { cn } from "@/lib/utils";
 import { SecretListItem } from "@/models/secret";
+import { useT } from "@seliseblocks/genesis-os";
 
 export type VariablePickerProps = {
   /** Rows from `GET /api/Secret/GetAll`, already narrowed by the server to what this tenant can resolve. */
@@ -36,6 +37,7 @@ export const VariablePicker = ({
   selectedId,
   hint,
 }: VariablePickerProps) => {
+  const { t } = useT("logic.shared");
   const [search, setSearch] = useState("");
   const [tag, setTag] = useState<string | null>(null);
 
@@ -65,20 +67,20 @@ export const VariablePicker = ({
   }, [variables, search, activeTag]);
 
   const emptyMessage = isLoading
-    ? "Loading variables…"
+    ? t("VARIABLE_PICKER.LOADING_VARIABLES")
     : isError
-      ? "Unable to load variables."
+      ? t("VARIABLE_PICKER.UNABLE_TO_LOAD_VARIABLES")
       : variables.length === 0
-        ? "No variables yet — add one in Secret management."
-        : "No variable matches that search.";
+        ? t("VARIABLE_PICKER.NO_VARIABLES_YET")
+        : t("VARIABLE_PICKER.NO_VARIABLE_MATCHES_SEARCH");
 
   return (
     <div className="flex flex-col">
       <div className="relative border-b p-2">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-medium-emphasis" />
         <Input
-          aria-label="Search variables"
-          placeholder="Search name or tag…"
+          aria-label={t("VARIABLE_PICKER.SEARCH_VARIABLES")}
+          placeholder={t("VARIABLE_PICKER.SEARCH_NAME_OR_TAG")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className="h-8 pl-7 text-xs"
@@ -88,7 +90,7 @@ export const VariablePicker = ({
       {tags.length > 0 && (
         <div
           role="group"
-          aria-label="Filter by tag"
+          aria-label={t("VARIABLE_PICKER.FILTER_BY_TAG")}
           className="flex flex-wrap gap-1 border-b px-2 py-1.5"
         >
           {tags.map((each) => {
@@ -115,7 +117,11 @@ export const VariablePicker = ({
         </div>
       )}
 
-      <div role="listbox" aria-label="Variables" className="max-h-56 overflow-y-auto p-1">
+      <div
+        role="listbox"
+        aria-label={t("VARIABLE_PICKER.VARIABLES")}
+        className="max-h-56 overflow-y-auto p-1"
+      >
         {filtered.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-medium-emphasis">{emptyMessage}</p>
         ) : (

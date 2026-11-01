@@ -13,7 +13,6 @@ import ProxiesPage from "./routes/private/proxy/proxies-page";
 import ProxyCreatePage from "./routes/private/proxy/proxy-create-page";
 import ProxyEditPage from "./routes/private/proxy/proxy-edit-page";
 import ProxyDetailsPage from "./routes/private/proxy/proxy-details-page";
-
 import {
   AuthResolver,
   PublicGuard,
@@ -26,7 +25,8 @@ import {
   DashboardOverview,
   DashboardRoute,
 } from "@seliseblocks/genesis-os";
-import { navigationMenus } from "./constants/navigation-menus";
+
+import { useNavigationMenus } from "./constants/navigation-menus";
 
 const redirectPaths: Record<string, string> = {
   "/workflow/*": "/app/workflow",
@@ -36,7 +36,10 @@ const redirectPaths: Record<string, string> = {
   "/proxy/*": "/app/proxy",
 };
 
-
+const LocalizedDashboardRoute = () => {
+  const navigationMenus = useNavigationMenus();
+  return <DashboardRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />;
+};
 
 export const router = createBrowserRouter([
   {
@@ -92,7 +95,7 @@ export const router = createBrowserRouter([
           {
             // impersonate
             path: ":itemId",
-            element: <DashboardRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />,
+            element: <LocalizedDashboardRoute />,
             children: [
               { path: "dashboard", element: <DashboardOverview /> },
               { path: "workflow/:id", element: <WorkflowDetailsPage /> },
