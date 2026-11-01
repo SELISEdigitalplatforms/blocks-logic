@@ -878,7 +878,7 @@ namespace Workflow.DomainService.Services
             await _workflowExecutionRepository.AtomicCompleteNodeAsync(
                 execution.Id, execution.TenantId, nodeExecution.NodeId, new List<string>());
 
-            await SendErrorTriggerIfNeededAsync(execution, node, error, wasAlreadyFailed);
+            await SendErrorTriggerAsync(execution, node, error, wasAlreadyFailed);
         }
 
         /// <summary>
@@ -887,7 +887,7 @@ namespace Workflow.DomainService.Services
         /// Never: a step test ("Test step" always names the node it stops at), or a run an Error Trigger started (no loops).
         /// A failure here is logged and never changes the failed run.
         /// </summary>
-        private async Task SendErrorTriggerIfNeededAsync(WorkflowExecutionEntity execution, NodeEntity node, string error, bool wasAlreadyFailed)
+        private async Task SendErrorTriggerAsync(WorkflowExecutionEntity execution, NodeEntity node, string error, bool wasAlreadyFailed)
         {
             if (wasAlreadyFailed) return;
             if (execution.TriggerMetadata?.TriggerType == LogicConstants.ErrorTriggerNodeType) return;
