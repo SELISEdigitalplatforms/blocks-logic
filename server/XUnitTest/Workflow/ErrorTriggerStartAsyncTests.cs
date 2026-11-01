@@ -15,7 +15,7 @@ using XUnitTest.TestHelpers;
 
 namespace XUnitTest.Workflow
 {
-    /// <summary>blocks-logic#380: the Worker starts the alert's error workflow from an ErrorTriggerEvent.</summary>
+    /// <summary>blocks-logic#380: the Worker reads the failed run and starts its alert's error workflow.</summary>
     public class ErrorTriggerStartAsyncTests
     {
         private const string Tenant = "tenant-1";
@@ -37,11 +37,8 @@ namespace XUnitTest.Workflow
             {
                 TenantId = Tenant, ItemId = "wf-b", IsPublished = true, PublishedVersionId = "ver-b",
             });
-            _workflows.Setup(r => r.GetWorkflowAsync(Tenant, "wf-a")).ReturnsAsync(new WorkflowEntity
-            {
-                TenantId = Tenant, ItemId = "wf-a", Name = "Sync orders",
-            });
-            SetSnapshot(new NodeEntity { Id = "err", Name = "Error Trigger", Type = LogicConstants.ErrorTriggerNodeType, Category = "trigger", Version = "v2", Position = new Position() });
+            SetFailedExecution();
+            SetSnapshot(ErrorTriggerNode());
 
             _sut = new WorkflowExecutionService(
                 _workflows.Object, _executions.Object, _messages.Object,
@@ -58,21 +55,41 @@ namespace XUnitTest.Workflow
                 Snapshot = new WorkflowEntity { TenantId = Tenant, ItemId = "wf-b", Nodes = [.. nodes], Edges = [] },
             });
 
-        private static ErrorTriggerEvent Event(string target = "wf-b") => new()
+        private void SetFailedExecution(WorkflowExecutionMode mode = WorkflowExecutionMode.Production, string? alertWorkflowId = "wf-b") =>
+            _executions.Setup(r => r.GetByIdAsync("exec-a", Tenant)).ReturnsAsync(new WorkflowExecutionEntity
+            {
+                Id = "exec-a", TenantId = Tenant, WorkflowId = "wf-a", WorkflowName = "Sync orders",
+                ExecutionMode = mode,
+                StartedAt = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc),
+                FinishedAt = new DateTime(2026, 1, 1, 9, 0, 3, DateTimeKind.Utc),
+                TriggerMetadata = new TriggerMetadata { TriggerType = "webhook" },
+                WorkflowSnapshot = new WorkflowEntity
+                {
+                    TenantId = Tenant, ItemId = "wf-a", Nodes = [], Edges = [],
+                    Settings = new WorkflowSettings
+                    {
+                        Alert = new WorkflowAlert { IsEnabled = true, Mode = WorkflowAlertMode.Workflow, WorkflowId = alertWorkflowId },
+                    },
+                },
+            });
+
+        private static NodeEntity ErrorTriggerNode(bool runOnTestMode = false) =>
+            new()
+            {
+                Id = "err", Name = "Error Trigger", Type = LogicConstants.ErrorTriggerNodeType, Category = "trigger", Version = "v2", Position = new Position(),
+                Parameters = new BsonDocument("runOnTestMode", runOnTestMode),
+            };
+
+        private static ErrorTriggerEvent Event() => new()
         {
             TenantId = Tenant,
             FailedWorkflowId = "wf-a",
             FailedExecutionId = "exec-a",
-            AttemptNumber = 2,
-            ExecutionMode = WorkflowExecutionMode.Production,
-            StartedAt = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc),
-            FinishedAt = new DateTime(2026, 1, 1, 9, 0, 3, DateTimeKind.Utc),
             Error = new ErrorTriggerEventError { Message = "timeout", NodeId = "n1", NodeName = "Postgres", NodeType = "dataAction" },
-            Alert = new ErrorTriggerEventAlert { WorkflowId = target },
         };
 
         [Fact]
-        public async Task H9_StartsOneProductionRunOfTheTarget_AtItsErrorTrigger_WithThePayload()
+        public async Task H9_StartsOneProductionRunOfThePublishedVersion_AtItsErrorTrigger_WithThePayload()
         {
             await _sut.ErrorTriggerStartAsync(Event());
 
@@ -86,22 +103,41 @@ namespace XUnitTest.Workflow
             {
                 { "execution", new BsonDocument
                     {
-                        { "id", "exec-a" }, { "attemptNumber", 2 }, { "mode", "Production" },
+                        { "workflowId", "wf-a" }, { "workflowName", "Sync orders" }, { "executionId", "exec-a" }, { "mode", "Production" },
                         { "startedAt", "2026-01-01T09:00:00Z" }, { "finishedAt", "2026-01-01T09:00:03Z" },
                         { "error", new BsonDocument { { "message", "timeout" }, { "nodeId", "n1" }, { "nodeName", "Postgres" }, { "nodeType", "dataAction" } } },
                     }
                 },
-                { "workflow", new BsonDocument { { "id", "wf-a" }, { "name", "Sync orders" } } },
             }).Should().BeTrue(payload.ToJson());
             _created.Context[LogicConstants.ExecutionInputKey].Equals(_created.TriggerMetadata.TriggerData).Should().BeTrue();
             _messages.Verify(m => m.SendToConsumerAsync(It.Is<ConsumerMessage<AddExcuationNodeEvent>>(c =>
-                c.ConsumerName == LogicConstants.NodeQueueFor("exec-b") && c.Payload.NodeId == "err")), Times.Once);
+                c.ConsumerName == LogicConstants.NodeQueueFor("exec-b") && c.Payload.WorkflowId == "wf-b" && c.Payload.NodeId == "err")), Times.Once);
         }
 
         [Fact]
-        public async Task C6_ARedeliveredEvent_StartsNothing()
+        public async Task ATestFailure_RunsTheErrorWorkflowsDraft_InTestMode_EvenWhenUnpublished()
         {
-            _executions.Setup(r => r.ErrorRunExistsAsync(Tenant, "wf-b", "exec-a", 2)).ReturnsAsync(true);
+            SetFailedExecution(WorkflowExecutionMode.Test);
+            _workflows.Setup(r => r.GetWorkflowAsync(Tenant, "wf-b")).ReturnsAsync(new WorkflowEntity
+            {
+                TenantId = Tenant, ItemId = "wf-b", IsPublished = false, Nodes = [ErrorTriggerNode(runOnTestMode: true)], Edges = [],
+            });
+
+            await _sut.ErrorTriggerStartAsync(Event());
+
+            _created!.ExecutionMode.Should().Be(WorkflowExecutionMode.Test);
+            _created.TriggerMetadata!.TriggerData![0]["execution"]["mode"].AsString.Should().Be("Test");
+            _versions.Verify(v => v.GetWorkflowVersionAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task ATestFailure_StartsNothing_WhenRunOnTestModeIsOff()
+        {
+            SetFailedExecution(WorkflowExecutionMode.Test);
+            _workflows.Setup(r => r.GetWorkflowAsync(Tenant, "wf-b")).ReturnsAsync(new WorkflowEntity
+            {
+                TenantId = Tenant, ItemId = "wf-b", IsPublished = true, PublishedVersionId = "ver-b", Nodes = [ErrorTriggerNode()], Edges = [],
+            });
 
             await _sut.ErrorTriggerStartAsync(Event());
 
@@ -109,11 +145,13 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task C7_ATargetThatIsGone_Unpublished_OrWithoutAnErrorTrigger_StartsNothing()
+        public async Task C7_AnErrorWorkflowThatIsGone_Unpublished_OrWithoutAnErrorTrigger_StartsNothing()
         {
-            await _sut.ErrorTriggerStartAsync(Event("wf-missing"));
+            SetFailedExecution(alertWorkflowId: "wf-missing");
+            await _sut.ErrorTriggerStartAsync(Event());
             _created.Should().BeNull();
 
+            SetFailedExecution();
             _workflows.Setup(r => r.GetWorkflowAsync(Tenant, "wf-b")).ReturnsAsync(new WorkflowEntity { TenantId = Tenant, ItemId = "wf-b", IsPublished = false });
             await _sut.ErrorTriggerStartAsync(Event());
             _created.Should().BeNull();
@@ -125,20 +163,14 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task C8_ADeletedFailedWorkflow_StillAlerts_WithAnEmptyName()
+        public async Task AFailedRunThatIsGone_OrHasNoAlert_StartsNothing()
         {
-            _workflows.Setup(r => r.GetWorkflowAsync(Tenant, "wf-a")).ReturnsAsync((WorkflowEntity)null!);
-
+            _executions.Setup(r => r.GetByIdAsync("exec-a", Tenant)).ReturnsAsync((WorkflowExecutionEntity?)null);
             await _sut.ErrorTriggerStartAsync(Event());
+            _created.Should().BeNull();
 
-            _created!.TriggerMetadata!.TriggerData![0]["workflow"]["name"].AsString.Should().BeEmpty();
-        }
-
-        [Fact]
-        public async Task AnEventWithoutATarget_StartsNothing()
-        {
-            await _sut.ErrorTriggerStartAsync(Event(target: ""));
-
+            SetFailedExecution(alertWorkflowId: "");
+            await _sut.ErrorTriggerStartAsync(Event());
             _created.Should().BeNull();
             _workflows.Verify(r => r.GetWorkflowAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }

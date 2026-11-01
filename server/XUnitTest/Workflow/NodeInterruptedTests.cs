@@ -60,8 +60,7 @@ namespace XUnitTest.Workflow
 
             var engine = new WorkflowEngineService(repository.Object, [new WaitsUntilStopped()], Mock.Of<IMessageClient>(),
                 NullLogger<WorkflowEngineService>.Instance, Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IWorkflowRepository>());
+                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
 
             using var stopping = new CancellationTokenSource();
             var run = engine.RunNodeAsync(new AddExcuationNodeEvent { TenantId = "t1", WorkflowId = "wf", WorkflowExecutionId = "exec-1", NodeId = "n1" }, stopping.Token);

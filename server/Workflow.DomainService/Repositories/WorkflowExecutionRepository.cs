@@ -359,17 +359,6 @@ namespace Workflow.DomainService.Repositories
             await collection.UpdateOneAsync(filter, update);
         }
 
-        public async Task<bool> ErrorRunExistsAsync(string tenantId, string workflowId, string failedExecutionId, int attemptNumber)
-        {
-            var f = Builders<WorkflowExecutionEntity>.Filter;
-            var filter = f.Eq(e => e.WorkflowId, workflowId)
-                & f.Eq("TriggerMetadata.TriggerType", LogicConstants.ErrorTriggerNodeType)
-                & f.Eq("TriggerMetadata.TriggerData.0.execution.id", failedExecutionId)
-                & f.Eq("TriggerMetadata.TriggerData.0.execution.attemptNumber", attemptNumber);
-            var scope = await ReadAsync(tenantId, filter, "ErrorRunExists", useProjection: false);
-            return scope.Granted && await GetCollection(tenantId).CountDocumentsAsync(scope.Filter, new CountOptions { Limit = 1 }) > 0;
-        }
-
         public async Task<List<WorkflowExecutionEntity>> GetByWorkflowIdAsync(string workflowId, string tenantId)
         {
             var collection = GetCollection(tenantId);

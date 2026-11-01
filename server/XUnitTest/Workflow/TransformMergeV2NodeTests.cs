@@ -450,8 +450,7 @@ namespace XUnitTest.Workflow
 
             var engine = new WorkflowEngineService(repository.Object, [executor], Mock.Of<IMessageClient>(),
                 NullLogger<WorkflowEngineService>.Instance, Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IWorkflowRepository>());
+                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
             return new Harness(engine, execution, saved, () => error);
         }
 
@@ -564,8 +563,7 @@ namespace XUnitTest.Workflow
 
             var engine = new WorkflowEngineService(repository.Object, [new EmptyExecutor(), new TransformMergeV2Node()], messages.Object,
                 NullLogger<WorkflowEngineService>.Instance, Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IWorkflowRepository>());
+                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
             return (engine, dispatched);
         }
 

@@ -1170,45 +1170,49 @@ namespace Workflow.DomainService.Services
         public async Task ErrorTriggerStartAsync(ErrorTriggerEvent @event)
         {
             var tenantId = @event.TenantId;
-            var targetId = @event.Alert.WorkflowId;
-            if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(@event.FailedExecutionId)
-                || @event.Alert.Mode != WorkflowAlertMode.Workflow || string.IsNullOrWhiteSpace(targetId))
+            if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(@event.FailedExecutionId))
             {
                 LogErrorTriggerDropped(@event, "invalid-event");
                 return;
             }
 
-            var isTest = @event.ExecutionMode == WorkflowExecutionMode.Test;
-            var workflowSnapshot = await ErrorWorkflowSnapshotAsync(@event, tenantId, targetId, isTest);
-            if (workflowSnapshot == null) return;
+            var failedExecution = await _executionRepository.GetByIdAsync(@event.FailedExecutionId, tenantId);
+            if (failedExecution == null)
+            {
+                LogErrorTriggerDropped(@event, "failed-execution-not-found");
+                return;
+            }
+
+            var alert = failedExecution.WorkflowSnapshot?.Settings?.Alert;
+            if (alert is not { IsEnabled: true, Mode: WorkflowAlertMode.Workflow } || string.IsNullOrWhiteSpace(alert.WorkflowId))
+            {
+                LogErrorTriggerDropped(@event, "alert-off");
+                return;
+            }
+
+            var mode = failedExecution.ExecutionMode;
+            var errorWorkflow = await ErrorWorkflowSnapshotAsync(@event, tenantId, alert.WorkflowId, mode);
+            if (errorWorkflow == null) return;
 
             // At most one per workflow (the editor allows only one); the first wins if there are more.
-            var triggerNode = workflowSnapshot.Nodes.FirstOrDefault(n =>
+            var triggerNode = errorWorkflow.Nodes.FirstOrDefault(n =>
                 n.Type == LogicConstants.ErrorTriggerNodeType && n.Category == LogicConstants.TriggerCategory);
             if (triggerNode == null)
             {
-                LogErrorTriggerDropped(@event, "trigger-missing");
+                LogErrorTriggerDropped(@event, "trigger-missing", errorWorkflow.ItemId);
                 return;
             }
-            if (isTest && !RunsOnTestMode(triggerNode))
+            // "Run on test mode" on the Error Trigger of the version that runs (the saved draft in a test run).
+            var runOnTestMode = triggerNode.Parameters != null
+                && triggerNode.Parameters.TryGetValue("runOnTestMode", out var value)
+                && value.IsBoolean && value.AsBoolean;
+            if (mode == WorkflowExecutionMode.Test && !runOnTestMode)
             {
-                LogErrorTriggerDropped(@event, "test-mode-off");
-                return;
-            }
-
-            // A redelivered message must not start the error workflow twice for the same failed attempt.
-            if (await _executionRepository.ErrorRunExistsAsync(tenantId, targetId, @event.FailedExecutionId, @event.AttemptNumber))
-            {
-                LogErrorTriggerDropped(@event, "duplicate");
+                LogErrorTriggerDropped(@event, "test-mode-off", errorWorkflow.ItemId);
                 return;
             }
 
-            // The current name; empty when the failed workflow was deleted meanwhile.
-            var failedWorkflow = await _workflowRepository.GetWorkflowAsync(tenantId, @event.FailedWorkflowId);
-            var triggerData = new BsonArray
-            {
-                ErrorTriggerPayload.Build(@event, failedWorkflow?.Name ?? string.Empty)
-            };
+            var triggerData = new BsonArray { ErrorTriggerPayload.Build(@event, failedExecution) };
 
             WorkflowExecutionEntity? execution = null;
             try
@@ -1219,19 +1223,7 @@ namespace Workflow.DomainService.Services
                     TriggerType = triggerNode.Type,
                     TriggerData = triggerData
                 };
-                if (isTest)
-                {
-                    // In memory only: the draft is not saved, so the error workflow's editor state is untouched.
-                    workflowSnapshot.TestMeta = new TestWorkflowMeta
-                    {
-                        IsListening = false,
-                        ListenerTriggerNodes = new List<NodeEntity>(),
-                        UserIds = @event.UserIds,
-                        CompletionNodeId = null,
-                    };
-                }
-                execution = await CreateExecutionAsync(workflowSnapshot, triggerMetadata,
-                    isTest ? WorkflowExecutionMode.Test : WorkflowExecutionMode.Production);
+                execution = await CreateExecutionAsync(errorWorkflow, triggerMetadata, mode);
                 execution.Context[LogicConstants.ExecutionInputKey] = triggerData;
                 execution.Status = WorkflowExecutionStatus.Queued;
                 execution.ActiveNodeIds.Add(triggerNode.Id);
@@ -1243,8 +1235,8 @@ namespace Workflow.DomainService.Services
                     ConsumerName = LogicConstants.NodeQueueFor(execution.Id!),
                     Payload = new AddExcuationNodeEvent
                     {
-                        TenantId = workflowSnapshot.TenantId,
-                        WorkflowId = workflowSnapshot.ItemId,
+                        TenantId = errorWorkflow.TenantId,
+                        WorkflowId = errorWorkflow.ItemId,
                         WorkflowExecutionId = execution.Id!,
                         NodeId = triggerNode.Id,
                     }
@@ -1252,49 +1244,45 @@ namespace Workflow.DomainService.Services
 
                 LogTriggerQueued(execution, triggerNode);
                 _logger.LogInformation("Queued {Mode} execution {ExecutionId} for WorkflowId: {WorkflowId} (Error Trigger, failed execution {FailedExecutionId})",
-                    execution.ExecutionMode, execution.Id, workflowSnapshot.ItemId, @event.FailedExecutionId);
+                    execution.ExecutionMode, execution.Id, errorWorkflow.ItemId, @event.FailedExecutionId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Error Trigger)", workflowSnapshot.ItemId);
+                _logger.LogError(ex, "Failed to create execution for WorkflowId: {WorkflowId} (Error Trigger)", errorWorkflow.ItemId);
                 LogStartFailed(execution, ex);
             }
         }
 
         // A production failure runs the error workflow's published version; a test failure runs its saved draft.
-        private async Task<WorkflowEntity?> ErrorWorkflowSnapshotAsync(ErrorTriggerEvent @event, string tenantId, string targetId, bool isTest)
+        private async Task<WorkflowEntity?> ErrorWorkflowSnapshotAsync(ErrorTriggerEvent @event, string tenantId, string errorWorkflowId, WorkflowExecutionMode mode)
         {
-            var workflow = await _workflowRepository.GetWorkflowAsync(tenantId, targetId);
-            if (workflow == null)
+            var errorWorkflow = await _workflowRepository.GetWorkflowAsync(tenantId, errorWorkflowId);
+            if (errorWorkflow == null)
             {
-                LogErrorTriggerDropped(@event, "not-found");
+                LogErrorTriggerDropped(@event, "error-workflow-not-found", errorWorkflowId);
                 return null;
             }
-            if (isTest) return workflow;
+            if (mode == WorkflowExecutionMode.Test) return errorWorkflow;
 
-            if (!workflow.IsPublished || string.IsNullOrWhiteSpace(workflow.PublishedVersionId))
+            if (!errorWorkflow.IsPublished || string.IsNullOrWhiteSpace(errorWorkflow.PublishedVersionId))
             {
-                LogErrorTriggerDropped(@event, "not-published");
+                LogErrorTriggerDropped(@event, "error-workflow-not-published", errorWorkflowId);
                 return null;
             }
-            var publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, workflow.PublishedVersionId);
+
+            var publishedVersion = await _workflowVersionRepository.GetWorkflowVersionAsync(tenantId, errorWorkflow.PublishedVersionId);
             if (publishedVersion?.Snapshot == null)
             {
-                LogErrorTriggerDropped(@event, "version-missing");
+                LogErrorTriggerDropped(@event, "published-version-not-found", errorWorkflowId);
                 return null;
             }
             return publishedVersion.Snapshot;
         }
 
-        private static bool RunsOnTestMode(NodeEntity triggerNode) =>
-            triggerNode.Parameters != null
-            && triggerNode.Parameters.TryGetValue("runOnTestMode", out var value)
-            && value.IsBoolean && value.AsBoolean;
-
         // Ids and a reason code only: the failed run's error text may hold customer data.
-        private void LogErrorTriggerDropped(ErrorTriggerEvent @event, string reason) =>
-            _logger.LogWarning("error-trigger dropped reason={Reason} target={WorkflowId} failedExecution={FailedExecutionId} attempt={AttemptNumber}",
-                reason, @event.Alert.WorkflowId, @event.FailedExecutionId, @event.AttemptNumber);
+        private void LogErrorTriggerDropped(ErrorTriggerEvent @event, string reason, string? errorWorkflowId = null) =>
+            _logger.LogWarning("error-trigger dropped reason={Reason} errorWorkflow={ErrorWorkflowId} failedWorkflow={FailedWorkflowId} failedExecution={FailedExecutionId}",
+                reason, errorWorkflowId, @event.FailedWorkflowId, @event.FailedExecutionId);
 
         public async Task SchedulerTriggerStartAsync(SchedulerTriggerPayload payload)
         {

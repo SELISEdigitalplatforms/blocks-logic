@@ -86,7 +86,7 @@ namespace XUnitTest.Workflow
             _engine = new WorkflowEngineService(_executions,
                 [new TriggerWebhookV1Node(), new TriggerErrorTriggerV2Node(), new FailingExecutor()],
                 messages.Object, NullLogger<WorkflowEngineService>.Instance, Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IServiceProvider>(), logger, _workflows);
+                Mock.Of<IServiceProvider>(), logger);
             _executionService = new WorkflowExecutionService(_workflows, _executions, messages.Object,
                 NullLogger<WorkflowExecutionService>.Instance, _engine, _versions, Mock.Of<IWorkflowNotificationService>(),
                 Mock.Of<IWorkflowAuthService>(), Mock.Of<IHttpContextAccessor>(), Mock.Of<IDelegationGrantFactory>(),
@@ -201,14 +201,14 @@ namespace XUnitTest.Workflow
             run.TriggerMetadata!.TriggerType.Should().Be(LogicConstants.ErrorTriggerNodeType);
 
             var output = await ErrorTriggerOutputAsync(run.Id!);
-            output["execution"]["id"].AsString.Should().Be(failedId);
-            output["execution"]["attemptNumber"].AsInt32.Should().Be(1);
+            output["execution"]["workflowId"].AsString.Should().Be("wf-a");
+            output["execution"]["workflowName"].AsString.Should().Be("Sync orders");
+            output["execution"]["executionId"].AsString.Should().Be(failedId);
             output["execution"]["mode"].AsString.Should().Be("Production");
             output["execution"]["error"]["message"].AsString.Should().Be("Order API returned 500");
             output["execution"]["error"]["nodeId"].AsString.Should().Be("fail1");
             output["execution"]["error"]["nodeName"].AsString.Should().Be("Call API 1");
             output["execution"]["error"]["nodeType"].AsString.Should().Be("fail");
-            output["workflow"].AsBsonDocument.Should().BeEquivalentTo(new BsonDocument { { "id", "wf-a" }, { "name", "Sync orders" } });
         }
 
         [Fact]
@@ -236,11 +236,12 @@ namespace XUnitTest.Workflow
             (await RunsOfBAsync()).Should().BeEmpty();
         }
 
-        /// <summary>Sets "Run on test mode" on B's saved draft only; B's published version keeps it off.</summary>
-        private async Task SetBRunOnTestModeAsync(bool on)
+        /// <summary>Changes the Error Trigger in B's saved draft only (renamed, so a run shows which version it used).</summary>
+        private async Task ChangeBDraftTriggerAsync(bool runOnTestMode)
         {
             var b = (await _workflows.GetWorkflowAsync(Tenant, "wf-b"))!;
-            b.Nodes[0].Parameters = new BsonDocument("runOnTestMode", on);
+            b.Nodes[0].Name = "Error Trigger (draft)";
+            b.Nodes[0].Parameters = new BsonDocument("runOnTestMode", runOnTestMode);
             await _workflows.UpdateWorkflowAsync(b);
         }
 
@@ -259,7 +260,7 @@ namespace XUnitTest.Workflow
         public async Task A_failing_test_run_starts_the_error_workflow_draft_in_test_mode_when_Run_on_test_mode_is_on()
         {
             await SeedAsync(AlertTo("wf-b"));
-            await SetBRunOnTestModeAsync(true);
+            await ChangeBDraftTriggerAsync(runOnTestMode: true);
 
             var failedId = await RunAAsync(WorkflowExecutionMode.Test);
 
@@ -268,20 +269,28 @@ namespace XUnitTest.Workflow
             var run = runs[0];
             run.ExecutionMode.Should().Be(WorkflowExecutionMode.Test);
             run.Status.Should().Be(WorkflowExecutionStatus.Completed);
-            run.WorkflowSnapshot.Nodes[0].Parameters["runOnTestMode"].AsBoolean.Should().BeTrue("the draft ran, not the published version");
-            run.WorkflowSnapshot.TestMeta.UserIds.Should().Equal("tester");
+            run.WorkflowSnapshot.Nodes[0].Name.Should().Be("Error Trigger (draft)", "the draft ran, not the published version");
             var output = await ErrorTriggerOutputAsync(run.Id!);
-            output["execution"]["id"].AsString.Should().Be(failedId);
+            output["execution"]["executionId"].AsString.Should().Be(failedId);
             output["execution"]["mode"].AsString.Should().Be("Test");
-            // The draft itself is not changed by the run.
-            (await _workflows.GetWorkflowAsync(Tenant, "wf-b"))!.TestMeta.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task A_failing_production_run_starts_the_published_version_not_the_draft()
+        {
+            await SeedAsync(AlertTo("wf-b"));
+            await ChangeBDraftTriggerAsync(runOnTestMode: true);
+
+            await RunAAsync();
+
+            (await RunsOfBAsync()).Should().ContainSingle().Which.WorkflowSnapshot.Nodes[0].Name.Should().Be("Error Trigger");
         }
 
         [Fact]
         public async Task A_failing_test_run_starts_an_unpublished_error_workflow()
         {
             await SeedAsync(AlertTo("wf-b"));
-            await SetBRunOnTestModeAsync(true);
+            await ChangeBDraftTriggerAsync(runOnTestMode: true);
             var b = (await _workflows.GetWorkflowAsync(Tenant, "wf-b"))!;
             b.IsPublished = false;
             b.PublishedVersionId = null;
@@ -296,7 +305,6 @@ namespace XUnitTest.Workflow
         public async Task A_failing_step_test_sends_nothing()
         {
             await SeedAsync(AlertTo("wf-b"));
-            await SetBRunOnTestModeAsync(true);
 
             await RunAAsync(WorkflowExecutionMode.Test, completionNodeId: "fail1");
 
@@ -308,7 +316,6 @@ namespace XUnitTest.Workflow
         public async Task A_failing_production_run_skips_an_unpublished_error_workflow()
         {
             await SeedAsync(AlertTo("wf-b"));
-            await SetBRunOnTestModeAsync(true);
             var b = (await _workflows.GetWorkflowAsync(Tenant, "wf-b"))!;
             b.IsPublished = false;
             b.PublishedVersionId = null;
@@ -331,22 +338,8 @@ namespace XUnitTest.Workflow
             resumed.IsSuccess.Should().BeTrue(resumed.Error);
             await DrainAsync();
 
-            _alerts.Select(a => a.AttemptNumber).Should().Equal(1, 2);
-            var runs = await RunsOfBAsync();
-            runs.Should().HaveCount(2);
-            (await ErrorTriggerOutputAsync(runs[1].Id!))["execution"]["attemptNumber"].AsInt32.Should().Be(2);
-        }
-
-        [Fact]
-        public async Task A_redelivered_alert_starts_the_error_workflow_only_once()
-        {
-            await SeedAsync(AlertTo("wf-b"));
-            await RunAAsync();
-
-            await _executionService.ErrorTriggerStartAsync(_alerts[0]);
-            await DrainAsync();
-
-            (await RunsOfBAsync()).Should().ContainSingle();
+            _alerts.Select(a => a.FailedExecutionId).Should().Equal(failedId, failedId);
+            (await RunsOfBAsync()).Should().HaveCount(2);
         }
 
         [Fact]
@@ -369,14 +362,15 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task An_alert_turned_on_after_publishing_takes_effect_without_republishing()
+        public async Task An_alert_turned_on_after_publishing_waits_for_the_next_publish_in_production()
         {
             await SeedAsync(alertSettings: null);
             (await _workflows.UpdateWorkflowSettingsAsync(Tenant, "wf-a", AlertTo("wf-b"), "user-1")).Should().BeTrue();
 
             await RunAAsync();
 
-            (await RunsOfBAsync()).Should().ContainSingle();
+            _alerts.Should().BeEmpty();
+            (await RunsOfBAsync()).Should().BeEmpty();
         }
 
         [Fact]

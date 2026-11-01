@@ -23,8 +23,7 @@ namespace Worker.Consumers.Workflow
 
         public async Task Consume(ErrorTriggerEvent @event)
         {
-            _logger.LogInformation("ErrorTriggerConsumer: Received failure of execution {FailedExecutionId} (attempt {AttemptNumber})",
-                @event.FailedExecutionId, @event.AttemptNumber);
+            _logger.LogInformation("ErrorTriggerConsumer: Received failure of execution {FailedExecutionId}", @event.FailedExecutionId);
 
             await _workflowExecutionService.ErrorTriggerStartAsync(@event);
         }

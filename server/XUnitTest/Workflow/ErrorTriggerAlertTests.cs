@@ -14,8 +14,8 @@ using Blocks.Genesis.Entities.Logic;
 namespace XUnitTest.Workflow
 {
     /// <summary>
-    /// blocks-logic#380: a failed production attempt sends one ErrorTriggerEvent when its workflow has an
-    /// enabled alert, and nothing (no message, no settings read) in every other case.
+    /// blocks-logic#380: a failed production attempt, or a failed full test run, sends one ErrorTriggerEvent
+    /// when the run's workflow has an enabled alert, and nothing in every other case.
     /// </summary>
     public class ErrorTriggerAlertTests
     {
@@ -29,7 +29,6 @@ namespace XUnitTest.Workflow
 
         private sealed record Harness(
             WorkflowEngineService Engine,
-            Mock<IWorkflowRepository> Workflows,
             List<ErrorTriggerEvent> Sent,
             Func<string?> StoredError);
 
@@ -43,7 +42,7 @@ namespace XUnitTest.Workflow
             WorkflowSettings? settings = null,
             WorkflowExecutionStatus statusBefore = WorkflowExecutionStatus.Running,
             string triggerType = "webhook",
-            bool settingsReadThrows = false,
+            bool sendThrows = false,
             string? completionNodeId = null)
         {
             var execution = new WorkflowExecutionEntity
@@ -63,6 +62,7 @@ namespace XUnitTest.Workflow
                     Nodes = [new NodeEntity { Id = "n1", Name = "Postgres", Category = "action", Type = "fn", Version = "v1", Position = new Position() }],
                     Edges = [],
                     TestMeta = new TestWorkflowMeta { UserIds = ["user-1"], CompletionNodeId = completionNodeId },
+                    Settings = settings,
                 },
             };
             string? error = null;
@@ -76,27 +76,23 @@ namespace XUnitTest.Workflow
                 .Callback((string _, string _, string _, string e, int _, Dictionary<string, int> _) => error = e)
                 .Returns(Task.CompletedTask);
 
-            var workflows = new Mock<IWorkflowRepository>();
-            if (settingsReadThrows)
-                workflows.Setup(r => r.GetWorkflowSettingsAsync("t1", "wf-a")).ThrowsAsync(new TimeoutException("mongo"));
-            else
-                workflows.Setup(r => r.GetWorkflowSettingsAsync("t1", "wf-a")).ReturnsAsync(settings);
-
             var sent = new List<ErrorTriggerEvent>();
             var messages = new Mock<IMessageClient>();
-            messages.Setup(m => m.SendToConsumerAsync(It.IsAny<ConsumerMessage<ErrorTriggerEvent>>()))
-                .Callback((ConsumerMessage<ErrorTriggerEvent> m) =>
-                {
-                    m.ConsumerName.Should().Be(LogicConstants.ErrorTriggerQueue);
-                    sent.Add(m.Payload);
-                })
-                .Returns(Task.CompletedTask);
+            if (sendThrows)
+                messages.Setup(m => m.SendToConsumerAsync(It.IsAny<ConsumerMessage<ErrorTriggerEvent>>())).ThrowsAsync(new TimeoutException("broker"));
+            else
+                messages.Setup(m => m.SendToConsumerAsync(It.IsAny<ConsumerMessage<ErrorTriggerEvent>>()))
+                    .Callback((ConsumerMessage<ErrorTriggerEvent> m) =>
+                    {
+                        m.ConsumerName.Should().Be(LogicConstants.ErrorTriggerQueue);
+                        sent.Add(m.Payload);
+                    })
+                    .Returns(Task.CompletedTask);
 
             var engine = new WorkflowEngineService(repository.Object, [new FailingExecutor()], messages.Object,
                 NullLogger<WorkflowEngineService>.Instance, Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                workflows.Object);
-            return new Harness(engine, workflows, sent, () => error);
+                Mock.Of<IServiceProvider>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance));
+            return new Harness(engine, sent, () => error);
         }
 
         private static Task Run(Harness h) =>
@@ -110,19 +106,13 @@ namespace XUnitTest.Workflow
             await Run(h);
 
             h.Sent.Should().ContainSingle();
-            var sent = h.Sent[0];
-            sent.Should().BeEquivalentTo(new
+            h.Sent[0].Should().BeEquivalentTo(new ErrorTriggerEvent
             {
                 TenantId = "t1",
                 FailedWorkflowId = "wf-a",
                 FailedExecutionId = "exec-1",
-                AttemptNumber = 2,
-                ExecutionMode = WorkflowExecutionMode.Production,
-                StartedAt = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc),
-                Error = new { Message = "timeout", NodeId = "n1", NodeName = "Postgres", NodeType = "fn" },
-                Alert = new { Mode = WorkflowAlertMode.Workflow, WorkflowId = "wf-b" },
+                Error = new ErrorTriggerEventError { Message = "timeout", NodeId = "n1", NodeName = "Postgres", NodeType = "fn" },
             });
-            sent.FinishedAt.Should().NotBeNull();
         }
 
         public static TheoryData<WorkflowSettings?> NoAlert => new()
@@ -136,48 +126,34 @@ namespace XUnitTest.Workflow
 
         [Theory]
         [MemberData(nameof(NoAlert))]
-        public async Task C1_NoUsableAlert_SendsNothing_AfterOneSettingsRead(WorkflowSettings? settings)
+        public async Task C1_NoUsableAlert_SendsNothing(WorkflowSettings? settings)
         {
             var h = Build(settings: settings);
 
             await Run(h);
 
             h.Sent.Should().BeEmpty();
-            h.Workflows.Verify(r => r.GetWorkflowSettingsAsync("t1", "wf-a"), Times.Once);
         }
 
         [Fact]
-        public async Task C2_AFullTestRun_SendsATestEvent_ForWhoRanIt()
+        public async Task C2_AFullTestRun_SendsOneEvent()
         {
             var h = Build(mode: WorkflowExecutionMode.Test, settings: EnabledAlert);
 
             await Run(h);
 
             h.Sent.Should().ContainSingle();
-            h.Sent[0].ExecutionMode.Should().Be(WorkflowExecutionMode.Test);
-            h.Sent[0].UserIds.Should().Equal("user-1");
+            h.Sent[0].FailedExecutionId.Should().Be("exec-1");
         }
 
         [Fact]
-        public async Task C2b_AStepTest_NeverReadsSettingsOrSends()
+        public async Task C2b_AStepTest_SendsNothing()
         {
             var h = Build(mode: WorkflowExecutionMode.Test, settings: EnabledAlert, completionNodeId: "n1");
 
             await Run(h);
 
             h.Sent.Should().BeEmpty();
-            h.Workflows.Verify(r => r.GetWorkflowSettingsAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task C2c_AProductionRun_SendsNoUserIds()
-        {
-            var h = Build(settings: EnabledAlert);
-
-            await Run(h);
-
-            h.Sent.Should().ContainSingle();
-            h.Sent[0].UserIds.Should().BeEmpty();
         }
 
         [Fact]
@@ -188,7 +164,6 @@ namespace XUnitTest.Workflow
             await Run(h);
 
             h.Sent.Should().BeEmpty();
-            h.Workflows.Verify(r => r.GetWorkflowSettingsAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
@@ -202,9 +177,9 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task C5_ASettingsReadFailure_IsSwallowed_AndTheRunStillFails()
+        public async Task C5_ASendFailure_IsSwallowed_AndTheRunStillFails()
         {
-            var h = Build(settingsReadThrows: true);
+            var h = Build(settings: EnabledAlert, sendThrows: true);
 
             await Run(h);
 

@@ -17,7 +17,6 @@ namespace Workflow.DomainService.Services
     public class WorkflowEngineService : IWorkflowEngineService
     {
         private readonly IWorkflowExecutionRepository _workflowExecutionRepository;
-        private readonly IWorkflowRepository _workflowRepository;
         private readonly NodeExecutorRegistry _nodeExecutors;
         private readonly IMessageClient _messageClient;
 
@@ -33,13 +32,10 @@ namespace Workflow.DomainService.Services
             ILogger<WorkflowEngineService> logger,
             IWorkflowNotificationService workflowNotificationService,
             IServiceProvider serviceProvider,
-            IWorkflowExecutionLogger executionLogger,
-            IWorkflowRepository workflowRepository
-            )
+            IWorkflowExecutionLogger executionLogger)
         {
             _executionLogger = executionLogger;
             _workflowExecutionRepository = workflowExecutionRepository;
-            _workflowRepository = workflowRepository;
             _nodeExecutors = new NodeExecutorRegistry(nodeExecutors);
             _messageClient = messageClient;
             _logger = logger;
@@ -891,17 +887,17 @@ namespace Workflow.DomainService.Services
         {
             if (wasAlreadyFailed) return;
             if (execution.TriggerMetadata?.TriggerType == LogicConstants.ErrorTriggerNodeType) return;
+
             var isFullTestRun = execution.ExecutionMode == WorkflowExecutionMode.Test
                 && string.IsNullOrWhiteSpace(execution.WorkflowSnapshot?.TestMeta?.CompletionNodeId);
             if (execution.ExecutionMode != WorkflowExecutionMode.Production && !isFullTestRun) return;
 
+            // The run's own settings: the published version's in production, the saved draft's in a test run.
+            var alert = execution.WorkflowSnapshot?.Settings?.Alert;
+            if (alert is not { IsEnabled: true, Mode: WorkflowAlertMode.Workflow } || string.IsNullOrWhiteSpace(alert.WorkflowId)) return;
+
             try
             {
-                // The live settings, not the published snapshot's: an alert takes effect without republishing.
-                var alert = (await _workflowRepository.GetWorkflowSettingsAsync(execution.TenantId, execution.WorkflowId))?.Alert;
-                if (alert is not { IsEnabled: true, Mode: WorkflowAlertMode.Workflow } || string.IsNullOrWhiteSpace(alert.WorkflowId))
-                    return;
-
                 await _messageClient.SendToConsumerAsync(new ConsumerMessage<ErrorTriggerEvent>
                 {
                     ConsumerName = LogicConstants.ErrorTriggerQueue,
@@ -910,10 +906,6 @@ namespace Workflow.DomainService.Services
                         TenantId = execution.TenantId,
                         FailedWorkflowId = execution.WorkflowId,
                         FailedExecutionId = execution.Id!,
-                        AttemptNumber = execution.AttemptNumber,
-                        ExecutionMode = execution.ExecutionMode,
-                        StartedAt = execution.StartedAt,
-                        FinishedAt = execution.FinishedAt,
                         Error = new ErrorTriggerEventError
                         {
                             Message = error,
@@ -921,12 +913,10 @@ namespace Workflow.DomainService.Services
                             NodeName = node.Name,
                             NodeType = node.Type,
                         },
-                        Alert = new ErrorTriggerEventAlert { Mode = alert.Mode, WorkflowId = alert.WorkflowId },
-                        UserIds = execution.ExecutionMode == WorkflowExecutionMode.Test
-                            ? execution.WorkflowSnapshot?.TestMeta?.UserIds ?? new List<string>()
-                            : new List<string>(),
                     }
                 });
+                _logger.LogInformation("Sent the failure alert for execution {ExecutionId} of workflow {WorkflowId} to error workflow {ErrorWorkflowId} ({Mode}).",
+                    execution.Id, execution.WorkflowId, alert.WorkflowId, execution.ExecutionMode);
             }
             catch (Exception ex)
             {
