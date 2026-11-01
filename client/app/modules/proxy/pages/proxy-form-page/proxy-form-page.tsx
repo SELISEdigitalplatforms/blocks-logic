@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { useScopedPath, useT, tStatic } from "@seliseblocks/genesis-os";
+import { useScopedPath, tStatic } from "@seliseblocks/genesis-os";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { BREADCRUMB_CUSTOM_TITLES } from "@/constants/breadcrumb-custom-title";
 import { showErrorToast } from "@/hooks/use-toast";
@@ -8,7 +8,6 @@ import { ProxyForm } from "../../components/proxy-form";
 import { useGetProxyById } from "../../hooks";
 
 export const ProxyFormPage = ({ mode }: { mode: "create" | "edit" }) => {
-  const { t } = useT("logic.proxy");
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { pathname } = useLocation();
