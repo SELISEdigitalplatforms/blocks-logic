@@ -10,7 +10,7 @@ namespace Workflow.DomainService.Nodes.TriggerErrorTriggerV2
     /// Runs when another workflow's production run fails and that workflow's alert names this workflow;
     /// outputs the one failure item ErrorTriggerStartAsync put in the execution's Input.
     /// </summary>
-    public class TriggerErrorTriggerV2Node : NodeExecutorBase<TriggerErrorTriggerV2Parameters>, INodeExecutor
+    public class TriggerErrorTriggerV2Node : NodeExecutorBase<object>, INodeExecutor
     {
         private static readonly IReadOnlyCollection<string> SupportedVersions = new[] { "v2" };
 
@@ -22,9 +22,10 @@ namespace Workflow.DomainService.Nodes.TriggerErrorTriggerV2
 
         protected override Task<NodeExecutionResult> ExecuteAsync(
             NodeExecutionContext context,
-            TriggerErrorTriggerV2Parameters? nodeparameters)
+            object? nodeparameters)
         {
-            var parameters = nodeparameters ?? new TriggerErrorTriggerV2Parameters();
+            // The Error Trigger has no parameters: the failing workflow chooses it in Settings → Alert.
+            var parameters = new BsonDocument();
             try
             {
                 var inputItems = context.WorkflowContext["Input"].AsBsonArray;
@@ -36,7 +37,7 @@ namespace Workflow.DomainService.Nodes.TriggerErrorTriggerV2
                     {
                         Input = item.ToBsonDocument(),
                         Output = item.ToBsonDocument(),
-                        Parameters = parameters.ToBsonDocument(),
+                        Parameters = parameters,
                     },
                     Branch = "source",
                     ParentItemIds = null
@@ -46,7 +47,7 @@ namespace Workflow.DomainService.Nodes.TriggerErrorTriggerV2
             }
             catch (Exception ex)
             {
-                var errorItem = TryBuildErrorOutputItem(null, parameters.ToBsonDocument(), ex);
+                var errorItem = TryBuildErrorOutputItem(null, parameters, ex);
                 var outputItems = errorItem != null ? new List<NodeOutputItem> { errorItem } : new List<NodeOutputItem>();
                 return Task.FromResult(NodeExecutionResult.Failed(ex.Message, outputItems));
             }

@@ -24,6 +24,7 @@ namespace Workflow.DomainService.Services
         private const string MessageKey = "Message";
         private const string WorkflowNotFoundMessage = "Workflow not found";
         private const string SomethingWentWrongMessage = "Something went wrong";
+        private const string SystemUserId = "system";
 
         private readonly IWorkflowRepository _workflowRepository;
         private readonly IWorkflowVersionRepository _workflowVersionRepository;
@@ -295,8 +296,8 @@ namespace Workflow.DomainService.Services
                 Description = dto.Description,
                 CreatedDate = DateTime.UtcNow,
                 LastUpdatedDate = DateTime.UtcNow,
-                CreatedBy = BlocksContext.GetContext().UserId ?? "system",
-                LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system",
+                CreatedBy = BlocksContext.GetContext().UserId ?? SystemUserId,
+                LastUpdatedBy = BlocksContext.GetContext().UserId ?? SystemUserId,
             };
             // Ids and counts only: the nodes carry parameters such as a ClientSecret (user rule 2026-10-08).
             _logger.LogInformation("Inserting workflow {WorkflowId} with {NodeCount} node(s)", model.ItemId, model.Nodes.Count);
@@ -552,7 +553,7 @@ namespace Workflow.DomainService.Services
                 }
             }
             workflow.LastUpdatedDate = DateTime.UtcNow;
-            workflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system";
+            workflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? SystemUserId;
 
             await _workflowRepository.UpdateWorkflowAsync(workflow);
 
@@ -582,7 +583,7 @@ namespace Workflow.DomainService.Services
             }
 
             var settings = dto.Settings ?? new WorkflowSettings();
-            var userId = BlocksContext.GetContext().UserId ?? "system";
+            var userId = BlocksContext.GetContext().UserId ?? SystemUserId;
             if (!await _workflowRepository.UpdateWorkflowSettingsAsync(tenantId, dto.ItemId, settings, userId))
             {
                 return new BaseMutationResponse
@@ -671,8 +672,8 @@ namespace Workflow.DomainService.Services
                 Snapshot = workflow,
                 CreatedDate = DateTime.UtcNow,
                 LastUpdatedDate = DateTime.UtcNow,
-                CreatedBy = BlocksContext.GetContext().UserId ?? "system",
-                LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system",
+                CreatedBy = BlocksContext.GetContext().UserId ?? SystemUserId,
+                LastUpdatedBy = BlocksContext.GetContext().UserId ?? SystemUserId,
             };
 
             // Before anything changes: a rejected publish leaves the workflow and its schedules untouched.
@@ -868,7 +869,7 @@ namespace Workflow.DomainService.Services
             updatedWorkflow.LastPublishedVersionId = workflow.LastPublishedVersionId;
             updatedWorkflow.PublishedMeta = workflow.PublishedMeta;
             updatedWorkflow.LastUpdatedDate = DateTime.UtcNow;
-            updatedWorkflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? "system"; ;
+            updatedWorkflow.LastUpdatedBy = BlocksContext.GetContext().UserId ?? SystemUserId; ;
             await _workflowRepository.UpdateWorkflowAsync(updatedWorkflow);
             return new BaseMutationResponse
             {
@@ -1043,7 +1044,7 @@ namespace Workflow.DomainService.Services
             workflow.TestMeta = new TestWorkflowMeta
             {
                 ListenerTriggerNodes = new List<NodeEntity> { triggerNode },
-                UserIds = new List<string> { BlocksContext.GetContext().UserId ?? "system" },
+                UserIds = new List<string> { BlocksContext.GetContext().UserId ?? SystemUserId },
                 IsListening = true,
                 CompletionNodeId = dto.CompletionNodeId ?? null,
 

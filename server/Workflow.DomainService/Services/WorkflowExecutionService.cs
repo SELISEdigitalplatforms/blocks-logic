@@ -1218,10 +1218,7 @@ namespace Workflow.DomainService.Services
             var failedWorkflow = await _workflowRepository.GetWorkflowAsync(tenantId, @event.FailedWorkflowId);
             var triggerData = new BsonArray
             {
-                ErrorTriggerPayload.Build(
-                    @event.FailedExecutionId, @event.AttemptNumber, @event.ExecutionMode.ToString(), @event.StartedAt, @event.FinishedAt,
-                    @event.Error.Message, @event.Error.NodeId, @event.Error.NodeName, @event.Error.NodeType,
-                    @event.FailedWorkflowId, failedWorkflow?.Name ?? string.Empty)
+                ErrorTriggerPayload.Build(@event, failedWorkflow?.Name ?? string.Empty)
             };
 
             WorkflowExecutionEntity? execution = null;
