@@ -54,9 +54,14 @@ export const NodeLibraryPanel = ({
       option.description.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  // A workflow can have one Error Trigger.
+  const hasErrorTrigger = nodes.some((n) => n.type === "errorTrigger");
+  const isUnavailable = (node: WorkflowNodeDefinition) =>
+    node.isComingSoon || (node.type === "errorTrigger" && hasErrorTrigger);
+
   const handleSelectOption = useCallback(
     (node: WorkflowNodeDefinition) => {
-      if (node.isComingSoon) return;
+      if (isUnavailable(node)) return;
       const schemaDefinition = NodeSchemasDefinition[`${node.category}${node.type}${node.version}`];
 
       const length = nodes.filter((n) => n.type === node.type).length;
@@ -160,28 +165,29 @@ export const NodeLibraryPanel = ({
           <div className="flex-1 overflow-y-auto px-6 pb-6">
             <div className="space-y-2">
               {filteredOptions.map((option) => (
-                <div
+                <button
                   key={option.id}
+                  type="button"
                   onClick={() => handleSelectOption(option)}
+                  aria-disabled={option.type === "errorTrigger" && hasErrorTrigger ? true : undefined}
                   className={cn(
                     "flex w-full cursor-pointer flex-col gap-1.5 rounded-sm p-4 text-left text-medium-emphasis transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                    option.type === "errorTrigger" && hasErrorTrigger && "cursor-not-allowed opacity-50 hover:bg-transparent",
                   )}
                 >
-                  <div className="mt-0.5 flex items-center gap-1">
+                  <span className="mt-0.5 flex w-full items-center gap-1">
                     {option.icon}
-                    <h4 className="text-sm font-medium text-high-emphasis">{option.title}</h4>
+                    <span className="text-sm font-medium text-high-emphasis">{option.title}</span>
                     {option.isComingSoon && (
                       <Badge variant="info" className="ml-auto h-fit w-fit">
                         Coming soon
                       </Badge>
                     )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      {option.description}
-                    </p>
-                  </div>
-                </div>
+                  </span>
+                  <span className="flex-1 text-xs leading-relaxed text-muted-foreground">
+                    {option.description}
+                  </span>
+                </button>
               ))}
               {filteredOptions.length === 0 && (
                 <div className="py-8 text-center text-sm text-muted-foreground">

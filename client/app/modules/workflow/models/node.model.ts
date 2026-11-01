@@ -19,6 +19,7 @@ export type NodeType =
   | "email"
   | "dataGateway"
   | "blocksEvent"
+  | "errorTrigger"
   | "dataAction"
   | "function"
   | "proxy"

@@ -1,6 +1,7 @@
 
 
 using Blocks.Genesis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Dtos
 {
@@ -14,7 +15,7 @@ namespace Workflow.DomainService.Dtos
         public required string Name { get; set; }
         public required bool IsDirty { get; set; }
         public required bool IsPublished { get; set; }
-        public Dictionary<string, string> Settings { get; set; } = new();
+        public WorkflowSettings? Settings { get; set; } = new();
         public DateTime CreatedDate { get; set; }
         public DateTime LastUpdatedDate { get; set; }
 

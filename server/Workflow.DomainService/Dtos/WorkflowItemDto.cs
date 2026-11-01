@@ -1,6 +1,7 @@
 
 
 using Blocks.Genesis;
+using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Dtos
 {
@@ -8,7 +9,7 @@ namespace Workflow.DomainService.Dtos
     {
         public string Name { get; set; } = string.Empty;
 
-        public Dictionary<string, string> Settings { get; set; } = new();
+        public WorkflowSettings? Settings { get; set; } = new();
 
         public string ItemId { get; set; } = string.Empty;
 

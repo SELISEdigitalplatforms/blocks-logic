@@ -12,7 +12,7 @@ public class WorkflowUpdateRequestDto
     public string? Name { get; set; }
     public List<NodeDto>? Nodes { get; set; }
     public List<EdgeEnity>? Edges { get; set; }
-    public Dictionary<string, string>? Settings { get; set; }
+    public WorkflowSettings? Settings { get; set; }
     public bool? IsPublished { get; set; }
 }
 

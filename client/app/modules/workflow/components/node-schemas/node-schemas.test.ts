@@ -118,11 +118,12 @@ describe("NodeSchemasDefinition registry", () => {
       expect(NodeSchemasDefinition[v2Key]).toBe(NodeSchemasDefinition[v1Key]);
     }
     // 13 v1 keys, their 13 v2 aliases, logicswitchv2, logicfilterv2, transformsplitOutv2, transformmergev2,
-    // triggerblocksEventv2 and transformlimitv2 (new types start at v2 with no v1).
-    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(32);
+    // triggerblocksEventv2, transformlimitv2 and triggererrorTriggerv2 (new types start at v2 with no v1).
+    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(33);
     expect(NodeSchemasDefinition.logicfilterv2).toBe(NodeSchemaLogicFilterV2);
     expect(NodeSchemasDefinition.logicfilterv1).toBeUndefined();
     expect(NodeSchemasDefinition.triggerblocksEventv1).toBeUndefined();
+    expect(NodeSchemasDefinition.triggererrorTriggerv1).toBeUndefined();
     expect(NodeSchemasDefinition.transformlimitv1).toBeUndefined();
     expect(NodeSchemasDefinition.transformmergev1).toBeUndefined();
     expect(NodeSchemasDefinition.transformsplitOutv1).toBeUndefined();
