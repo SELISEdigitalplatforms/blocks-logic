@@ -39,7 +39,7 @@ export const GuideContent = ({ title, description, steps, sections, notes }: Gui
         </h5>
         <ol className="list-decimal space-y-2 pl-5">
           {steps.map((step, index) => (
-            <li key={index}>{step}</li>
+            <li key={index} /* NOSONAR: static ReactNode list */>{step}</li>
           ))}
         </ol>
       </section>
@@ -60,7 +60,7 @@ export const GuideContent = ({ title, description, steps, sections, notes }: Gui
           </h5>
           <ul className="list-disc space-y-1.5 pl-5">
             {notes.map((note, index) => (
-              <li key={index}>{note}</li>
+              <li key={index} /* NOSONAR: static ReactNode list */>{note}</li>
             ))}
           </ul>
         </section>

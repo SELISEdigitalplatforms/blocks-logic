@@ -28,6 +28,7 @@ export const VersionsTable = ({
   isLoading,
 }: VersionsTableProps) => {
   const { t } = useT("logic.functions.components");
+  const rowActionsLabel = t("VERSIONS_TABLE.ROW_ACTIONS");
   const [sourceTarget, setSourceTarget] = useState<IFunctionVersionSummary | null>(null);
 
   return (
@@ -36,7 +37,7 @@ export const VersionsTable = ({
         {t("VERSIONS_TABLE.EVERY_DEPLOY_PINS_AN")}
       </p>
 
-      <div
+      <div /* NOSONAR: CSS-grid table */
         className="overflow-x-auto rounded-lg border"
         role="table"
         aria-label={t("VERSIONS_TABLE.VERSIONS")}
@@ -45,12 +46,16 @@ export const VersionsTable = ({
           className={`${GRID} border-b bg-surface-app px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-low-emphasis`}
           role="row"
         >
-          <span role="columnheader">{t("VERSIONS_TABLE.VERSION")}</span>
-          <span role="columnheader">{t("VERSIONS_TABLE.DEPLOYED")}</span>
-          <span role="columnheader">{t("VERSIONS_TABLE.NOTE")}</span>
-          <span role="columnheader">{t("VERSIONS_TABLE.RUNS")}</span>
-          <span role="columnheader">{t("common:STATUS")}</span>
-          <span role="columnheader" aria-label={t("VERSIONS_TABLE.ROW_ACTIONS")} />
+          <span /* NOSONAR: CSS-grid table */ role="columnheader">
+            {t("VERSIONS_TABLE.VERSION")}
+          </span>
+          <span /* NOSONAR: CSS-grid table */ role="columnheader">
+            {t("VERSIONS_TABLE.DEPLOYED")}
+          </span>
+          <span /* NOSONAR: CSS-grid table */ role="columnheader">{t("VERSIONS_TABLE.NOTE")}</span>
+          <span /* NOSONAR: CSS-grid table */ role="columnheader">{t("VERSIONS_TABLE.RUNS")}</span>
+          <span /* NOSONAR: CSS-grid table */ role="columnheader">{t("common:STATUS")}</span>
+          <span /* NOSONAR: CSS-grid table */ role="columnheader" aria-label={rowActionsLabel} />
         </div>
 
         {isLoading &&

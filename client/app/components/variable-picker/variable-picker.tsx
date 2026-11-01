@@ -117,7 +117,7 @@ export const VariablePicker = ({
         </div>
       )}
 
-      <div
+      <div /* NOSONAR custom rich listbox, a native <select> cannot render these options */
         role="listbox"
         aria-label={t("VARIABLE_PICKER.VARIABLES")}
         className="max-h-56 overflow-y-auto p-1"

@@ -104,16 +104,16 @@ export const RunsTable = ({
         role="grid"
         aria-label={t("RUNS_TABLE.RUNS")}
       >
-        <div
+        <div /* NOSONAR: CSS-grid table */
           className={`${GRID} border-b bg-surface-app px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-low-emphasis`}
           role="row"
         >
-          <span role="columnheader">{t("RUNS_TABLE.RUN")}</span>
+          <span /* NOSONAR: CSS-grid table */ role="columnheader">{t("RUNS_TABLE.RUN")}</span>
           <span role="columnheader">{t("common:STATUS")}</span>
-          <span role="columnheader" className="whitespace-nowrap">
+          <span /* NOSONAR: CSS-grid table */ role="columnheader" className="whitespace-nowrap">
             {t("RUNS_TABLE.TRIGGERED_BY")}
           </span>
-          <span role="columnheader">{t("RUNS_TABLE.DURATION")}</span>
+          <span /* NOSONAR: CSS-grid table */ role="columnheader">{t("RUNS_TABLE.DURATION")}</span>
           <span role="columnheader" className="whitespace-nowrap">
             {t("RUNS_TABLE.PEAK_MEM")}
           </span>
@@ -139,9 +139,7 @@ export const RunsTable = ({
           ))}
 
         {!isLoading && runs.length === 0 && (
-          <p className="px-5 py-9 text-center text-sm text-medium-emphasis">
-            {emptyMessage}
-          </p>
+          <p className="px-5 py-9 text-center text-sm text-medium-emphasis">{emptyMessage}</p>
         )}
 
         {!isLoading &&
