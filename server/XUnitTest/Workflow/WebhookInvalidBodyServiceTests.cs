@@ -31,22 +31,14 @@ namespace XUnitTest.Workflow
         public WebhookInvalidBodyServiceTests()
         {
             TestBlocksContext.Set("tenant-1");
-            var accessor = new Mock<IHttpContextAccessor>();
-            accessor.Setup(a => a.HttpContext).Returns(new DefaultHttpContext());
             _sut = new WorkflowExecutionService(
-                _workflows.Object,
-                _executions.Object,
+                new WorkflowExecutionStores(_workflows.Object, _executions.Object, _versions.Object),
                 Mock.Of<IMessageClient>(),
                 Mock.Of<ILogger<WorkflowExecutionService>>(),
                 Mock.Of<IWorkflowEngineService>(),
-                _versions.Object,
                 Mock.Of<IWorkflowNotificationService>(),
-                _auth.Object,
-                accessor.Object,
-                Mock.Of<IDelegationGrantFactory>(),
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>(),
-                WebhookRequests.Intake());
+                new WorkflowTriggerAccess(_auth.Object, Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(), WebhookRequests.Intake()));
         }
 
         public void Dispose() => TestBlocksContext.Clear();

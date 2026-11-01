@@ -49,19 +49,13 @@ namespace XUnitTest.Workflow
 
             // The real execution service queues the runs, so the whole path down to the node message is covered.
             var executionService = new WorkflowExecutionService(
-                _workflows.Object,
-                _executions.Object,
+                new WorkflowExecutionStores(_workflows.Object, _executions.Object, _versions.Object),
                 _messages.Object,
                 Mock.Of<ILogger<WorkflowExecutionService>>(),
                 Mock.Of<IWorkflowEngineService>(),
-                _versions.Object,
                 Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IWorkflowAuthService>(),
-                Mock.Of<IHttpContextAccessor>(),
-                Mock.Of<IDelegationGrantFactory>(),
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>(),
-                Mock.Of<IWebhookIntake>());
+                new WorkflowTriggerAccess(Mock.Of<IWorkflowAuthService>(), Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(), Mock.Of<IWebhookIntake>()));
             _sut = new BlocksEventTriggerService(
                 _workflows.Object,
                 _versions.Object,

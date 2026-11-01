@@ -173,10 +173,6 @@ if (File.Exists(indexHtml))
     });
 }
 
-static bool IsWebhookPath(PathString path) =>
-    path.StartsWithSegments("/api/Workflow/Webhook", StringComparison.OrdinalIgnoreCase)
-    || path.StartsWithSegments("/api/Workflow/webhook-test", StringComparison.OrdinalIgnoreCase);
-
 static bool LooksLikeAFile(PathString path)
 {
     var value = path.Value;
@@ -186,18 +182,10 @@ static bool LooksLikeAFile(PathString path)
     return lastSegment.Contains('.');
 }
 
-// Webhook routes accept up to 50 MiB of files. Raise Kestrel's body limit for them here, ahead of the
-// authentication middleware, which may read the form before the action's [RequestSizeLimit] applies.
+// Webhook routes accept up to 50 MiB of files; raised ahead of the authentication middleware.
 app.Use(async (context, next) =>
 {
-    if (IsWebhookPath(context.Request.Path))
-    {
-        var bodySize = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
-        if (bodySize is { IsReadOnly: false })
-        {
-            bodySize.MaxRequestBodySize = WebhookIntakeLimits.RequestSizeLimitBytes;
-        }
-    }
+    WebhookBodySizeLimit.Apply(context);
     await next(context);
 });
 

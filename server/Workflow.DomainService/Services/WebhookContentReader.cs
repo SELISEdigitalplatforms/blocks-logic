@@ -24,10 +24,7 @@ namespace Workflow.DomainService.Services
         public void Dispose()
         {
             TempStream?.Dispose();
-            if (TempPath is null) return;
-            try { System.IO.File.Delete(TempPath); }
-            catch (IOException) { /* best-effort; the OS temp folder is cleaned eventually */ }
-            catch (UnauthorizedAccessException) { }
+            if (TempPath is not null) WebhookContentReader.TryDeleteTempFile(TempPath);
         }
     }
 
@@ -307,13 +304,13 @@ namespace Workflow.DomainService.Services
             }
             catch
             {
-                TryDelete(tempPath);
+                TryDeleteTempFile(tempPath);
                 throw;
             }
 
             if (length == 0)
             {
-                TryDelete(tempPath);
+                TryDeleteTempFile(tempPath);
                 return empty();
             }
 
@@ -508,7 +505,7 @@ namespace Workflow.DomainService.Services
                 {
                     throw WebhookIntakeException.TooLarge(tooLargeMessage);
                 }
-                buffer.Write(chunk, 0, read);
+                await buffer.WriteAsync(chunk.AsMemory(0, read), ct);
             }
             return buffer.ToArray();
         }
@@ -526,11 +523,17 @@ namespace Workflow.DomainService.Services
             }
         }
 
-        private static void TryDelete(string path)
+        /// <summary>Deletes a temporary body file; failing to is not an error for the request.</summary>
+        internal static void TryDeleteTempFile(string path)
         {
-            try { System.IO.File.Delete(path); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            try
+            {
+                System.IO.File.Delete(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Best-effort: the request's outcome does not depend on it, and the OS cleans its temp folder.
+            }
         }
     }
 }

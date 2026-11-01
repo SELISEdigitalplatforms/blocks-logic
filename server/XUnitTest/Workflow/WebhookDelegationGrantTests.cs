@@ -38,24 +38,16 @@ namespace XUnitTest.Workflow
         {
             TestBlocksContext.Set("tenant-1");
             DelegatedTokenContext.Clear();
-            var accessor = new Mock<IHttpContextAccessor>();
-            accessor.Setup(a => a.HttpContext).Returns(new DefaultHttpContext());
             _executions.Setup(r => r.CreateAsync(It.IsAny<WorkflowExecutionEntity>()))
                 .ReturnsAsync((WorkflowExecutionEntity e) => e);
             _sut = new WorkflowExecutionService(
-                _workflows.Object,
-                _executions.Object,
+                new WorkflowExecutionStores(_workflows.Object, _executions.Object, _versions.Object),
                 Mock.Of<IMessageClient>(),
                 Mock.Of<ILogger<WorkflowExecutionService>>(),
                 _engine.Object,
-                _versions.Object,
                 Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IWorkflowAuthService>(),
-                accessor.Object,
-                _grants.Object,
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                _releaser.Object,
-                WebhookRequests.Intake());
+                new WorkflowTriggerAccess(Mock.Of<IWorkflowAuthService>(), _grants.Object, _releaser.Object, WebhookRequests.Intake()));
         }
 
         public void Dispose()

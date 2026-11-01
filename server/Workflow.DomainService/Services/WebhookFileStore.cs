@@ -125,7 +125,7 @@ namespace Workflow.DomainService.Services
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogWarning("Webhook upload rollback: a stored file could not be deleted ({ErrorKind}).", ex.GetType().Name);
+                _logger.LogWarning("Webhook upload rollback: a stored file could not be deleted ({ErrorType}).", ex.GetType().Name); // NOSONAR S6667 — type only
                 return false;
             }
             finally

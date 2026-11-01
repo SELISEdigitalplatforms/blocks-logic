@@ -39,41 +39,36 @@ namespace Workflow.DomainService.Services
         private readonly IWorkflowEngineService _workflowEngineService;
         private readonly IWorkflowNotificationService _workflowNotificationService;
         private readonly IWorkflowAuthService _workflowAuthService;
-        private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IDelegationGrantFactory _delegationGrantFactory;
         private readonly IWorkflowExecutionLogger _executionLogger;
         private readonly IInProcessGrantReleaser _inProcessGrants;
         private readonly IWebhookIntake _webhookIntake;
 
         public WorkflowExecutionService(
-            IWorkflowRepository workflowRepository,
-            IWorkflowExecutionRepository executionRepository,
+            WorkflowExecutionStores stores,
             IMessageClient messageClient,
             ILogger<WorkflowExecutionService> logger,
             IWorkflowEngineService workflowEngineService,
-            IWorkflowVersionRepository workflowVersionRepository,
             IWorkflowNotificationService workflowNotificationService,
-            IWorkflowAuthService workflowAuthService,
-            IHttpContextAccessor httpContextAccessor,
-            IDelegationGrantFactory delegationGrantFactory,
             IWorkflowExecutionLogger executionLogger,
-            IInProcessGrantReleaser inProcessGrants,
-            IWebhookIntake webhookIntake
+            WorkflowTriggerAccess triggerAccess
             )
         {
-            _webhookIntake = webhookIntake;
-            _inProcessGrants = inProcessGrants;
-            _executionLogger = executionLogger;
-            _workflowRepository = workflowRepository;
-            _executionRepository = executionRepository;
+            ArgumentNullException.ThrowIfNull(stores);
+            ArgumentNullException.ThrowIfNull(triggerAccess);
+
+            _workflowRepository = stores.Workflows;
+            _executionRepository = stores.Executions;
+            _workflowVersionRepository = stores.Versions;
             _messageClient = messageClient;
-            _workflowEngineService = workflowEngineService;
             _logger = logger;
-            _workflowVersionRepository = workflowVersionRepository;
+            _workflowEngineService = workflowEngineService;
             _workflowNotificationService = workflowNotificationService;
-            _workflowAuthService = workflowAuthService;
-            _httpContextAccessor = httpContextAccessor;
-            _delegationGrantFactory = delegationGrantFactory;
+            _executionLogger = executionLogger;
+            _workflowAuthService = triggerAccess.Auth;
+            _delegationGrantFactory = triggerAccess.Grants;
+            _inProcessGrants = triggerAccess.GrantReleaser;
+            _webhookIntake = triggerAccess.WebhookIntake;
         }
 
         private async Task NotifyWorkflowStartedAsync(WorkflowExecutionEntity execution)
@@ -206,11 +201,8 @@ namespace Workflow.DomainService.Services
         }
         private async Task<WorkflowWebhookResponseDto?> HandleWebhookExecutionAsync(WorkflowEntity workflow, WorkflowExecutionMode executionMode, string triggerId, HttpRequest request)
         {
-            WorkflowExecutionEntity execution;
-            WebhookIntakeResult? intake = null;
             try
             {
-
                 var triggerNode = workflow.Nodes.FirstOrDefault(n => n.Id == triggerId);
                 if (triggerNode == null)
                 {
@@ -221,73 +213,20 @@ namespace Workflow.DomainService.Services
                         Status = "Workflow not found",
                     };
                 }
-                var authType = triggerNode.Parameters.GetValue("authType")?.ToString();
-                BlocksContext? caller = null;
 
-                if (string.Equals(authType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
+                var (caller, isAuthorizationContext) = await AuthorizeWebhookCallerAsync(triggerNode, workflow.TenantId, request);
+                if (isAuthorizationContext)
                 {
-                    var isAuthenticatedUser = await _workflowAuthService.IsAuthenticated(request, workflow.TenantId);
-                    if (!isAuthenticatedUser) throw new UnauthorizedAccessException();
-                    caller = _workflowAuthService.BuildCallerContext(request, workflow.TenantId);
-                }
-                else if (string.Equals(authType, "blocksAuthorization", StringComparison.OrdinalIgnoreCase))
-                {
-                    var authConfig = ParseAuthorizationConfig(triggerNode.Parameters);
-                    if (authConfig is null) throw new UnauthorizedAccessException();
-                    var (isAuthorizedUser, context) = await _workflowAuthService.IsAuthorized(
-                        request, workflow.TenantId, authConfig);
-                    if (!isAuthorizedUser) throw new UnauthorizedAccessException();
-                    BlocksContext.SetContext(context);
-                    caller = context;
+                    // Here, not inside the helper: BlocksContext is an AsyncLocal, and a value set inside an
+                    // async method is discarded when that method returns.
+                    BlocksContext.SetContext(caller);
                 }
 
                 // The body is read only now, in both modes (SPEC8 A1): an unauthenticated caller gets 401 and
                 // a missing/unpublished workflow its status, never a hint about the body, and no file is stored
                 // for a caller who may not run this webhook.
-                var settings = WebhookIntakeSettings.From(triggerNode.Parameters);
-                BsonArray normalizedInput;
-                if (settings.IsAnyContent)
-                {
-                    intake = await _webhookIntake.ReadAnyContentAsync(
-                        request, settings, workflow.TenantId, caller, request.HttpContext?.RequestAborted ?? default);
-                    normalizedInput = intake.Items;
-                }
-                else
-                {
-                    normalizedInput = await _webhookIntake.ReadLegacyAsync(request, request.HttpContext?.RequestAborted ?? default);
-                }
-
-                var triggerMetadata = new TriggerMetadata
-                {
-                    TriggerNodeId = triggerId,
-                    TriggerType = triggerNode.Type,
-                    TriggerData = normalizedInput,
-                };
-
-                try
-                {
-                    execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
-                    execution.Context[LogicConstants.ExecutionInputKey] = normalizedInput;
-                    execution.Status = WorkflowExecutionStatus.Queued;
-                    execution.ActiveNodeIds.Add(triggerId);
-
-                    await _executionRepository.UpdateAsync(execution);
-                }
-                catch when (intake is not null)
-                {
-                    // No run holds these files, so nothing would ever reference them.
-                    await _webhookIntake.DiscardAsync(intake);
-                    throw;
-                }
-
-                if (intake is not null)
-                {
-                    // Counts only: never header values, body content, file names or ids.
-                    _executionLogger.For(execution).Info(
-                        ExecutionLogStages.TriggerWebhookIntake,
-                        "Webhook body read: format {BodyFormat:l}, {Items} item(s), {Files} file(s), {KiB} KiB.",
-                        intake.BodyFormat, intake.Items.Count, intake.StoredFileIds.Count, (intake.Bytes + 1023) / 1024);
-                }
+                var (input, intake) = await ReadWebhookInputAsync(triggerNode, workflow.TenantId, caller, request);
+                var execution = await CreateWebhookExecutionAsync(workflow, triggerNode, executionMode, input, intake);
                 await NotifyWorkflowStartedAsync(execution);
 
                 var payload = new AddExcuationNodeEvent
@@ -299,86 +238,11 @@ namespace Workflow.DomainService.Services
                 };
 
                 var responseMode = triggerNode.Parameters.GetValue("httpResponseMode");
-
                 if (responseMode != null && responseMode.ToString().ToLower() == "last")
                 {
-                    // In-process runs (this mode and the editor's Execute step) never go through a bus send, so
-                    // Genesis would not attach a grant; mint one for the caller here. Null (no user / missing stamp
-                    // claims) leaves no grant and Blocks-auth nodes fail with NoDelegatedTokenException.
-                    // Set it in this method, never inside an async helper: DelegatedTokenContext is an AsyncLocal,
-                    // and a value set inside an async method is discarded when that method returns.
-                    // Released once the run returns (in the finally), not left for the store's two-day TTL.
-                    var inProcessGrant = await _delegationGrantFactory.CreateForSendAsync();
-                    DelegatedTokenContext.Set(inProcessGrant);
-
-                    _executionLogger.For(execution).Info(
-                        ExecutionLogStages.ExecutionInProcess, "Running in-process; the webhook waits for the last node.");
-                    WorkflowExecutionEntity? response;
-                    try
-                    {
-                        response = await _workflowEngineService.RunNodeInProcessAsync(payload);
-                    }
-                    finally
-                    {
-                        DelegatedTokenContext.Clear();
-                        await _inProcessGrants.ReleaseAsync(inProcessGrant);
-                    }
-                    // The caller waited for the run, so it is told how the run ended. Still HTTP 200, so a
-                    // caller that only checks the status code behaves as before; the error text is not
-                    // returned (it can hold internal details) — it is on the execution.
-                    var finalStatus = WebhookFinalStatus(response);
-                    var responseModeData = triggerNode.Parameters.GetValue("httpResponseData");
-                    if (responseModeData == null)
-                    {
-                        return new WorkflowWebhookResponseDto
-                        {
-                            ExecutionId = execution.Id,
-                            Status = finalStatus,
-                        };
-                    }
-                    if (responseModeData.ToString().ToLower() == "none")
-                    {
-
-                        return null;
-                    }
-                    var responseDataMode = responseModeData.ToString().ToLower();
-                    var edges = response?.WorkflowSnapshot?.Edges ?? workflow.Edges;
-                    var executions = response?.NodeExecutions ?? new List<NodeExecutionEntity>();
-                    var lastExecutionNode = WebhookLastNodeSelector.Select(triggerId, executions, edges);
-
-                    if (lastExecutionNode == null)
-                    {
-                        return new WorkflowWebhookResponseDto
-                        {
-                            ExecutionId = execution.Id,
-                            Status = finalStatus,
-                            Data = responseDataMode == "all"
-                                ? JsonDocument.Parse("[]").RootElement
-                                : null
-                        };
-                    }
-
-                    var lastNodeOutput = await _executionRepository.GetAllItemsByNodeExecutionIdAsync(lastExecutionNode.Id, workflow.TenantId);
-                    var data = JsonDocument.Parse(new BsonArray(lastNodeOutput.Select(item => item.Data.Output)).ToJson()).RootElement;
-
-                    if (responseDataMode == "all")
-                    {
-                        return new WorkflowWebhookResponseDto
-                        {
-                            ExecutionId = execution.Id,
-                            Status = finalStatus,
-                            Data = data
-                        };
-                    }
-                    return new WorkflowWebhookResponseDto
-                    {
-                        ExecutionId = execution.Id,
-                        Status = finalStatus,
-                        Data = data.ValueKind == JsonValueKind.Array && data.GetArrayLength() > 0
-                            ? data[0]
-                            : null
-                    };
+                    return await RespondAfterLastNodeAsync(workflow, triggerNode, execution, payload);
                 }
+
                 await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
                 {
                     ConsumerName = LogicConstants.NodeQueueFor(payload.WorkflowExecutionId),
@@ -391,22 +255,181 @@ namespace Workflow.DomainService.Services
                     Status = "Queued"
                 };
             }
-            catch (UnauthorizedAccessException)
-            {
-                throw; // preserve 401
-            }
-            catch (InvalidWebhookBodyException)
-            {
-                throw; // the controller answers 400
-            }
-            catch (WebhookIntakeException)
-            {
-                throw; // the controller answers its status (400/403/413/415/422/503)
-            }
-            catch (Exception ex)
+            // 401, the legacy body 400 and the intake's own statuses reach the controller unchanged.
+            catch (Exception ex) when (ex is not (UnauthorizedAccessException or InvalidWebhookBodyException or WebhookIntakeException))
             {
                 throw new InvalidOperationException("Failed to create execution for webhook", ex);
             }
+        }
+
+        /// <summary>
+        /// Applies the trigger's <c>authType</c> and returns the caller's context (null for an open webhook).
+        /// <c>IsAuthorizationContext</c> tells the caller to install it as the ambient context, as before.
+        /// </summary>
+        private async Task<(BlocksContext? Caller, bool IsAuthorizationContext)> AuthorizeWebhookCallerAsync(
+            NodeEntity triggerNode, string tenantId, HttpRequest request)
+        {
+            var authType = triggerNode.Parameters.GetValue("authType")?.ToString();
+
+            if (string.Equals(authType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!await _workflowAuthService.IsAuthenticated(request, tenantId)) throw new UnauthorizedAccessException();
+                return (_workflowAuthService.BuildCallerContext(request, tenantId), false);
+            }
+
+            if (string.Equals(authType, "blocksAuthorization", StringComparison.OrdinalIgnoreCase))
+            {
+                var authConfig = ParseAuthorizationConfig(triggerNode.Parameters) ?? throw new UnauthorizedAccessException();
+                var (isAuthorizedUser, context) = await _workflowAuthService.IsAuthorized(request, tenantId, authConfig);
+                if (!isAuthorizedUser) throw new UnauthorizedAccessException();
+                return (context, true);
+            }
+
+            return (null, false);
+        }
+
+        /// <summary>The trigger items, per the trigger's <c>bodyMode</c>; the intake result only in Any content mode.</summary>
+        private async Task<(BsonArray Input, WebhookIntakeResult? Intake)> ReadWebhookInputAsync(
+            NodeEntity triggerNode, string tenantId, BlocksContext? caller, HttpRequest request)
+        {
+            var ct = request.HttpContext?.RequestAborted ?? default;
+            var settings = WebhookIntakeSettings.From(triggerNode.Parameters);
+            if (!settings.IsAnyContent)
+            {
+                return (await _webhookIntake.ReadLegacyAsync(request, ct), null);
+            }
+
+            var intake = await _webhookIntake.ReadAnyContentAsync(request, settings, tenantId, caller, ct);
+            return (intake.Items, intake);
+        }
+
+        private async Task<WorkflowExecutionEntity> CreateWebhookExecutionAsync(
+            WorkflowEntity workflow, NodeEntity triggerNode, WorkflowExecutionMode executionMode,
+            BsonArray input, WebhookIntakeResult? intake)
+        {
+            var triggerMetadata = new TriggerMetadata
+            {
+                TriggerNodeId = triggerNode.Id,
+                TriggerType = triggerNode.Type,
+                TriggerData = input,
+            };
+
+            WorkflowExecutionEntity execution;
+            try
+            {
+                execution = await CreateExecutionAsync(workflow, triggerMetadata, executionMode);
+                execution.Context[LogicConstants.ExecutionInputKey] = input;
+                execution.Status = WorkflowExecutionStatus.Queued;
+                execution.ActiveNodeIds.Add(triggerNode.Id);
+
+                await _executionRepository.UpdateAsync(execution);
+            }
+            catch when (intake is not null)
+            {
+                // No run holds these files, so nothing would ever reference them.
+                await _webhookIntake.DiscardAsync(intake);
+                throw;
+            }
+
+            if (intake is not null)
+            {
+                // Counts only: never header values, body content, file names or ids.
+                _executionLogger.For(execution).Info(
+                    ExecutionLogStages.TriggerWebhookIntake,
+                    "Webhook body read: format {BodyFormat:l}, {Items} item(s), {Files} file(s), {KiB} KiB.",
+                    intake.BodyFormat, intake.Items.Count, intake.StoredFileIds.Count, (intake.Bytes + 1023) / 1024);
+            }
+            return execution;
+        }
+
+        /// <summary>The "After Last Node Completion" response mode: runs in-process and answers with the last node's output.</summary>
+        private async Task<WorkflowWebhookResponseDto?> RespondAfterLastNodeAsync(
+            WorkflowEntity workflow, NodeEntity triggerNode, WorkflowExecutionEntity execution, AddExcuationNodeEvent payload)
+        {
+            // In-process runs (this mode and the editor's Execute step) never go through a bus send, so
+            // Genesis would not attach a grant; mint one for the caller here. Null (no user / missing stamp
+            // claims) leaves no grant and Blocks-auth nodes fail with NoDelegatedTokenException.
+            // Set it in this method, which also runs the engine, never in a separate async helper:
+            // DelegatedTokenContext is an AsyncLocal, and a value set inside an async method is discarded
+            // when that method returns.
+            // Released once the run returns (in the finally), not left for the store's two-day TTL.
+            var inProcessGrant = await _delegationGrantFactory.CreateForSendAsync();
+            DelegatedTokenContext.Set(inProcessGrant);
+
+            _executionLogger.For(execution).Info(
+                ExecutionLogStages.ExecutionInProcess, "Running in-process; the webhook waits for the last node.");
+            WorkflowExecutionEntity? response;
+            try
+            {
+                response = await _workflowEngineService.RunNodeInProcessAsync(payload);
+            }
+            finally
+            {
+                DelegatedTokenContext.Clear();
+                await _inProcessGrants.ReleaseAsync(inProcessGrant);
+            }
+
+            return await BuildLastNodeResponseAsync(workflow, triggerNode, execution, response);
+        }
+
+        private async Task<WorkflowWebhookResponseDto?> BuildLastNodeResponseAsync(
+            WorkflowEntity workflow, NodeEntity triggerNode, WorkflowExecutionEntity execution, WorkflowExecutionEntity? response)
+        {
+            // The caller waited for the run, so it is told how the run ended. Still HTTP 200, so a
+            // caller that only checks the status code behaves as before; the error text is not
+            // returned (it can hold internal details) — it is on the execution.
+            var finalStatus = WebhookFinalStatus(response);
+            var responseModeData = triggerNode.Parameters.GetValue("httpResponseData");
+            if (responseModeData == null)
+            {
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = execution.Id,
+                    Status = finalStatus,
+                };
+            }
+            if (responseModeData.ToString().ToLower() == "none")
+            {
+
+                return null;
+            }
+            var responseDataMode = responseModeData.ToString().ToLower();
+            var edges = response?.WorkflowSnapshot?.Edges ?? workflow.Edges;
+            var executions = response?.NodeExecutions ?? new List<NodeExecutionEntity>();
+            var lastExecutionNode = WebhookLastNodeSelector.Select(triggerNode.Id, executions, edges);
+
+            if (lastExecutionNode == null)
+            {
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = execution.Id,
+                    Status = finalStatus,
+                    Data = responseDataMode == "all"
+                        ? JsonDocument.Parse("[]").RootElement
+                        : null
+                };
+            }
+
+            var lastNodeOutput = await _executionRepository.GetAllItemsByNodeExecutionIdAsync(lastExecutionNode.Id, workflow.TenantId);
+            var data = JsonDocument.Parse(new BsonArray(lastNodeOutput.Select(item => item.Data.Output)).ToJson()).RootElement;
+
+            if (responseDataMode == "all")
+            {
+                return new WorkflowWebhookResponseDto
+                {
+                    ExecutionId = execution.Id,
+                    Status = finalStatus,
+                    Data = data
+                };
+            }
+            return new WorkflowWebhookResponseDto
+            {
+                ExecutionId = execution.Id,
+                Status = finalStatus,
+                Data = data.ValueKind == JsonValueKind.Array && data.GetArrayLength() > 0
+                    ? data[0]
+                    : null
+            };
         }
 
 
