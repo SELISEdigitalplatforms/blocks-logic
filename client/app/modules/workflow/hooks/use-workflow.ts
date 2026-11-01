@@ -5,10 +5,9 @@ import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { getOrderedNodeData } from "@blocks-workflow/utils/runtime-node-data";
 import { workflowService } from "../services/workflow.service";
 import { showErrorToast } from "@/hooks/use-toast";
-import { useT, tStatic } from "@seliseblocks/genesis-os";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 export const useWorkflow = () => {
-  const { t } = useT("logic.workflow");
   const reactFlowInstance = useReactFlow();
   const nodesMap = useWorkflowStore((state) => state.nodesMap);
   const edgesMap = useWorkflowStore((state) => state.edgesMap);

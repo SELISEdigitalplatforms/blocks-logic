@@ -4,10 +4,9 @@ import { useWorkflow } from "@blocks-workflow/hooks";
 import { workflowService } from "../services/workflow.service";
 import { EXECUTION_STATUS_COMPLETED, EXECUTION_STATUS_FAILED } from "../constants";
 import { showErrorToast } from "@/hooks/use-toast";
-import { useT, tStatic } from "@seliseblocks/genesis-os";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 export const useWorkflowNotification = () => {
-  const { t } = useT("logic.workflow");
   const { isListening, setIsListening, listeningNodeId, workflowId, setStepExecutionData,setNextExecutionId } = useWorkflow();
 
   const handleNotification = useCallback(async (data: unknown) => {
