@@ -11,14 +11,9 @@ namespace Workflow.DomainService.Nodes.LogicFilterV2
     /// </summary>
     public class LogicFilterV2Node : NodeExecutorBase<LogicFilterV2Parameters>, INodeExecutor
     {
-        private static readonly IReadOnlyCollection<string> SupportedVersions = new[] { "v2" };
-
         public override string NodeType => "filter";
 
         public override string Version => "v2";
-
-        /// <summary>Filter exists only as v2; there is no v1.</summary>
-        public IReadOnlyCollection<string> Versions => SupportedVersions;
 
         protected override Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, LogicFilterV2Parameters? nodeparameters)
         {
@@ -29,7 +24,6 @@ namespace Workflow.DomainService.Nodes.LogicFilterV2
 
             var useOr = parameters.ConditionType == FilterConditionType.Or;
             var outputItems = new List<NodeOutputItem>();
-            string? firstError = null;
             int failedCount = 0, kept = 0;
 
             for (var i = 0; i < context.IterationCount; i++)
@@ -62,7 +56,6 @@ namespace Workflow.DomainService.Nodes.LogicFilterV2
                 catch (Exception ex)
                 {
                     failedCount++;
-                    firstError ??= $"Item {i}: {ex.Message}";
                     AppendErrorOutputItem(outputItems, inputItem, context.Parameters, ex);
                 }
             }
@@ -71,13 +64,9 @@ namespace Workflow.DomainService.Nodes.LogicFilterV2
             context.Log.Info(ExecutionLogStages.FilterApplied, "Kept {Kept} of {Total} item(s).",
                 kept, context.IterationCount);
 
-            if (firstError != null)
-            {
-                var message = failedCount == 1
-                    ? $"Condition could not be evaluated. {firstError}"
-                    : $"Condition could not be evaluated for {failedCount} item(s). First: {firstError}";
-                return Task.FromResult(NodeExecutionResult.Failed(message, outputItems));
-            }
+            if (failedCount > 0)
+                return Task.FromResult(NodeExecutionResult.Failed(
+                    $"Condition could not be evaluated for {failedCount} item(s).", outputItems));
             return Task.FromResult(NodeExecutionResult.Successful(outputItems));
         }
     }

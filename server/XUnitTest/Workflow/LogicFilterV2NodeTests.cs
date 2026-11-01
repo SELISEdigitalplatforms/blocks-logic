@@ -224,8 +224,7 @@ namespace XUnitTest.Workflow
             var run = await RunFilter(Params("and", Cond("{{ $json.status }}", "starts_with", "p", "string")));
 
             run.Result.IsSuccess.Should().BeFalse();
-            run.Result.ErrorMessage.Should().Be(
-                "Condition could not be evaluated for 3 item(s). First: Item 0: Unknown operator starts_with for type string");
+            run.Result.ErrorMessage.Should().Be("Condition could not be evaluated for 3 item(s).");
             run.Result.OutputItems.Should().HaveCount(3).And.OnlyContain(o => o.IsError && o.Branch == "source");
             run.Result.OutputItems.Select(o => o.Data.Output).Should().AllSatisfy(output =>
                 output.Should().Be(new BsonDocument { { "error", true }, { "message", "Unknown operator starts_with for type string" } }));
@@ -248,9 +247,7 @@ namespace XUnitTest.Workflow
             var run = await RunFilter(Params("and", condition), items, new Dictionary<string, List<WorkflowItemExecutionEntity>> { ["Limits"] = [limits] });
 
             run.Result.IsSuccess.Should().BeFalse();
-            // One failure: the single-failure form, naming the item and the evaluator's message.
-            // The exception text itself is the runtime's; only the single-failure form and the item are Filter's.
-            run.Result.ErrorMessage.Should().StartWith("Condition could not be evaluated. Item 1: ");
+            run.Result.ErrorMessage.Should().Be("Condition could not be evaluated for 1 item(s).");
             run.Result.OutputItems.Should().HaveCount(2);
             KeptIds(run).Should().Equal(1);
             run.Result.OutputItems.Single(o => o.IsError).ParentItemIds.Should().Equal("item-1");
@@ -265,8 +262,8 @@ namespace XUnitTest.Workflow
             var run = await RunFilter(parameters, [E1Items()[0]]);
 
             run.Result.IsSuccess.Should().BeFalse();
-            run.Result.ErrorMessage.Should().Be("Condition could not be evaluated. Item 0: Condition is empty");
-            run.Result.OutputItems.Should().ContainSingle().Which.IsError.Should().BeTrue();
+            run.Result.ErrorMessage.Should().Be("Condition could not be evaluated for 1 item(s).");
+            run.Result.OutputItems.Should().ContainSingle().Which.Data.Output["message"].AsString.Should().Be("Condition is empty");
         }
 
         [Theory]
@@ -279,8 +276,8 @@ namespace XUnitTest.Workflow
             var run = await RunFilter(Params(conditionType, first, Cond("a", "equals", "a", "Money")), [E1Items()[0]]);
 
             run.Result.IsSuccess.Should().BeFalse();
-            run.Result.ErrorMessage.Should().Be("Condition could not be evaluated. Item 0: Unknown type money");
-            run.Result.OutputItems.Should().ContainSingle().Which.IsError.Should().BeTrue();
+            run.Result.ErrorMessage.Should().Be("Condition could not be evaluated for 1 item(s).");
+            run.Result.OutputItems.Should().ContainSingle().Which.Data.Output["message"].AsString.Should().Be("Unknown type money");
         }
 
         // ---------- E11–E13: conditionType binding (C8) ----------
@@ -416,12 +413,11 @@ namespace XUnitTest.Workflow
         // ---------- versions ----------
 
         [Fact]
-        public void DeclaresOnlyV2()
+        public void DeclaresTypeAndVersion()
         {
             INodeExecutor executor = new LogicFilterV2Node();
             executor.NodeType.Should().Be("filter");
             executor.Version.Should().Be("v2");
-            executor.Versions.Should().Equal("v2");
         }
     }
 

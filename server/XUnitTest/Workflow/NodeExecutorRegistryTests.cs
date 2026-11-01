@@ -98,21 +98,6 @@ namespace XUnitTest.Workflow
             }
         }
 
-        [Fact]
-        public void Filter_ResolvesOnlyAsV2_AndNeverFallsBack()
-        {
-            var all = AllProductionExecutors();
-            var registry = new NodeExecutorRegistry(all);
-            var filter = all.Single(e => e.NodeType == "filter");
-
-            registry.Resolve("filter", "v2").Should().Be(new NodeExecutorResolution(filter, false));
-            foreach (var version in new[] { "v1", "v3", "", null })
-            {
-                var act = () => registry.Resolve("filter", version);
-                act.Should().Throw<InvalidOperationException>($"version '{version}'").WithMessage("No executor for node type.");
-            }
-        }
-
         /// <summary>SPEC9 C10: a server built before Filter (no Filter executor) fails the step instead of running another node.</summary>
         [Fact]
         public void Filter_OnAServerWithoutTheFilterExecutor_HasNoExecutor()

@@ -43,7 +43,7 @@ const {
 const FILTER_2 = "Filter2"; // node-library-panel.tsx names the 2nd Filter `${defaultName}${count + 1}`
 
 const STARTS_WITH_FAILURE =
-  "Condition could not be evaluated for 3 item(s). First: Item 0: Unknown operator starts_with for type string";
+  "Condition could not be evaluated for 3 item(s).";
 
 function nodeNamed(workflow: ExportedWorkflow, name: string): ExportedWorkflowNode {
   const node = workflow.nodes.find((candidate) => candidate.name === name);
