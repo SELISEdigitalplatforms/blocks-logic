@@ -9,6 +9,7 @@
  * the handful of exports the app modules under test rely on.
  */
 import React from "react";
+import { create } from "zustand";
 
 export type RuntimeKey = string;
 
@@ -135,3 +136,77 @@ export const attachQueryErrorReporting = (
   _queryClient?: unknown,
   _rollbar?: unknown,
 ) => {};
+
+// ---- i18n runtime (same API as genesis-os; English comes from registerTranslations) ----
+type Dictionary = Readonly<Record<string, string>>;
+type TranslateValues = Readonly<Record<string, string | number>>;
+
+export const useAppSettingsStore = create<{
+  settings: { language?: string };
+  setSettings: (settings: { language?: string }) => void;
+}>()((set) => ({
+  settings: { language: "en" },
+  setSettings: (settings) => set((state) => ({ settings: { ...state.settings, ...settings } })),
+}));
+
+export const useI18nStore = create<{
+  bundled: Record<string, Dictionary>;
+  remote: Record<string, Dictionary>;
+  registerBundle: (module: string, dictionary: Dictionary) => void;
+  setRemote: (language: string, module: string, dictionary: Dictionary) => void;
+}>()((set) => ({
+  bundled: {},
+  remote: {},
+  registerBundle: (module, dictionary) =>
+    set((state) => ({
+      bundled: { ...state.bundled, [module]: { ...state.bundled[module], ...dictionary } },
+    })),
+  setRemote: (language, module, dictionary) =>
+    set((state) => ({ remote: { ...state.remote, [`${language}:${module}`]: dictionary } })),
+}));
+
+export const registerTranslations = (module: string, dictionary: Dictionary) => {
+  useI18nStore.getState().registerBundle(module, dictionary);
+};
+
+const lookup = (language: string, module: string, key: string, values?: TranslateValues) => {
+  const at = key.indexOf(":");
+  const target = at > 0 ? { module: key.slice(0, at), key: key.slice(at + 1) } : { module, key };
+  const { bundled, remote } = useI18nStore.getState();
+  const sources = [
+    ...(language === "en" ? [] : [remote[`${language}:${target.module}`]]),
+    bundled[target.module],
+  ];
+  const count = values?.count;
+  const rules = new Intl.PluralRules(language);
+  const keys =
+    typeof count === "number"
+      ? [`${target.key}_${rules.select(count)}`, `${target.key}_other`, target.key]
+      : [target.key];
+  for (const source of sources) {
+    for (const candidate of keys) {
+      const value = source?.[candidate];
+      if (value) {
+        return value.replaceAll(/\{\{\s*(\w+)\s*\}\}/g, (match, name: string) =>
+          values && Object.hasOwn(values, name) ? String(values[name]) : match,
+        );
+      }
+    }
+  }
+  return target.key;
+};
+
+export const tStatic = (module: string, key: string, values?: TranslateValues) =>
+  lookup(useAppSettingsStore.getState().settings.language ?? "en", module, key, values);
+
+export const useT = (module: string) => {
+  const language = useAppSettingsStore((state) => state.settings.language) ?? "en";
+  useI18nStore((state) => state.bundled);
+  const remote = useI18nStore((state) => state.remote);
+  const t = React.useCallback(
+    (key: string, values?: TranslateValues) => lookup(language, module, key, values),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [language, module, remote],
+  );
+  return { t, language };
+};
