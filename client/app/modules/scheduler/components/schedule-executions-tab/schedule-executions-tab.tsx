@@ -11,6 +11,7 @@ import { ScheduleExecutionSheet } from "./execution-sheet/schedule-execution-she
 import { ExecutionListError, NoExecutionsYet, NoMatchingExecutions, ScheduleGone } from "./execution-list-states";
 import { ScheduleExecutionFilterToolbar } from "./schedule-execution-filter-toolbar";
 import { ScheduleExecutionList } from "./schedule-execution-list";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface ScheduleExecutionsTabProps {
   schedule: ISchedule;
@@ -35,6 +36,7 @@ export function listStateOf(
 }
 
 export const ScheduleExecutionsTab = ({ schedule, active }: Readonly<ScheduleExecutionsTabProps>) => {
+  const { t } = useT("logic.scheduler");
   const tz = schedule.timeZone ?? "UTC";
   const { queryParams, setQueryParams } = useScheduleExecutionQueryParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export const ScheduleExecutionsTab = ({ schedule, active }: Readonly<ScheduleExe
       {state !== "empty" && state !== "gone" && (
         <CardHeader className="mb-0 space-y-2">
           <ScheduleExecutionFilterToolbar />
-          {showDatesNote && <p className="text-xs text-muted-foreground">Dates are in {tz}</p>}
+          {showDatesNote && <p className="text-xs text-muted-foreground">{t("SCHEDULE_EXECUTIONS_TAB.DATES_ARE_IN", { tz })}</p>}
         </CardHeader>
       )}
       <CardContent>

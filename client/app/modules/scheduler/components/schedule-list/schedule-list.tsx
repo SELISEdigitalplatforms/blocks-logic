@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT } from "@seliseblocks/genesis-os";
 import {
   ColumnDef,
   flexRender,
@@ -69,34 +69,40 @@ type ScheduleListProps = {
   isFiltered?: boolean;
 };
 
-const ScheduleEmptyState = ({ onCreateSchedule }: { onCreateSchedule: () => void }) => (
-  <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
-    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
-      <CalendarClock className="h-7 w-7" />
+const ScheduleEmptyState = ({ onCreateSchedule }: { onCreateSchedule: () => void }) => {
+  const { t } = useT("logic.scheduler");
+  return (
+    <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <CalendarClock className="h-7 w-7" />
+      </div>
+      <h4 className="mt-5 text-lg font-semibold text-high-emphasis">
+        {t("SCHEDULE_LIST.CREATE_YOUR_FIRST_SCHEDULE")}
+      </h4>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+        {t("SCHEDULE_LIST.SET_UP_RECURRING_RUNS")}
+      </p>
+      <Button className="mt-6" size="sm" onClick={onCreateSchedule}>
+        {t("SCHEDULE_LIST.CREATE_SCHEDULE")}
+      </Button>
     </div>
-    <h4 className="mt-5 text-lg font-semibold text-high-emphasis">
-      Create your first schedule
-    </h4>
-    <p className="mt-2 max-w-md text-sm text-muted-foreground">
-      Set up recurring runs with cron timing, payloads, and activation controls.
-    </p>
-    <Button className="mt-6" size="sm" onClick={onCreateSchedule}>
-      Create schedule
-    </Button>
-  </div>
-);
+  );
+};
 
-const ScheduleNoResultsState = () => (
-  <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
-    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
-      <Search className="h-7 w-7" />
+const ScheduleNoResultsState = () => {
+  const { t } = useT("logic.scheduler");
+  return (
+    <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <Search className="h-7 w-7" />
+      </div>
+      <h4 className="mt-5 text-lg font-semibold text-high-emphasis">{t("SCHEDULE_LIST.NO_SCHEDULES_FOUND")}</h4>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+        {t("SCHEDULE_LIST.NO_SCHEDULES_MATCH_YOUR")}
+      </p>
     </div>
-    <h4 className="mt-5 text-lg font-semibold text-high-emphasis">No schedules found</h4>
-    <p className="mt-2 max-w-md text-sm text-muted-foreground">
-      No schedules match your search. Try adjusting it.
-    </p>
-  </div>
-);
+  );
+};
 
 export const ScheduleList = ({
   schedules,
@@ -104,6 +110,7 @@ export const ScheduleList = ({
   onCreateSchedule,
   isFiltered,
 }: ScheduleListProps) => {
+  const { t } = useT("logic.scheduler");
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const [modal, setModal] = useState<ModalState>({ type: null, schedule: null });
@@ -111,7 +118,7 @@ export const ScheduleList = ({
   const columns: ColumnDef<ISchedule>[] = [
     {
       id: "name",
-      header: () => <div className="font-bold text-medium-emphasis">Name</div>,
+      header: () => <div className="font-bold text-medium-emphasis">{t("common:NAME")}</div>,
       cell: (info) => (
         <div
           className="w-[200px] truncate font-semibold md:w-[240px]"
@@ -126,7 +133,7 @@ export const ScheduleList = ({
 
           {info.row.original.kind === ScheduleKind.Internal && (
             <Badge variant="info" className="ml-2 inline-flex rounded-md px-2 py-0.5">
-              Workflow
+              {t("SCHEDULE_LIST.WORKFLOW")}
             </Badge>
           )}
           {info.row.original.description && (
@@ -139,7 +146,7 @@ export const ScheduleList = ({
     },
     {
       id: "cronExpression",
-      header: () => <div className="font-bold text-medium-emphasis">Cron Expression</div>,
+      header: () => <div className="font-bold text-medium-emphasis">{t("SCHEDULE_LIST.CRON_EXPRESSION")}</div>,
       cell: (info) => (
         <div className="font-mono text-sm text-muted-foreground">
           {info.row.original.cronExpression || "-"}
@@ -148,7 +155,7 @@ export const ScheduleList = ({
     },
     {
       id: "startDate",
-      header: () => <div className="font-bold text-medium-emphasis">Start date</div>,
+      header: () => <div className="font-bold text-medium-emphasis">{t("SCHEDULE_LIST.START_DATE")}</div>,
       cell: (info) => (
         <div className="whitespace-nowrap text-muted-foreground">
           {info.row.original.startDate
@@ -159,7 +166,7 @@ export const ScheduleList = ({
     },
     {
       id: "endDate",
-      header: () => <div className="font-bold text-medium-emphasis">End date</div>,
+      header: () => <div className="font-bold text-medium-emphasis">{t("SCHEDULE_LIST.END_DATE")}</div>,
       cell: (info) => (
         <div className="whitespace-nowrap text-muted-foreground">
           {info.row.original.endDate
@@ -170,14 +177,14 @@ export const ScheduleList = ({
     },
     {
       id: "isActive",
-      header: () => <div className="font-bold text-medium-emphasis">Status</div>,
+      header: () => <div className="font-bold text-medium-emphasis">{t("common:STATUS")}</div>,
       cell: (info) => (
         <div>
           <Badge
             variant={info.row.original.isActive ? "success" : "error"}
             className="w-fit rounded-md px-3 py-1 text-sm"
           >
-            {info.row.original.isActive ? "Active" : "Inactive"}
+            {info.row.original.isActive ? t("SCHEDULE_LIST.ACTIVE") : t("SCHEDULE_LIST.INACTIVE")}
           </Badge>
         </div>
       ),
@@ -210,14 +217,14 @@ export const ScheduleList = ({
                   onClick={() => navigate(scoped(`schedule/${info.row.original.itemId}`))}
                 >
                   <ArrowRightFromLine className="mr-2 h-4 w-4" />
-                  <span>Open</span>
+                  <span>{t("SCHEDULE_LIST.OPEN")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
                   onClick={() => navigate(scoped(`schedule/${info.row.original.itemId}/edit`))}
                 >
                   <Pen className="mr-2 h-4 w-4" />
-                  <span>Edit</span>
+                  <span>{t("common:EDIT")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer text-error"
@@ -226,7 +233,7 @@ export const ScheduleList = ({
                   }
                 >
                   <Trash className="mr-2 h-4 w-4" />
-                  <span>Delete</span>
+                  <span>{t("common:DELETE")}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
 

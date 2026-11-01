@@ -9,7 +9,10 @@ vi.mock("@monaco-editor/react", () => ({
 }));
 
 const theme = vi.hoisted(() => ({ resolvedTheme: "light" }));
-vi.mock("@seliseblocks/genesis-os/hooks", () => ({ useTheme: () => theme }));
+vi.mock("@seliseblocks/genesis-os/hooks", async () => ({
+  ...(await vi.importActual<object>("@seliseblocks/genesis-os/hooks")),
+  useTheme: () => theme,
+}));
 
 import { beautify, detectLanguage, ReadOnlyCodeViewer } from "./read-only-code-viewer";
 

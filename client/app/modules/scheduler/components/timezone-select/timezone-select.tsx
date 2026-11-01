@@ -13,6 +13,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/popover/popover";
 import { cn } from "@/lib/utils";
 import { browserTimeZone, listTimeZones, offsetLabel, UTC } from "../../utils/timezone";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface TimezoneSelectProps {
   value: string;
@@ -44,6 +45,7 @@ const ZoneItem = ({
 /** Searchable IANA time zone picker: UTC first, a "Use my timezone" shortcut, then every zone with its offset. */
 export const TimezoneSelect = forwardRef<HTMLButtonElement, Readonly<TimezoneSelectProps>>(
   ({ value, onChange, id, disabled }, ref) => {
+  const { t } = useT("logic.scheduler");
     const [open, setOpen] = useState(false);
     // Built once: 400+ Intl lookups are too slow to redo on every keystroke.
     const zones = useMemo(() => listTimeZones().map((zone) => ({ id: zone, offset: offsetLabel(zone) })), []);
@@ -65,7 +67,7 @@ export const TimezoneSelect = forwardRef<HTMLButtonElement, Readonly<TimezoneSel
             type="button"
             variant="outline"
             role="combobox"
-            aria-label="Timezone"
+            aria-label={t("TIMEZONE_SELECT.TIMEZONE")}
             aria-expanded={open}
             disabled={disabled}
             className="w-full justify-between font-normal"
@@ -78,24 +80,24 @@ export const TimezoneSelect = forwardRef<HTMLButtonElement, Readonly<TimezoneSel
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
           <Command filter={matchZone}>
-            <CommandInput placeholder="Search timezone…" />
+            <CommandInput placeholder={t("TIMEZONE_SELECT.SEARCH_TIMEZONE")} />
             <CommandList className="max-h-72">
-              <CommandEmpty>No timezone found.</CommandEmpty>
+              <CommandEmpty>{t("TIMEZONE_SELECT.NO_TIMEZONE_FOUND")}</CommandEmpty>
               <CommandGroup heading="UTC">
                 <ZoneItem option={utcOption} value={`pinned ${UTC}`} selected={value === UTC} onSelect={select} />
               </CommandGroup>
               {browserOption && (
-                <CommandGroup heading="Your timezone">
+                <CommandGroup heading={t("TIMEZONE_SELECT.YOUR_TIMEZONE")}>
                   <ZoneItem
                     option={browserOption}
                     value={`browser ${browserOption.id}`}
-                    label={`Use my timezone · ${browserOption.id}`}
+                    label={t("TIMEZONE_SELECT.USE_MY_TIMEZONE", { id: browserOption.id })}
                     selected={false}
                     onSelect={select}
                   />
                 </CommandGroup>
               )}
-              <CommandGroup heading="All timezones">
+              <CommandGroup heading={t("TIMEZONE_SELECT.ALL_TIMEZONES")}>
                 {zones.map((zone) => (
                   <ZoneItem key={zone.id} option={zone} value={zone.id} selected={value === zone.id} onSelect={select} />
                 ))}

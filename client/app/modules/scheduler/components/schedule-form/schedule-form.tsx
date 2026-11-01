@@ -50,6 +50,7 @@ import {
   timeZoneErrorFrom,
   webhookHeadersToRecord,
 } from "../schedule-form-dialog/utils";
+import { useT } from "@seliseblocks/genesis-os";
 
 export type ScheduleFormProps = {
   mode: "create" | "edit";
@@ -129,6 +130,7 @@ export const ScheduleForm = ({
   onSuccess,
   onCancel,
 }: ScheduleFormProps) => {
+  const { t } = useT("logic.scheduler");
   const isEdit = mode === "edit";
   const { resolvedTheme } = useTheme();
   const monacoTheme = resolvedTheme === "dark" ? "vs-dark" : "vs";
@@ -224,20 +226,20 @@ export const ScheduleForm = ({
 
         if (!res.isSuccess) return reportFailure(res);
         showSuccessToast({
-          description: "Schedule updated successfully.",
+          description: t("SCHEDULE_FORM.SCHEDULE_UPDATED_SUCCESSFULLY"),
         });
         onSuccess?.(schedule.itemId);
       } else {
         const res = await createMutation.mutateAsync(basePayload);
         if (!res.isSuccess) return reportFailure(res);
         showSuccessToast({
-          description: "Schedule successfully created.",
+          description: t("SCHEDULE_FORM.SCHEDULE_SUCCESSFULLY_CREATED"),
         });
         onSuccess?.(res.itemId ?? undefined);
       }
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to save schedule" });
+      return showErrorToast({ errors: t("SCHEDULE_FORM.FAILED_TO_SAVE_SCHEDULE") });
     }
   };
 
@@ -256,10 +258,10 @@ export const ScheduleForm = ({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mt-4">
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              {isEdit ? "Edit Schedule" : "Create Schedule"}
+              {isEdit ? t("SCHEDULE_FORM.EDIT_SCHEDULE") : t("SCHEDULE_FORM.CREATE_SCHEDULE")}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Configure trigger timing, webhook destination, and payloads.
+              {t("SCHEDULE_FORM.CONFIGURE_TRIGGER_TIMING_WEBHOOK")}
             </p>
           </div>
 
@@ -278,14 +280,14 @@ export const ScheduleForm = ({
                     </FormItem>
                   )}
                 />
-                <span className="text-sm font-medium text-foreground">Active</span>
+                <span className="text-sm font-medium text-foreground">{t("SCHEDULE_FORM.ACTIVE")}</span>
               </div>
             )}
 
             {onCancel && (
               <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
                 <X className="h-4 w-4 mr-2" />
-                Cancel
+                {t("common:CANCEL")}
               </Button>
             )}
 
@@ -293,17 +295,17 @@ export const ScheduleForm = ({
               {isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving…
+                  {t("SCHEDULE_FORM.SAVING")}
                 </>
               ) : isEdit ? (
                 <>
                   <Save className="h-4 w-4" />
-                  Save Changes
+                  {t("SCHEDULE_FORM.SAVE_CHANGES")}
                 </>
               ) : (
                 <>
                   <Plus className="h-4 w-4" />
-                  Create
+                  {t("common:CREATE")}
                 </>
               )}
             </Button>
@@ -321,7 +323,7 @@ export const ScheduleForm = ({
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <Settings2 className="h-4 w-4" />
                   </span>
-                  <CardTitle className="text-base">General</CardTitle>
+                  <CardTitle className="text-base">{t("SCHEDULE_FORM.GENERAL")}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -330,9 +332,9 @@ export const ScheduleForm = ({
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Name</FormLabel>
+                      <FormLabel>{t("common:NAME")}</FormLabel>
                       <FormControl>
-                        <Input placeholder="Schedule name" maxLength={100} {...field} />
+                        <Input placeholder={t("SCHEDULE_FORM.SCHEDULE_NAME")} maxLength={100} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -344,10 +346,10 @@ export const ScheduleForm = ({
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Description</FormLabel>
+                      <FormLabel>{t("common:DESCRIPTION")}</FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="Brief summary of the scheduled task"
+                          placeholder={t("SCHEDULE_FORM.BRIEF_SUMMARY_OF_THE")}
                           className="min-h-[85px] resize-none"
                           maxLength={500}
                           {...field}
@@ -367,7 +369,7 @@ export const ScheduleForm = ({
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <CalendarClock className="h-4 w-4" />
                   </span>
-                  <CardTitle className="text-base">Timing &amp; Recurrence</CardTitle>
+                  <CardTitle className="text-base">{t("SCHEDULE_FORM.TIMING_RECURRENCE")}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -376,7 +378,7 @@ export const ScheduleForm = ({
                   name="cronExpression"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Cron Expression</FormLabel>
+                      <FormLabel>{t("SCHEDULE_FORM.CRON_EXPRESSION")}</FormLabel>
                       <FormControl>
                         <Input placeholder="0 0 * * *" className="font-mono" {...field} />
                       </FormControl>
@@ -407,12 +409,12 @@ export const ScheduleForm = ({
                   name="timeZone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Timezone</FormLabel>
+                      <FormLabel>{t("SCHEDULE_FORM.TIMEZONE")}</FormLabel>
                       <FormControl>
                         <TimezoneSelect value={field.value} onChange={field.onChange} />
                       </FormControl>
                       <p className="text-xs text-muted-foreground">
-                        Evaluated in {field.value}. Daylight-saving changes follow this timezone.
+                        {t("SCHEDULE_FORM.EVALUATED_IN_DAYLIGHT_SAVING", { value: field.value })}
                       </p>
                       <FormMessage />
                     </FormItem>
@@ -432,7 +434,7 @@ export const ScheduleForm = ({
                     name="startDate"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Start Date</FormLabel>
+                        <FormLabel>{t("SCHEDULE_FORM.START_DATE")}</FormLabel>
                         <DatePopoverField
                           value={field.value}
                           onChange={field.onChange}
@@ -447,7 +449,7 @@ export const ScheduleForm = ({
                     name="endDate"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>End Date</FormLabel>
+                        <FormLabel>{t("SCHEDULE_FORM.END_DATE")}</FormLabel>
                         <DatePopoverField
                           value={field.value}
                           onChange={field.onChange}
@@ -471,13 +473,13 @@ export const ScheduleForm = ({
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <Webhook className="h-4 w-4" />
                   </span>
-                  <CardTitle className="text-base">Webhook Configuration</CardTitle>
+                  <CardTitle className="text-base">{t("SCHEDULE_FORM.WEBHOOK_CONFIGURATION")}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Endpoint: Method + URL */}
                 <div>
-                  <FormLabel>Endpoint</FormLabel>
+                  <FormLabel>{t("SCHEDULE_FORM.ENDPOINT")}</FormLabel>
                   <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:items-start">
                     <FormField
                       control={form.control}
@@ -487,7 +489,7 @@ export const ScheduleForm = ({
                           <Select value={field.value} onValueChange={field.onChange}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Method" />
+                                <SelectValue placeholder={t("SCHEDULE_FORM.METHOD")} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
@@ -527,9 +529,9 @@ export const ScheduleForm = ({
                   name="webhook.signingSecret"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Signing Secret</FormLabel>
+                      <FormLabel>{t("SCHEDULE_FORM.SIGNING_SECRET")}</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="Enter secret" {...field} />
+                        <Input type="password" placeholder={t("SCHEDULE_FORM.ENTER_SECRET")} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -542,7 +544,7 @@ export const ScheduleForm = ({
                   name="webhook.headers"
                   render={() => (
                     <FormItem>
-                      <FormLabel>Headers</FormLabel>
+                      <FormLabel>{t("SCHEDULE_FORM.HEADERS")}</FormLabel>
                       <div className="space-y-2">
                         {fields.map((headerField, index) => (
                           <div key={headerField.id} className="flex items-center gap-2">
@@ -552,7 +554,7 @@ export const ScheduleForm = ({
                               render={({ field }) => (
                                 <FormControl>
                                   <Input
-                                    placeholder="Header Key"
+                                    placeholder={t("SCHEDULE_FORM.HEADER_KEY")}
                                     className="font-mono text-xs"
                                     {...field}
                                   />
@@ -565,7 +567,7 @@ export const ScheduleForm = ({
                               render={({ field }) => (
                                 <FormControl>
                                   <Input
-                                    placeholder="Header Value"
+                                    placeholder={t("SCHEDULE_FORM.HEADER_VALUE")}
                                     className="font-mono text-xs"
                                     {...field}
                                   />
@@ -592,7 +594,7 @@ export const ScheduleForm = ({
                           onClick={() => append({ key: "", value: "" })}
                         >
                           <Plus className="mr-1.5 h-3.5 w-3.5" />
-                          Add Header
+                          {t("SCHEDULE_FORM.ADD_HEADER")}
                         </Button>
                       </div>
                       <FormMessage />
@@ -609,7 +611,7 @@ export const ScheduleForm = ({
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <Braces className="h-4 w-4" />
                   </span>
-                  <CardTitle className="text-base">Payload</CardTitle>
+                  <CardTitle className="text-base">{t("SCHEDULE_FORM.PAYLOAD")}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>

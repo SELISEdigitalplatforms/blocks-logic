@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { Link } from "react-router";
 import { History, Search } from "lucide-react";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT, tStatic } from "@seliseblocks/genesis-os";
 import { Button } from "@/components/ui-kits/button/button";
 import { ISchedule } from "../../types/schedule.service.type";
 import { formatInZone } from "../../utils/timezone";
@@ -27,37 +27,47 @@ const Message = ({ children }: Readonly<{ children: ReactNode }>) => (
 /** The "no executions yet" text; `nextRunAtUtc` only exists once SPEC6 ships, so its absence is a case. */
 export function emptyStateMessage(schedule: ISchedule, tz: string): string {
   if (schedule.nextRunAtUtc) {
-    return `Next run ${formatInZone(schedule.nextRunAtUtc, tz, "datetime")} (${tz})`;
+    return tStatic("logic.scheduler", "EXECUTION_LIST_STATES.NEXT_RUN", { value: formatInZone(schedule.nextRunAtUtc, tz, "datetime"), tz });
   }
-  if (!schedule.isActive) return "This schedule is inactive. Activate it to start running.";
-  if ("nextRunAtUtc" in schedule) return "No upcoming run in the current date window.";
-  return "Runs will appear here after the schedule fires.";
+  if (!schedule.isActive) return tStatic("logic.scheduler", "EXECUTION_LIST_STATES.THIS_SCHEDULE_IS_INACTIVE");
+  if ("nextRunAtUtc" in schedule) return tStatic("logic.scheduler", "EXECUTION_LIST_STATES.NO_UPCOMING_RUN_IN");
+  return tStatic("logic.scheduler", "EXECUTION_LIST_STATES.RUNS_WILL_APPEAR_HERE");
 }
 
-export const NoExecutionsYet = ({ schedule, tz }: Readonly<{ schedule: ISchedule; tz: string }>) => (
-  <StateLayout icon={<History className="h-7 w-7" />} title="No executions yet">
-    <Message>{emptyStateMessage(schedule, tz)}</Message>
-  </StateLayout>
-);
+export const NoExecutionsYet = ({ schedule, tz }: Readonly<{ schedule: ISchedule; tz: string }>) => {
+  const { t } = useT("logic.scheduler");
+  return (
+    <StateLayout icon={<History className="h-7 w-7" />} title={t("EXECUTION_LIST_STATES.NO_EXECUTIONS_YET")}>
+      <Message>{emptyStateMessage(schedule, tz)}</Message>
+    </StateLayout>
+  );
+};
 
-export const NoMatchingExecutions = () => (
-  <StateLayout icon={<Search className="h-7 w-7" />} title="No executions match this filter." />
-);
+export const NoMatchingExecutions = () => {
+  const { t } = useT("logic.scheduler");
+  return (
+    <StateLayout icon={<Search className="h-7 w-7" />} title={t("EXECUTION_LIST_STATES.NO_EXECUTIONS_MATCH_THIS")} />
+  );
+};
 
-export const ExecutionListError = ({ onRetry }: Readonly<{ onRetry: () => void }>) => (
-  <StateLayout icon={<History className="h-7 w-7" />} title="Couldn't load executions">
-    <Button type="button" variant="outline" size="sm" className="mt-6" onClick={onRetry}>
-      Retry
-    </Button>
-  </StateLayout>
-);
+export const ExecutionListError = ({ onRetry }: Readonly<{ onRetry: () => void }>) => {
+  const { t } = useT("logic.scheduler");
+  return (
+    <StateLayout icon={<History className="h-7 w-7" />} title={t("EXECUTION_LIST_STATES.COULDN_T_LOAD_EXECUTIONS")}>
+      <Button type="button" variant="outline" size="sm" className="mt-6" onClick={onRetry}>
+        {t("common:RETRY")}
+      </Button>
+    </StateLayout>
+  );
+};
 
 export const ScheduleGone = () => {
+  const { t } = useT("logic.scheduler");
   const scoped = useScopedPath();
   return (
-    <StateLayout icon={<History className="h-7 w-7" />} title="This schedule no longer exists.">
+    <StateLayout icon={<History className="h-7 w-7" />} title={t("EXECUTION_LIST_STATES.THIS_SCHEDULE_NO_LONGER")}>
       <Button asChild variant="outline" size="sm" className="mt-6">
-        <Link to={scoped("schedule")}>Back to schedules</Link>
+        <Link to={scoped("schedule")}>{t("EXECUTION_LIST_STATES.BACK_TO_SCHEDULES")}</Link>
       </Button>
     </StateLayout>
   );

@@ -1,3 +1,4 @@
+import { tStatic } from "@seliseblocks/genesis-os";
 /**
  * Client-side check for 5-field cron expressions.
  *
@@ -36,12 +37,12 @@ const MONTH_NAMES = [
 const DAY_NAMES = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] as const;
 
 const CRON_FIELDS: readonly CronFieldSpec[] = [
-  { label: "Minute", min: 0, max: 59 },
-  { label: "Hour", min: 0, max: 23 },
-  { label: "Day of month", min: 1, max: 31, allowsQuestionMark: true },
-  { label: "Month", min: 1, max: 12, names: MONTH_NAMES, nameOffset: 1 },
+  { get label() { return tStatic("logic.scheduler", "CRON_VALIDATION.MINUTE"); }, min: 0, max: 59 },
+  { get label() { return tStatic("logic.scheduler", "CRON_VALIDATION.HOUR"); }, min: 0, max: 23 },
+  { get label() { return tStatic("logic.scheduler", "CRON_VALIDATION.DAY_OF_MONTH"); }, min: 1, max: 31, allowsQuestionMark: true },
+  { get label() { return tStatic("logic.scheduler", "CRON_VALIDATION.MONTH"); }, min: 1, max: 12, names: MONTH_NAMES, nameOffset: 1 },
   // 0 and 7 are both Sunday.
-  { label: "Day of week", min: 0, max: 7, names: DAY_NAMES, nameOffset: 0, allowsQuestionMark: true },
+  { get label() { return tStatic("logic.scheduler", "CRON_VALIDATION.DAY_OF_WEEK"); }, min: 0, max: 7, names: DAY_NAMES, nameOffset: 0, allowsQuestionMark: true },
 ];
 
 const DAY_OF_MONTH_INDEX = 2;
@@ -98,7 +99,7 @@ const validateField = (field: string, spec: CronFieldSpec): string | null => {
 export const validateCronExpression = (expression: string): string | null => {
   const fields = expression.trim().split(/\s+/);
   if (fields.length !== CRON_FIELDS.length) {
-    return "Cron expression must have 5 fields: minute hour day-of-month month day-of-week";
+    return tStatic("logic.scheduler", "CRON_VALIDATION.CRON_EXPRESSION_MUST_HAVE");
   }
 
   for (let index = 0; index < CRON_FIELDS.length; index += 1) {
@@ -107,7 +108,7 @@ export const validateCronExpression = (expression: string): string | null => {
   }
 
   if (fields[DAY_OF_MONTH_INDEX] === "?" && fields[DAY_OF_WEEK_INDEX] === "?") {
-    return 'Day of month and day of week cannot both be "?"';
+    return tStatic("logic.scheduler", "CRON_VALIDATION.DAY_OF_MONTH_AND");
   }
 
   return null;

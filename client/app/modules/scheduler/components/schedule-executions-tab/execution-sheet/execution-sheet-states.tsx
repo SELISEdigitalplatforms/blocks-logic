@@ -1,32 +1,42 @@
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const ExecutionSheetLoading = () => (
-  // <output> carries the "status" role natively.
-  <output className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground">
-    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-    Loading execution…
-  </output>
-);
+export const ExecutionSheetLoading = () => {
+  const { t } = useT("logic.scheduler");
+  return (
+    // <output> carries the "status" role natively.
+    <output className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+      {t("EXECUTION_SHEET_STATES.LOADING_EXECUTION")}
+    </output>
+  );
+};
 
 interface ExecutionSheetErrorProps {
   notFound?: boolean;
   onRetry: () => void;
 }
 
-export const ExecutionSheetError = ({ notFound = false, onRetry }: Readonly<ExecutionSheetErrorProps>) => (
-  <div className="space-y-3 px-4 py-8 text-sm" role="alert">
-    <p className="text-foreground">
-      {notFound ? "This execution no longer exists." : "Couldn't load this execution."}
-    </p>
-    {!notFound && (
-      <Button type="button" variant="outline" size="xs" onClick={onRetry}>
-        Retry
-      </Button>
-    )}
-  </div>
-);
+export const ExecutionSheetError = ({ notFound = false, onRetry }: Readonly<ExecutionSheetErrorProps>) => {
+  const { t } = useT("logic.scheduler");
+  return (
+    <div className="space-y-3 px-4 py-8 text-sm" role="alert">
+      <p className="text-foreground">
+        {notFound ? t("EXECUTION_SHEET_STATES.THIS_EXECUTION_NO_LONGER") : t("EXECUTION_SHEET_STATES.COULDN_T_LOAD_THIS")}
+      </p>
+      {!notFound && (
+        <Button type="button" variant="outline" size="xs" onClick={onRetry}>
+          {t("common:RETRY")}
+        </Button>
+      )}
+    </div>
+  );
+};
 
-export const SnapshotUnavailable = () => (
-  <p className="text-xs text-muted-foreground">Schedule snapshot unavailable for this run.</p>
-);
+export const SnapshotUnavailable = () => {
+  const { t } = useT("logic.scheduler");
+  return (
+    <p className="text-xs text-muted-foreground">{t("EXECUTION_SHEET_STATES.SCHEDULE_SNAPSHOT_UNAVAILABLE_FOR")}</p>
+  );
+};
