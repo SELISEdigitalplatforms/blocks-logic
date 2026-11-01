@@ -12,6 +12,7 @@ using DomainService.Notification;
 using DomainService.Shared;
 using DomainService.Utilities;
 using Workflow.DomainService;
+using Workflow.DomainService.Services;
 using Workflow.DomainService.Utils;
 using Proxy.DomainService;
 using Mail.DomainService.Shared.Utilities;
@@ -44,7 +45,10 @@ ApplicationConfigurations.ConfigureServices(builder.Services, LogicConstants.Get
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 15 * 1024 * 1024; // 15 MB
+    // Global, not per action: Genesis can read a webhook's form while resolving the tenant for a bearer
+    // token, before any action filter applies (SPEC8 A5). CertificateController keeps 15 MB on its own.
+    options.MultipartBodyLengthLimit = WebhookIntakeLimits.FileRequestMaxBytes;
+    options.ValueLengthLimit = (int)WebhookIntakeLimits.NonFileMaxBytes;
 });
 
 var services = builder.Services;
@@ -177,6 +181,13 @@ static bool LooksLikeAFile(PathString path)
     var lastSegment = value.AsSpan(value.LastIndexOf('/') + 1);
     return lastSegment.Contains('.');
 }
+
+// Webhook routes accept up to 50 MiB of files; raised ahead of the authentication middleware.
+app.Use(async (context, next) =>
+{
+    WebhookBodySizeLimit.Apply(context);
+    await next(context);
+});
 
 ApplicationConfigurations.ConfigureMiddleware(app, tenantValidationPrefixes: new[] { "api/notificationHub" });
 // A connection is closed when its token expires; the client reconnects with a fresh login.

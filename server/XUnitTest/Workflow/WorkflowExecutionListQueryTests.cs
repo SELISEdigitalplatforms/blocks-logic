@@ -20,18 +20,13 @@ namespace XUnitTest.Workflow
         public WorkflowExecutionListQueryTests()
         {
             _sut = new WorkflowExecutionService(
-                Mock.Of<IWorkflowRepository>(),
-                _executions.Object,
+                new WorkflowExecutionStores(Mock.Of<IWorkflowRepository>(), _executions.Object, Mock.Of<IWorkflowVersionRepository>()),
                 Mock.Of<IMessageClient>(),
                 Mock.Of<ILogger<WorkflowExecutionService>>(),
                 Mock.Of<IWorkflowEngineService>(),
-                Mock.Of<IWorkflowVersionRepository>(),
                 Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IWorkflowAuthService>(),
-                Mock.Of<IHttpContextAccessor>(),
-                Mock.Of<IDelegationGrantFactory>(),
                 Mock.Of<IWorkflowExecutionLogger>(),
-                Mock.Of<IInProcessGrantReleaser>());
+                new WorkflowTriggerAccess(Mock.Of<IWorkflowAuthService>(), Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(), Mock.Of<IWebhookIntake>()));
         }
 
         [Fact]

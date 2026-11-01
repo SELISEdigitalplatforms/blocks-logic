@@ -55,18 +55,13 @@ namespace XUnitTest.Workflow
                 .Returns(Task.CompletedTask);
 
             _sut = new WorkflowExecutionService(
-                _workflows.Object,
-                _executions.Object,
+                new WorkflowExecutionStores(_workflows.Object, _executions.Object, _versions.Object),
                 _messages.Object,
                 _logger.Object,
                 _engine.Object,
-                _versions.Object,
                 _notifications.Object,
-                _auth.Object,
-                Mock.Of<IHttpContextAccessor>(),
-                Mock.Of<IDelegationGrantFactory>(),
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>());
+                new WorkflowTriggerAccess(_auth.Object, Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(), Mock.Of<IWebhookIntake>()));
         }
 
         [Fact]

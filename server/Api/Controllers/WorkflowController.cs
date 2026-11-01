@@ -207,31 +207,16 @@ namespace Utilities.Api.Controllers
         /// Data-plane entry point: runs the published workflow behind a webhook trigger.
         /// <c>POST /api/Workflow/Webhook/{tenantId}/{workflowId}/{webhookId}</c>. Anonymous at the framework
         /// level — the trigger's own <c>authType</c> decides whether a caller must be authenticated or
-        /// authorized, and a failure surfaces here as 401.
+        /// authorized, and a failure surfaces here as 401. The body is not bound by the framework: the service
+        /// reads it after the workflow and auth checks, as JSON or "Any content" per the trigger's
+        /// <c>bodyMode</c> (see <see cref="RunWebhookAsync"/> for the error statuses).
         /// </summary>
         [HttpPost("{tenantId}/{workflowId}/{webhookId}")]
-        public async Task<IActionResult> Webhook(string tenantId, string workflowId, string webhookId, [FromBody] JsonElement input)
+        [RequestSizeLimit(WebhookIntakeLimits.RequestSizeLimitBytes)]
+        [RequestFormLimits(MultipartBodyLengthLimit = WebhookIntakeLimits.FileRequestMaxBytes, ValueLengthLimit = (int)WebhookIntakeLimits.NonFileMaxBytes)]
+        public Task<IActionResult> Webhook(string tenantId, string workflowId, string webhookId)
         {
-            try
-            {
-                var response = await _workflowExecutionService.TriggerWebhookAsync(
-                    workflowId,
-                    webhookId,
-                    tenantId,
-                    input
-                );
-
-                return Ok(response);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return StatusCode(401, new { message = "Unauthorized" });
-            }
-            catch (InvalidWebhookBodyException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-
+            return RunWebhookAsync(() => _workflowExecutionService.TriggerWebhookAsync(workflowId, webhookId, tenantId, Request));
         }
 
         /// <summary>
@@ -240,28 +225,11 @@ namespace Utilities.Api.Controllers
         /// </summary>
         [ActionName("webhook-test")]
         [HttpPost("{tenantId}/{workflowId}/{webhookId}")]
-        public async Task<IActionResult> TestWebhook(string tenantId, string workflowId, string webhookId, [FromBody] JsonElement input)
+        [RequestSizeLimit(WebhookIntakeLimits.RequestSizeLimitBytes)]
+        [RequestFormLimits(MultipartBodyLengthLimit = WebhookIntakeLimits.FileRequestMaxBytes, ValueLengthLimit = (int)WebhookIntakeLimits.NonFileMaxBytes)]
+        public Task<IActionResult> TestWebhook(string tenantId, string workflowId, string webhookId)
         {
-            try
-            {
-                var response = await _workflowExecutionService.TriggerTestWebhookAsync(
-                    workflowId,
-                    webhookId,
-                    tenantId,
-                    input
-                );
-
-                return Ok(response);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return StatusCode(401, new { message = "Unauthorized" });
-            }
-            catch (InvalidWebhookBodyException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-
+            return RunWebhookAsync(() => _workflowExecutionService.TriggerTestWebhookAsync(workflowId, webhookId, tenantId, Request));
         }
 
         /// <summary>
@@ -271,32 +239,15 @@ namespace Utilities.Api.Controllers
         /// </summary>
         [ActionName("Webhook")]
         [HttpPost("{workflowId}/{webhookId}")]
-        public async Task<IActionResult> WebhookByHeader(string workflowId, string webhookId, [FromBody] JsonElement input)
+        [RequestSizeLimit(WebhookIntakeLimits.RequestSizeLimitBytes)]
+        [RequestFormLimits(MultipartBodyLengthLimit = WebhookIntakeLimits.FileRequestMaxBytes, ValueLengthLimit = (int)WebhookIntakeLimits.NonFileMaxBytes)]
+        public Task<IActionResult> WebhookByHeader(string workflowId, string webhookId)
         {
             if (!TryGetTenantIdFromBlocksKey(out var tenantId, out var error))
             {
-                return error;
+                return Task.FromResult(error);
             }
-
-            try
-            {
-                var response = await _workflowExecutionService.TriggerWebhookAsync(
-                    workflowId,
-                    webhookId,
-                    tenantId,
-                    input
-                );
-
-                return Ok(response);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return StatusCode(401, new { message = "Unauthorized" });
-            }
-            catch (InvalidWebhookBodyException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+            return RunWebhookAsync(() => _workflowExecutionService.TriggerWebhookAsync(workflowId, webhookId, tenantId, Request));
         }
 
         /// <summary>
@@ -306,23 +257,26 @@ namespace Utilities.Api.Controllers
         /// </summary>
         [ActionName("webhook-test")]
         [HttpPost("{workflowId}/{webhookId}")]
-        public async Task<IActionResult> TestWebhookByHeader(string workflowId, string webhookId, [FromBody] JsonElement input)
+        [RequestSizeLimit(WebhookIntakeLimits.RequestSizeLimitBytes)]
+        [RequestFormLimits(MultipartBodyLengthLimit = WebhookIntakeLimits.FileRequestMaxBytes, ValueLengthLimit = (int)WebhookIntakeLimits.NonFileMaxBytes)]
+        public Task<IActionResult> TestWebhookByHeader(string workflowId, string webhookId)
         {
             if (!TryGetTenantIdFromBlocksKey(out var tenantId, out var error))
             {
-                return error;
+                return Task.FromResult(error);
             }
+            return RunWebhookAsync(() => _workflowExecutionService.TriggerTestWebhookAsync(workflowId, webhookId, tenantId, Request));
+        }
 
+        /// <summary>
+        /// Shared webhook error mapping: 401 for a failed trigger auth, 400 for a legacy body that is not an object
+        /// or array of objects, and the intake's own status (400/403/413/415/422/503) with its message otherwise.
+        /// </summary>
+        private async Task<IActionResult> RunWebhookAsync(Func<Task<WorkflowWebhookResponseDto?>> run)
+        {
             try
             {
-                var response = await _workflowExecutionService.TriggerTestWebhookAsync(
-                    workflowId,
-                    webhookId,
-                    tenantId,
-                    input
-                );
-
-                return Ok(response);
+                return Ok(await run());
             }
             catch (UnauthorizedAccessException)
             {
@@ -331,6 +285,10 @@ namespace Utilities.Api.Controllers
             catch (InvalidWebhookBodyException ex)
             {
                 return BadRequest(new { message = ex.Message });
+            }
+            catch (WebhookIntakeException ex)
+            {
+                return StatusCode(ex.StatusCode, new { message = ex.Message });
             }
         }
 

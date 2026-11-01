@@ -31,21 +31,14 @@ namespace XUnitTest.Workflow
         public WebhookInvalidBodyServiceTests()
         {
             TestBlocksContext.Set("tenant-1");
-            var accessor = new Mock<IHttpContextAccessor>();
-            accessor.Setup(a => a.HttpContext).Returns(new DefaultHttpContext());
             _sut = new WorkflowExecutionService(
-                _workflows.Object,
-                _executions.Object,
+                new WorkflowExecutionStores(_workflows.Object, _executions.Object, _versions.Object),
                 Mock.Of<IMessageClient>(),
                 Mock.Of<ILogger<WorkflowExecutionService>>(),
                 Mock.Of<IWorkflowEngineService>(),
-                _versions.Object,
                 Mock.Of<IWorkflowNotificationService>(),
-                _auth.Object,
-                accessor.Object,
-                Mock.Of<IDelegationGrantFactory>(),
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>());
+                new WorkflowTriggerAccess(_auth.Object, Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(), WebhookRequests.Intake()));
         }
 
         public void Dispose() => TestBlocksContext.Clear();
@@ -95,7 +88,7 @@ namespace XUnitTest.Workflow
         {
             Published("none");
 
-            var act = () => _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", Json(raw));
+            var act = () => _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", WebhookRequests.Json(raw));
 
             (await act.Should().ThrowAsync<InvalidWebhookBodyException>())
                 .Which.Message.Should().StartWith("Body must be a JSON object or an array of objects");
@@ -108,7 +101,7 @@ namespace XUnitTest.Workflow
             Published("blocksAuthentication");
             _auth.Setup(a => a.IsAuthenticated(It.IsAny<HttpRequest>(), "tenant-1")).ReturnsAsync(false);
 
-            var act = () => _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", Json("5"));
+            var act = () => _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", WebhookRequests.Json("5"));
 
             await act.Should().ThrowAsync<UnauthorizedAccessException>();
         }

@@ -10,6 +10,15 @@ const AUTHORIZATION_DEPENDENCY = {
   value: "blocksAuthorization",
 } as const;
 
+// Values of the server's WebhookBodyModes.
+export const BODY_MODE_JSON = "json";
+export const BODY_MODE_ANY_CONTENT = "anyContent";
+
+const ANY_CONTENT_DEPENDENCY = {
+  key: "bodyMode",
+  value: BODY_MODE_ANY_CONTENT,
+} as const;
+
 type AuthBlock = {
   organizationId?: string;
   roles?: { operator?: "all" | "any"; items?: string[] };
@@ -102,6 +111,59 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         key: "httpMethodInfo",
         transient: true,
         displayValue: () => "POST",
+      },
+      {
+        // A webhook saved before this setting existed has no `bodyMode`; it shows (and the server treats it)
+        // as JSON (legacy). Only new nodes start on Any content (see defaults below).
+        id: "body-mode",
+        type: "select-with-description",
+        label: "Body Mode",
+        info: "Any content limits: 5 MiB without files; 50 MiB and up to 10 files with files. Each file must also fit the storage configuration's maximum file size.",
+        key: "bodyMode",
+        defaultValue: BODY_MODE_JSON,
+        options: [
+          {
+            value: BODY_MODE_JSON,
+            label: "JSON (legacy)",
+            description: "Accepts only a JSON object or array of objects. Items are the JSON itself.",
+          },
+          {
+            value: BODY_MODE_ANY_CONTENT,
+            label: "Any content",
+            description:
+              "Accepts JSON, forms, multipart files, text and binary. Each item is { body, files, contentType, bodyFormat, headers, query }; files are stored and passed as file IDs.",
+          },
+        ],
+      },
+      {
+        id: "files-folder-id",
+        type: "text",
+        label: "Files Folder ID",
+        info: "Storage folder for uploaded files.",
+        key: "filesFolderId",
+        placeholder: "Blank = storage root",
+        defaultValue: "",
+        dependsOn: ANY_CONTENT_DEPENDENCY,
+      },
+      {
+        id: "storage-configuration-name",
+        type: "text",
+        label: "Storage Configuration",
+        info: "Storage configuration that receives uploaded files.",
+        key: "storageConfigurationName",
+        placeholder: "Blank = default configuration",
+        defaultValue: "",
+        dependsOn: ANY_CONTENT_DEPENDENCY,
+      },
+      {
+        id: "allowed-headers",
+        type: "comma-list",
+        label: "Allowed Headers",
+        info: "Header names copied into the item. Authorization, Proxy-Authorization, Cookie, Set-Cookie and x-blocks-key are never copied.",
+        key: "allowedHeaders",
+        placeholder: "e.g. x-signature, x-event-type",
+        defaultValue: [],
+        dependsOn: ANY_CONTENT_DEPENDENCY,
       },
       {
         id: "auth-type",
@@ -245,6 +307,10 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       roles: { operator: "all", values: [] },
       permissions: { operator: "any", values: [] },
       authorizationMode: "",
+      bodyMode: BODY_MODE_ANY_CONTENT,
+      filesFolderId: "",
+      storageConfigurationName: "",
+      allowedHeaders: [],
     },
     settings: {},
   },

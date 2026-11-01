@@ -44,7 +44,14 @@ namespace Workflow.DomainService
             services.AddSingleton<IWorkflowService, WorkflowService>();
             services.TryAddSingleton<IWorkflowImportTenantSlugResolver, NullWorkflowImportTenantSlugResolver>();
             services.AddSingleton<IWorkflowImportService, WorkflowImportService>();
+            services.AddSingleton<WorkflowExecutionStores>();
+            services.AddSingleton<WorkflowTriggerAccess>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
+            // Webhook "Any content" intake: request → JSON items, files stored through the storage driver.
+            services.AddOptions<WebhookUploadOptions>().BindConfiguration(WebhookUploadOptions.SectionName);
+            services.AddSingleton<IWebhookFileStore, StorageWebhookFileStore>();
+            services.AddSingleton<IWebhookIntake, WebhookIntake>();
+            services.AddHttpClient(StorageWebhookFileStore.HttpClientName);
             services.AddSingleton<IInProcessGrantReleaser, InProcessGrantReleaser>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
             services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();

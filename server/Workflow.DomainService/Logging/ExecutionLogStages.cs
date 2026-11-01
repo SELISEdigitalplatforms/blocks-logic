@@ -12,6 +12,7 @@ namespace Workflow.DomainService.Logging
         public const string ExecutionInProcess = "execution.inProcess";
         public const string ExecutionStep = "execution.step";
         public const string ExecutionStartFailed = "execution.startFailed";
+        public const string TriggerWebhookIntake = "execution.webhookIntake";
 
         // Engine (WorkflowEngineService)
         public const string NodeSkipped = "node.skipped";

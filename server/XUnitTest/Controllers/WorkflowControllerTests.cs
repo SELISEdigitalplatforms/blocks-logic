@@ -35,11 +35,6 @@ namespace XUnitTest.Controllers
 
         public void Dispose() => TestBlocksContext.Clear();
 
-        private static JsonElement EmptyJson()
-        {
-            using var doc = JsonDocument.Parse("{}");
-            return doc.RootElement.Clone();
-        }
 
         private void SetBlocksKey(string? value)
         {
@@ -235,10 +230,10 @@ namespace XUnitTest.Controllers
         [Fact]
         public async Task Webhook_Success_ReturnsOk()
         {
-            _executionService.Setup(s => s.TriggerWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerWebhookAsync("wf1", "wh1", "proj1", It.IsAny<HttpRequest>()))
                 .ReturnsAsync(new WorkflowWebhookResponseDto());
 
-            var result = await _controller.Webhook("proj1", "wf1", "wh1", EmptyJson());
+            var result = await _controller.Webhook("proj1", "wf1", "wh1");
 
             result.Should().BeOfType<OkObjectResult>();
         }
@@ -246,10 +241,10 @@ namespace XUnitTest.Controllers
         [Fact]
         public async Task Webhook_Unauthorized_Returns401()
         {
-            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()))
                 .ThrowsAsync(new UnauthorizedAccessException());
 
-            var result = await _controller.Webhook("proj1", "wf1", "wh1", EmptyJson());
+            var result = await _controller.Webhook("proj1", "wf1", "wh1");
 
             result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(401);
         }
@@ -257,22 +252,41 @@ namespace XUnitTest.Controllers
         [Fact]
         public async Task Webhook_InvalidBody_Returns400WithMessage()
         {
-            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()))
                 .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects (the body is a number)."));
 
-            var result = await _controller.Webhook("proj1", "wf1", "wh1", EmptyJson());
+            var result = await _controller.Webhook("proj1", "wf1", "wh1");
 
             var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
             JsonSerializer.Serialize(bad.Value).Should().Contain("Body must be a JSON object or an array of objects");
         }
 
+        [Theory]
+        [InlineData(400, "Body is not valid JSON")]
+        [InlineData(403, "Not allowed to store files in the configured folder")]
+        [InlineData(413, "Too many files (max 10)")]
+        [InlineData(415, "XML bodies are not supported yet")]
+        [InlineData(422, "File 'a.pdf' was rejected by storage")]
+        [InlineData(503, "File storage is unavailable")]
+        public async Task Webhook_IntakeRefusal_ReturnsItsStatusAndMessage(int status, string message)
+        {
+            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()))
+                .ThrowsAsync(new WebhookIntakeException(status, "kind", message));
+
+            var result = await _controller.Webhook("proj1", "wf1", "wh1");
+
+            var refused = result.Should().BeOfType<ObjectResult>().Subject;
+            refused.StatusCode.Should().Be(status);
+            JsonSerializer.Serialize(refused.Value).Should().Be(JsonSerializer.Serialize(new { message }));
+        }
+
         [Fact]
         public async Task TestWebhook_InvalidBody_Returns400()
         {
-            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()))
                 .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects"));
 
-            var result = await _controller.TestWebhook("proj1", "wf1", "wh1", EmptyJson());
+            var result = await _controller.TestWebhook("proj1", "wf1", "wh1");
 
             result.Should().BeOfType<BadRequestObjectResult>();
         }
@@ -281,10 +295,10 @@ namespace XUnitTest.Controllers
         public async Task WebhookByHeader_InvalidBody_Returns400()
         {
             SetBlocksKey("proj1");
-            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()))
                 .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects"));
 
-            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+            var result = await _controller.WebhookByHeader("wf1", "wh1");
 
             result.Should().BeOfType<BadRequestObjectResult>();
         }
@@ -293,10 +307,10 @@ namespace XUnitTest.Controllers
         public async Task TestWebhookByHeader_InvalidBody_Returns400()
         {
             SetBlocksKey("proj1");
-            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()))
                 .ThrowsAsync(new InvalidWebhookBodyException("Body must be a JSON object or an array of objects"));
 
-            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1");
 
             result.Should().BeOfType<BadRequestObjectResult>();
         }
@@ -304,10 +318,10 @@ namespace XUnitTest.Controllers
         [Fact]
         public async Task TestWebhook_Success_ReturnsOk()
         {
-            _executionService.Setup(s => s.TriggerTestWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerTestWebhookAsync("wf1", "wh1", "proj1", It.IsAny<HttpRequest>()))
                 .ReturnsAsync(new WorkflowWebhookResponseDto());
 
-            var result = await _controller.TestWebhook("proj1", "wf1", "wh1", EmptyJson());
+            var result = await _controller.TestWebhook("proj1", "wf1", "wh1");
 
             result.Should().BeOfType<OkObjectResult>();
         }
@@ -315,10 +329,10 @@ namespace XUnitTest.Controllers
         [Fact]
         public async Task TestWebhook_Unauthorized_Returns401()
         {
-            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()))
                 .ThrowsAsync(new UnauthorizedAccessException());
 
-            var result = await _controller.TestWebhook("proj1", "wf1", "wh1", EmptyJson());
+            var result = await _controller.TestWebhook("proj1", "wf1", "wh1");
 
             result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(401);
         }
@@ -327,13 +341,13 @@ namespace XUnitTest.Controllers
         public async Task WebhookByHeader_Success_ReturnsOk()
         {
             SetBlocksKey("proj1");
-            _executionService.Setup(s => s.TriggerWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerWebhookAsync("wf1", "wh1", "proj1", It.IsAny<HttpRequest>()))
                 .ReturnsAsync(new WorkflowWebhookResponseDto());
 
-            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+            var result = await _controller.WebhookByHeader("wf1", "wh1");
 
             result.Should().BeOfType<OkObjectResult>();
-            _executionService.Verify(s => s.TriggerWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()), Times.Once);
+            _executionService.Verify(s => s.TriggerWebhookAsync("wf1", "wh1", "proj1", It.IsAny<HttpRequest>()), Times.Once);
         }
 
         [Fact]
@@ -341,10 +355,10 @@ namespace XUnitTest.Controllers
         {
             SetBlocksKey(null);
 
-            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+            var result = await _controller.WebhookByHeader("wf1", "wh1");
 
             result.Should().BeOfType<BadRequestObjectResult>();
-            _executionService.Verify(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()), Times.Never);
+            _executionService.Verify(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()), Times.Never);
         }
 
         [Fact]
@@ -352,20 +366,20 @@ namespace XUnitTest.Controllers
         {
             SetBlocksKey("   ");
 
-            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+            var result = await _controller.WebhookByHeader("wf1", "wh1");
 
             result.Should().BeOfType<BadRequestObjectResult>();
-            _executionService.Verify(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()), Times.Never);
+            _executionService.Verify(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()), Times.Never);
         }
 
         [Fact]
         public async Task WebhookByHeader_Unauthorized_Returns401()
         {
             SetBlocksKey("proj1");
-            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()))
                 .ThrowsAsync(new UnauthorizedAccessException());
 
-            var result = await _controller.WebhookByHeader("wf1", "wh1", EmptyJson());
+            var result = await _controller.WebhookByHeader("wf1", "wh1");
 
             result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(401);
         }
@@ -374,13 +388,13 @@ namespace XUnitTest.Controllers
         public async Task TestWebhookByHeader_Success_ReturnsOk()
         {
             SetBlocksKey("proj1");
-            _executionService.Setup(s => s.TriggerTestWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerTestWebhookAsync("wf1", "wh1", "proj1", It.IsAny<HttpRequest>()))
                 .ReturnsAsync(new WorkflowWebhookResponseDto());
 
-            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1");
 
             result.Should().BeOfType<OkObjectResult>();
-            _executionService.Verify(s => s.TriggerTestWebhookAsync("wf1", "wh1", "proj1", It.IsAny<JsonElement>()), Times.Once);
+            _executionService.Verify(s => s.TriggerTestWebhookAsync("wf1", "wh1", "proj1", It.IsAny<HttpRequest>()), Times.Once);
         }
 
         [Fact]
@@ -388,10 +402,10 @@ namespace XUnitTest.Controllers
         {
             SetBlocksKey(null);
 
-            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1");
 
             result.Should().BeOfType<BadRequestObjectResult>();
-            _executionService.Verify(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()), Times.Never);
+            _executionService.Verify(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()), Times.Never);
         }
 
         [Fact]
@@ -399,20 +413,20 @@ namespace XUnitTest.Controllers
         {
             SetBlocksKey("   ");
 
-            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1");
 
             result.Should().BeOfType<BadRequestObjectResult>();
-            _executionService.Verify(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()), Times.Never);
+            _executionService.Verify(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()), Times.Never);
         }
 
         [Fact]
         public async Task TestWebhookByHeader_Unauthorized_Returns401()
         {
             SetBlocksKey("proj1");
-            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<JsonElement>()))
+            _executionService.Setup(s => s.TriggerTestWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<HttpRequest>()))
                 .ThrowsAsync(new UnauthorizedAccessException());
 
-            var result = await _controller.TestWebhookByHeader("wf1", "wh1", EmptyJson());
+            var result = await _controller.TestWebhookByHeader("wf1", "wh1");
 
             result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(401);
         }
