@@ -4,7 +4,7 @@
 #   make image       build, test and publish the Node 24 runtime image (A-2)
 #   make build       build the .NET solution
 #   make test        run the .NET test suite and the runtime bootstrap suite
-#   make install     publish the runner to /opt and (re)start the systemd service
+#   make install     publish the runner to /opt, (re)start the systemd service, enable the police timer
 #   (verification is a separate harness outside this repository - see `help`)
 #   make logs        follow the runner's journal
 
@@ -18,6 +18,8 @@ APP_DIR := /opt/blocks-function-runner
 # Publishing lands here first; install compares it against APP_DIR before restarting.
 STAGE_DIR := /opt/blocks-function-runner.stage
 SERVICE := blocks-function-runner.service
+# Root timer beside the runner: checks the host every minute and ends leaked shims.
+POLICE := blocks-runner-police
 export DOTNET_CLI_TELEMETRY_OPTOUT := 1
 export DOTNET_NOLOGO := 1
 # install depends on build, so a deploy runs dotnet build/test/publish back-to-back within
@@ -89,11 +91,22 @@ install: build
 	   echo "== $(SERVICE) is already running these binaries - not restarting"; \
 	 fi
 	@rm -rf $(STAGE_DIR)
+	@# Installed on every deploy, so no host runs the runner without its police.
+	@police_changed=no; \
+	 for unit in $(POLICE).service $(POLICE).timer; do \
+	   cmp -s $(ROOT)/deploy/$$unit /etc/systemd/system/$$unit || police_changed=yes; \
+	   install -m 0644 $(ROOT)/deploy/$$unit /etc/systemd/system/$$unit; \
+	 done; \
+	 [ "$$police_changed" = no ] || systemctl daemon-reload; \
+	 systemctl enable --now $(POLICE).timer >/dev/null 2>&1; \
+	 echo "== $(POLICE).timer enabled (units changed: $$police_changed)"
 	@systemctl --no-pager --lines=0 status $(SERVICE) || true
 
 uninstall:
+	@systemctl disable --now $(POLICE).timer 2>/dev/null || true
 	@systemctl disable --now $(SERVICE) 2>/dev/null || true
-	@rm -f /etc/systemd/system/$(SERVICE) /usr/local/bin/fnctl
+	@rm -f /etc/systemd/system/$(SERVICE) /etc/systemd/system/$(POLICE).service \
+	  /etc/systemd/system/$(POLICE).timer /usr/local/bin/fnctl
 	@systemctl daemon-reload
 	@echo "removed the service (state in /var/lib/blocks-runner is kept)"
 

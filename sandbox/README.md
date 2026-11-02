@@ -262,13 +262,9 @@ fnctl watch            # stats every 2 s until Ctrl+C
 fnctl police [--fix]   # the independent check
 ```
 
-Install the timer once (the units are in `deploy/`; `deploy.sh` does not do it):
-
-```
-cp deploy/blocks-runner-police.service deploy/blocks-runner-police.timer /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now blocks-runner-police.timer
-```
+No manual step: `make install` (so every `deploy.sh`) installs and enables the police timer
+(units in `deploy/`), and `deploy.sh` phase 6 runs `fnctl police --fix` and fails the deploy on
+any FAIL.
 
 ## Security
 

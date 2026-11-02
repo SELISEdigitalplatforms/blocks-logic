@@ -468,6 +468,20 @@ ok "heartbeat published — the runner reached Redis"
 step "fnctl doctor"
 fnctl doctor || die "fnctl doctor reported problems"
 
+# Police is the same check its timer runs every minute. --fix ends shims a previous runner
+# leaked, so a deploy also cleans the host. The runner writes its first metrics sample a few
+# seconds after start, so a "not recording" result gets up to 30 s before it fails the deploy.
+step "fnctl police"
+POLICE_OK=no
+for _ in 1 2 3; do
+  if fnctl police --fix; then POLICE_OK=yes; break; fi
+  sleep 10
+done
+[ "$POLICE_OK" = yes ] || die "fnctl police reported FAIL (see above)"
+systemctl is-active --quiet blocks-runner-police.timer \
+  || die "blocks-runner-police.timer is not active — the host would run without its police"
+ok "police passed; its timer checks the host every minute"
+
 printf '\n\033[1mdeployed\033[0m in %ds — runner %s on %s\n' \
   "$(( $(date +%s) - START ))" "$(env_val RUNNER__RunnerId)" "$(hostname -s)"
 if [ "$WAS_ACTIVE" = yes ]; then
@@ -475,4 +489,4 @@ if [ "$WAS_ACTIVE" = yes ]; then
     && info "the runner was already current — it was not restarted" \
     || info "this replaced a running runner"
 fi
-info "logs: make logs    state: make status    health: fnctl doctor"
+info "logs: make logs    state: make status    health: fnctl doctor, fnctl stats, fnctl police"
