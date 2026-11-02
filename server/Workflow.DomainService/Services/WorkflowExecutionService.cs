@@ -1592,6 +1592,8 @@ namespace Workflow.DomainService.Services
             execution.Context[LogicConstants.ExecutionInputKey] = triggerMetadata.TriggerData ?? new BsonArray();
             execution.Status = WorkflowExecutionStatus.Queued;
             execution.ActiveNodeIds.Add(triggerNode.Id);
+            // Saved before the engine reloads the run: the trigger reads its pinned or sample data from Input.
+            await _executionRepository.UpdateAsync(execution);
             await NotifyWorkflowStartedAsync(execution);
             LogStepExecution(execution, targetNode);
             // Set here, not in an async helper (AsyncLocal; see the webhook "last" mode).
