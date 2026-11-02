@@ -29,7 +29,8 @@ export interface WorkflowExportEdge {
 
 export interface WorkflowExportFile {
   name: string;
-  settings: Record<string, string>;
+  // Copied as-is (the alert too); import drops it, because an alert target belongs to this tenant.
+  settings: Record<string, unknown>;
   nodes: WorkflowExportNode[];
   edges: WorkflowExportEdge[];
 }
@@ -85,7 +86,7 @@ export const buildWorkflowExport = (workflow: Workflow): WorkflowExportFile => {
   return {
     name: typeof workflow.name === "string" ? workflow.name : "",
     settings: isPlainObject(workflow.settings)
-      ? (workflow.settings as Record<string, string>)
+      ? (workflow.settings as Record<string, unknown>)
       : {},
     nodes: nodes.map((node) => pickNode(node as unknown as Record<string, unknown>)),
     edges: edges.map((edge) => pickEdge(edge as unknown as Record<string, unknown>)),

@@ -110,7 +110,8 @@ namespace XUnitTest.Security
             {
                 var logger = new CapturingLogger<WorkflowService>();
                 var sut = new WorkflowService(Mock.Of<IWorkflowRepository>(), Mock.Of<IWorkflowVersionRepository>(),
-                    Mock.Of<IScheduleService>(), logger, Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>());
+                    Mock.Of<IScheduleService>(), logger, Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>(),
+                    Mock.Of<FluentValidation.IValidator<global::Workflow.DomainService.Dtos.WorkflowUpdateSettingsRequestDto>>());
                 // The marker rides in a node field: the point is that no node content reaches the log at all.
                 var nodes = new List<NodeDto>
                 {
