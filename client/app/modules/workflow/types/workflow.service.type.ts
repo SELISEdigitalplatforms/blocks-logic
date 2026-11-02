@@ -1,5 +1,5 @@
 import { Edge } from "@xyflow/react";
-import { ExecutedItem, ExecutedNode, Workflow, WorkflowSummary, WorkflowVersion, WorkflowExecutionMode } from "../models/workflow.model";
+import { ExecutedItem, ExecutedNode, Workflow, WorkflowSettings, WorkflowSummary, WorkflowVersion, WorkflowExecutionMode } from "../models/workflow.model";
 import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { OutputSchemaField } from "./output-schema.types";
 import type { PersistedNode } from "../utils/to-persisted-node";
@@ -9,6 +9,9 @@ export interface IGetWorkflowsPayload {
   pageNumber?: number;
   search?: string;
   isPublished?: boolean;
+  /** Only published workflows that contain an Error Trigger. */
+  hasErrorTrigger?: boolean;
+  excludeItemId?: string;
 }
 
 export interface IGetWorkflowsResponse {
@@ -32,7 +35,7 @@ export interface ICreateWorkflowPayload {
   description?: string;
   nodes?: WorkflowNode[];
   edges?: Edge[];
-  settings?: Record<string, unknown>;
+  settings?: WorkflowSettings | null;
   // isActive?: boolean;
   nodeOutputSchemas?: Record<string, OutputSchemaField[]>;
 }
@@ -58,6 +61,11 @@ export interface IUpdateWorkflowPayload extends Omit<ICreateWorkflowPayload, "na
   itemId: string;
   name?: string;
   nodes?: PersistedNode[];
+}
+
+export interface IUpdateWorkflowSettingsPayload {
+  itemId: string;
+  settings: WorkflowSettings;
 }
 
 export interface IUpdateWorkflowResponse {

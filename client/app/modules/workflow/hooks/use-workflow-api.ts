@@ -72,6 +72,21 @@ export const useUpdateWorkflow = () => {
   });
 };
 
+// Settings are not part of the editor's graph, so the editor store is not touched. The server marks the workflow dirty.
+export const useUpdateWorkflowSettings = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["workflow", "update-settings"],
+    mutationFn: workflowService.updateWorkflowSettings,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["workflow"] });
+      // The versions list shows whether the draft differs from the published version.
+      queryClient.invalidateQueries({ queryKey: ["workflow-versions"] });
+    },
+  });
+};
+
 export const useDeleteWorkflow = () => {
   const queryClient = useQueryClient();
   return useMutation({
