@@ -289,6 +289,12 @@
         <member name="M:Utilities.Api.Controllers.WorkflowController.Update(Workflow.DomainService.Dtos.WorkflowUpdateRequestDto)">
             <summary><c>PUT</c> — rewrites a workflow's name, description and node graph.</summary>
         </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.UpdateSettings(Workflow.DomainService.Dtos.WorkflowUpdateSettingsRequestDto)">
+            <summary>
+            <c>PUT</c> — replaces the workflow's settings (the failure alert) and marks the workflow dirty, without
+            touching its graph or publish state. Takes effect for the next failure, no republish needed.
+            </summary>
+        </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.Import(Workflow.DomainService.Dtos.WorkflowImportRequestDto)">
             <summary>
             <c>POST</c> — enqueues a workflow import. The file must already be in storage.

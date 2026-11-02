@@ -162,5 +162,64 @@ namespace Blocks.FunctionRunner.Tests
             third.Discard.Should().Be("dirty:Timeout");
             sandbox.IsDead.Should().BeTrue();
         }
+
+        /// <summary>
+        /// The leak of 2026-11-02: an idle warm sandbox is removed while paused, and under gVisor a
+        /// paused container does not die — Docker forgets it, its containerd shim stays with its
+        /// memory. 2652 shims (11.7 GB) on one host in four days. Removal must thaw it first.
+        /// </summary>
+        [SkippableFact]
+        public async Task Removing_a_paused_sandbox_leaves_no_shim_behind()
+        {
+            Skip.If(_skip is not null, _skip);
+
+            var options = new RunnerOptions
+            {
+                RunnerId = "test-runner",
+                Network = "none",
+                ResolvConf = Path.Combine(_context, "resolv.conf"),
+                CleanGraceMs = 200,
+                StartupAllowanceSeconds = 60,
+            };
+            var name = SandboxProfile.WarmContainerPrefix + Guid.NewGuid().ToString("N");
+            var sandbox = new ReusableSandbox(
+                new DockerReusableContainer(_docker!, name, _image!, RunLimits.Default, options, NullLogger.Instance),
+                options, NullLogger.Instance);
+
+            var start = await sandbox.StartAsync(CancellationToken.None);
+            start.Status.Should().Be(WarmStartStatus.Ready, start.HostFailure ?? string.Join('\n', start.Output.Logs));
+            var id = (await _docker!.Containers.InspectContainerAsync(name)).ID;
+            (await sandbox.PauseAsync()).Should().BeTrue();
+
+            await sandbox.DisposeAsync();
+
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (ShimAlive(id) && DateTime.UtcNow < deadline) await Task.Delay(250);
+            ShimAlive(id).Should().BeFalse("the container's shim must end with it, not hold its memory");
+        }
+
+        /// <summary>True while any process on this host still carries <paramref name="containerId"/> on its command line.</summary>
+        private static bool ShimAlive(string containerId)
+        {
+            foreach (var dir in Directory.EnumerateDirectories("/proc"))
+            {
+                if (!int.TryParse(Path.GetFileName(dir), out _)) continue;
+                try
+                {
+                    var cmdline = File.ReadAllText(Path.Combine(dir, "cmdline"));
+                    if (cmdline.Contains("containerd-shim", StringComparison.Ordinal)
+                        && cmdline.Contains(containerId, StringComparison.Ordinal)) return true;
+                }
+                catch (IOException)
+                {
+                    // The process ended while being read.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Not ours to read; a shim runs as root, which this check needs to be.
+                }
+            }
+            return false;
+        }
     }
 }

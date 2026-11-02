@@ -44,10 +44,25 @@ export interface WorkflowEdge extends Edge {
   targetHandle: string;
 }
 
+// Stored as a number, like the server's WorkflowAlertMode.
+export enum WorkflowAlertMode {
+  Workflow = 1,
+}
+
+export interface WorkflowAlert {
+  isEnabled: boolean;
+  mode: WorkflowAlertMode;
+  workflowId: string | null;
+}
+
+export interface WorkflowSettings {
+  alert: WorkflowAlert | null;
+}
+
 export interface Workflow extends WorkflowSummary {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
-  settings: Record<string, unknown>;
+  settings: WorkflowSettings | null;
   nodeOutputSchemas?: Record<string, OutputSchemaField[]>;
   items?: ExecutedItem[];
   nodeExecutions?: ExecutedNode[];

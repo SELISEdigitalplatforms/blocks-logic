@@ -131,7 +131,7 @@ namespace Blocks.FunctionRunner.Maintenance
                 _logger.LogWarning("Removing run sandbox {Name} ({Status}): {Reason}", name, container.Status,
                     hung ? "busy longer than the hard limit, so dead or hung" : "its run holds no lease, so no runner owns it");
 
-                if (!await RemoveAsync(container.ID, name, token).ConfigureAwait(false)) continue;
+                if (!await RemoveAsync(container.ID, name, container.State, token).ConfigureAwait(false)) continue;
                 reaped++;
                 if (hung) await ReleaseLeaseAsync(runId).ConfigureAwait(false);
             }
@@ -147,11 +147,13 @@ namespace Blocks.FunctionRunner.Maintenance
         internal static bool IsPastHardLimit(DateTime createdUtc, DateTime nowUtc) => nowUtc - createdUtc > RunHardLimit;
 
         /// <summary>Kills and removes one container. A Docker failure is logged; the next pass tries again.</summary>
-        private async Task<bool> RemoveAsync(string id, string name, CancellationToken token)
+        private async Task<bool> RemoveAsync(string id, string name, string? state, CancellationToken token)
         {
+            // A forced removal of a PAUSED gVisor sandbox drops the container but leaks its shim
+            // and memory, so it is thawed first (PausedSandbox).
+            if (state == "paused") await PausedSandbox.ThawAsync(_docker, id, _logger).ConfigureAwait(false);
             try
             {
-                // Forced removal works on a running or paused container too: it is killed first.
                 await _docker.Containers.RemoveContainerAsync(
                     id, new ContainerRemoveParameters { Force = true, RemoveVolumes = true }, token).ConfigureAwait(false);
                 return true;
@@ -212,7 +214,7 @@ namespace Blocks.FunctionRunner.Maintenance
                     "Removing build sandbox {Name} ({Status}): it has outlived the {Age} build limit",
                     name, container.Status, abandoned);
 
-                if (await RemoveAsync(container.ID, name, token).ConfigureAwait(false)) reaped++;
+                if (await RemoveAsync(container.ID, name, container.State, token).ConfigureAwait(false)) reaped++;
             }
 
             if (reaped > 0) _logger.LogInformation("Reaped {Count} abandoned build sandbox(es)", reaped);
@@ -264,7 +266,7 @@ namespace Blocks.FunctionRunner.Maintenance
                     "Removing orphaned warm sandbox {Name} ({Status}) of runner '{Owner}'; no pool keeps it",
                     name, container.Status, owner);
 
-                if (await RemoveAsync(container.ID, name, token).ConfigureAwait(false)) reaped++;
+                if (await RemoveAsync(container.ID, name, container.State, token).ConfigureAwait(false)) reaped++;
             }
 
             if (reaped > 0) _logger.LogInformation("Reaped {Count} orphaned warm sandbox(es)", reaped);

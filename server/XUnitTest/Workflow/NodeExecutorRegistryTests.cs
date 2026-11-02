@@ -19,7 +19,7 @@ namespace XUnitTest.Workflow
 
         /// <summary>Types added after SPEC6: they start at v2 and have no v1.</summary>
         private static bool IsV2Only(INodeExecutor e) =>
-            e.NodeType is "switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit" or "notification";
+            e.NodeType is "switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit" or "notification" or "errorTrigger";
 
         /// <summary>The 13 node types that existed before SPEC6; they must keep resolving exactly as before.</summary>
         private static List<INodeExecutor> ProductionExecutors() =>

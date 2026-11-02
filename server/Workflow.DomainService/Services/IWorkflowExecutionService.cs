@@ -1,3 +1,4 @@
+using Workflow.DomainService.Events;
 using MongoDB.Bson;
 using Workflow.DomainService.Entities;
 using Workflow.DomainService.Dtos;
@@ -35,6 +36,8 @@ namespace Workflow.DomainService.Services
         /// </summary>
         Task<bool> QueueTriggeredExecutionAsync(WorkflowEntity workflow, NodeEntity triggerNode, BsonArray triggerData, WorkflowExecutionMode executionMode);
         Task SchedulerTriggerStartAsync(SchedulerTriggerPayload payload);
+        /// <summary>Starts the alert's error workflow for one failed production attempt (ErrorTriggerConsumer).</summary>
+        Task ErrorTriggerStartAsync(ErrorTriggerEvent @event);
         Task<StepExecuteResponseDto> StepExecuteAsync(string tenantId, StepExecuteRequestDto dto);
     }
 }

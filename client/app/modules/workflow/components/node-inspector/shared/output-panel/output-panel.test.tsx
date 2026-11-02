@@ -79,6 +79,20 @@ describe("OutputPanel", () => {
     expect(screen.getByText("city:")).toBeTruthy();
   });
 
+  it("offers no Set mock data on an Error Trigger", () => {
+    renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ type: "errorTrigger", pinData: null }) });
+    expect(screen.queryByText("Set mock data")).toBeNull();
+  });
+
+  it("lets existing mock data on an Error Trigger be removed, and offers none afterwards", () => {
+    renderWithProviders(<OutputPanel />, {
+      seedWorkflow: seedSelected({ type: "errorTrigger", pinData: [{ name: "uday" }] }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Remove mock data" }));
+    expect(screen.queryByText("Mock data")).toBeNull();
+    expect(screen.queryByText("Set mock data")).toBeNull();
+  });
+
   it("shows no mock-data indicator or remove button without pinned data", () => {
     renderWithProviders(<OutputPanel />, { seedWorkflow: seedSelected({ pinData: null }) });
     expect(screen.queryByText("Mock data")).toBeNull();
