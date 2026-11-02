@@ -27,10 +27,14 @@ namespace Blocks.FunctionRunner.Health
         [GeneratedRegex("^[0-9a-f]{64}$", RegexOptions.None, matchTimeoutMilliseconds: 100)]
         private static partial Regex ContainerIdPattern();
 
+        /// <summary>containerd namespace Docker runs its containers in. Shims of any other are not Docker's.</summary>
+        private const string DockerNamespace = "moby";
+
         /// <summary>
         /// Reads a <c>/proc/&lt;pid&gt;/cmdline</c> (NUL-separated). Returns false when the process
         /// is not a containerd shim; <paramref name="containerId"/> is null when it is one but has
-        /// no readable <c>-id</c>.
+        /// no readable <c>-id</c>, or is not in Docker's namespace — a shim of another containerd
+        /// user (Kubernetes, BuildKit) is not in Docker's list and must never look orphaned.
         /// </summary>
         public static bool TryParseCommandLine(string cmdline, out string? containerId)
         {
@@ -38,14 +42,14 @@ namespace Blocks.FunctionRunner.Health
             var args = cmdline.Split('\0', StringSplitOptions.RemoveEmptyEntries);
             if (args.Length == 0 || !args[0].StartsWith(ShimPath, StringComparison.Ordinal)) return false;
 
+            string? id = null;
+            string? ns = null;
             for (var i = 1; i < args.Length - 1; i++)
             {
-                if (args[i] == "-id" && ContainerIdPattern().IsMatch(args[i + 1]))
-                {
-                    containerId = args[i + 1];
-                    break;
-                }
+                if (args[i] == "-id" && ContainerIdPattern().IsMatch(args[i + 1])) id = args[i + 1];
+                else if (args[i] == "-namespace") ns = args[i + 1];
             }
+            if (ns == DockerNamespace) containerId = id;
             return true;
         }
 

@@ -29,7 +29,17 @@ namespace Blocks.FunctionRunner.Tests
         {
             ShimScanner.TryParseCommandLine("/usr/bin/dockerd\0-id\0" + IdA, out _).Should().BeFalse();
 
-            ShimScanner.TryParseCommandLine("/usr/bin/containerd-shim-runc-v2\0-id\0not-an-id\0", out var id).Should().BeTrue();
+            ShimScanner.TryParseCommandLine("/usr/bin/containerd-shim-runc-v2\0-namespace\0moby\0-id\0not-an-id\0", out var id).Should().BeTrue();
+            id.Should().BeNull();
+        }
+
+        /// <summary>Police kills orphans as root: a shim of another containerd user is not in Docker's list and must never qualify.</summary>
+        [Fact]
+        public void A_shim_outside_dockers_namespace_is_never_an_orphan_candidate()
+        {
+            var cmdline = $"/usr/bin/containerd-shim-runc-v2\0-namespace\0k8s.io\0-id\0{IdA}\0";
+
+            ShimScanner.TryParseCommandLine(cmdline, out var id).Should().BeTrue();
             id.Should().BeNull();
         }
 
