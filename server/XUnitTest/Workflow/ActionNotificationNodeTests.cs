@@ -62,7 +62,6 @@ namespace XUnitTest.Workflow
             { "UserIds", userIds ?? new BsonArray { "{{$json.userId}}" } },
             { "OrganizationId", organizationId },
             { "Payload", payload },
-            { "SubscriptionFilters", new BsonArray { new BsonDocument { { "Context", "order" }, { "ActionName", "status" }, { "Value", "{{$json.id}}" } } } },
             { "ResponseKey", "" },
             { "ResponseValue", "" },
         };
@@ -95,10 +94,14 @@ namespace XUnitTest.Workflow
             public Mock<INotificationPublisher> Publisher { get; } = new();
             public List<NotificationRequest> Published { get; } = new();
 
-            public Harness(NotificationConfiguration? configuration)
+            /// <param name="configuration">The project's row.</param>
+            /// <param name="root">The root tenant's row, read only when the project has none.</param>
+            public Harness(NotificationConfiguration? configuration, NotificationConfiguration? root = null)
             {
-                Store.Setup(s => s.GetAsync<NotificationConfiguration>(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                Store.Setup(s => s.GetAsync<NotificationConfiguration>(It.IsAny<string>(), true, It.IsAny<CancellationToken>()))
                     .ReturnsAsync(configuration);
+                Store.Setup(s => s.GetAsync<NotificationConfiguration>(It.IsAny<string>(), false, It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(root);
                 Publisher.Setup(p => p.Publish(It.IsAny<NotificationRequest>()))
                     .Callback<NotificationRequest>(Published.Add);
             }
@@ -117,6 +120,7 @@ namespace XUnitTest.Workflow
         {
             var node = new Harness(Config()).Node;
             node.NodeType.Should().Be("notification");
+            node.Version.Should().Be("v2");
             ((INodeExecutor)node).Versions.Should().Equal("v2");
         }
 
@@ -135,9 +139,7 @@ namespace XUnitTest.Workflow
             request.NamedUserIds.Should().Equal("u-1");
             request.OrganizationId.Should().Be("default");
             JsonDocument.Parse((string)request.Payload!).RootElement.GetProperty("title").GetString().Should().Be("Order 7");
-            var filter = request.SubscriptionFilters.Should().ContainSingle().Subject;
-            filter.Context.Should().Be("order");
-            filter.Value.Should().Be("7");
+            request.SubscriptionFilters.Should().BeNull();
             request.ResponseKey.Should().Be(Name);
             request.ResponseValue.Should().Be("Sent");
 
@@ -212,7 +214,6 @@ namespace XUnitTest.Workflow
         public static TheoryData<NotificationConfiguration?, bool, string> Refusals() => new()
         {
             { null, true, "No notification configuration named 'order-shipped' in this project." },
-            { Config(builtIn: true), true, "'order-shipped' is a built-in notification configuration; a workflow cannot send it." },
             { Config(live: false, push: false, inbox: false), true, "'order-shipped' has no delivery channel on (in-app, mobile push or offline)." },
             { Config(NotificationAudienceLevel.AffectedOnly), false, "'order-shipped' sends only to the users the event is about: set at least one user id." },
             { Config(NotificationAudienceLevel.AllUsers, NotificationScope.Console), false, "'order-shipped' goes to console users, who must be named: set at least one user id." },
@@ -280,7 +281,111 @@ namespace XUnitTest.Workflow
                 new BsonDocument { { "userId", "u-3" } }));
 
             harness.Published.Should().HaveCount(3);
-            harness.Store.Verify(s => s.GetAsync<NotificationConfiguration>(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
+            harness.Store.Verify(s => s.GetAsync<NotificationConfiguration>(It.IsAny<string>(), true, It.IsAny<CancellationToken>()), Times.Once);
+            harness.Store.Verify(s => s.GetAsync<NotificationConfiguration>(It.IsAny<string>(), false, It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_configuration_that_cannot_be_sent_is_read_once_and_refuses_every_item()
+        {
+            var harness = new Harness(null);
+
+            var result = await harness.Node.RunAsync(Context(Parameters(),
+                new BsonDocument { { "userId", "u-1" } },
+                new BsonDocument { { "userId", "u-2" } }));
+
+            result.OutputItems.Should().HaveCount(2);
+            ErrorOf(result, 1).Should().Be("No notification configuration named 'order-shipped' in this project.");
+            harness.Store.Verify(s => s.GetAsync<NotificationConfiguration>(It.IsAny<string>(), true, It.IsAny<CancellationToken>()), Times.Once);
+            harness.Store.Verify(s => s.GetAsync<NotificationConfiguration>(It.IsAny<string>(), false, It.IsAny<CancellationToken>()), Times.Once);
+            harness.Published.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_built_in_configuration_of_the_project_is_sent()
+        {
+            var harness = new Harness(Config(builtIn: true));
+
+            var result = await harness.Node.RunAsync(Context(Parameters(), new BsonDocument { { "userId", "u-1" } }));
+
+            OutputOf(result)["Queued"].AsBoolean.Should().BeTrue();
+            harness.Published.Should().ContainSingle();
+            harness.Store.Verify(s => s.GetAsync<NotificationConfiguration>(It.IsAny<string>(), false, It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_built_in_kept_only_in_root_is_read_from_root()
+        {
+            var harness = new Harness(null, root: Config(builtIn: true));
+
+            var result = await harness.Node.RunAsync(Context(Parameters(), new BsonDocument { { "userId", "u-1" } }));
+
+            OutputOf(result)["Queued"].AsBoolean.Should().BeTrue();
+            harness.Published.Single().TenantId.Should().Be(Tenant);
+        }
+
+        [Fact]
+        public async Task A_custom_configuration_of_root_is_never_used()
+        {
+            var harness = new Harness(null, root: Config(builtIn: false));
+
+            var result = await harness.Node.RunAsync(Context(Parameters(), new BsonDocument { { "userId", "u-1" } }));
+
+            ErrorOf(result).Should().Be("No notification configuration named 'order-shipped' in this project.");
+            harness.Published.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task User_id_lists_take_numbers_and_text_that_is_not_a_list_is_one_id()
+        {
+            var harness = new Harness(Config());
+
+            await harness.Node.RunAsync(Context(
+                Parameters(userIds: new BsonArray { "{{$json.ids}}", "[not-a-list" }),
+                new BsonDocument { { "ids", new BsonArray { 7, "u-2", true } } }));
+
+            harness.Published.Single().NamedUserIds.Should().Equal("7", "u-2", "[not-a-list");
+        }
+
+        [Fact]
+        public async Task A_publish_that_throws_is_an_error_item_and_the_next_item_still_runs()
+        {
+            var harness = new Harness(Config());
+            var calls = 0;
+            harness.Publisher.Setup(p => p.Publish(It.IsAny<NotificationRequest>()))
+                .Callback<NotificationRequest>(r =>
+                {
+                    if (calls++ == 0) throw new InvalidOperationException("bus down");
+                    harness.Published.Add(r);
+                });
+
+            var result = await harness.Node.RunAsync(Context(Parameters(),
+                new BsonDocument { { "userId", "u-1" } },
+                new BsonDocument { { "userId", "u-2" } }));
+
+            result.IsSuccess.Should().BeTrue();
+            ErrorOf(result).Should().Be("bus down");
+            OutputOf(result, 1)["Queued"].AsBoolean.Should().BeTrue();
+            harness.Published.Should().ContainSingle();
+        }
+
+        [Fact]
+        public async Task A_cancelled_run_stops_instead_of_making_an_error_item()
+        {
+            var harness = new Harness(Config());
+            using var cancellation = new CancellationTokenSource();
+            harness.Publisher.Setup(p => p.Publish(It.IsAny<NotificationRequest>()))
+                .Callback<NotificationRequest>(_ =>
+                {
+                    cancellation.Cancel();
+                    throw new OperationCanceledException(cancellation.Token);
+                });
+            var context = Context(Parameters(), new BsonDocument { { "userId", "u-1" } });
+            context.CancellationToken = cancellation.Token;
+
+            var run = () => harness.Node.RunAsync(context);
+
+            await run.Should().ThrowAsync<OperationCanceledException>();
         }
 
         /// <summary>Keeps each rendered stage line.</summary>
@@ -324,6 +429,7 @@ namespace XUnitTest.Workflow
         [InlineData("{\"ConfigurationName\":\"order-shipped\"}", true)]
         [InlineData("{\"ConfigurationName\":\"\"}", false)]
         [InlineData("{}", false)]
+        [InlineData("[]", false)]
         public async Task ValidateConfiguration_needs_a_name(string json, bool expected)
         {
             using var document = JsonDocument.Parse(json);

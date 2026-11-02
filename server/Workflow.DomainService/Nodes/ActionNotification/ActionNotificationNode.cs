@@ -48,22 +48,20 @@ namespace Workflow.DomainService.Nodes.ActionNotification
             _publisher = publisher;
         }
 
-        /// <summary>What one step shares across its items.</summary>
+        /// <summary>What one step shares across its items: the configuration is read once, before the first item.</summary>
         private sealed record StepState(
             NodeExecutionContext Context,
             ActionNotificationParameters Parameters,
             BsonDocument ParametersDocument,
             string TenantId,
-            Dictionary<string, NotificationConfiguration?> Configurations,
-            Dictionary<string, int> QueuedByName);
+            string Name,
+            NotificationConfiguration Configuration);
 
         protected override async Task<NodeExecutionResult> ExecuteAsync(NodeExecutionContext context, ActionNotificationParameters? nodeparameters)
         {
             var parameters = nodeparameters ?? new ActionNotificationParameters();
             var tenantId = context.TenantId ?? "";
-            var step = new StepState(context, parameters, parameters.ToBsonDocument(), tenantId,
-                new Dictionary<string, NotificationConfiguration?>(StringComparer.Ordinal),
-                new Dictionary<string, int>(StringComparer.Ordinal));
+            var parametersDocument = parameters.ToBsonDocument();
 
             // The configuration read uses the workflow's project, so the step runs under its tenant.
             var blocksContext = BlocksContext.GetContext();
@@ -71,7 +69,14 @@ namespace Workflow.DomainService.Nodes.ActionNotification
             BlocksContext.SetContext(securityData, false);
             try
             {
-                return await SendItemsAsync(step);
+                // The name comes from a picker, so it is the same for every item: read the configuration once.
+                var name = (parameters.ConfigurationName ?? "").Trim();
+                var configuration = name.Length == 0 ? null : await GetConfigurationAsync(name, context.CancellationToken);
+                var refusal = name.Length == 0 ? "No notification configuration is selected." : Refusal(configuration, name);
+                if (refusal is not null)
+                    return RefuseAll(context, parametersDocument, refusal);
+
+                return SendItems(new StepState(context, parameters, parametersDocument, tenantId, name, configuration!));
             }
             finally
             {
@@ -79,7 +84,18 @@ namespace Workflow.DomainService.Nodes.ActionNotification
             }
         }
 
-        private async Task<NodeExecutionResult> SendItemsAsync(StepState step)
+        /// <summary>The configuration cannot be sent at all: every item becomes an error item with the same reason.</summary>
+        private static NodeExecutionResult RefuseAll(NodeExecutionContext context, BsonDocument parametersDocument, string message)
+        {
+            var outputItems = new List<NodeOutputItem>();
+            for (int i = 0; i < context.IterationCount; i++)
+                AppendErrorOutputItem(outputItems, context.InputItems[i], parametersDocument, message);
+
+            context.Log.Info(ExecutionLogStages.NotificationFinished, "{Queued} of {Total} notification(s) queued.", 0, context.IterationCount);
+            return NodeExecutionResult.Successful(outputItems);
+        }
+
+        private NodeExecutionResult SendItems(StepState step)
         {
             var context = step.Context;
             var outputItems = new List<NodeOutputItem>();
@@ -90,7 +106,7 @@ namespace Workflow.DomainService.Nodes.ActionNotification
                 var inputItem = context.InputItems[i];
                 try
                 {
-                    var (item, wasQueued) = await SendItemAsync(step, inputItem);
+                    var (item, wasQueued) = SendItem(step, inputItem);
                     if (item is not null) outputItems.Add(item);
                     if (wasQueued) queued++;
                 }
@@ -110,7 +126,7 @@ namespace Workflow.DomainService.Nodes.ActionNotification
                 }
             }
 
-            WarnOverRateLimit(step);
+            WarnOverRateLimit(step, queued);
 
             // Counts only: never recipients, payloads or configuration names.
             context.Log.Info(ExecutionLogStages.NotificationFinished, "{Queued} of {Total} notification(s) queued.", queued, context.IterationCount);
@@ -122,37 +138,30 @@ namespace Workflow.DomainService.Nodes.ActionNotification
         /// Queues the notification for one item: its output item, or an error item saying why nothing was queued.
         /// Throws <see cref="InvalidFilledJsonException"/> when the payload is not JSON after filling.
         /// </summary>
-        private async Task<(NodeOutputItem? Item, bool Queued)> SendItemAsync(StepState step, WorkflowItemExecutionEntity inputItem)
+        private (NodeOutputItem? Item, bool Queued) SendItem(StepState step, WorkflowItemExecutionEntity inputItem)
         {
             var parameters = step.Parameters;
+            var configuration = step.Configuration;
             (NodeOutputItem?, bool) Error(string message) => (TryBuildErrorOutputItem(inputItem, step.ParametersDocument, message), false);
 
             var payload = string.IsNullOrWhiteSpace(parameters.Payload)
                 ? "{}"
                 : FillJsonTemplateOrThrow(parameters.Payload, "Payload", inputItem, step.Context);
 
-            var name = (Resolve(parameters.ConfigurationName, inputItem, step.Context) ?? "").Trim();
-            if (name.Length == 0)
-                return Error("No notification configuration is selected.");
-
             if (PayloadSizeError(payload) is { } sizeError)
                 return Error(sizeError);
 
-            var configuration = await GetConfigurationAsync(step, name);
             var userIds = ResolveList(parameters.UserIds, inputItem, step.Context);
-            if (Refusal(configuration, name, userIds.Count) is { } refusal)
+            if (UsersRefusal(configuration, step.Name, userIds.Count) is { } refusal)
                 return Error(refusal);
 
-            var request = BuildRequest(parameters, name, step.TenantId, userIds, payload, inputItem, step.Context);
+            var request = BuildRequest(parameters, step.Name, step.TenantId, userIds, payload, inputItem, step.Context);
 
-            // Switched off by the tenant, and allowed to be (built-ins are already refused). Genesis would drop it
+            // Switched off by the tenant, and allowed to be (built-in Job/Progress cannot be). Genesis would drop it
             // without a word; say so instead.
-            var skipped = configuration!.IsDisabled && configuration.CanBeDisabled();
+            var skipped = configuration.IsDisabled && configuration.CanBeDisabled();
             if (!skipped)
-            {
                 _publisher.Publish(request);
-                step.QueuedByName[name] = step.QueuedByName.GetValueOrDefault(name) + 1;
-            }
 
             var item = new NodeOutputItem
             {
@@ -169,34 +178,30 @@ namespace Workflow.DomainService.Nodes.ActionNotification
         }
 
         /// <summary>
-        /// The configuration by name from the project's key-value store, read once per step. Same place the genesis
-        /// dispatcher reads; a row only in the old collection is never sent, so it reads as missing here too.
+        /// The configuration by name, read the way the genesis dispatcher reads it: the project's key-value store first,
+        /// then the root tenant's row when it is a built-in (built-ins may live in root only). A root custom
+        /// configuration never leaks out, and a row only in the old collection is never sent, so it reads as missing.
         /// </summary>
-        private async Task<NotificationConfiguration?> GetConfigurationAsync(StepState step, string name)
+        private async Task<NotificationConfiguration?> GetConfigurationAsync(string name, CancellationToken cancellationToken)
         {
-            if (!step.Configurations.TryGetValue(name, out var configuration))
-            {
-                configuration = await _keyValueStore.GetAsync<NotificationConfiguration>(
-                    ConfigurationKeyPrefix + name, impersonated: true, step.Context.CancellationToken);
-                step.Configurations[name] = configuration;
-            }
+            var key = ConfigurationKeyPrefix + name;
+            var fromProject = await _keyValueStore.GetAsync<NotificationConfiguration>(key, impersonated: true, cancellationToken);
+            if (fromProject is not null)
+                return fromProject;
 
-            return configuration;
+            var fromRoot = await _keyValueStore.GetAsync<NotificationConfiguration>(key, impersonated: false, cancellationToken);
+            return fromRoot is { IsBuiltIn: true } ? fromRoot : null;
         }
 
         /// <summary>Genesis drops sends over the configuration's limit without a word; the log says so.</summary>
-        private static void WarnOverRateLimit(StepState step)
+        private static void WarnOverRateLimit(StepState step, int queued)
         {
-            foreach (var (name, count) in step.QueuedByName)
+            var limit = step.Configuration.RateLimitPerMinute > 0 ? step.Configuration.RateLimitPerMinute : DefaultRateLimitPerMinute;
+            if (queued > limit)
             {
-                var configuration = step.Configurations.GetValueOrDefault(name);
-                var limit = configuration?.RateLimitPerMinute > 0 ? configuration.RateLimitPerMinute : DefaultRateLimitPerMinute;
-                if (count > limit)
-                {
-                    step.Context.Log.Warn(ExecutionLogStages.NotificationRateLimit,
-                        "{Count} notifications of one configuration in this step; its limit is {Limit} per minute, the rest are dropped.",
-                        count, limit);
-                }
+                step.Context.Log.Warn(ExecutionLogStages.NotificationRateLimit,
+                    "{Count} notifications of one configuration in this step; its limit is {Limit} per minute, the rest are dropped.",
+                    queued, limit);
             }
         }
 
@@ -218,21 +223,26 @@ namespace Workflow.DomainService.Nodes.ActionNotification
             }
         }
 
-        /// <summary>Why this configuration cannot be sent by a workflow with <paramref name="userCount"/> named users, or null when it can.</summary>
-        internal static string? Refusal(NotificationConfiguration? configuration, string name, int userCount)
+        /// <summary>Why this configuration cannot be sent by a workflow at all, or null when it can.</summary>
+        internal static string? Refusal(NotificationConfiguration? configuration, string name)
         {
             if (configuration is null)
                 return $"No notification configuration named '{name}' in this project.";
-            if (configuration.IsBuiltIn)
-                // A workflow must not be able to send what reads as a platform alert.
-                return $"'{name}' is a built-in notification configuration; a workflow cannot send it.";
 
             var channels = configuration.EffectiveChannels();
             if (!channels.Live && !channels.Push && !channels.Inbox)
                 return $"'{name}' has no delivery channel on (in-app, mobile push or offline).";
-            if (userCount == 0 && configuration.EffectiveAudience().Level == NotificationAudienceLevel.AffectedOnly)
+            return null;
+        }
+
+        /// <summary>Why this configuration cannot be sent with <paramref name="userCount"/> named users, or null when it can.</summary>
+        internal static string? UsersRefusal(NotificationConfiguration configuration, string name, int userCount)
+        {
+            if (userCount > 0)
+                return null;
+            if (configuration.EffectiveAudience().Level == NotificationAudienceLevel.AffectedOnly)
                 return $"'{name}' sends only to the users the event is about: set at least one user id.";
-            if (userCount == 0 && configuration.Scope == NotificationScope.Console)
+            if (configuration.Scope == NotificationScope.Console)
                 return $"'{name}' goes to console users, who must be named: set at least one user id.";
             return null;
         }
@@ -242,7 +252,6 @@ namespace Workflow.DomainService.Nodes.ActionNotification
             WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
         {
             var organizationId = (Resolve(parameters.OrganizationId, inputItem, context) ?? "").Trim();
-            var filters = ResolveFilters(parameters.SubscriptionFilters, inputItem, context);
             var responseKey = Resolve(parameters.ResponseKey, inputItem, context);
             var responseValue = Resolve(parameters.ResponseValue, inputItem, context);
 
@@ -254,7 +263,6 @@ namespace Workflow.DomainService.Nodes.ActionNotification
                 NamedUserIds = userIds,
                 OrganizationId = organizationId.Length == 0 ? AccessPrincipal.DefaultOrganizationId : organizationId,
                 Payload = payload,
-                SubscriptionFilters = filters.Count == 0 ? null : filters,
                 ResponseKey = string.IsNullOrWhiteSpace(responseKey) ? name : responseKey,
                 ResponseValue = string.IsNullOrWhiteSpace(responseValue) ? "Sent" : responseValue,
             };
@@ -280,21 +288,6 @@ namespace Workflow.DomainService.Nodes.ActionNotification
             }
 
             return values.Select(v => v.Trim()).Where(v => v.Length > 0).Distinct(StringComparer.Ordinal).ToList();
-        }
-
-        private List<SubscriptionFilter> ResolveFilters(
-            List<ActionNotificationFilter>? filters, WorkflowItemExecutionEntity inputItem, NodeExecutionContext context)
-        {
-            // A filter without a context matches no subscription, so it is dropped.
-            return (filters ?? new List<ActionNotificationFilter>())
-                .Select(f => new SubscriptionFilter
-                {
-                    Context = (Resolve(f.Context, inputItem, context) ?? "").Trim(),
-                    ActionName = (Resolve(f.ActionName, inputItem, context) ?? "").Trim(),
-                    Value = (Resolve(f.Value, inputItem, context) ?? "").Trim(),
-                })
-                .Where(f => f.Context.Length > 0)
-                .ToList();
         }
 
         internal static bool TryReadArray(string text, out List<string> items)
