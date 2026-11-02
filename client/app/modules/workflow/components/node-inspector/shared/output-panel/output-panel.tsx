@@ -221,7 +221,8 @@ export const OutputPanel = ({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {!isEditingMock && editorMode === "editor" && !hasMockData && (
+          {/* No mock data for an Error Trigger: a run another workflow's failure starts must get the real failure. */}
+          {!isEditingMock && editorMode === "editor" && !hasMockData && selectedNode.type !== "errorTrigger" && (
             <Button variant="outline" size="xs" onClick={handleSetMockDataClick}>
               Set mock data
             </Button>
