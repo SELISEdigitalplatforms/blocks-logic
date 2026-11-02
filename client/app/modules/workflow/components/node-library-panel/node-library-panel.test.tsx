@@ -10,16 +10,44 @@ const openPanel = (store: any) => store.getState().openNodeLibraryPanel();
 describe("NodeLibraryPanel", () => {
   it("renders the node options when the panel is open", () => {
     renderWithProviders(<NodeLibraryPanel />, { seedWorkflow: openPanel });
-    expect(screen.getByText("Start your workflow")).toBeTruthy();
+    expect(screen.getByText("Add a node")).toBeTruthy();
     expect(screen.getByText(NodeDefinitions[0].title)).toBeTruthy();
   });
 
   it("filters options by the search query", () => {
     renderWithProviders(<NodeLibraryPanel />, { seedWorkflow: openPanel });
-    fireEvent.change(screen.getByPlaceholderText("Search"), {
+    fireEvent.change(screen.getByPlaceholderText("Search nodes"), {
       target: { value: "zzz-nonexistent" },
     });
-    expect(screen.getByText(/No triggers found/)).toBeTruthy();
+    expect(screen.getByText(/No nodes match/)).toBeTruthy();
+  });
+
+  it("groups nodes as Triggers, Logic, Transform, Actions and sorts each group by title", () => {
+    renderWithProviders(<NodeLibraryPanel />, { seedWorkflow: openPanel });
+    const sections = screen.getAllByRole("region");
+    expect(sections.map((s) => s.getAttribute("aria-label"))).toEqual(["Triggers", "Logic", "Transform", "Actions"]);
+    for (const section of sections) {
+      const titles = Array.from(section.querySelectorAll("button .font-semibold")).map((el) => el.textContent ?? "");
+      expect(titles.length).toBeGreaterThan(0);
+      expect(titles).toEqual([...titles].sort((a, b) => a.localeCompare(b)));
+    }
+  });
+
+  it("shows only the selected category's nodes and keeps the search applied", () => {
+    renderWithProviders(<NodeLibraryPanel />, { seedWorkflow: openPanel });
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["All", "Triggers", "Logic", "Transform", "Actions"]);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Logic" }));
+    expect(screen.getAllByRole("region").map((s) => s.getAttribute("aria-label"))).toEqual(["Logic"]);
+    expect(screen.queryByText("Webhook")).toBeNull();
+    expect(screen.getByText("Filter")).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("Search nodes"), { target: { value: "webhook" } });
+    expect(screen.getByText(/No nodes match/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "All" }));
+    expect(screen.getByText("Webhook")).toBeTruthy();
   });
 
   it("adds a node to the store when an option is selected", () => {
@@ -170,7 +198,7 @@ describe("NodeLibraryPanel Filter (SPEC9)", () => {
 
   it("H1: lists Filter as a logic node with the Filter icon and its description", () => {
     open();
-    const option = screen.getByText("Filter").closest("div.cursor-pointer") as HTMLElement;
+    const option = screen.getByText("Filter").closest("button") as HTMLElement;
     expect(option.textContent).toContain("Keep only the items that match the conditions.");
     expect(option.querySelector("svg.lucide-filter")?.getAttribute("class")).toContain("text-success");
     expect(NodeDefinitions.find((d) => d.type === "filter")).toMatchObject({ category: "logic", version: "v2" });
@@ -286,5 +314,28 @@ describe("NodeLibraryPanel Merge (SPEC3)", () => {
     expect(merge.handle.targets.map((t: { key: string }) => t.key)).toEqual(["merge-handle-target-1", "merge-handle-target-2"]);
     const edges = Object.values(store.getState().edgesMap) as Array<Record<string, unknown>>;
     expect(edges.map((e) => [e.source, e.targetHandle]).sort()).toEqual([["a", "merge-handle-target-1"], ["b", "merge-handle-target-1"]]);
+  });
+
+  it("SPEC8 H13/C14: adds one v2 Error Trigger, then disables its row", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let store: any;
+    renderWithProviders(<NodeLibraryPanel />, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (s: any) => {
+        store = s;
+        s.getState().openNodeLibraryPanel();
+      },
+    });
+    fireEvent.click(screen.getByText("Error Trigger"));
+    const nodes = () => Object.values(store.getState().nodesMap) as Record<string, unknown>[];
+    expect(nodes()).toHaveLength(1);
+    expect(nodes()[0]).toMatchObject({ type: "errorTrigger", category: "trigger", version: "v2", name: "Error Trigger" });
+    expect(nodes()[0].handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [] });
+
+    act(() => store.getState().openNodeLibraryPanel());
+    const row = screen.getByText("Error Trigger").closest("[aria-disabled]");
+    expect(row?.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(screen.getByText("Error Trigger"));
+    expect(nodes().filter((n) => n.type === "errorTrigger")).toHaveLength(1);
   });
 });

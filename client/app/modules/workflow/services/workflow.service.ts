@@ -44,6 +44,7 @@ import {
   IGetPreSignedUrlForUploadPayload,
   IGetPreSignedUrlForUploadResponse,
   IResumeWorkflowExecutionResponse,
+  IUpdateWorkflowSettingsPayload,
 } from "../types/workflow.service.type";
 
 export class WorkflowService {
@@ -72,6 +73,10 @@ export class WorkflowService {
 
   updateWorkflow = (payload: IUpdateWorkflowPayload): Promise<IUpdateWorkflowResponse> => {
     return this.LogicHttpClient.put(`${WORKFLOW_ENDPOINTS.UPDATE}`, payload);
+  }
+
+  updateWorkflowSettings = (payload: IUpdateWorkflowSettingsPayload): Promise<IUpdateWorkflowResponse> => {
+    return this.LogicHttpClient.put(`${WORKFLOW_ENDPOINTS.UPDATE_SETTINGS}`, payload);
   }
 
   deleteWorkflow = (payload: IDeleteWorkflowPayload): Promise<IDeleteWorkflowResponse> => {

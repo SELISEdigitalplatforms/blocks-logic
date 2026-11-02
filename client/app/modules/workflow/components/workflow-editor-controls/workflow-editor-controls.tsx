@@ -54,8 +54,9 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
 
   useWorkflowNotification();
 
+  // The Error Trigger only runs when another workflow fails: there is nothing to listen for here.
   const triggerNodes = useMemo(
-    () => nodes.filter((node) => node.category === "trigger"),
+    () => nodes.filter((node) => node.category === "trigger" && node.type !== "errorTrigger"),
     [nodes]
   );
   const triggerNodesCount = triggerNodes.length;

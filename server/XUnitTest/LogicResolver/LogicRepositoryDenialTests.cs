@@ -79,8 +79,8 @@ public class LogicRepositoryDenialTests
             .ReturnsAsync(new ReadScope<WorkflowEntity>(false, Builders<WorkflowEntity>.Filter.Empty, null));
 
         (await _sut.GetWorkflowAsync("t1", "w1")).Should().BeNull();
-        (await _sut.GetWorkflowsCountAsync("t1", null, null)).Should().Be(0);
-        (await _sut.GetAllWorkflowsAsync("t1", 10, 0, null, null)).Should().BeEmpty();
+        (await _sut.GetWorkflowsCountAsync("t1", null, null, null, null)).Should().Be(0);
+        (await _sut.GetAllWorkflowsAsync("t1", 10, 0, null, null, null, null)).Should().BeEmpty();
         _collection.Verify(c => c.CountDocumentsAsync(It.IsAny<FilterDefinition<WorkflowEntity>>(), It.IsAny<CountOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

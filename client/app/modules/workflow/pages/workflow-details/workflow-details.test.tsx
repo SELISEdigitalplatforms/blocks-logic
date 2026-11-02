@@ -108,12 +108,12 @@ describe("WorkflowDetails", () => {
     expect(BREADCRUMB_CUSTOM_TITLES[PATH]).toBeUndefined();
   });
 
-  it("lists rename, duplicate, export and delete in the actions menu", async () => {
+  it("lists rename, duplicate, settings, export and delete in the actions menu", async () => {
     const user = userEvent.setup();
     renderPage();
     const menu = await openMenu(user);
     const items = within(menu).getAllByRole("menuitem").map((i) => i.textContent);
-    expect(items).toEqual(["Rename", "Duplicate", "Export", "Delete"]);
+    expect(items).toEqual(["Rename", "Duplicate", "Settings", "Export", "Delete"]);
   });
 
   it("exports the current workflow", async () => {

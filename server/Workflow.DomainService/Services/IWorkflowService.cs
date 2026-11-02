@@ -14,6 +14,8 @@ namespace Workflow.DomainService.Services
         Task<WorkflowGetResponseDto> GetAsync(string tenantId, WorkflowGetRequestDto dto);
 
         Task<BaseMutationResponse> UpdateAsync(string tenantId, WorkflowUpdateRequestDto dto);
+        /// <summary>Saves only the workflow's settings and marks it dirty; its graph and publish state are unchanged.</summary>
+        Task<BaseMutationResponse> UpdateSettingsAsync(string tenantId, WorkflowUpdateSettingsRequestDto dto);
 
         Task<BaseMutationResponse> DeleteAsync(string tenantId, WorkflowDeleteRequestDto dto);
 
