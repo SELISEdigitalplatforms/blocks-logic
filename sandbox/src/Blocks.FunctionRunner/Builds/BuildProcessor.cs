@@ -732,6 +732,12 @@ namespace Blocks.FunctionRunner.Builds
         /// </summary>
         public const string TestDepsImageLabel = "dev.selise.blocks.test-deps";
 
+        /// <summary>
+        /// Label on a run image built on this host from a deployed version's artifact. A cache entry:
+        /// Image GC removes it once idle (<c>ImageGc.ArtifactIdle</c>), and it rebuilds in seconds.
+        /// </summary>
+        public const string ArtifactImageLabel = "dev.selise.blocks.artifact";
+
         /// <summary>The image id of a local-only build — what the run then executes.</summary>
         private async Task<string?> LocalImageIdAsync(string tag, StringBuilder log, CancellationToken token)
         {

@@ -63,6 +63,20 @@ namespace Blocks.FunctionRunner.Maintenance
         /// </summary>
         public static readonly TimeSpan TestDepsIdle = TimeSpan.FromHours(1);
 
+        /// <summary>
+        /// A run image built here from a deployed version's artifact is kept while the function is
+        /// called, and removed after this long unused (last use from the usage log; with no record,
+        /// from when it was built). The keep set never protects it: it pins the builder's image,
+        /// not this local one. Rebuilding one costs seconds on the next cold call.
+        /// </summary>
+        public static readonly TimeSpan ArtifactIdle = TimeSpan.FromHours(24);
+
+        /// <summary>
+        /// Repository prefix of artifact run images (<c>FunctionRunImage.ForArtifact</c> in the
+        /// control plane). Images built before they were labelled are found by this name.
+        /// </summary>
+        internal const string ArtifactImagePrefix = "blocks-fn-artifact/";
+
         private readonly IDockerClient _docker;
         private readonly IDatabase _db;
         private readonly IRegistryClient _registry;
@@ -151,14 +165,7 @@ namespace Blocks.FunctionRunner.Maintenance
             var keep = await LoadKeepSetAsync().ConfigureAwait(false);
             var inUse = await LoadImagesInUseAsync(token).ConfigureAwait(false);
 
-            var images = await _docker.Images.ListImagesAsync(new ImagesListParameters
-            {
-                All = false,
-                Filters = new Dictionary<string, IDictionary<string, bool>>
-                {
-                    ["label"] = new Dictionary<string, bool> { [$"{FunctionImageLabel}=true"] = true },
-                },
-            }, token).ConfigureAwait(false);
+            var images = await ListFunctionImagesAsync(token).ConfigureAwait(false);
 
             var removed = 0;
             var pruned = new HashSet<string>(StringComparer.Ordinal);
@@ -183,6 +190,11 @@ namespace Blocks.FunctionRunner.Maintenance
                     // one is built on it; the next sweep tries again.
                     var lastUsed = _usage?.LastUsedUtc(image.RepoTags?.FirstOrDefault() ?? image.ID) ?? image.Created;
                     if (lastUsed > DateTime.UtcNow - TestDepsIdle) continue;
+                }
+                else if (IsArtifactImage(image))
+                {
+                    var lastUsed = _usage?.LastUsedUtc(image.RepoTags?.FirstOrDefault() ?? image.ID) ?? image.Created;
+                    if (lastUsed > DateTime.UtcNow - ArtifactIdle) continue;
                 }
                 else
                 {
@@ -467,6 +479,41 @@ namespace Blocks.FunctionRunner.Maintenance
 
             return keep;
         }
+
+        /// <summary>
+        /// Every image this sweep may consider: the labelled ones, plus artifact images built before
+        /// artifact builds carried the label (found by name, once each).
+        /// </summary>
+        private async Task<IList<ImagesListResponse>> ListFunctionImagesAsync(CancellationToken token)
+        {
+            var labelled = await _docker.Images.ListImagesAsync(new ImagesListParameters
+            {
+                All = false,
+                Filters = new Dictionary<string, IDictionary<string, bool>>
+                {
+                    ["label"] = new Dictionary<string, bool> { [$"{FunctionImageLabel}=true"] = true },
+                },
+            }, token).ConfigureAwait(false);
+
+            var unlabelledArtifacts = await _docker.Images.ListImagesAsync(new ImagesListParameters
+            {
+                All = false,
+                Filters = new Dictionary<string, IDictionary<string, bool>>
+                {
+                    ["reference"] = new Dictionary<string, bool> { [$"{ArtifactImagePrefix}*"] = true },
+                },
+            }, token).ConfigureAwait(false);
+
+            var seen = labelled.Where(i => i.ID is not null).Select(i => i.ID).ToHashSet(StringComparer.Ordinal);
+            return [.. labelled, .. unlabelledArtifacts.Where(i => i.ID is null || seen.Add(i.ID))];
+        }
+
+        /// <summary>True for a run image built on this host from an artifact, labelled or by its name.</summary>
+        internal static bool IsArtifactImage(ImagesListResponse image) =>
+            (image.Labels is not null
+             && image.Labels.TryGetValue(Builds.BuildProcessor.ArtifactImageLabel, out var value)
+             && string.Equals(value, "true", StringComparison.Ordinal))
+            || (image.RepoTags ?? []).Any(t => t.StartsWith(ArtifactImagePrefix, StringComparison.Ordinal));
 
         /// <summary>Image ids any container references, running or merely stopped.</summary>
         private async Task<HashSet<string>> LoadImagesInUseAsync(CancellationToken token)

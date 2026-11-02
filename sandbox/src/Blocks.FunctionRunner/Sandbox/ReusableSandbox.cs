@@ -1076,6 +1076,10 @@ namespace Blocks.FunctionRunner.Sandbox
         private string? _containerId;
         private int _disposed;
 
+        // Set before a pause is asked for and cleared only once an unpause succeeded, so a pause
+        // that timed out (and may still have happened) counts as paused. See PausedSandbox.
+        private volatile bool _mayBePaused;
+
         public DockerReusableContainer(
             IDockerClient docker, string name, string image, RunLimits limits, RunnerOptions options, ILogger logger)
         {
@@ -1206,11 +1210,25 @@ namespace Blocks.FunctionRunner.Sandbox
             await _stream.WriteAsync(bytes, 0, bytes.Length, token).ConfigureAwait(false);
         }
 
-        public Task PauseAsync(CancellationToken token) =>
-            _docker.Containers.PauseContainerAsync(RequireId(), token);
+        public Task PauseAsync(CancellationToken token)
+        {
+            var id = RequireId();
+            _mayBePaused = true;
+            return _docker.Containers.PauseContainerAsync(id, token);
+        }
 
-        public Task UnpauseAsync(CancellationToken token) =>
-            _docker.Containers.UnpauseContainerAsync(RequireId(), token);
+        public async Task UnpauseAsync(CancellationToken token)
+        {
+            await _docker.Containers.UnpauseContainerAsync(RequireId(), token).ConfigureAwait(false);
+            _mayBePaused = false;
+        }
+
+        /// <summary>
+        /// Unpauses first when the container may be paused, else a kill leaks its shim. The flag
+        /// stays set, so the removal after a kill tries again if this thaw did not get through.
+        /// </summary>
+        private Task ThawIfPausedAsync(string containerId) =>
+            _mayBePaused ? PausedSandbox.ThawAsync(_docker, containerId, _logger) : Task.CompletedTask;
 
         /// <inheritdoc />
         public async Task<string?> DropToRunLimitAsync(CancellationToken token)
@@ -1274,6 +1292,7 @@ namespace Blocks.FunctionRunner.Sandbox
         public async Task KillAsync()
         {
             if (_containerId is null) return;
+            await ThawIfPausedAsync(_containerId).ConfigureAwait(false);
             try
             {
                 await _docker.Containers.KillContainerAsync(
@@ -1282,9 +1301,8 @@ namespace Blocks.FunctionRunner.Sandbox
             }
             catch (Exception)
             {
-                // Already gone — or paused: SIGKILL reaches a paused container too, and the
-                // removal in DisposeAsync is forced either way. Any other failure (the Engine not
-                // answering) is left to that forced removal and, failing that, to the reaper.
+                // Already gone. Any other failure (the Engine not answering) is left to the forced
+                // removal in DisposeAsync and, failing that, to the reaper.
             }
         }
 
@@ -1325,6 +1343,7 @@ namespace Blocks.FunctionRunner.Sandbox
             await _pumpCts.CancelAsync().ConfigureAwait(false);
             if (_containerId is not null)
             {
+                await ThawIfPausedAsync(_containerId).ConfigureAwait(false);
                 try
                 {
                     await _docker.Containers.RemoveContainerAsync(
