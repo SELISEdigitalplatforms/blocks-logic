@@ -20,14 +20,22 @@ import { NodeSchemasDefinition } from "../node-schemas";
 import { v4 as uuidv4 } from "uuid";
 import { findFreePosition } from "../../utils/find-free-position";
 
+// Panel order of the categories; nodes inside each are sorted by title.
+const NODE_CATEGORIES = [
+  { key: "trigger", label: "Triggers" },
+  { key: "logic", label: "Logic" },
+  { key: "transform", label: "Transform" },
+  { key: "action", label: "Actions" },
+];
+
 type NodeLibraryPanelProps = {
   title?: string;
   description?: string;
 };
 
 export const NodeLibraryPanel = ({
-  title = "Start your workflow",
-  description = "Select how this workflow should start.",
+  title = "Add a node",
+  description = "Search or browse by category.",
 }: NodeLibraryPanelProps) => {
   const {
     isPanelOpen,
@@ -43,9 +51,11 @@ export const NodeLibraryPanel = ({
     getNodeNextSource,
   } = useWorkflow();
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const onOpenChange = () => {
     closeNodeLibraryPanel();
     setSearchQuery("");
+    setSelectedCategory("all");
   }
 
   const filteredOptions = NodeDefinitions.filter(
@@ -53,6 +63,17 @@ export const NodeLibraryPanel = ({
       option.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       option.description.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+
+  const groups = NODE_CATEGORIES.filter(
+    (category) => selectedCategory === "all" || category.key === selectedCategory,
+  )
+    .map((category) => ({
+      ...category,
+      options: filteredOptions
+        .filter((option) => option.category === category.key)
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    }))
+    .filter((group) => group.options.length > 0);
 
   // A workflow can have one Error Trigger.
   const hasErrorTrigger = nodes.some((n) => n.type === "errorTrigger");
@@ -151,50 +172,78 @@ export const NodeLibraryPanel = ({
               </div>
             </div>
           </SheetHeader>
-          <div className="px-6 py-4">
+          <div className="flex flex-col gap-3 border-b px-6 py-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search"
+                placeholder="Search nodes"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
-          </div>
-          <div className="flex-1 overflow-y-auto px-6 pb-6">
-            <div className="space-y-2">
-              {filteredOptions.map((option) => (
+            <div role="tablist" aria-label="Node categories" className="flex flex-wrap gap-1.5">
+              {[{ key: "all", label: "All" }, ...NODE_CATEGORIES].map((category) => (
                 <button
-                  key={option.id}
+                  key={category.key}
                   type="button"
-                  onClick={() => handleSelectOption(option)}
-                  aria-disabled={option.type === "errorTrigger" && hasErrorTrigger ? true : undefined}
+                  role="tab"
+                  aria-selected={selectedCategory === category.key}
+                  onClick={() => setSelectedCategory(category.key)}
                   className={cn(
-                    "flex w-full cursor-pointer flex-col gap-1.5 rounded-sm p-4 text-left text-medium-emphasis transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-                    option.type === "errorTrigger" && hasErrorTrigger && "cursor-not-allowed opacity-50 hover:bg-transparent",
+                    "h-8 rounded-full border px-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    selectedCategory === category.key
+                      ? "border-primary bg-primary/15 text-high-emphasis"
+                      : "text-medium-emphasis hover:bg-accent",
                   )}
                 >
-                  <span className="mt-0.5 flex w-full items-center gap-1">
-                    {option.icon}
-                    <span className="text-sm font-medium text-high-emphasis">{option.title}</span>
-                    {option.isComingSoon && (
-                      <Badge variant="info" className="ml-auto h-fit w-fit">
-                        Coming soon
-                      </Badge>
-                    )}
-                  </span>
-                  <span className="flex-1 text-xs leading-relaxed text-muted-foreground">
-                    {option.description}
-                  </span>
+                  {category.label}
                 </button>
               ))}
-              {filteredOptions.length === 0 && (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  No triggers found matching &quot;{searchQuery}&quot;
-                </div>
-              )}
             </div>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 pb-6">
+            {groups.map((group) => (
+              <section key={group.key} aria-label={group.label}>
+                <h3 className="px-3 pb-1.5 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.label}
+                </h3>
+                {group.options.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => handleSelectOption(option)}
+                    aria-disabled={option.type === "errorTrigger" && hasErrorTrigger ? true : undefined}
+                    className={cn(
+                      "flex w-full cursor-pointer items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      option.type === "errorTrigger" && hasErrorTrigger && "cursor-not-allowed opacity-50 hover:bg-transparent",
+                    )}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent">
+                      {option.icon}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-high-emphasis">{option.title}</span>
+                        {option.isComingSoon && (
+                          <Badge variant="info" className="ml-auto h-fit w-fit">
+                            Coming soon
+                          </Badge>
+                        )}
+                      </span>
+                      <span className="text-xs leading-relaxed text-muted-foreground">
+                        {option.description}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </section>
+            ))}
+            {groups.length === 0 && (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No nodes match &quot;{searchQuery}&quot;
+              </div>
+            )}
           </div>
         </div>
       </SheetContent>

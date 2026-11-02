@@ -10,16 +10,44 @@ const openPanel = (store: any) => store.getState().openNodeLibraryPanel();
 describe("NodeLibraryPanel", () => {
   it("renders the node options when the panel is open", () => {
     renderWithProviders(<NodeLibraryPanel />, { seedWorkflow: openPanel });
-    expect(screen.getByText("Start your workflow")).toBeTruthy();
+    expect(screen.getByText("Add a node")).toBeTruthy();
     expect(screen.getByText(NodeDefinitions[0].title)).toBeTruthy();
   });
 
   it("filters options by the search query", () => {
     renderWithProviders(<NodeLibraryPanel />, { seedWorkflow: openPanel });
-    fireEvent.change(screen.getByPlaceholderText("Search"), {
+    fireEvent.change(screen.getByPlaceholderText("Search nodes"), {
       target: { value: "zzz-nonexistent" },
     });
-    expect(screen.getByText(/No triggers found/)).toBeTruthy();
+    expect(screen.getByText(/No nodes match/)).toBeTruthy();
+  });
+
+  it("groups nodes as Triggers, Logic, Transform, Actions and sorts each group by title", () => {
+    renderWithProviders(<NodeLibraryPanel />, { seedWorkflow: openPanel });
+    const sections = screen.getAllByRole("region");
+    expect(sections.map((s) => s.getAttribute("aria-label"))).toEqual(["Triggers", "Logic", "Transform", "Actions"]);
+    for (const section of sections) {
+      const titles = Array.from(section.querySelectorAll("button .font-semibold")).map((el) => el.textContent ?? "");
+      expect(titles.length).toBeGreaterThan(0);
+      expect(titles).toEqual([...titles].sort((a, b) => a.localeCompare(b)));
+    }
+  });
+
+  it("shows only the selected category's nodes and keeps the search applied", () => {
+    renderWithProviders(<NodeLibraryPanel />, { seedWorkflow: openPanel });
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["All", "Triggers", "Logic", "Transform", "Actions"]);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Logic" }));
+    expect(screen.getAllByRole("region").map((s) => s.getAttribute("aria-label"))).toEqual(["Logic"]);
+    expect(screen.queryByText("Webhook")).toBeNull();
+    expect(screen.getByText("Filter")).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("Search nodes"), { target: { value: "webhook" } });
+    expect(screen.getByText(/No nodes match/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "All" }));
+    expect(screen.getByText("Webhook")).toBeTruthy();
   });
 
   it("adds a node to the store when an option is selected", () => {
