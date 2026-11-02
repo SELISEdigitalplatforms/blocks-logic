@@ -84,6 +84,7 @@ namespace Blocks.FunctionRunner.Maintenance
         private readonly RunnerOptions _options;
         private readonly ILogger<ImageGc> _logger;
         private readonly TimeSpan _grace;
+        private readonly Health.MetricsStore? _metrics;
 
         /// <param name="grace">
         /// Overrides <see cref="DefaultGrace"/>. Injectable so the prune path can be exercised in a
@@ -97,8 +98,10 @@ namespace Blocks.FunctionRunner.Maintenance
             IOptions<RunnerOptions> options,
             ILogger<ImageGc> logger,
             TimeSpan? grace = null,
-            IImageUsageLog? usage = null)
+            IImageUsageLog? usage = null,
+            Health.MetricsStore? metrics = null)
         {
+            _metrics = metrics;
             // Optional so the sweeps that existing tests construct keep compiling. Without it the
             // cap simply does not evict — the keep-set behaviour is unchanged, which is the safe
             // way round for a cache.
@@ -137,7 +140,10 @@ namespace Blocks.FunctionRunner.Maintenance
             {
                 try
                 {
-                    await SweepAsync(stoppingToken).ConfigureAwait(false);
+                    var removed = await SweepAsync(stoppingToken).ConfigureAwait(false);
+                    // For `fnctl police`: a sweep that stopped running is invisible otherwise. The
+                    // store swallows its own IO errors, so this cannot fail the sweep.
+                    _metrics?.WriteGcLast(removed);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
