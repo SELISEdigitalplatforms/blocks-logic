@@ -528,5 +528,13 @@ namespace Blocks.FunctionRunner.Options
 
         /// <summary>Consume build jobs.</summary>
         public bool ProcessBuilds { get; set; } = true;
+
+        /// <summary>
+        /// Where the metrics recorder writes samples and events, as <c>RUNNER__MetricsDir</c>. Must
+        /// be under <c>/var/lib/blocks-runner</c>: the unit allows writes nowhere else.
+        /// <c>fnctl stats</c> and <c>fnctl police</c> read the same directory.
+        /// </summary>
+        [Required]
+        public string MetricsDir { get; set; } = "/var/lib/blocks-runner/metrics";
     }
 }
