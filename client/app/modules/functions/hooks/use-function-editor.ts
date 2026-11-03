@@ -7,6 +7,7 @@ import { isErrorWithErrors } from "@/lib/error";
 import { FUNCTIONS_QUERY_KEY } from "./use-functions";
 import { useFunctionEditorStore } from "../store/function-editor-store";
 import { withTriggerDefaults } from "../utils/trigger";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 /**
  * Drives the Code+Configuration editor: hydrates the store from a loaded function, saves the
@@ -81,11 +82,16 @@ export const useFunctionEditor = (
     if (!functionId) return false;
     try {
       await saveMutateAsync();
-      showSuccessToast({ description: "Function saved." });
+      showSuccessToast({
+        description: tStatic("logic.functions", "USE_FUNCTION_EDITOR.FUNCTION_SAVED"),
+      });
       return true;
     } catch (error) {
       if (isErrorWithErrors(error)) showErrorToast({ errors: error.errors });
-      else showErrorToast({ errors: "Failed to save function." });
+      else
+        showErrorToast({
+          errors: tStatic("logic.functions", "USE_FUNCTION_EDITOR.FAILED_TO_SAVE_FUNCTION"),
+        });
       return false;
     }
   }, [functionId, saveMutateAsync]);

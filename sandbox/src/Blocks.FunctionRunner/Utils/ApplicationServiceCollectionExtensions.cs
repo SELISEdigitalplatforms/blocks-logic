@@ -11,6 +11,8 @@ using Blocks.Secrets;
 using Docker.DotNet;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
 namespace Blocks.FunctionRunner.Utils
@@ -134,6 +136,18 @@ namespace Blocks.FunctionRunner.Utils
             services.AddHostedService<TestConsumerService>();
             services.AddHostedService<SandboxReaper>();
             services.AddHostedService<ImageGc>();
+
+            // The recorder is last: everything it samples (warm pool, heartbeat, Redis) is up.
+            // The error provider sits beside Genesis' Serilog provider, so runner errors become
+            // events without changing where the logs go.
+            services.AddSingleton(TimeProvider.System);
+            services.AddSingleton(sp => new MetricsStore(
+                sp.GetRequiredService<IOptions<RunnerOptions>>().Value.MetricsDir,
+                sp.GetRequiredService<TimeProvider>()));
+            services.AddSingleton<ErrorEventSink>();
+            services.AddSingleton<ILoggerProvider, ErrorEventLoggerProvider>();
+            services.AddSingleton<SampleCollector>();
+            services.AddHostedService<MetricsRecorder>();
 
             return services;
         }

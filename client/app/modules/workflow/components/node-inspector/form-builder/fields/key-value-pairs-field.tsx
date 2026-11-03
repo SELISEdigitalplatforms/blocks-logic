@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { ExpressionHighlighter, VariablePickerConfig } from "../utils/expression-highlighter";
 import { pickerTarget, showsVariablePicker } from "./secret-picker";
 import { useLockedValue } from "../utils/use-locked-value";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface KeyValuePair {
   key: string;
@@ -63,6 +64,7 @@ export const KeyValuePairsField = ({
   config,
   variablePicker,
 }: FieldProps<Record<string, unknown>>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   // Convert object to key-value pairs array
   const pairs = Object.entries(value || {}).map(([key, val]) => ({
     key,
@@ -117,7 +119,7 @@ export const KeyValuePairsField = ({
     return (
       <div className="flex h-32 w-full items-center justify-center rounded border border-dashed">
         <Button variant="ghost" className="text-primary" onClick={() => handleAddPair()}>
-          Add Field
+          {t("KEY_VALUE_PAIRS_FIELD.ADD_FIELD")}
         </Button>
       </div>
     );
@@ -128,16 +130,16 @@ export const KeyValuePairsField = ({
         <div key={`locked-${key}`} className="flex items-center gap-1">
           <span
             className="flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground"
-            title="Locked, can't be changed"
+            title={t("KEY_VALUE_PAIRS_FIELD.LOCKED_CAN_T_BE")}
           >
-            <Lock aria-label="Locked" className="h-3.5 w-3.5" />
+            <Lock aria-label={t("KEY_VALUE_PAIRS_FIELD.LOCKED")} className="h-3.5 w-3.5" />
           </span>
           <div className="flex-1">
             <DroppableKeyInput
               id={`${field.id}-locked-key-${index}`}
               value={key}
               onChange={() => {}}
-              placeholder={field.keyLabel || "Key"}
+              placeholder={field.keyLabel || t("KEY_VALUE_PAIRS_FIELD.KEY")}
               disabled
               readOnly
               isMultiline={false}
@@ -171,7 +173,7 @@ export const KeyValuePairsField = ({
               id={`${field.id}-key-${index}`}
               value={pair.key}
               onChange={(newKey) => handleKeyChange(index, newKey)}
-              placeholder={field.keyLabel || "Key"}
+              placeholder={field.keyLabel || t("KEY_VALUE_PAIRS_FIELD.KEY")}
               disabled={field.disabled as boolean}
               readOnly={readOnly}
               isMultiline={false}
@@ -186,20 +188,20 @@ export const KeyValuePairsField = ({
             />
 
             <ExpressionInputField
-              placeholder={field.valueLabel || "Value"}
+              placeholder={field.valueLabel || t("KEY_VALUE_PAIRS_FIELD.VALUE")}
               value={pair.value}
               onChange={(value) => handleValueChange(index, value)}
               readOnly={readOnly}
               data={data}
               config={config}
               field={{ ...field, id: `${field.id}-val-${index}` }}
-              pickerLabel={`row ${index + 1} value`}
+              pickerLabel={t("KEY_VALUE_PAIRS_FIELD.ROW_VALUE", { value: index + 1 })}
               variablePicker={variablePicker}
               className="rounded-t-none border-t-0 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {lockedKeys.has(pair.key.trim()) && (
               <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                A locked row sets &quot;{pair.key.trim()}&quot;; its value is sent instead.
+                {t("KEY_VALUE_PAIRS_FIELD.A_LOCKED_ROW_SETS", { value: pair.key.trim() })}
               </p>
             )}
           </div>
@@ -214,7 +216,7 @@ export const KeyValuePairsField = ({
         onClick={() => handleAddPair()}
         disabled={field.disabled as boolean}
       >
-        Add Field
+        {t("KEY_VALUE_PAIRS_FIELD.ADD_FIELD")}
       </Button>
     </div>
   );

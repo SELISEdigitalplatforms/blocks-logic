@@ -6,6 +6,7 @@ import { SecretListItem } from "@/models/secret";
 import { useVariableCatalog } from "@/hooks/use-variable-catalog";
 import { VariablePickerPopover } from "./variable-picker-popover";
 import { VariableRefCodec, soleRefKey } from "./variable-ref";
+import { useT } from "@seliseblocks/genesis-os";
 
 export type VariableRefFieldProps = {
   value: string;
@@ -46,6 +47,7 @@ export const VariableRefField = ({
   placeholder,
   hint,
 }: VariableRefFieldProps) => {
+  const { t } = useT("logic.shared");
   // Skipped entirely when the caller supplies the rows, so a form that already has them does
   // not fetch the same list once per field.
   const query = useVariableCatalog({}, { enabled: !variables });
@@ -78,7 +80,10 @@ export const VariableRefField = ({
               }`}
             >
               {/* Never the key. There is no name to show, so say that, in words. */}
-              {bound?.name ?? (isLoading ? "Loading…" : "Unavailable variable")}
+              {bound?.name ??
+                (isLoading
+                  ? t("VARIABLE_REF_FIELD.LOADING")
+                  : t("VARIABLE_REF_FIELD.UNAVAILABLE_VARIABLE"))}
             </span>
             {bound?.tags.slice(0, 1).map((tag) => (
               <Badge key={tag} variant="secondary" className="shrink-0 px-1.5 py-0 font-normal">
@@ -89,7 +94,7 @@ export const VariableRefField = ({
               type="button"
               variant="ghost"
               size="icon"
-              aria-label={`Unbind ${ariaLabel}`}
+              aria-label={t("VARIABLE_REF_FIELD.UNBIND", { ariaLabel })}
               className="h-6 w-6 shrink-0 text-medium-emphasis hover:text-error"
               onClick={() => onChange("")}
             >
@@ -111,7 +116,7 @@ export const VariableRefField = ({
           isLoading={isLoading}
           isError={isError}
           selectedId={bound?.id}
-          ariaLabel={`Bind ${ariaLabel} to a configuration variable`}
+          ariaLabel={t("VARIABLE_REF_FIELD.BIND_TO_A_CONFIGURATION", { ariaLabel })}
           hint={hint}
           // Replaces rather than appends: the field holds a single binding, and half typed text
           // plus half reference could not be shown as a chip.
@@ -121,7 +126,7 @@ export const VariableRefField = ({
 
       {unresolved && (
         <p className="text-xs text-error">
-          This configuration variable no longer exists. Pick another one, or clear it.
+          {t("VARIABLE_REF_FIELD.THIS_CONFIGURATION_VARIABLE_NO")}
         </p>
       )}
     </div>

@@ -1,23 +1,27 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideLogicFilterV2 = () => (
-  <GuideContent
-    title="Filter"
-    description="Use this node to keep only the items that match the conditions. The other items are removed."
-    steps={[
-      "Add conditions. For each, pick the type and operator, then the value to compare with.",
-      "Choose AND to keep items that match every condition, or OR to keep items that match any one.",
-      "Connect the next node. It receives only the kept items, unchanged.",
-    ]}
-    notes={[
-      "Conditions work exactly like the If and Switch nodes, with the same types and operators.",
-      "Text comparisons are case-sensitive.",
-      "Every condition is evaluated for every item.",
-      "A value that is not a valid number, date or true/false makes its condition not match.",
-      "With no conditions, AND keeps every item and OR keeps none.",
-      "An item whose conditions cannot be evaluated fails the step. The matching items are still kept.",
-      "The execution log shows the count, for example: Kept 1 of 3 item(s).",
-      "Example: status equals paid AND total greater than 100 keeps only the paid items over 100.",
-    ]}
-  />
-);
+export const NodeGuideLogicFilterV2 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_LOGIC_FILTER_V2.FILTER")}
+      description={t("NODE_GUIDE_LOGIC_FILTER_V2.USE_THIS_NODE_TO_KEEP")}
+      steps={[
+        t("NODE_GUIDE_LOGIC_FILTER_V2.ADD_CONDITIONS"),
+        t("NODE_GUIDE_LOGIC_FILTER_V2.CHOOSE_AND_OR"),
+        t("NODE_GUIDE_LOGIC_FILTER_V2.CONNECT_THE_NEXT_NODE"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_LOGIC_FILTER_V2.CONDITIONS_WORK_EXACTLY_LIKE"),
+        t("NODE_GUIDE_LOGIC_FILTER_V2.TEXT_COMPARISONS_ARE_CASE_SENSITIVE"),
+        t("NODE_GUIDE_LOGIC_FILTER_V2.EVERY_CONDITION_IS_EVALUATED"),
+        t("NODE_GUIDE_LOGIC_FILTER_V2.A_VALUE_THAT_IS_NOT_VALID"),
+        t("NODE_GUIDE_LOGIC_FILTER_V2.WITH_NO_CONDITIONS"),
+        t("NODE_GUIDE_LOGIC_FILTER_V2.AN_ITEM_WHOSE_CONDITIONS_CANNOT"),
+        t("NODE_GUIDE_LOGIC_FILTER_V2.THE_EXECUTION_LOG_SHOWS"),
+        t("NODE_GUIDE_LOGIC_FILTER_V2.EXAMPLE"),
+      ]}
+    />
+  );
+};

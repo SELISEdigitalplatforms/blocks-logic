@@ -1,4 +1,5 @@
 using System.Globalization;
+using Blocks.FunctionRunner.Cli.Commands;
 using Blocks.FunctionRunner.Contracts;
 using Blocks.FunctionRunner.Maintenance;
 using Blocks.FunctionRunner.Options;
@@ -12,8 +13,11 @@ using StackExchange.Redis;
 //
 //   fnctl doctor                                   check the host against the contract
 //   fnctl gc [--dry-run] [--grace-hours N]         prune unreferenced function images now
+//   fnctl stats [--hour] | watch | events          read what the runner's recorder wrote
+//   fnctl police [--fix]                           the independent health check (root timer)
 //
-// Deliberately only these two. `enqueue-run`, `tail-results` and `stats` existed while there
+// The first two are the original pair; the metrics commands were added for host health, see
+// Health/MetricsRecorder. Deliberately no run-queue commands: `enqueue-run`, `tail-results` and `stats` existed while there
 // was no control plane; blocks-logic owns enqueueing now (FunctionInvocationService), and a
 // second writer of the run protocol is exactly the kind of thing that drifts from the first.
 // What is left has no other home: `doctor` is the host-contract check the HANDOFF points at
@@ -36,6 +40,10 @@ try
     {
         "doctor" => await DoctorAsync(),
         "gc" => await GcAsync(),
+        "stats" => MetricsCommands.Stats(args, MetricsDir()),
+        "events" => MetricsCommands.Events(args, MetricsDir()),
+        "watch" => await MetricsCommands.WatchAsync(MetricsDir()),
+        "police" => await new PoliceCommand(MetricsDir(), HasFlag("--fix"), WarmMaxAgeSeconds()).RunAsync(),
         "help" or "--help" or "-h" => Help(),
         _ => Fail($"unknown command '{command}'"),
     };
@@ -236,11 +244,15 @@ int Report(bool ok, string message)
     return ok ? 0 : 1;
 }
 
-string? GetOption(string name)
-{
-    var index = Array.IndexOf(args, name);
-    return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
-}
+string? GetOption(string name) => CliArgs.Option(args, name);
+
+// Same directory the runner records into: --dir wins, then the unit's setting, then its default.
+string MetricsDir() => GetOption("--dir") ?? Setting("RUNNER__MetricsDir", "/var/lib/blocks-runner/metrics");
+
+int WarmMaxAgeSeconds() =>
+    int.TryParse(Setting("RUNNER__WarmMaxAgeSeconds", "3600"), NumberStyles.None, CultureInfo.InvariantCulture, out var seconds)
+        ? seconds
+        : 3600;
 
 bool HasFlag(string name) => Array.IndexOf(args, name) >= 0;
 
@@ -320,6 +332,11 @@ static int Help()
               --dry-run           list candidates without removing anything
               --grace-hours N     protect images younger than N hours (default 6)
               --base-image REF    the base image to keep (default the local registry's)
+          stats [--hour]                             latest sample; --hour = last hour per 5 min
+          watch                                      redraw stats every 2 s until Ctrl+C
+          events [--days N] [--errors]               spikes and runner errors, newest first (default 7 days)
+          police [--fix]                             health check; --fix ends orphaned shims; exit 1 on FAIL
+              --dir PATH          metrics directory (default RUNNER__MetricsDir or /var/lib/blocks-runner/metrics)
 
         --redis HOST:PORT overrides FNCTL_REDIS, which overrides
         BlocksSecret__CacheConnectionString in /etc/blocks-runner/runner.env. On a Key

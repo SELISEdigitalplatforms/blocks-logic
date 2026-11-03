@@ -18,6 +18,7 @@ import {
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { showErrorToast } from "@/hooks/use-toast";
+import { useT } from "@seliseblocks/genesis-os";
 
 type EditorNodeBaseProps = {
   id: string;
@@ -26,6 +27,7 @@ type EditorNodeBaseProps = {
 };
 
 export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
+  const { t } = useT("logic.workflow");
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
   const store = useWorkflowStoreApi();
   const node = useWorkflowStore((state) => state.nodesMap[id]);
@@ -66,8 +68,8 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
     if (newName && newName !== node?.name) {
       if (!isNodeNameUnique(newName)) {
         showErrorToast({
-          title: "Validation Error",
-          errors: "A node with this name already exists.",
+          title: t("EDITOR_NODE_BASE.VALIDATION_ERROR"),
+          errors: t("EDITOR_NODE_BASE.A_NODE_WITH_THIS"),
         });
         return;
       }
@@ -133,7 +135,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Execute Node</p>
+            <p>{t("EDITOR_NODE_BASE.EXECUTE_NODE")}</p>
           </TooltipContent>
         </Tooltip>}
 
@@ -146,7 +148,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Stop Execution</p>
+            <p>{t("EDITOR_NODE_BASE.STOP_EXECUTION")}</p>
           </TooltipContent>
         </Tooltip>}
         <Tooltip>
@@ -163,7 +165,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Duplicate</p>
+            <p>{t("EDITOR_NODE_BASE.DUPLICATE")}</p>
           </TooltipContent>
         </Tooltip>
         <Tooltip>
@@ -178,7 +180,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Delete Node</p>
+            <p>{t("EDITOR_NODE_BASE.DELETE_NODE")}</p>
           </TooltipContent>
         </Tooltip>
         <DropdownMenu onOpenChange={setIsToolbarVisible}>
@@ -191,7 +193,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
               </DropdownMenuTrigger>
             </TooltipTrigger>
             <TooltipContent>
-              <p>More options</p>
+              <p>{t("EDITOR_NODE_BASE.MORE_OPTIONS")}</p>
             </TooltipContent>
           </Tooltip>
           <DropdownMenuContent
@@ -207,7 +209,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
                 openConfigModal();
               }}
             >
-              <span>Open</span>
+              <span>{t("EDITOR_NODE_BASE.OPEN")}</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer"
@@ -217,7 +219,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
                 handleExecuteStep(id);
               }}
             >
-              <span>Execute step</span>
+              <span>{t("EDITOR_NODE_BASE.EXECUTE_STEP")}</span>
             </DropdownMenuItem>
 
             <DropdownMenuItem
@@ -228,7 +230,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
                 setIsToolbarVisible(false);
               }}
             >
-              <span>Rename</span>
+              <span>{t("EDITOR_NODE_BASE.RENAME")}</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer"
@@ -237,7 +239,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
                 duplicateNode(id);
               }}
             >
-              <span>Duplicate</span>
+              <span>{t("EDITOR_NODE_BASE.DUPLICATE")}</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -247,7 +249,7 @@ export const EditorNodeBase = ({ children, id }: EditorNodeBaseProps) => {
                 deleteNode(id);
               }}
             >
-              <span>Delete</span>
+              <span>{t("common:DELETE")}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

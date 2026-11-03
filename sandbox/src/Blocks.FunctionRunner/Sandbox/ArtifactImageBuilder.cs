@@ -220,7 +220,12 @@ namespace Blocks.FunctionRunner.Sandbox
             // build` streams it as-is, where the API would want it tarred again.
             var (exit, error) = await RunAsync(
                 "docker",
-                ["build", "--quiet", "--tag", reference, "--file", Path.Combine(contextDir, "Dockerfile"), contextDir],
+                // The labels are what Image GC finds it by; without them every artifact image stayed
+                // on disk for good (~200 on one host by 2026-11-02).
+                ["build", "--quiet", "--tag", reference,
+                 "--label", $"{Builds.BuildProcessor.FunctionImageLabel}=true",
+                 "--label", $"{Builds.BuildProcessor.ArtifactImageLabel}=true",
+                 "--file", Path.Combine(contextDir, "Dockerfile"), contextDir],
                 token).ConfigureAwait(false);
 
             if (exit != 0)

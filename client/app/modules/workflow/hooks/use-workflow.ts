@@ -5,6 +5,7 @@ import { WorkflowNode } from "@blocks-workflow/models/node.model";
 import { getOrderedNodeData } from "@blocks-workflow/utils/runtime-node-data";
 import { workflowService } from "../services/workflow.service";
 import { showErrorToast } from "@/hooks/use-toast";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 export const useWorkflow = () => {
   const reactFlowInstance = useReactFlow();
@@ -172,7 +173,7 @@ export const useWorkflow = () => {
               EnableListener: false,
             });
           } catch (error) {
-            showErrorToast({ errors: (error instanceof Error ? error.message : "") || "Failed to disable trigger listener after timeout" });
+            showErrorToast({ errors: (error instanceof Error ? error.message : "") || tStatic("logic.workflow", "USE_WORKFLOW.FAILED_TO_DISABLE_TRIGGER") });
           }
         }
       }, 2 * 60 * 1000); // 3 minutes

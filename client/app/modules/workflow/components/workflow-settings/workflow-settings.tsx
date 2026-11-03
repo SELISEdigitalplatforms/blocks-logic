@@ -17,6 +17,9 @@ import { isErrorWithErrors } from "@/lib/error";
 import { useUpdateWorkflowSettings } from "@blocks-workflow/hooks/use-workflow-api";
 import { WorkflowAlertMode, WorkflowSettings as WorkflowSettingsModel } from "@blocks-workflow/models/workflow.model";
 import { ErrorWorkflowPicker } from "./error-workflow-picker";
+import { tStatic, useT } from "@seliseblocks/genesis-os";
+
+const LOGIC_WORKFLOW_MODULE = "logic.workflow";
 
 const settingsSchema = z
   .object({
@@ -25,7 +28,7 @@ const settingsSchema = z
   })
   .superRefine((values, ctx) => {
     if (values.isEnabled && !values.workflowId)
-      ctx.addIssue({ code: "custom", path: ["workflowId"], message: "Select a workflow" });
+      ctx.addIssue({ code: "custom", path: ["workflowId"], message: tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_SETTINGS.SELECT_A_WORKFLOW") });
   });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
@@ -44,6 +47,7 @@ type Props = {
 
 /** Workflow settings: flat rows like n8n's settings modal. Saving never touches the editor's graph. */
 export const WorkflowSettings = ({ open, onOpenChange, workflowId, settings }: Props) => {
+  const { t } = useT(LOGIC_WORKFLOW_MODULE);
   const { isPending, mutateAsync } = useUpdateWorkflowSettings();
 
   const form = useForm<SettingsFormValues>({
@@ -80,11 +84,11 @@ export const WorkflowSettings = ({ open, onOpenChange, workflowId, settings }: P
         if (!shown) showErrorToast({ errors: res.errors });
         return;
       }
-      showSuccessToast({ description: "Settings saved." });
+      showSuccessToast({ description: t("WORKFLOW_SETTINGS.SETTINGS_SAVED") });
       onOpenChange(false);
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to save settings" });
+      return showErrorToast({ errors: t("WORKFLOW_SETTINGS.FAILED_TO_SAVE_SETTINGS") });
     }
   };
 
@@ -92,7 +96,7 @@ export const WorkflowSettings = ({ open, onOpenChange, workflowId, settings }: P
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-32px)] max-w-[720px] gap-5 px-7 py-6">
         <DialogHeader>
-          <DialogTitle className="text-xl">Workflow settings</DialogTitle>
+          <DialogTitle className="text-xl">{t("WORKFLOW_SETTINGS.WORKFLOW_SETTINGS")}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -103,10 +107,10 @@ export const WorkflowSettings = ({ open, onOpenChange, workflowId, settings }: P
                 name="isEnabled"
                 render={({ field }) => (
                   <FormItem className="flex min-h-12 items-center justify-between space-y-0">
-                    <FormLabel className="text-sm font-normal">Alert on failure</FormLabel>
+                    <FormLabel className="text-sm font-normal">{t("WORKFLOW_SETTINGS.ALERT_ON_FAILURE")}</FormLabel>
                     <FormControl>
                       <Switch
-                        aria-label="Alert on failure"
+                        aria-label={t("WORKFLOW_SETTINGS.ALERT_ON_FAILURE")}
                         checked={field.value}
                         onCheckedChange={(checked) => {
                           field.onChange(checked);
@@ -127,7 +131,7 @@ export const WorkflowSettings = ({ open, onOpenChange, workflowId, settings }: P
                   render={({ field }) => (
                     <FormItem className="grid min-h-12 grid-cols-1 items-center gap-2 space-y-0 sm:grid-cols-[10fr_14fr]">
                       <FormLabel htmlFor="error-workflow" className="text-sm font-normal">
-                        Error workflow
+                        {t("WORKFLOW_SETTINGS.ERROR_WORKFLOW")}
                       </FormLabel>
                       <div className="flex flex-col gap-1">
                         <ErrorWorkflowPicker
@@ -149,7 +153,7 @@ export const WorkflowSettings = ({ open, onOpenChange, workflowId, settings }: P
 
             <div className="flex justify-end">
               <Button type="submit" className="h-10" disabled={isPending}>
-                Save
+                {t("common:SAVE")}
               </Button>
             </div>
           </form>

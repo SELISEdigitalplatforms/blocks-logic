@@ -108,6 +108,28 @@ namespace Blocks.FunctionRunner.Tests
             ImageGc.RepositoryOf(tenantReference).Should().NotBe(baseRepo);
         }
 
+        /// <summary>
+        /// Artifact run images were built without any label, so the sweep never listed them and
+        /// ~200 piled up on one host (2026-11-02). New ones carry the label; old ones are found by name.
+        /// </summary>
+        [Theory]
+        [InlineData("blocks-fn-artifact/0c2f952a-851d-4215-b8d5-74f03b580036:local", false, true)]
+        [InlineData("anything:local", true, true)]
+        [InlineData("127.0.0.1:5000/fn/abc123:latest", false, false)]
+        [InlineData("blocks-functions-node:24-v2", false, false)]
+        public void Artifact_images_are_found_by_label_or_by_name(string tag, bool labelled, bool expected)
+        {
+            var image = new ImagesListResponse
+            {
+                RepoTags = [tag],
+                Labels = labelled
+                    ? new Dictionary<string, string> { [Builds.BuildProcessor.ArtifactImageLabel] = "true" }
+                    : null,
+            };
+
+            ImageGc.IsArtifactImage(image).Should().Be(expected);
+        }
+
         /// <summary>Deleting from the registry is as destructive as deleting locally; a sweep that
         /// refuses to prune must not reach this either.</summary>
         private sealed class RefusingRegistry : Blocks.FunctionRunner.Maintenance.IRegistryClient

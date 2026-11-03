@@ -12,6 +12,7 @@ import {
   getStatusConfig,
   WorkflowExecutionStatus,
 } from "../../utils/workflow-execution-list.util";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface WorkflowExecutionListProps {
   executions: WorkflowExecution[];
@@ -55,6 +56,7 @@ export const WorkflowExecutionList = forwardRef<HTMLDivElement, WorkflowExecutio
     },
     ref,
   ) {
+  const { t } = useT("logic.workflow");
     const sentinelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -82,7 +84,7 @@ export const WorkflowExecutionList = forwardRef<HTMLDivElement, WorkflowExecutio
       return (
         <div className="h-full w-64 min-w-64 border-r bg-background p-3">
           <div className="text-center text-sm text-muted-foreground py-8">
-            No executions found.
+            {t("WORKFLOW_EXECUTION_LIST.NO_EXECUTIONS_FOUND")}
           </div>
         </div>
       );
@@ -133,7 +135,7 @@ export const WorkflowExecutionList = forwardRef<HTMLDivElement, WorkflowExecutio
                     execution.status === WorkflowExecutionStatus.Failed) && (
                     <div className="pl-6">
                       <span className="text-xs text-muted-foreground">
-                        Completed in {duration} seconds
+                        {t("WORKFLOW_EXECUTION_LIST.COMPLETED_IN_SECONDS", { duration: duration ?? "" })}
                       </span>
                     </div>
                   )}
@@ -143,7 +145,7 @@ export const WorkflowExecutionList = forwardRef<HTMLDivElement, WorkflowExecutio
                   execution.status === WorkflowExecutionStatus.Pending ||
                   execution.status === WorkflowExecutionStatus.Queued) && (
                   <span className="text-xs text-muted-foreground">
-                    Started {formatDate(new Date(execution.startedAt))}
+                    {t("WORKFLOW_EXECUTION_LIST.STARTED")} {formatDate(new Date(execution.startedAt))}
                   </span>
                 )}
               </div>
@@ -152,7 +154,7 @@ export const WorkflowExecutionList = forwardRef<HTMLDivElement, WorkflowExecutio
         })}
         {hasMore && <div ref={sentinelRef} className="h-1" aria-hidden />}
         {isLoadingMore && (
-          <p className="py-2 text-center text-xs text-muted-foreground">Loading…</p>
+          <p className="py-2 text-center text-xs text-muted-foreground">{t("WORKFLOW_EXECUTION_LIST.LOADING")}</p>
         )}
       </ScrollArea>
     );
