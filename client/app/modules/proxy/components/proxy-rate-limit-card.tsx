@@ -30,8 +30,14 @@ export const ProxyRateLimitCard = ({ control }: Props) => {
   };
 
   let effective = t("PROXY_RATE_LIMIT_CARD.NO_LIMIT_THE_DEFAULT");
-  if (value != null && !fieldState.error) effective = `${value.toLocaleString("en")} calls a minute (your limit).`;
-  else if (isPublic) effective = `${PROXY_PUBLIC_DEFAULT_PER_MINUTE} calls a minute (the default for public proxies).`;
+  if (value != null && !fieldState.error)
+    effective = t("PROXY_RATE_LIMIT_CARD.CALLS_A_MINUTE_YOUR_LIMIT", {
+      value: value.toLocaleString("en"),
+    });
+  else if (isPublic)
+    effective = t("PROXY_RATE_LIMIT_CARD.CALLS_A_MINUTE_PUBLIC_DEFAULT", {
+      value: PROXY_PUBLIC_DEFAULT_PER_MINUTE,
+    });
 
   return (
     <Card className="rounded-xl">
@@ -52,7 +58,13 @@ export const ProxyRateLimitCard = ({ control }: Props) => {
             inputMode="numeric"
             min={1}
             max={PROXY_MAX_PER_MINUTE}
-            placeholder={isPublic ? t("PROXY_RATE_LIMIT_CARD.DEFAULT", { proxyPublicDefaultPerMinute: PROXY_PUBLIC_DEFAULT_PER_MINUTE }) : t("PROXY_RATE_LIMIT_CARD.DEFAULT_NO_LIMIT")}
+            placeholder={
+              isPublic
+                ? t("PROXY_RATE_LIMIT_CARD.DEFAULT", {
+                    proxyPublicDefaultPerMinute: PROXY_PUBLIC_DEFAULT_PER_MINUTE,
+                  })
+                : t("PROXY_RATE_LIMIT_CARD.DEFAULT_NO_LIMIT")
+            }
             value={value ?? ""}
             onChange={(event) => onInput(event.target.value)}
             onBlur={field.onBlur}

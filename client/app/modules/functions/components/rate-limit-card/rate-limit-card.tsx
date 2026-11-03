@@ -36,15 +36,23 @@ export const RateLimitCard = ({ authMode, value, onChange }: RateLimitCardProps)
     }
     const parsed = Number(text);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_PER_MINUTE) {
-      return setError(t("RATE_LIMIT_CARD.A_WHOLE_NUMBER_FROM", { value: MAX_PER_MINUTE.toLocaleString("en") }));
+      return setError(
+        t("RATE_LIMIT_CARD.A_WHOLE_NUMBER_FROM", { value: MAX_PER_MINUTE.toLocaleString("en") }),
+      );
     }
     setError(null);
     onChange(parsed);
   };
 
   let effective = t("RATE_LIMIT_CARD.NO_LIMIT_THE_DEFAULT");
-  if (value != null) effective = `${value.toLocaleString("en")} calls a minute (your limit).`;
-  else if (isPublic) effective = `${PUBLIC_DEFAULT_PER_MINUTE} calls a minute (the default for public functions).`;
+  if (value != null)
+    effective = t("RATE_LIMIT_CARD.CALLS_A_MINUTE_YOUR_LIMIT", {
+      value: value.toLocaleString("en"),
+    });
+  else if (isPublic)
+    effective = t("RATE_LIMIT_CARD.CALLS_A_MINUTE_PUBLIC_DEFAULT", {
+      value: PUBLIC_DEFAULT_PER_MINUTE,
+    });
 
   return (
     <Card>
@@ -65,7 +73,13 @@ export const RateLimitCard = ({ authMode, value, onChange }: RateLimitCardProps)
             inputMode="numeric"
             min={1}
             max={MAX_PER_MINUTE}
-            placeholder={isPublic ? t("RATE_LIMIT_CARD.DEFAULT", { publicDefaultPerMinute: PUBLIC_DEFAULT_PER_MINUTE }) : t("RATE_LIMIT_CARD.DEFAULT_NO_LIMIT")}
+            placeholder={
+              isPublic
+                ? t("RATE_LIMIT_CARD.DEFAULT", {
+                    publicDefaultPerMinute: PUBLIC_DEFAULT_PER_MINUTE,
+                  })
+                : t("RATE_LIMIT_CARD.DEFAULT_NO_LIMIT")
+            }
             value={draft}
             onChange={(event) => onInput(event.target.value)}
             aria-invalid={error ? true : undefined}

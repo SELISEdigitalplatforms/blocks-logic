@@ -29,6 +29,7 @@ export const KeyValueField = ({
                 }
               }
         }
+        // eslint-disable-next-line no-restricted-syntax -- example JSON, not prose
         placeholder='{"key": "value"}'
         readOnly={readOnly}
         className="font-mono text-sm"
