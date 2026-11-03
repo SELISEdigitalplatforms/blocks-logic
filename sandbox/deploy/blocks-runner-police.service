@@ -1,0 +1,13 @@
+[Unit]
+Description=Blocks Functions runner police (independent host health check)
+# Runs beside the runner, not inside it: it must still work when the runner is stuck or stopped.
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+# Ends orphaned containerd shims (the one leak the non-root runner cannot clean) and writes
+# WARN/FAIL lines to /var/lib/blocks-runner/metrics/police-<day>.jsonl. Exit 1 = a FAIL.
+ExecStart=/opt/blocks-function-runner/cli/fnctl police --fix
+SyslogIdentifier=blocks-runner-police
+Nice=10

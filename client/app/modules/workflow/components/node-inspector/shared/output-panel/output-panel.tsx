@@ -200,6 +200,10 @@ export const OutputPanel = ({
 
   if (!selectedNode) return null;
 
+  // In the editor an Error Trigger's output is always the server's sample: test runs never alert.
+  const isErrorTriggerSample =
+    selectedNode.type === "errorTrigger" && !hasMockData && editorMode === "editor" && runtimeOutputByBranch.length > 0;
+
   return (
     <div className={`flex w-full flex-col overflow-hidden ${isCollapsed ? 'h-fit shrink-0' : 'h-full flex-1'}`}>
       <div className="flex items-center justify-between">
@@ -218,9 +222,15 @@ export const OutputPanel = ({
               </TooltipContent>
             </Tooltip>
           )}
+          {isErrorTriggerSample && (
+            <Badge variant="info" className="px-1.5 py-0.5 text-[11px]">
+              {t("OUTPUT_PANEL.SAMPLE_DATA")}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {!isEditingMock && editorMode === "editor" && !hasMockData && (
+          {/* No mock data for an Error Trigger: a run another workflow's failure starts must get the real failure. */}
+          {!isEditingMock && editorMode === "editor" && !hasMockData && selectedNode.type !== "errorTrigger" && (
             <Button variant="outline" size="xs" onClick={handleSetMockDataClick}>
               {t("OUTPUT_PANEL.SET_MOCK_DATA")}
             </Button>

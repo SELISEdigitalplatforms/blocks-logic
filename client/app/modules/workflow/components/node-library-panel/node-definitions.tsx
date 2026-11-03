@@ -19,6 +19,7 @@ import {
 	Filter,
 	BetweenHorizontalStart,
 	Zap,
+	TriangleAlert,
 } from "lucide-react";
 import { deriveMergeHandle } from "@blocks-workflow/utils/merge-handles";
 import { deriveSwitchHandle, switchHandleLabel } from "@blocks-workflow/utils/switch-handles";
@@ -78,6 +79,20 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		category: "trigger",
 		version: "v2",
 		get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.BLOCKS_EVENT"); },
+		handle: {
+			sources: [{ key: "source", label: "" }],
+			targets: [],
+		},
+	},
+	{
+		id: "trigger-errorTrigger-v2",
+		icon: <TriangleAlert className="h-5 w-5 text-error" />,
+		get title() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.ERROR_TRIGGER"); },
+		get description() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.STARTS_THE_WORKFLOW_WHEN_ANOTHER_FAILS"); },
+		type: "errorTrigger",
+		category: "trigger",
+		version: "v2",
+		get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.ERROR_TRIGGER"); },
 		handle: {
 			sources: [{ key: "source", label: "" }],
 			targets: [],

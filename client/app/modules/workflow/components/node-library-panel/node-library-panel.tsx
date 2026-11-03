@@ -23,14 +23,22 @@ import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
 
+// Panel order of the categories; nodes inside each are sorted by title.
+const NODE_CATEGORIES = [
+  { key: "trigger", labelKey: "NODE_LIBRARY_PANEL.CATEGORY_TRIGGERS" },
+  { key: "logic", labelKey: "NODE_LIBRARY_PANEL.CATEGORY_LOGIC" },
+  { key: "transform", labelKey: "NODE_LIBRARY_PANEL.CATEGORY_TRANSFORM" },
+  { key: "action", labelKey: "NODE_LIBRARY_PANEL.CATEGORY_ACTIONS" },
+];
+
 type NodeLibraryPanelProps = {
   title?: string;
   description?: string;
 };
 
 export const NodeLibraryPanel = ({
-  title = tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_LIBRARY_PANEL.START_YOUR_WORKFLOW"),
-  description = tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_LIBRARY_PANEL.SELECT_HOW_THIS_WORKFLOW"),
+  title = tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_LIBRARY_PANEL.ADD_A_NODE"),
+  description = tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_LIBRARY_PANEL.SEARCH_OR_BROWSE_BY_CATEGORY"),
 }: NodeLibraryPanelProps) => {
   const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const {
@@ -47,9 +55,11 @@ export const NodeLibraryPanel = ({
     getNodeNextSource,
   } = useWorkflow();
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const onOpenChange = () => {
     closeNodeLibraryPanel();
     setSearchQuery("");
+    setSelectedCategory("all");
   }
 
   const filteredOptions = NodeDefinitions.filter(
@@ -58,9 +68,26 @@ export const NodeLibraryPanel = ({
       option.description.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  const groups = NODE_CATEGORIES.filter(
+    (category) => selectedCategory === "all" || category.key === selectedCategory,
+  )
+    .map((category) => ({
+      ...category,
+      label: t(category.labelKey),
+      options: filteredOptions
+        .filter((option) => option.category === category.key)
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    }))
+    .filter((group) => group.options.length > 0);
+
+  // A workflow can have one Error Trigger.
+  const hasErrorTrigger = nodes.some((n) => n.type === "errorTrigger");
+  const isUnavailable = (node: WorkflowNodeDefinition) =>
+    node.isComingSoon || (node.type === "errorTrigger" && hasErrorTrigger);
+
   const handleSelectOption = useCallback(
     (node: WorkflowNodeDefinition) => {
-      if (node.isComingSoon) return;
+      if (isUnavailable(node)) return;
       const schemaDefinition = NodeSchemasDefinition[`${node.category}${node.type}${node.version}`];
 
       const length = nodes.filter((n) => n.type === node.type).length;
@@ -150,49 +177,78 @@ export const NodeLibraryPanel = ({
               </div>
             </div>
           </SheetHeader>
-          <div className="px-6 py-4">
+          <div className="flex flex-col gap-3 border-b px-6 py-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder={t("common:SEARCH")}
+                placeholder={t("NODE_LIBRARY_PANEL.SEARCH_NODES")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
-          </div>
-          <div className="flex-1 overflow-y-auto px-6 pb-6">
-            <div className="space-y-2">
-              {filteredOptions.map((option) => (
-                <div
-                  key={option.id}
-                  onClick={() => handleSelectOption(option)}
+            <div role="tablist" aria-label={t("NODE_LIBRARY_PANEL.NODE_CATEGORIES")} className="flex flex-wrap gap-1.5">
+              {[{ key: "all", labelKey: "common:ALL" }, ...NODE_CATEGORIES].map((category) => (
+                <button
+                  key={category.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedCategory === category.key}
+                  onClick={() => setSelectedCategory(category.key)}
                   className={cn(
-                    "flex w-full cursor-pointer flex-col gap-1.5 rounded-sm p-4 text-left text-medium-emphasis transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                    "h-8 rounded-full border px-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    selectedCategory === category.key
+                      ? "border-primary bg-primary/15 text-high-emphasis"
+                      : "text-medium-emphasis hover:bg-accent",
                   )}
                 >
-                  <div className="mt-0.5 flex items-center gap-1">
-                    {option.icon}
-                    <h4 className="text-sm font-medium text-high-emphasis">{option.title}</h4>
-                    {option.isComingSoon && (
-                      <Badge variant="info" className="ml-auto h-fit w-fit">
-                        {t("NODE_LIBRARY_PANEL.COMING_SOON")}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      {option.description}
-                    </p>
-                  </div>
-                </div>
+                  {t(category.labelKey)}
+                </button>
               ))}
-              {filteredOptions.length === 0 && (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  {t("NODE_LIBRARY_PANEL.NO_TRIGGERS_FOUND_MATCHING", { searchQuery })}
-                </div>
-              )}
             </div>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 pb-6">
+            {groups.map((group) => (
+              <section key={group.key} aria-label={group.label}>
+                <h3 className="px-3 pb-1.5 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.label}
+                </h3>
+                {group.options.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => handleSelectOption(option)}
+                    aria-disabled={option.type === "errorTrigger" && hasErrorTrigger ? true : undefined}
+                    className={cn(
+                      "flex w-full cursor-pointer items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      option.type === "errorTrigger" && hasErrorTrigger && "cursor-not-allowed opacity-50 hover:bg-transparent",
+                    )}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent">
+                      {option.icon}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-high-emphasis">{option.title}</span>
+                        {option.isComingSoon && (
+                          <Badge variant="info" className="ml-auto h-fit w-fit">
+                            {t("NODE_LIBRARY_PANEL.COMING_SOON")}
+                          </Badge>
+                        )}
+                      </span>
+                      <span className="text-xs leading-relaxed text-muted-foreground">
+                        {option.description}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </section>
+            ))}
+            {groups.length === 0 && (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                {t("NODE_LIBRARY_PANEL.NO_NODES_MATCH", { searchQuery })}
+              </div>
+            )}
           </div>
         </div>
       </SheetContent>

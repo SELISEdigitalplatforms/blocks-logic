@@ -13,6 +13,7 @@ import {
   Copy,
   Download,
   Trash,
+  Settings2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -43,6 +44,7 @@ import { useScopedPath, useT } from "@seliseblocks/genesis-os";
 import { DeleteWorkflow } from "../../components/delete-workflow";
 import { DuplicateWorkflow } from "../../components/duplicate-workflow";
 import { RenameWorkflow } from "../../components/rename-workflow/rename-workflow";
+import { WorkflowSettings } from "../../components/workflow-settings/workflow-settings";
 import { useExportWorkflow } from "../../hooks/use-export-workflow";
 
 type WorkflowDetailPageProps = {
@@ -58,7 +60,7 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
 
   const [activeTab, setActiveTab] = useState<string>("editor");
   const [isDirtyBannerDismissed, setIsDirtyBannerDismissed] = useState(false);
-  const [modal, setModal] = useState<"rename" | "duplicate" | "delete" | null>(null);
+  const [modal, setModal] = useState<"rename" | "duplicate" | "settings" | "delete" | null>(null);
 
   const { hasUnsavedChanges, setWorkflow, setLastSuccessfulExecutionData } = useWorkflow();
   const workflowStore = useWorkflowStoreApi();
@@ -250,6 +252,13 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
+                        onClick={() => setModal("settings")}
+                      >
+                        <Settings2 className="mr-2 h-4 w-4" />
+                        <span>{t("common:SETTINGS")}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
                         disabled={isExporting}
                         onClick={() => void exportWorkflow(workflowId)}
                       >
@@ -303,6 +312,16 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
         }}
         workflowId={workflowId}
         name={workflowName}
+      />
+      <WorkflowSettings
+        // Re-created on each open, so closing without saving discards the changes.
+        key={modal === "settings" ? "settings-open" : "settings-closed"}
+        open={modal === "settings"}
+        onOpenChange={(value) => {
+          if (!value) setModal(null);
+        }}
+        workflowId={workflowId}
+        settings={data?.data?.settings}
       />
       <DeleteWorkflow
         open={modal === "delete"}
