@@ -35,7 +35,7 @@ import {
 } from "../../utils/client-credential-upgrade";
 import { toPersistedNode } from "../../utils/to-persisted-node";
 import { WorkflowExecutions } from "@blocks-workflow/components/workflow-execution";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { showErrorToast } from "@/hooks/use-toast";
 import { PublishWorkflowAction } from "../../components/publish-workflow-action";
 import { WorkflowVersions } from "../../components/workflow-version";
@@ -46,6 +46,11 @@ import { DuplicateWorkflow } from "../../components/duplicate-workflow";
 import { RenameWorkflow } from "../../components/rename-workflow/rename-workflow";
 import { WorkflowSettings } from "../../components/workflow-settings/workflow-settings";
 import { useExportWorkflow } from "../../hooks/use-export-workflow";
+
+const WORKFLOW_TABS = ["editor", "executions", "versions"] as const;
+type WorkflowTab = (typeof WORKFLOW_TABS)[number];
+const isWorkflowTab = (value: string | null): value is WorkflowTab =>
+  WORKFLOW_TABS.includes(value as WorkflowTab);
 
 type WorkflowDetailPageProps = {
   workflowId: string;
@@ -58,7 +63,20 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
   const scoped = useScopedPath();
   const { exportWorkflow, isExporting } = useExportWorkflow();
 
-  const [activeTab, setActiveTab] = useState<string>("editor");
+  // The open tab lives in the URL (?tab=), so a page reload keeps it. The editor is the default and has no param.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const activeTab: WorkflowTab = isWorkflowTab(tabParam) ? tabParam : "editor";
+  const setActiveTab = (tab: string) =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (tab === "editor") next.delete("tab");
+        else next.set("tab", tab);
+        return next;
+      },
+      { replace: true },
+    );
   const [isDirtyBannerDismissed, setIsDirtyBannerDismissed] = useState(false);
   const [modal, setModal] = useState<"rename" | "duplicate" | "settings" | "delete" | null>(null);
 
