@@ -154,6 +154,64 @@ namespace XUnitTest.Workflow
             _intake.VerifyAll();
         }
 
+        /// <summary>The same service over the real intake, with a strict store that fails the test if it is touched.</summary>
+        private WorkflowExecutionService WithRealIntake(Mock<IWebhookFileStore> store) => new(
+            new WorkflowExecutionStores(_workflows.Object, _executions.Object, _versions.Object),
+            Mock.Of<IMessageClient>(),
+            Mock.Of<ILogger<WorkflowExecutionService>>(),
+            Mock.Of<IWorkflowEngineService>(),
+            Mock.Of<IWorkflowNotificationService>(),
+            new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
+            new WorkflowTriggerAccess(_auth.Object, Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(),
+                WebhookRequests.Intake(store.Object)));
+
+        [Fact]
+        public async Task Open_webhook_refuses_a_raw_file_with_403_and_creates_nothing()   // SPEC10 K1, Example 1
+        {
+            Published("none", "anyContent");
+            var store = new Mock<IWebhookFileStore>(MockBehavior.Strict);
+
+            var act = () => WithRealIntake(store).TriggerWebhookAsync(
+                "wf-1", "hook", "tenant-1", WebhookRequests.Create("image/png", new byte[] { 1, 2, 3 }));
+
+            var error = (await act.Should().ThrowAsync<WebhookIntakeException>()).Which;
+            (error.StatusCode, error.Message).Should().Be((403, "File uploads require an authenticated webhook"));
+            _executions.Verify(r => r.CreateAsync(It.IsAny<WorkflowExecutionEntity>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Authenticated_webhook_stores_a_raw_file_as_the_caller()   // SPEC10 N2, Example 3
+        {
+            Published("blocksAuthentication", "anyContent");
+            var caller = TestBlocksContext.Create("tenant-1", "user-7");
+            _auth.Setup(a => a.IsAuthenticated(It.IsAny<HttpRequest>(), "tenant-1")).ReturnsAsync(true);
+            _auth.Setup(a => a.BuildCallerContext(It.IsAny<HttpRequest>(), "tenant-1")).Returns(caller);
+            var store = new Mock<IWebhookFileStore>(MockBehavior.Strict);
+            store.Setup(s => s.StoreAsync(It.IsAny<WebhookPendingFile>(), It.Is<WebhookFileTarget>(t => t.Caller == caller),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync("file-1");
+
+            var response = await WithRealIntake(store).TriggerWebhookAsync(
+                "wf-1", "hook", "tenant-1", WebhookRequests.Create("image/png", new byte[] { 1, 2, 3 }));
+
+            response.Status.Should().Be("Queued");
+            store.VerifyAll();
+        }
+
+        [Fact]
+        public async Task Saved_accepted_body_types_reach_the_reader()   // SPEC10 K9
+        {
+            Published("none", "anyContent");
+            var snapshot = (await _versions.Object.GetWorkflowVersionAsync("tenant-1", "ver-1"))!.Snapshot;
+            snapshot.Nodes[0].Parameters["acceptedBodyTypes"] = new BsonArray { "json" };
+
+            var act = () => WithRealIntake(new Mock<IWebhookFileStore>(MockBehavior.Strict)).TriggerWebhookAsync(
+                "wf-1", "hook", "tenant-1", WebhookRequests.Create("application/x-www-form-urlencoded", "a=1"));
+
+            (await act.Should().ThrowAsync<WebhookIntakeException>()).Which.Message
+                .Should().Be("This webhook does not accept form bodies");
+        }
+
         [Fact]
         public async Task Intake_refusal_propagates_with_its_status()
         {

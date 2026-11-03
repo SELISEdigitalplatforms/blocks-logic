@@ -11,30 +11,25 @@ using StorageDriver;
 
 namespace Workflow.DomainService.Services
 {
-    /// <summary>Identity and service-principal settings for webhook uploads, bound from <c>WebhookUploads</c>.</summary>
+    /// <summary>Settings for webhook uploads, bound from <c>WebhookUploads</c>.</summary>
     public sealed class WebhookUploadOptions
     {
         public const string SectionName = "WebhookUploads";
-
-        /// <summary>
-        /// Principal that stores files for webhooks with no authenticated caller (<c>authType</c> none). Storage is
-        /// default-deny, so this principal needs an Edit grant on each folder such webhooks write to.
-        /// </summary>
-        public string SystemUserId { get; set; } = "blocks-logic-webhook";
 
         /// <summary>Time allowed for one upload to the storage provider.</summary>
         public int UploadTimeoutSeconds { get; set; } = 120;
     }
 
-    /// <summary>Where and as whom a webhook's files are stored.</summary>
+    /// <summary>
+    /// As whom a webhook's files are stored. Where is fixed: Storage's default folder in the default configuration
+    /// (SPEC10 D2), so the driver is always called without a folder or a configuration name.
+    /// </summary>
     public sealed class WebhookFileTarget
     {
         public required string TenantId { get; init; }
 
-        /// <summary>The authenticated caller; null for an anonymous webhook (the service principal is used).</summary>
+        /// <summary>The authenticated caller. Required for storing: there is no service principal (SPEC10 K6).</summary>
         public BlocksContext? Caller { get; init; }
-        public string? FolderId { get; init; }
-        public string? ConfigurationName { get; init; }
     }
 
     public interface IWebhookFileStore
@@ -49,8 +44,8 @@ namespace Workflow.DomainService.Services
     /// <summary>
     /// Stores webhook files through the in-process storage driver, as the Storage controller and Mail attachments
     /// already do: a pre-signed upload (plus completion when the provider quarantines) for cloud configurations,
-    /// or the driver's local upload for SFTP-backed ones. Runs under the caller's <see cref="BlocksContext"/> or
-    /// the configured service principal, and restores the ambient context afterwards.
+    /// or the driver's local upload for SFTP-backed ones. Runs under the caller's <see cref="BlocksContext"/> and
+    /// restores the ambient context afterwards.
     /// </summary>
     public sealed class StorageWebhookFileStore : IWebhookFileStore
     {
@@ -80,18 +75,19 @@ namespace Workflow.DomainService.Services
 
         public async Task<string> StoreAsync(WebhookPendingFile file, WebhookFileTarget target, CancellationToken ct = default)
         {
+            var caller = CallerOf(target);
             if (_driver is null)
             {
                 throw Unavailable(null);
             }
 
             var restore = BlocksContext.GetContext();
-            BlocksContext.SetContext(ActingContext(target, restore), false);
+            BlocksContext.SetContext(caller, false);
             try
             {
-                return await IsLocalAsync(target.ConfigurationName, ct)
-                    ? await StoreLocalAsync(file, target)
-                    : await StoreCloudAsync(file, target, ct);
+                return await IsLocalAsync(ct)
+                    ? await StoreLocalAsync(file)
+                    : await StoreCloudAsync(file, ct);
             }
             catch (WebhookIntakeException)
             {
@@ -109,16 +105,16 @@ namespace Workflow.DomainService.Services
 
         public async Task<bool> DeleteAsync(string fileId, WebhookFileTarget target, CancellationToken ct = default)
         {
-            if (_driver is null) return false;
+            if (_driver is null || string.IsNullOrWhiteSpace(target.Caller?.UserId)) return false;
 
             var restore = BlocksContext.GetContext();
-            BlocksContext.SetContext(ActingContext(target, restore), false);
+            BlocksContext.SetContext(target.Caller, false);
             try
             {
                 var response = await _driver.DeleteFileAsync(new DeleteFileRequest
                 {
                     FileId = fileId,
-                    ConfigurationName = target.ConfigurationName!,
+                    ConfigurationName = null!,
                     Permanent = true,
                 });
                 return response?.IsSuccess == true;
@@ -134,15 +130,15 @@ namespace Workflow.DomainService.Services
             }
         }
 
-        private async Task<string> StoreCloudAsync(WebhookPendingFile file, WebhookFileTarget target, CancellationToken ct)
+        private async Task<string> StoreCloudAsync(WebhookPendingFile file, CancellationToken ct)
         {
             var session = await _driver!.GetPerSignedUrlForUploadAsync(new GetPreSignedUrlForUploadRequest
             {
                 Name = file.Name,
-                ParentDirectoryId = target.FolderId,
-                ConfigurationName = target.ConfigurationName,
+                ParentDirectoryId = null,
+                ConfigurationName = null,
                 AccessModifier = PrivateAccess,
-                ObjectAccessLevel = ObjectAccessLevel(target),
+                ObjectAccessLevel = CreatorAccess,
                 SizeInBytes = file.Length,
                 ContentType = file.ContentType,
             });
@@ -202,15 +198,15 @@ namespace Workflow.DomainService.Services
             return session.FileId;
         }
 
-        private async Task<string> StoreLocalAsync(WebhookPendingFile file, WebhookFileTarget target)
+        private async Task<string> StoreLocalAsync(WebhookPendingFile file)
         {
             var response = await _driver!.UploadFileToLocalStorageAsync(new LocalStorageUploadRequest
             {
                 Name = file.Name,
-                ParentDirectoryId = target.FolderId!,
-                ConfigurationName = target.ConfigurationName,
+                ParentDirectoryId = null!,
+                ConfigurationName = DefaultConfigurationName,
                 AccessModifier = PrivateAccess,
-                ObjectAccessLevel = ObjectAccessLevel(target),
+                ObjectAccessLevel = CreatorAccess,
                 File = file.File,
                 MetaData = string.Empty,
                 Tags = string.Empty,
@@ -222,52 +218,31 @@ namespace Workflow.DomainService.Services
             return response.FileId;
         }
 
-        private async Task<bool> IsLocalAsync(string? configurationName, CancellationToken ct)
+        private async Task<bool> IsLocalAsync(CancellationToken ct)
         {
             if (_configurations is null) return false;
-            var configuration = await _configurations.GetByNameAsync(configurationName ?? DefaultConfigurationName, ct);
+            var configuration = await _configurations.GetByNameAsync(DefaultConfigurationName, ct);
             return configuration is not null
                 && StorageTypes.TryGetCategory(configuration.StorageStrategy ?? string.Empty, out var category)
                 && category == StorageStrategyCategory.Local;
         }
 
-        /// <summary>The caller as validated by the webhook's auth; otherwise the service principal in the webhook's tenant.</summary>
-        private BlocksContext ActingContext(WebhookFileTarget target, BlocksContext? current)
-        {
-            if (target.Caller is not null && !string.IsNullOrWhiteSpace(target.Caller.UserId))
-            {
-                return target.Caller;
-            }
+        private const string CreatorAccess = "Creator";
 
-            return BlocksContext.Create(
-                tenantId: target.TenantId,
-                roles: [],
-                userId: _options.SystemUserId,
-                isAuthenticated: false,
-                requestUri: string.Empty,
-                organizationId: current?.OrganizationId ?? string.Empty,
-                expireOn: DateTime.MinValue,
-                email: string.Empty,
-                permissions: [],
-                userName: _options.SystemUserId,
-                phoneNumber: string.Empty,
-                displayName: _options.SystemUserId,
-                oauthToken: string.Empty,
-                originalTenantId: target.TenantId,
-                applicationDomain: string.Empty);
-        }
+        /// <summary>The caller as validated by the webhook's auth. A missing one is a programming error (SPEC10 K6).</summary>
+        private static BlocksContext CallerOf(WebhookFileTarget target) =>
+            target.Caller is not null && !string.IsNullOrWhiteSpace(target.Caller.UserId)
+                ? target.Caller
+                : throw new InvalidOperationException("Webhook files are stored only for an authenticated caller.");
 
-        private static string ObjectAccessLevel(WebhookFileTarget target) =>
-            target.Caller is not null && !string.IsNullOrWhiteSpace(target.Caller.UserId) ? "Creator" : "Organization";
-
-        /// <param name="reason">
-        /// Storage's own text for a refusal it reports without <c>Errors</c>: the upload-session endpoint puts it in
-        /// <c>UploadUrl</c> (for example "File name does not have any extension"). Never echoed when it is a URL.
-        /// </param>
         private static WebhookIntakeException RefusedBy(IDictionary<string, string>? errors, string fileName, string? reason)
         {
             var values = errors?.Values ?? (ICollection<string>)Array.Empty<string>();
             if (values.Any(IsSizeError)) return StorageLimit(fileName);
+            if (errors?.TryGetValue("ParentDirectoryId", out var parent) == true && parent == "default_directory_not_found")
+            {
+                return new WebhookIntakeException(503, "storage_unavailable", "File storage is not set up for this project");
+            }
             if (errors?.TryGetValue("access", out var access) == true && access == "forbidden")
             {
                 return new WebhookIntakeException(403, "storage_forbidden", "Not allowed to store files in the configured folder");

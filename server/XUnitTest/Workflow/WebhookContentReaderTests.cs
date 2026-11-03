@@ -60,7 +60,7 @@ namespace XUnitTest.Workflow
             content.ContentType.Should().Be("application/x-www-form-urlencoded");
             content.Bodies.Should().ContainSingle().Which.Should().Be(BsonDocument.Parse("{name:'Ana', tag:['a','b']}"));
             content.Query.ToJson().Should().Be(BsonDocument.Parse("{src:'web'}").ToJson());
-            content.Headers.ElementCount.Should().Be(0);
+            content.Headers.Names.Should().BeEquivalentTo("content-type", "content-length");
             content.Files.Should().BeEmpty();
         }
 
@@ -272,25 +272,161 @@ namespace XUnitTest.Workflow
         // ------------------------------------------------------------ headers, query, names
 
         [Fact]
-        public async Task Only_allowed_headers_are_copied_and_sensitive_ones_never()   // H10, C12
+        public async Task Every_header_is_copied_except_credentials_proxy_and_connection_ones()   // SPEC10 N4, K3, K4
+        {
+            var request = WebhookRequests.Create("text/plain", "hi");
+            request.Headers["Stripe-Signature"] = "t=1,v1=abc";
+            request.Headers["X-GitHub-Event"] = "push";
+            request.Headers.Append("X-Multi", "one");
+            request.Headers.Append("X-Multi", "two");
+            request.Headers["X-CSRF-Token"] = "dropped";   // contains "token" (SPEC10 D3)
+            foreach (var excluded in new[]
+            {
+                "Authorization", "Proxy-Authorization", "Cookie", "Set-Cookie", "x-blocks-key",
+                "X-Api-Key", "Api-Key", "X-ApiKey", "X-Auth-Token", "X-Client-Secret", "X-Password",
+                "Forwarded", "Via", "X-Real-IP", "X-Client-IP", "True-Client-IP", "CF-Connecting-IP",
+                "X-Forwarded-For", "X-Forwarded-Proto", "X-Original-URL", "X-Envoy-Attempt-Count",
+                "Connection", "Keep-Alive", "Proxy-Connection", "TE", "Trailer", "Upgrade", "Expect",
+            })
+            {
+                request.Headers[excluded] = "secret";
+            }
+
+            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+
+            content.Headers.ToJson().Should().Be(BsonDocument.Parse(
+                "{'content-length':'2', 'content-type':'text/plain', 'stripe-signature':'t=1,v1=abc', 'x-github-event':'push', 'x-multi':'one, two'}").ToJson());
+        }
+
+        [Fact]
+        public async Task The_retired_allowed_headers_setting_has_no_effect()   // SPEC10 N3
         {
             var settings = WebhookIntakeSettings.From(new BsonDocument
             {
                 { "bodyMode", "anyContent" },
-                { "allowedHeaders", new BsonArray { "X-Event", "authorization", "cookie", "x-blocks-key", "x-multi" } },
+                { "allowedHeaders", new BsonArray { "authorization", "x-event" } },
             });
             var request = WebhookRequests.Create("text/plain", "hi");
-            request.Headers["X-Event"] = "created";
             request.Headers["Authorization"] = "Bearer secret";
-            request.Headers["Cookie"] = "a=b";
-            request.Headers["x-blocks-key"] = "tenant";
-            request.Headers.Append("X-Multi", "one");
-            request.Headers.Append("X-Multi", "two");
-            request.Headers["X-Other"] = "not listed";
+            request.Headers["X-Other"] = "kept";
 
             using var content = await WebhookContentReader.ReadAnyContentAsync(request, settings);
 
-            content.Headers.ToJson().Should().Be(BsonDocument.Parse("{'x-event':'created', 'x-multi':'one, two'}").ToJson());
+            content.Headers.Contains("authorization").Should().BeFalse();
+            content.Headers["x-other"].AsString.Should().Be("kept");
+        }
+
+        // ------------------------------------------------------------ accepted types and the file gate (SPEC10)
+
+        private static WebhookIntakeSettings Restricted(params string[] types) => WebhookIntakeSettings.From(
+            new BsonDocument { { "bodyMode", "anyContent" }, { "acceptedBodyTypes", new BsonArray(types) } });
+
+        private static HttpRequest Unreadable(string? contentType, long? length = 10)
+        {
+            var request = WebhookRequests.Create(contentType, []);
+            request.ContentLength = length;
+            request.Body = new ThrowingStream();
+            return request;
+        }
+
+        [Theory]
+        [InlineData("application/x-www-form-urlencoded", "form")]
+        [InlineData("text/plain", "text")]
+        [InlineData("image/png", "binary")]
+        [InlineData("multipart/form-data; boundary=x", "multipart")]
+        [InlineData(null, "binary")]
+        public async Task A_type_outside_the_accepted_ones_is_415_before_the_body_is_read(string? contentType, string format)   // K9
+        {
+            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(Unreadable(contentType), Restricted("json")));
+
+            (error.StatusCode, error.ErrorKind, error.Message)
+                .Should().Be((415, "unsupported_type", $"This webhook does not accept {format} bodies"));
+        }
+
+        [Fact]
+        public async Task An_accepted_type_and_an_empty_body_pass_the_restriction()   // N7
+        {
+            using var json = await WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Json("{\"a\":1}"), Restricted("json", "text"));
+            using var empty = await WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Create("image/png", []), Restricted("json"));
+
+            json.BodyFormat.Should().Be("json");
+            empty.BodyFormat.Should().Be("empty");
+        }
+
+        [Fact]
+        public async Task Xml_is_refused_with_its_own_message_whatever_is_accepted()
+        {
+            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(Unreadable("application/xml"), Restricted("binary")));
+
+            error.Message.Should().Be("XML bodies are not supported yet");
+        }
+
+        [Theory]
+        [InlineData("image/png")]
+        [InlineData(null)]
+        public async Task Without_files_allowed_a_binary_body_is_403_before_it_is_read(string? contentType)   // K1
+        {
+            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(
+                Unreadable(contentType), AnyContent.WithFilesAllowed(false)));
+
+            (error.StatusCode, error.Message).Should().Be((403, "File uploads require an authenticated webhook"));
+        }
+
+        [Fact]
+        public async Task The_type_gate_runs_before_the_file_gate()   // K9
+        {
+            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(
+                Unreadable("image/png"), Restricted("json").WithFilesAllowed(false)));
+
+            error.StatusCode.Should().Be(415);
+        }
+
+        [Fact]
+        public async Task Without_files_allowed_multipart_with_a_file_is_403_but_text_only_multipart_is_read()   // K2, N5
+        {
+            var withFile = WebhookRequests.Multipart([("a", "1")], [("doc", "a.pdf", "application/pdf", new byte[] { 1 })]);
+            var textOnly = WebhookRequests.Multipart([("a", "1")], []);
+            var settings = AnyContent.WithFilesAllowed(false);
+
+            (await Refused(() => WebhookContentReader.ReadAnyContentAsync(withFile, settings))).StatusCode.Should().Be(403);
+            using var content = await WebhookContentReader.ReadAnyContentAsync(textOnly, settings);
+            content.Bodies.Single().Should().Be(BsonDocument.Parse("{a:'1'}"));
+        }
+
+        [Fact]
+        public async Task Without_files_allowed_an_oversized_multipart_is_still_413()   // K7
+        {
+            var files = Enumerable.Range(0, 11).Select(n => ($"f{n}", $"f{n}.txt", "text/plain", new byte[] { 1 }));
+            var request = WebhookRequests.Multipart([], files);
+
+            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(request, AnyContent.WithFilesAllowed(false)));
+
+            error.StatusCode.Should().Be(413);
+        }
+
+        [Fact]
+        public async Task A_request_that_cannot_have_a_body_is_empty_without_reading()
+        {
+            var request = Unreadable("image/png", length: null);
+            request.HttpContext.Features.Set<Microsoft.AspNetCore.Http.Features.IHttpRequestBodyDetectionFeature>(new NoBody());
+
+            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent.WithFilesAllowed(false));
+
+            content.BodyFormat.Should().Be("empty");
+        }
+
+        private sealed class NoBody : Microsoft.AspNetCore.Http.Features.IHttpRequestBodyDetectionFeature
+        {
+            public bool CanHaveBody => false;
+        }
+
+        private sealed class ThrowingStream : MemoryStream
+        {
+            public override int Read(byte[] buffer, int offset, int count) => throw new InvalidOperationException("the body was read");
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+                throw new InvalidOperationException("the body was read");
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+                throw new InvalidOperationException("the body was read");
         }
 
         [Fact]

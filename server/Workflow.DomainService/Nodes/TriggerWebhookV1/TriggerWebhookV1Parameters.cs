@@ -22,13 +22,11 @@ namespace Workflow.DomainService.Nodes.TriggerWebhookV1
         /// </summary>
         public string? BodyMode { get; set; }
 
-        /// <summary>Any content: storage directory for uploaded files; blank = the configuration's root.</summary>
-        public string FilesFolderId { get; set; } = "";
-
-        /// <summary>Any content: storage configuration name; blank = the default configuration.</summary>
-        public string StorageConfigurationName { get; set; } = "";
-
-        /// <summary>Any content: request header names copied into the item's <c>headers</c>.</summary>
-        public List<string> AllowedHeaders { get; set; } = new();
+        /// <summary>
+        /// Any content: the body types this webhook accepts (<c>json</c>, <c>form</c>, <c>multipart</c>,
+        /// <c>text</c>, <c>binary</c>); empty accepts every type (SPEC10 D6). Files always go to Storage's default
+        /// folder and configuration, and every non-sensitive header is copied, so neither is configurable here.
+        /// </summary>
+        public List<string> AcceptedBodyTypes { get; set; } = new();
     }
 }

@@ -30,7 +30,8 @@ namespace Workflow.DomainService.Services
     }
 
     /// <summary>
-    /// Turns a webhook request into trigger items (SPEC8). Files are stored one at a time in request order; if any
+    /// Turns a webhook request into trigger items (SPEC8, SPEC10). Files are stored as the caller, in Storage's
+    /// default folder and configuration, one at a time in request order; if any
     /// fails, those already stored for the request are deleted and no item is returned (all-or-nothing).
     /// </summary>
     public sealed class WebhookIntake : IWebhookIntake
@@ -53,15 +54,11 @@ namespace Workflow.DomainService.Services
         public async Task<WebhookIntakeResult> ReadAnyContentAsync(
             HttpRequest request, WebhookIntakeSettings settings, string tenantId, BlocksContext? caller, CancellationToken ct = default)
         {
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, settings, ct);
+            // Files only for an authenticated caller (SPEC10 D1); the reader refuses them before anything is stored.
+            var filesAllowed = !string.IsNullOrWhiteSpace(caller?.UserId);
+            using var content = await WebhookContentReader.ReadAnyContentAsync(request, settings.WithFilesAllowed(filesAllowed), ct);
 
-            var target = new WebhookFileTarget
-            {
-                TenantId = tenantId,
-                Caller = caller,
-                FolderId = string.IsNullOrWhiteSpace(settings.FilesFolderId) ? null : settings.FilesFolderId,
-                ConfigurationName = string.IsNullOrWhiteSpace(settings.StorageConfigurationName) ? null : settings.StorageConfigurationName,
-            };
+            var target = new WebhookFileTarget { TenantId = tenantId, Caller = caller };
 
             var stored = new List<string>(content.Files.Count);
             var references = new BsonArray();

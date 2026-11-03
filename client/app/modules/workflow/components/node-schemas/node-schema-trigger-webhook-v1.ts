@@ -23,6 +23,16 @@ const ANY_CONTENT_DEPENDENCY = {
   value: BODY_MODE_ANY_CONTENT,
 } as const;
 
+// Values of the server's WebhookIntakeSettings.BodyTypes (SPEC10 D6). An empty selection accepts every type.
+export const BODY_TYPES = ["json", "form", "multipart", "text", "binary"] as const;
+const BODY_TYPE_LABEL_KEYS: Record<(typeof BODY_TYPES)[number], string> = {
+  json: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_JSON",
+  form: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_FORM",
+  multipart: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_MULTIPART",
+  text: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_TEXT",
+  binary: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_BINARY",
+};
+
 type AuthBlock = {
   organizationId?: string;
   roles?: { operator?: "all" | "any"; items?: string[] };
@@ -173,8 +183,10 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         displayValue: () => "POST",
       },
       {
-        // A webhook saved before this setting existed has no `bodyMode`; it shows (and the server treats it)
-        // as JSON (legacy). Only new nodes start on Any content (see defaults below).
+        // Only legacy webhooks show Body Mode: one saved before this setting existed has no `bodyMode` and runs
+        // (and shows) as JSON (legacy). Its author can switch it to Any content once; the field then hides, so
+        // the switch is one-way. New nodes start on Any content and never show it (SPEC10 D7, N8). `hidden`
+        // rather than `dependsOn`, because a field depending on its own key would be reset when it changes.
         id: "body-mode",
         type: "select-with-description",
         get label() {
@@ -188,6 +200,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         },
         key: "bodyMode",
         defaultValue: BODY_MODE_JSON,
+        hidden: (data: Record<string, unknown>) => data.bodyMode === BODY_MODE_ANY_CONTENT,
         options: [
           {
             value: BODY_MODE_JSON,
@@ -216,71 +229,32 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         ],
       },
       {
-        id: "files-folder-id",
-        type: "text",
-        get label() {
-          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.FILES_FOLDER_ID");
-        },
-        get info() {
-          return tStatic(
-            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.STORAGE_FOLDER_FOR_UPLOADED",
-          );
-        },
-        key: "filesFolderId",
-        get placeholder() {
-          return tStatic(
-            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.BLANK_STORAGE_ROOT",
-          );
-        },
-        defaultValue: "",
-        dependsOn: ANY_CONTENT_DEPENDENCY,
-      },
-      {
-        id: "storage-configuration-name",
-        type: "text",
+        // Files always go to Storage's default folder and configuration, and every non-sensitive header is
+        // copied, so neither is a setting (SPEC10 D2, D3). Leaving this empty accepts every body type.
+        id: "accepted-body-types",
+        type: "multiselect",
         get label() {
           return tStatic(
             LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.STORAGE_CONFIGURATION",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ACCEPTED_BODY_TYPES",
           );
         },
         get info() {
           return tStatic(
             LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.STORAGE_CONFIGURATION_THAT_RECEIVES",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ACCEPTED_BODY_TYPES_DESCRIPTION",
           );
         },
-        key: "storageConfigurationName",
         get placeholder() {
-          return tStatic(
-            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.BLANK_DEFAULT_CONFIGURATION",
-          );
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ALL_TYPES");
         },
-        defaultValue: "",
-        dependsOn: ANY_CONTENT_DEPENDENCY,
-      },
-      {
-        id: "allowed-headers",
-        type: "comma-list",
-        get label() {
-          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ALLOWED_HEADERS");
-        },
-        get info() {
-          return tStatic(
-            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.HEADER_NAMES_COPIED_INTO",
-          );
-        },
-        key: "allowedHeaders",
-        get placeholder() {
-          return tStatic(
-            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.E_G_X_SIGNATURE",
-          );
-        },
+        key: "acceptedBodyTypes",
+        options: BODY_TYPES.map((value) => ({
+          value,
+          get label() {
+            return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, BODY_TYPE_LABEL_KEYS[value]);
+          },
+        })),
         defaultValue: [],
         dependsOn: ANY_CONTENT_DEPENDENCY,
       },
@@ -622,9 +596,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       permissions: { operator: "any", values: [] },
       authorizationMode: "",
       bodyMode: BODY_MODE_ANY_CONTENT,
-      filesFolderId: "",
-      storageConfigurationName: "",
-      allowedHeaders: [],
+      acceptedBodyTypes: [],
     },
     settings: {},
   },

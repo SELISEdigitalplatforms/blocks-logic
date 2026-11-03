@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using MimeKit;
 using Microsoft.Net.Http.Headers;
 using MongoDB.Bson;
@@ -113,7 +114,7 @@ namespace Workflow.DomainService.Services
             HttpRequest request, WebhookIntakeSettings settings, CancellationToken ct = default)
         {
             var mediaType = MediaTypeOf(request, out var parsed);
-            var headers = ReadHeaders(request, settings.AllowedHeaders);
+            var headers = ReadHeaders(request);
             var query = ReadQuery(request);
 
             WebhookContent Empty() => new()
@@ -125,7 +126,7 @@ namespace Workflow.DomainService.Services
                 Query = query,
             };
 
-            if (request.ContentLength == 0)
+            if (!CanHaveBody(request))
             {
                 return Empty();
             }
@@ -135,9 +136,20 @@ namespace Workflow.DomainService.Services
                 throw WebhookIntakeException.Unsupported("XML bodies are not supported yet");
             }
 
+            // Both gates run on the declared type, before a byte of the body is read (SPEC10 K9, K1).
+            var format = FormatOf(mediaType);
+            if (!settings.Accepts(format))
+            {
+                throw WebhookIntakeException.TypeNotAccepted(format);
+            }
+            if (format == FormatBinary && !settings.FilesAllowed)
+            {
+                throw WebhookIntakeException.FilesNotAllowed();
+            }
+
             if (mediaType == "multipart/form-data")
             {
-                return await ReadMultipartAsync(request, parsed!, mediaType, headers, query, ct);
+                return await ReadMultipartAsync(request, parsed!, mediaType, headers, query, settings.FilesAllowed, ct);
             }
 
             if (mediaType is "application/x-www-form-urlencoded")
@@ -212,7 +224,7 @@ namespace Workflow.DomainService.Services
 
         private static async Task<WebhookContent> ReadMultipartAsync(
             HttpRequest request, MediaTypeHeaderValue parsed, string mediaType,
-            BsonDocument headers, BsonDocument query, CancellationToken ct)
+            BsonDocument headers, BsonDocument query, bool filesAllowed, CancellationToken ct)
         {
             if (HeaderUtilities.RemoveQuotes(parsed.Boundary).Length == 0)
             {
@@ -249,6 +261,13 @@ namespace Workflow.DomainService.Services
             if (form.Files.Count == 0 && total > WebhookIntakeLimits.NonFileMaxBytes)
             {
                 throw WebhookIntakeException.TooLarge(MessageNonFileTooLarge);
+            }
+
+            // After the limits, so an oversized request still gets 413 (SPEC10 K7). Nothing has been stored yet;
+            // the form's buffered parts are removed with the request.
+            if (form.Files.Count > 0 && !filesAllowed)
+            {
+                throw WebhookIntakeException.FilesNotAllowed();
             }
 
             var files = form.Files
@@ -366,6 +385,30 @@ namespace Workflow.DomainService.Services
             return parsed.MediaType.Value?.ToLowerInvariant() ?? string.Empty;
         }
 
+        /// <summary>
+        /// The body format a media type maps to (SPEC8 § mapping), decided before the body is read. A JSON or text
+        /// body that turns out to be empty is still reported as empty once read.
+        /// </summary>
+        public static string FormatOf(string mediaType) => mediaType switch
+        {
+            "multipart/form-data" => FormatMultipart,
+            "application/x-www-form-urlencoded" => FormatForm,
+            _ when IsJson(mediaType) => FormatJson,
+            _ when mediaType.StartsWith("text/", StringComparison.Ordinal) => FormatText,
+            _ => FormatBinary,
+        };
+
+        /// <summary>
+        /// False when the request certainly has no body: Content-Length 0, or, on a server request, Kestrel's own
+        /// body detection (no Content-Length and no chunked encoding). Unknown means a body may follow.
+        /// </summary>
+        private static bool CanHaveBody(HttpRequest request)
+        {
+            if (request.ContentLength == 0) return false;
+            if (request.ContentLength > 0) return true;
+            return request.HttpContext.Features.Get<IHttpRequestBodyDetectionFeature>()?.CanHaveBody ?? true;
+        }
+
         private static bool IsJson(string mediaType) =>
             mediaType is "application/json" or "text/json" || mediaType.EndsWith("+json", StringComparison.Ordinal);
 
@@ -448,16 +491,14 @@ namespace Workflow.DomainService.Services
             return (fields, bytes);
         }
 
-        private static BsonDocument ReadHeaders(HttpRequest request, IReadOnlyList<string> allowed)
+        /// <summary>Every request header except the excluded ones, under lower-cased names (SPEC10 N4).</summary>
+        private static BsonDocument ReadHeaders(HttpRequest request)
         {
             var headers = new BsonDocument();
-            foreach (var name in allowed)
+            foreach (var (name, values) in request.Headers.OrderBy(h => h.Key, StringComparer.OrdinalIgnoreCase))
             {
-                if (WebhookIntakeSettings.SensitiveHeaders.Contains(name)) continue;
-                if (request.Headers.TryGetValue(name, out var values) && values.Count > 0)
-                {
-                    headers[name] = string.Join(", ", values.ToArray());
-                }
+                if (values.Count == 0 || WebhookHeaderFilter.IsExcluded(name)) continue;
+                headers[name.ToLowerInvariant()] = string.Join(", ", values.ToArray());
             }
             return headers;
         }

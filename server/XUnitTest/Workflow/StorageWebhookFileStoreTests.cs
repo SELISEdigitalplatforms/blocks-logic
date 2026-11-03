@@ -26,7 +26,7 @@ namespace XUnitTest.Workflow
             factory.Setup(f => f.CreateClient(StorageWebhookFileStore.HttpClientName)).Returns(() => new HttpClient(_provider));
             _sut = new StorageWebhookFileStore(
                 factory.Object,
-                Options.Create(new WebhookUploadOptions { SystemUserId = "svc-webhook" }),
+                Options.Create(new WebhookUploadOptions()),
                 NullLogger<StorageWebhookFileStore>.Instance,
                 _driver.Object);
         }
@@ -41,7 +41,7 @@ namespace XUnitTest.Workflow
             return content.Files.Single();
         }
 
-        private static WebhookFileTarget Anonymous => new() { TenantId = "tenant-1", FolderId = "dir-1", ConfigurationName = "wf-50" };
+        private static WebhookFileTarget Caller => new() { TenantId = "tenant-1", Caller = TestBlocksContext.Create("tenant-1", "user-7") };
 
         private void SessionReturns(GetPreSignedUrlForUploadResponse response) =>
             _driver.Setup(d => d.GetPerSignedUrlForUploadAsync(It.IsAny<GetPreSignedUrlForUploadRequest>())).ReturnsAsync(response);
@@ -65,12 +65,13 @@ namespace XUnitTest.Workflow
                 .ReturnsAsync(Session());
             using var file = await PdfAsync();
 
-            var fileId = await _sut.StoreAsync(file, Anonymous);
+            var fileId = await _sut.StoreAsync(file, Caller);
 
             fileId.Should().Be("file-1");
             sent!.Name.Should().Be("upload.pdf");
-            sent.ParentDirectoryId.Should().Be("dir-1");
-            sent.ConfigurationName.Should().Be("wf-50");
+            // Storage's default folder and configuration, always (SPEC10 N2).
+            sent.ParentDirectoryId.Should().BeNull();
+            sent.ConfigurationName.Should().BeNull();
             sent.AccessModifier.Should().Be("Private");
             sent.SizeInBytes.Should().Be(3);
             sent.ContentType.Should().Be("application/pdf");
@@ -80,21 +81,16 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task Anonymous_webhook_uploads_as_the_service_principal_with_organization_access()   // H9, A6
+        public async Task Without_a_caller_nothing_reaches_storage()   // SPEC10 K6
         {
-            BlocksContext? acting = null;
-            GetPreSignedUrlForUploadRequest? sent = null;
-            _driver.Setup(d => d.GetPerSignedUrlForUploadAsync(It.IsAny<GetPreSignedUrlForUploadRequest>()))
-                .Callback<GetPreSignedUrlForUploadRequest>(r => { acting = BlocksContext.GetContext(); sent = r; })
-                .ReturnsAsync(Session());
             using var file = await PdfAsync();
 
-            await _sut.StoreAsync(file, Anonymous);
+            var act = () => _sut.StoreAsync(file, new WebhookFileTarget { TenantId = "tenant-1" });
 
-            acting!.UserId.Should().Be("svc-webhook");
-            acting.TenantId.Should().Be("tenant-1");
-            sent!.ObjectAccessLevel.Should().Be("Organization");
-            BlocksContext.GetContext()!.UserId.Should().Be("ambient-user", "the ambient context is restored");
+            await act.Should().ThrowAsync<InvalidOperationException>();
+            _driver.VerifyNoOtherCalls();
+            (await _sut.DeleteAsync("file-1", new WebhookFileTarget { TenantId = "tenant-1" })).Should().BeFalse();
+            _driver.VerifyNoOtherCalls();
         }
 
         [Fact]
@@ -114,6 +110,21 @@ namespace XUnitTest.Workflow
             sent!.ObjectAccessLevel.Should().Be("Creator");
         }
 
+        [Fact]
+        public async Task A_missing_default_folder_is_503()   // SPEC10 K5
+        {
+            SessionReturns(new GetPreSignedUrlForUploadResponse
+            {
+                IsSuccess = false,
+                Errors = new Dictionary<string, string> { ["ParentDirectoryId"] = "default_directory_not_found" },
+            });
+            using var file = await PdfAsync();
+
+            var thrown = (await ((Func<Task>)(() => _sut.StoreAsync(file, Caller))).Should().ThrowAsync<WebhookIntakeException>()).Which;
+
+            (thrown.StatusCode, thrown.Message).Should().Be((503, "File storage is not set up for this project"));
+        }
+
         [Theory]
         [InlineData("declared_size_exceeds_maximum_allowed", 413, "File 'upload.pdf' exceeds the storage limit")]
         [InlineData("forbidden", 403, "Not allowed to store files in the configured folder")]
@@ -128,7 +139,7 @@ namespace XUnitTest.Workflow
             });
             using var file = await PdfAsync();
 
-            var act = () => _sut.StoreAsync(file, Anonymous);
+            var act = () => _sut.StoreAsync(file, Caller);
 
             var thrown = (await act.Should().ThrowAsync<WebhookIntakeException>()).Which;
             (thrown.StatusCode, thrown.Message).Should().Be((status, message));
@@ -145,7 +156,7 @@ namespace XUnitTest.Workflow
             SessionReturns(new GetPreSignedUrlForUploadResponse { IsSuccess = false, UploadUrl = reason });
             using var file = await PdfAsync();
 
-            var thrown = (await ((Func<Task>)(() => _sut.StoreAsync(file, Anonymous))).Should().ThrowAsync<WebhookIntakeException>()).Which;
+            var thrown = (await ((Func<Task>)(() => _sut.StoreAsync(file, Caller))).Should().ThrowAsync<WebhookIntakeException>()).Which;
 
             (thrown.StatusCode, thrown.Message).Should().Be((422, message));
         }
@@ -162,7 +173,7 @@ namespace XUnitTest.Workflow
             });
             using var file = await PdfAsync();
 
-            var act = () => _sut.StoreAsync(file, Anonymous);
+            var act = () => _sut.StoreAsync(file, Caller);
 
             (await act.Should().ThrowAsync<WebhookIntakeException>()).Which.StatusCode.Should().Be(expected);
         }
@@ -175,7 +186,7 @@ namespace XUnitTest.Workflow
                 .ReturnsAsync(new CompleteUploadResponse { IsSuccess = true, VerificationStatus = FileVerificationStatus.Verified });
             using var file = await PdfAsync();
 
-            (await _sut.StoreAsync(file, Anonymous)).Should().Be("file-1");
+            (await _sut.StoreAsync(file, Caller)).Should().Be("file-1");
         }
 
         [Fact]
@@ -185,7 +196,7 @@ namespace XUnitTest.Workflow
             _provider.Status = HttpStatusCode.InternalServerError;
             using var file = await PdfAsync();
 
-            var act = () => _sut.StoreAsync(file, Anonymous);
+            var act = () => _sut.StoreAsync(file, Caller);
             (await act.Should().ThrowAsync<WebhookIntakeException>()).Which.StatusCode.Should().Be(503);
 
             _driver.Setup(d => d.GetPerSignedUrlForUploadAsync(It.IsAny<GetPreSignedUrlForUploadRequest>()))
@@ -199,7 +210,7 @@ namespace XUnitTest.Workflow
             _driver.Setup(d => d.DeleteFileAsync(It.Is<DeleteFileRequest>(r => r.FileId == "file-1" && r.Permanent)))
                 .ReturnsAsync(new BaseResponse { IsSuccess = true });
 
-            (await _sut.DeleteAsync("file-1", Anonymous)).Should().BeTrue();
+            (await _sut.DeleteAsync("file-1", Caller)).Should().BeTrue();
         }
 
         private sealed class RecordingHandler : HttpMessageHandler
