@@ -2,6 +2,7 @@ import { Control, useController } from "react-hook-form";
 import { Card, CardContent } from "@/components/ui-kits/card/card";
 import { ProxyFormValues } from "../types";
 import { ProxyResilienceFields, ResilienceErrors } from "./proxy-resilience-fields";
+import { useT } from "@seliseblocks/genesis-os";
 
 type Props = {
   control: Control<ProxyFormValues>;
@@ -41,6 +42,7 @@ export const flattenResilienceErrors = (errors: unknown): ResilienceErrors => {
  * gateway reads it, and so what the copy here has to say.
  */
 export const ProxyResilienceCard = ({ control }: Props) => {
+  const { t } = useT("logic.proxy.components");
   // `fieldState.error` for this name is the whole subtree the schema raised — `timeoutSeconds`,
   // `retry.attempts` and so on — which is what the fields below need to place each message.
   const { field, fieldState } = useController({ control, name: "resilience" });
@@ -49,11 +51,9 @@ export const ProxyResilienceCard = ({ control }: Props) => {
     <Card className="rounded-xl">
       <CardContent className="space-y-4 p-0">
         <div>
-          <p className="text-sm font-semibold">If the vendor is slow or down</p>
+          <p className="text-sm font-semibold">{t("PROXY_RESILIENCE_CARD.IF_THE_VENDOR_IS")}</p>
           <p className="text-xs text-muted-foreground">
-            Nothing here is on unless you turn it on, and nothing is chosen for you. Left alone, a
-            call waits up to 30 s for the vendor, is never sent twice, and a vendor that is down is called every
-            time anyway.
+            {t("PROXY_RESILIENCE_CARD.NOTHING_HERE_IS_ON")}
           </p>
         </div>
 

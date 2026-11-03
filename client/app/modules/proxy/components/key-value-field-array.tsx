@@ -17,6 +17,7 @@ import { KeyCollision, KeyKind, keyCollisions } from "../utils";
 import { KeyCollisionWarning } from "./key-collision-warning";
 import { VariableTokenField, varNameRef } from "@/components/variable-picker";
 import { VariablesButton } from "./variables-button";
+import { useT } from "@seliseblocks/genesis-os";
 
 type VariablePickerProps = {
   variables?: SecretListItem[];
@@ -54,30 +55,33 @@ const ValueCell = ({
   variables,
   variablesLoading,
   variablesError,
-}: Pick<Props, "control" | "name" | "label"> & VariablePickerProps & { index: number }) => (
-  <FormField
-    control={control}
-    name={`${name}.${index}.value`}
-    render={({ field: valueField }) => (
-      <FormItem>
-        <FormControl>
-          <VariableTokenField
-            value={valueField.value ?? ""}
-            onChange={valueField.onChange}
-            codec={varNameRef}
-            ariaLabel={`${label} value`}
-            placeholder="Enter value"
-            variables={variables}
-            isLoading={variablesLoading}
-            isError={variablesError}
-            variablePickMode="replace"
-          />
-        </FormControl>
-        <FormMessage />
-      </FormItem>
-    )}
-  />
-);
+}: Pick<Props, "control" | "name" | "label"> & VariablePickerProps & { index: number }) => {
+  const { t } = useT("logic.proxy.components");
+  return (
+    <FormField
+      control={control}
+      name={`${name}.${index}.value`}
+      render={({ field: valueField }) => (
+        <FormItem>
+          <FormControl>
+            <VariableTokenField
+              value={valueField.value ?? ""}
+              onChange={valueField.onChange}
+              codec={varNameRef}
+              ariaLabel={t("KEY_VALUE_FIELD_ARRAY.VALUE", { label })}
+              placeholder={t("KEY_VALUE_FIELD_ARRAY.ENTER_VALUE")}
+              variables={variables}
+              isLoading={variablesLoading}
+              isError={variablesError}
+              variablePickMode="replace"
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+};
 
 type Row = ProxyKeyValue & { sendAs?: ProxyCredentialRow["sendAs"] };
 
@@ -121,6 +125,7 @@ export const KeyValueFieldArray = ({
   variablesLoading,
   variablesError,
 }: Props) => {
+  const { t } = useT("logic.proxy.components");
   const { fields, append, remove } = useFieldArray({ control, name });
   const liveRows = (useWatch({ control, name }) ?? []) as Row[];
   const collisions = duplicateCollisions(name, liveRows);
@@ -164,9 +169,9 @@ export const KeyValueFieldArray = ({
                 <p className="text-xs text-muted-foreground">
                   {description ?? (
                     <>
-                      Inject fixed key-value pairs before forwarding the request. Use the{" "}
-                      <Variable className="inline h-3 w-3" /> button to reference a configuration
-                      variable.
+                      {t("KEY_VALUE_FIELD_ARRAY.INJECT_FIXED_KEY_VALUE")}
+                      <Variable className="inline h-3 w-3" />{" "}
+                      {t("KEY_VALUE_FIELD_ARRAY.BUTTON_TO_REFERENCE_A")}
                     </>
                   )}
                 </p>
@@ -196,7 +201,7 @@ export const KeyValueFieldArray = ({
                         <FormItem>
                           <FormControl>
                             <Input
-                              placeholder="Enter key"
+                              placeholder={t("KEY_VALUE_FIELD_ARRAY.ENTER_KEY")}
                               className="font-mono text-xs"
                               {...keyField}
                             />
@@ -222,13 +227,20 @@ export const KeyValueFieldArray = ({
                           <FormItem>
                             <Select value={sendAsField.value} onValueChange={sendAsField.onChange}>
                               <FormControl>
-                                <SelectTrigger aria-label="Send as" className="text-xs">
+                                <SelectTrigger
+                                  aria-label={t("KEY_VALUE_FIELD_ARRAY.SEND_AS")}
+                                  className="text-xs"
+                                >
                                   <SelectValue />
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                <SelectItem value="header">as header</SelectItem>
-                                <SelectItem value="query">as query param</SelectItem>
+                                <SelectItem value="header">
+                                  {t("KEY_VALUE_FIELD_ARRAY.AS_HEADER")}
+                                </SelectItem>
+                                <SelectItem value="query">
+                                  {t("KEY_VALUE_FIELD_ARRAY.AS_QUERY_PARAM")}
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                           </FormItem>
@@ -239,7 +251,9 @@ export const KeyValueFieldArray = ({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      aria-label={`Remove ${label.toLowerCase()} row`}
+                      aria-label={t("KEY_VALUE_FIELD_ARRAY.REMOVE_ROW", {
+                        value: label.toLowerCase(),
+                      })}
                       className="h-10 w-10 text-muted-foreground hover:text-destructive"
                       onClick={() => remove(index)}
                     >
@@ -258,7 +272,9 @@ export const KeyValueFieldArray = ({
             })}
             {!fields.length ? (
               <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-3">
-                <p className="text-xs text-muted-foreground">No injected values.</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("KEY_VALUE_FIELD_ARRAY.NO_INJECTED_VALUES")}
+                </p>
               </div>
             ) : null}
           </div>
@@ -271,7 +287,9 @@ export const KeyValueFieldArray = ({
           {variablesError ||
           (!variablesLoading && Array.isArray(variables) && variables.length === 0) ? (
             <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              {variablesError ? "Unable to load secret keys." : "No configuration variables yet."}
+              {variablesError
+                ? t("KEY_VALUE_FIELD_ARRAY.UNABLE_TO_LOAD_SECRET")
+                : t("KEY_VALUE_FIELD_ARRAY.NO_CONFIGURATION_VARIABLES_YET")}
               <VariablesButton className="h-7 px-2 text-xs" />
             </p>
           ) : null}

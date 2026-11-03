@@ -15,6 +15,8 @@ import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
 import { useDeleteFunction } from "../../hooks/use-functions";
 import { IFunctionSummary } from "../../types/function.types";
+import { renderRichText } from "@/lib/rich-text";
+import { useT } from "@seliseblocks/genesis-os";
 
 type DeleteFunctionDialogProps = {
   open: boolean;
@@ -46,7 +48,6 @@ export const readDeleteBlocked = (errors: Record<string, string | string[]> | un
   };
 };
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * Deleting takes the endpoint, every version, run and log with it, so the design asks for the name
@@ -60,6 +61,7 @@ export const DeleteFunctionDialog = ({
   fn,
   onDeleted,
 }: DeleteFunctionDialogProps) => {
+  const { t } = useT("logic.functions.components");
   const { mutateAsync, isPending } = useDeleteFunction();
   const [typedName, setTypedName] = useState("");
   const [blocked, setBlocked] = useState<DeleteBlocked | null>(null);
@@ -80,8 +82,8 @@ export const DeleteFunctionDialog = ({
     if (!fn || !canDelete) return;
     try {
       const res = await mutateAsync({ functionId: fn.id, force });
-      if (!res.isSuccess) return showErrorToast({ errors: res.errors || "Something went wrong" });
-      showSuccessToast({ description: "Function deleted successfully" });
+      if (!res.isSuccess) return showErrorToast({ errors: res.errors || t("DELETE_FUNCTION_DIALOG.SOMETHING_WENT_WRONG") });
+      showSuccessToast({ description: t("DELETE_FUNCTION_DIALOG.FUNCTION_DELETED_SUCCESSFULLY") });
       handleOpenChange(false);
       onDeleted?.();
     } catch (error) {
@@ -90,7 +92,7 @@ export const DeleteFunctionDialog = ({
         if (refusal) return setBlocked(refusal);
         return showErrorToast({ errors: error.errors });
       }
-      return showErrorToast({ errors: "Something went wrong" });
+      return showErrorToast({ errors: t("DELETE_FUNCTION_DIALOG.SOMETHING_WENT_WRONG") });
     }
   };
 
@@ -98,17 +100,15 @@ export const DeleteFunctionDialog = ({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Delete function</DialogTitle>
+          <DialogTitle>{t("DELETE_FUNCTION_DIALOG.DELETE_FUNCTION")}</DialogTitle>
           <DialogDescription>
-            This removes <span className="font-semibold text-foreground">{fn?.name}</span>, its
-            endpoint, every version and all runs and logs. It cannot be undone. While runs have not
-            finished or a workflow step uses this function, you are asked first.
+            {renderRichText(t("DELETE_FUNCTION_DIALOG.THIS_REMOVES_0_0", { name: fn?.name ?? "" }), [(children) => <span className="font-semibold text-foreground">{children}</span>])}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="delete-function-name" className="text-xs font-semibold">
-            Type <span className="font-mono">{fn?.name}</span> to confirm
+            {renderRichText(t("DELETE_FUNCTION_DIALOG.TYPE_0_0_TO", { name: fn?.name ?? "" }), [(children) => <span className="font-mono">{children}</span>])}
           </Label>
           <Input
             id="delete-function-name"
@@ -129,32 +129,32 @@ export const DeleteFunctionDialog = ({
             className="flex flex-col gap-2 rounded-md border border-warning-200 bg-warning-50 p-3 text-sm"
           >
             <div className="flex items-center gap-2 font-semibold text-warning-800">
-              <TriangleAlert className="h-4 w-4 shrink-0" /> This function is still in use
+              <TriangleAlert className="h-4 w-4 shrink-0" /> {t("DELETE_FUNCTION_DIALOG.THIS_FUNCTION_IS_STILL")}
             </div>
             <ul className="ml-6 list-disc text-foreground">
               {blocked.activeRuns > 0 && (
                 <li>
-                  {plural(blocked.activeRuns, "run has", "runs have")} not finished (queued or running).
-                  Deleting now <span className="font-semibold">cancels</span> {blocked.activeRuns === 1 ? "it" : "them"}.
+                  {renderRichText(t("DELETE_FUNCTION_DIALOG.ACTIVE_RUNS_CANCELLED", { count: blocked.activeRuns }), [
+                    (text) => <span className="font-semibold">{text}</span>,
+                  ])}
                 </li>
               )}
               {blocked.workflows > 0 && (
                 <li>
-                  {plural(blocked.workflows, "workflow uses", "workflows use")} it. Those function steps
-                  will fail at their next run.
+                  {t("DELETE_FUNCTION_DIALOG.WORKFLOWS_USE_FUNCTION", { count: blocked.workflows })}
                 </li>
               )}
             </ul>
             {blocked.message && <p className="text-xs text-muted-foreground">{blocked.message}</p>}
             <p className="text-xs text-muted-foreground">
-              Wait and try again, or delete it anyway.
+              {t("DELETE_FUNCTION_DIALOG.WAIT_AND_TRY_AGAIN")}
             </p>
           </div>
         )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isPending}>
-            Cancel
+            {t("common:CANCEL")}
           </Button>
           {blocked ? (
             <Button
@@ -163,11 +163,11 @@ export const DeleteFunctionDialog = ({
               onClick={() => void confirmHandler(true)}
               data-testid="delete-function-anyway"
             >
-              {isPending ? "Deleting…" : "Delete anyway"}
+              {isPending ? t("DELETE_FUNCTION_DIALOG.DELETING") : t("DELETE_FUNCTION_DIALOG.DELETE_ANYWAY")}
             </Button>
           ) : (
             <Button variant="destructive" disabled={!canDelete} onClick={() => void confirmHandler()}>
-              {isPending ? "Deleting…" : "Delete function"}
+              {isPending ? t("DELETE_FUNCTION_DIALOG.DELETING") : t("DELETE_FUNCTION_DIALOG.DELETE_FUNCTION")}
             </Button>
           )}
         </DialogFooter>

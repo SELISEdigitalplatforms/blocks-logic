@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useGetProxyVersions, useRevertProxyVersion } from "../hooks";
+import { useT } from "@seliseblocks/genesis-os";
 
 const ProxyHistorySkeleton = () => (
   <Card className="rounded-xl px-6 py-1">
@@ -24,6 +25,7 @@ const ProxyHistorySkeleton = () => (
 );
 
 export const ProxyHistoryTab = ({ proxyId, active }: { proxyId: string; active: boolean }) => {
+  const { t } = useT("logic.proxy.components");
   const { data = [], isLoading } = useGetProxyVersions(active ? proxyId : undefined);
   const revertVersion = useRevertProxyVersion();
 
@@ -31,9 +33,9 @@ export const ProxyHistoryTab = ({ proxyId, active }: { proxyId: string; active: 
     const res = await revertVersion.mutateAsync({ proxyId, versionId });
     if (!res.isSuccess)
       return showErrorToast({
-        errors: res.message || "Unable to revert this proxy version.",
+        errors: res.message || t("PROXY_HISTORY_TAB.UNABLE_TO_REVERT_THIS"),
       });
-    showSuccessToast({ description: "Proxy version reverted." });
+    showSuccessToast({ description: t("PROXY_HISTORY_TAB.PROXY_VERSION_REVERTED") });
   };
 
   if (isLoading) {
@@ -44,7 +46,9 @@ export const ProxyHistoryTab = ({ proxyId, active }: { proxyId: string; active: 
     <Card className="rounded-xl px-6 py-3">
       <CardContent className="divide-y p-0">
         {!data.length ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">No change history yet.</p>
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            {t("PROXY_HISTORY_TAB.NO_CHANGE_HISTORY_YET")}
+          </p>
         ) : null}
         {data.map((version) => (
           <div key={version.id} className="grid gap-4 py-4 sm:grid-cols-[1.25rem_1fr_auto]">
@@ -85,7 +89,7 @@ export const ProxyHistoryTab = ({ proxyId, active }: { proxyId: string; active: 
                 className="w-fit justify-self-start sm:justify-self-end"
                 onClick={() => handleRevert(version.id)}
               >
-                Revert
+                {t("PROXY_HISTORY_TAB.REVERT")}
               </Button>
             ) : null}
           </div>

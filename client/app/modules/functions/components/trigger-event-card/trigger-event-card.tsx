@@ -7,6 +7,7 @@ import { showErrorToast } from "@/hooks/use-toast";
 import { isErrorWithErrors } from "@/lib/error";
 import { useGetEventSettings, useSaveEventSettings } from "../../hooks/use-events";
 import { MAX_TRIGGER_EVENTS, addTriggerEvent, mapSaveErrors } from "../../utils/events";
+import { useT } from "@seliseblocks/genesis-os";
 
 type TriggerEventCardProps = {
   functionId: string;
@@ -14,6 +15,7 @@ type TriggerEventCardProps = {
 
 /** "Run this function when one of these events arrives": the event names that start a run. */
 export const TriggerEventCard = ({ functionId }: Readonly<TriggerEventCardProps>) => {
+  const { t } = useT("logic.functions.components");
   const { data: settings, isLoading } = useGetEventSettings(functionId);
   const { mutateAsync: save, isPending } = useSaveEventSettings(functionId);
   const [draft, setDraft] = useState("");
@@ -29,9 +31,9 @@ export const TriggerEventCard = ({ functionId }: Readonly<TriggerEventCardProps>
       if (isErrorWithErrors(failure)) {
         const mapped = mapSaveErrors(failure.errors);
         const messages = [...mapped.trigger, ...mapped.general];
-        showErrorToast({ errors: messages.length > 0 ? messages : "Failed to save events" });
+        showErrorToast({ errors: messages.length > 0 ? messages : t("TRIGGER_EVENT_CARD.FAILED_TO_SAVE_EVENTS") });
       } else {
-        showErrorToast({ errors: "Failed to save events" });
+        showErrorToast({ errors: t("TRIGGER_EVENT_CARD.FAILED_TO_SAVE_EVENTS") });
       }
       return false;
     }
@@ -48,14 +50,14 @@ export const TriggerEventCard = ({ functionId }: Readonly<TriggerEventCardProps>
     <Card>
       <CardContent className="flex flex-col gap-3 p-5">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-base font-semibold">Run this function when one of these events arrives</span>
+          <span className="text-base font-semibold">{t("TRIGGER_EVENT_CARD.RUN_THIS_FUNCTION_WHEN")}</span>
           <span className="text-xs leading-relaxed text-medium-emphasis">
-            Add the event names. Each event that arrives starts one run, with the event as input.
+            {t("TRIGGER_EVENT_CARD.ADD_THE_EVENT_NAMES")}
           </span>
         </div>
 
         {names.length > 0 && (
-          <ul className="flex flex-wrap gap-2" aria-label="Trigger events">
+          <ul className="flex flex-wrap gap-2" aria-label={t("TRIGGER_EVENT_CARD.TRIGGER_EVENTS")}>
             {names.map((name) => (
               <li
                 key={name}
@@ -67,7 +69,7 @@ export const TriggerEventCard = ({ functionId }: Readonly<TriggerEventCardProps>
                   variant="ghost"
                   size="icon"
                   className="h-5 w-5"
-                  aria-label={`Remove ${name}`}
+                  aria-label={t("TRIGGER_EVENT_CARD.REMOVE", { name })}
                   disabled={isPending}
                   onClick={() => saveNames(names.filter((entry) => entry !== name))}
                 >
@@ -83,8 +85,8 @@ export const TriggerEventCard = ({ functionId }: Readonly<TriggerEventCardProps>
             <Input
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder="e.g. order.paid"
-              aria-label="Event name"
+              placeholder={t("TRIGGER_EVENT_CARD.E_G_ORDER_PAID")}
+              aria-label={t("TRIGGER_EVENT_CARD.EVENT_NAME")}
               disabled={isLoading || isPending || names.length >= MAX_TRIGGER_EVENTS}
             />
             {error && (
@@ -95,13 +97,12 @@ export const TriggerEventCard = ({ functionId }: Readonly<TriggerEventCardProps>
           </div>
           <Button type="submit" size="sm" disabled={isLoading || isPending || draft.trim() === ""}>
             <Plus className="mr-1.5 h-4 w-4" />
-            <span>Add</span>
+            <span>{t("common:ADD")}</span>
           </Button>
         </form>
 
         <span className="text-xs leading-relaxed text-medium-emphasis">
-          Event runs wait behind HTTP calls (1 event per 5 HTTP) and expire after 5 minutes in the
-          queue. Up to {MAX_TRIGGER_EVENTS} events. Changes apply to runs after the next Deploy.
+          {t("TRIGGER_EVENT_CARD.EVENT_RUNS_WAIT_BEHIND", { maxTriggerEvents: MAX_TRIGGER_EVENTS })}
         </span>
       </CardContent>
     </Card>

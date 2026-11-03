@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui-kits/dropdown-menu/dropdown-menu";
 import { showErrorToast } from "@/hooks/use-toast";
+import { useT } from "@seliseblocks/genesis-os";
 
 export const EditorFitConfig = {
   fitView: true,
@@ -32,6 +33,7 @@ export interface WorkflowEditorControlsProps {
 }
 
 export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorControlsProps) => {
+  const { t } = useT("logic.workflow");
   const {
     fitView,
     zoomIn,
@@ -78,8 +80,8 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
       );
     } catch (error) {
       showErrorToast({
-        title: "Error",
-        errors: (error instanceof Error ? error.message : "") || "Failed to start workflow",
+        title: t("common:ERROR"),
+        errors: (error instanceof Error ? error.message : "") || t("WORKFLOW_EDITOR_CONTROLS.FAILED_TO_START_WORKFLOW"),
       });
     }
   };
@@ -93,8 +95,8 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
       );
     } catch (error) {
       showErrorToast({
-        title: "Error",
-        errors: (error instanceof Error ? error.message : "") || "Failed to stop trigger listener",
+        title: t("common:ERROR"),
+        errors: (error instanceof Error ? error.message : "") || t("WORKFLOW_EDITOR_CONTROLS.FAILED_TO_STOP_TRIGGER"),
       });
     }
   };
@@ -106,7 +108,7 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
     disabled?: boolean;
   }> = [
     {
-      label: "Fit View",
+      label: t("WORKFLOW_EDITOR_CONTROLS.FIT_VIEW"),
       icon: Maximize,
       action: () => {
         // fitView, zoomIn and zoomOut all return a promise, and action is typed void.
@@ -118,21 +120,21 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
       },
     },
     {
-      label: "Zoom in",
+      label: t("WORKFLOW_EDITOR_CONTROLS.ZOOM_IN"),
       icon: ZoomIn,
       action: () => {
         void zoomIn();
       },
     },
     {
-      label: "Zoom out",
+      label: t("WORKFLOW_EDITOR_CONTROLS.ZOOM_OUT"),
       icon: ZoomOut,
       action: () => {
         void zoomOut();
       },
     },
     {
-      label: "Organize",
+      label: t("WORKFLOW_EDITOR_CONTROLS.ORGANIZE"),
       icon: Wand,
       action: () => {
         tidyUpWorkflow();
@@ -148,7 +150,7 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
       },
     },
     {
-      label: "Open Node Library",
+      label: t("WORKFLOW_EDITOR_CONTROLS.OPEN_NODE_LIBRARY"),
       icon: Plus,
       action: () => {
         openNodeLibraryPanel();
@@ -178,7 +180,7 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Stop Workflow</p>
+              <p>{t("WORKFLOW_EDITOR_CONTROLS.STOP_WORKFLOW")}</p>
             </TooltipContent>
           </Tooltip>
         </div>
@@ -194,7 +196,7 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" className="max-h-60 overflow-y-auto">
-            <DropdownMenuLabel>Select Trigger</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("WORKFLOW_EDITOR_CONTROLS.SELECT_TRIGGER")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {triggerNodes.map((node) => (
               <DropdownMenuItem
@@ -203,7 +205,7 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
                   handlePlayWorkflow(node.id);
                 }}
               >
-                {node.name || "Unnamed Trigger"}
+                {node.name || t("WORKFLOW_EDITOR_CONTROLS.UNNAMED_TRIGGER")}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -229,7 +231,7 @@ export const WorkflowEditorControls = ({ readonly = false }: WorkflowEditorContr
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          <p>Execute Workflow</p>
+          <p>{t("WORKFLOW_EDITOR_CONTROLS.EXECUTE_WORKFLOW")}</p>
         </TooltipContent>
       </Tooltip>
     );

@@ -7,6 +7,7 @@ import { FormBuilder } from "../form-builder/form-builder";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { ListenEventPanel, NodeGuidePanel } from "../shared";
 import { OutputPanel } from "../shared/output-panel/output-panel";
+import { useT } from "@seliseblocks/genesis-os";
 
 type LayoutWithListenerProps = {
   schema: NodeSchema | null;
@@ -14,6 +15,7 @@ type LayoutWithListenerProps = {
 };
 
 export const LayoutWithListener = ({ schema, guide }: LayoutWithListenerProps) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const { selectedNode, updateNode, updateNodeParameters, editorMode } = useWorkflow();
   const [activeTab, setActiveTab] = useState<"parameters" | "settings">("parameters");
   const [isGuideOpen, setIsGuideOpen] = useState(false);
@@ -34,8 +36,8 @@ export const LayoutWithListener = ({ schema, guide }: LayoutWithListenerProps) =
             className="flex flex-1 flex-col overflow-hidden"
           >
             <TabsList className="mb-4 w-fit shrink-0">
-              <TabsTrigger value="parameters">Parameters</TabsTrigger>
-              <TabsTrigger value="settings">Settings</TabsTrigger>
+              <TabsTrigger value="parameters">{t("LAYOUT_WITH_LISTENER.PARAMETERS")}</TabsTrigger>
+              <TabsTrigger value="settings">{t("common:SETTINGS")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="parameters" className="flex-1 overflow-y-auto p-1 pr-6">

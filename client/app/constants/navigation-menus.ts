@@ -1,5 +1,6 @@
 import { Menu } from "@/models/menu-models";
 import * as React from "react";
+import { useT } from "@seliseblocks/genesis-os";
 import { CalendarClock, Home, type LucideIcon, type LucideProps, Workflow } from "lucide-react";
 
 /**
@@ -64,11 +65,11 @@ export const ProxyIcon = React.forwardRef<SVGSVGElement, LucideProps>(
 
 ProxyIcon.displayName = "ProxyIcon";
 
-export const navigationMenus: Menu[] = [
+export const buildNavigationMenus = (t: (key: string) => string): Menu[] => [
   {
     id: "overview-project",
     type: "menu",
-    name: "Overview",
+    name: t("NAVIGATION_MENUS.OVERVIEW"),
     path: "/app/dashboard",
     icon: Home,
   },
@@ -76,7 +77,12 @@ export const navigationMenus: Menu[] = [
     type: "separator",
     id: "separator-overview",
   },
-  { id: "environments", type: "menu", name: "Environments", path: "/app/project/environments" },
+  {
+    id: "environments",
+    type: "menu",
+    name: t("NAVIGATION_MENUS.ENVIRONMENTS"),
+    path: "/app/project/environments",
+  },
   {
     type: "separator",
     id: "separator-identity",
@@ -84,29 +90,34 @@ export const navigationMenus: Menu[] = [
   {
     id: "service-schedule",
     type: "menu",
-    name: "Schedules",
+    name: t("NAVIGATION_MENUS.SCHEDULES"),
     path: "/app/schedule",
     icon: CalendarClock,
   },
   {
     id: "service-workflow",
     type: "menu",
-    name: "Workflow",
+    name: t("NAVIGATION_MENUS.WORKFLOW"),
     path: "/app/workflow",
     icon: Workflow,
   },
   {
     id: "service-functions",
     type: "menu",
-    name: "Functions",
+    name: t("NAVIGATION_MENUS.FUNCTIONS"),
     path: "/app/functions",
     icon: FunctionIcon,
   },
   {
     id: "service-proxy",
     type: "menu",
-    name: "Proxy",
+    name: t("NAVIGATION_MENUS.PROXY"),
     path: "/app/proxy",
     icon: ProxyIcon,
   },
 ];
+
+export const useNavigationMenus = (): Menu[] => {
+  const { t } = useT("logic.shared");
+  return React.useMemo(() => buildNavigationMenus(t), [t]);
+};

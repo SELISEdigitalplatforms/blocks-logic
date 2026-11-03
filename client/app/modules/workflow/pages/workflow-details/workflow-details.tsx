@@ -40,7 +40,7 @@ import { showErrorToast } from "@/hooks/use-toast";
 import { PublishWorkflowAction } from "../../components/publish-workflow-action";
 import { WorkflowVersions } from "../../components/workflow-version";
 import { useGetLastSuccessfulExecution } from "../../hooks";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT } from "@seliseblocks/genesis-os";
 import { DeleteWorkflow } from "../../components/delete-workflow";
 import { DuplicateWorkflow } from "../../components/duplicate-workflow";
 import { RenameWorkflow } from "../../components/rename-workflow/rename-workflow";
@@ -52,6 +52,7 @@ type WorkflowDetailPageProps = {
 };
 
 export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) => {
+  const { t } = useT("logic.workflow");
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const scoped = useScopedPath();
@@ -100,7 +101,7 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
           }).catch(() => migratedWorkflowIds.current.delete(workflowData.itemId));
         }
       } else {
-        showErrorToast({ errors: "Workflow not found" });
+        showErrorToast({ errors: t("WORKFLOW_DETAILS.WORKFLOW_NOT_FOUND") });
         navigate(scoped("/app/workflow"));
       }
     }
@@ -144,12 +145,12 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
               <div className="flex items-center gap-3">
                 <AlertCircle className="h-5 w-5 text-amber-500" />
                 <p className="text-sm font-medium">
-                  You have unadapted changes. Please click on the Publish button to adapt them.
+                  {t("WORKFLOW_DETAILS.YOU_HAVE_UNADAPTED_CHANGES")}
                 </p>
               </div>
               <button
                 type="button"
-                aria-label="Dismiss unadapted changes warning"
+                aria-label={t("WORKFLOW_DETAILS.DISMISS_UNADAPTED_CHANGES_WARNING")}
                 onClick={() => setIsDirtyBannerDismissed(true)}
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-yellow-700 transition-colors hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-yellow-500 dark:text-yellow-300 dark:hover:bg-yellow-900/70"
               >
@@ -172,9 +173,9 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
           >
             <div className="flex items-center justify-between border-b px-4 py-4">
               <TabsList>
-                <TabsTrigger value="editor">Editor</TabsTrigger>
-                <TabsTrigger value="executions">Executions</TabsTrigger>
-                <TabsTrigger value="versions">Versions</TabsTrigger>
+                <TabsTrigger value="editor">{t("WORKFLOW_DETAILS.EDITOR")}</TabsTrigger>
+                <TabsTrigger value="executions">{t("WORKFLOW_DETAILS.EXECUTIONS")}</TabsTrigger>
+                <TabsTrigger value="versions">{t("WORKFLOW_DETAILS.VERSIONS")}</TabsTrigger>
               </TabsList>
 
               {activeTab === "editor" && (
@@ -187,19 +188,21 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
                   className="h-4 bg-muted-foreground"
                 /> */}
                   <div className="text-sm text-muted-foreground">
-                    {isSaving ? (
+                    {isSaving && (
                       <span className="flex items-center gap-1">
                         <Loader2 className="h-3 w-3 animate-spin" />
-                        Saving...
+                        {t("WORKFLOW_DETAILS.SAVING")}
                       </span>
-                    ) : data?.data?.lastUpdatedDate ? (
+                    )}
+                    {!isSaving && data?.data?.lastUpdatedDate && (
                       `Last saved: ${format(new Date(data.data.lastUpdatedDate), "dd/MM/yyyy, hh:mm a")}`
-                    ) : (
-                      "Not saved yet"
+                    )}
+                    {!isSaving && !data?.data?.lastUpdatedDate && (
+                      t("WORKFLOW_DETAILS.NOT_SAVED_YET")
                     )}
                   </div>
                   {hasUnsavedChanges && !isSaving && (
-                    <span className="text-xs text-orange-500">Unsaved changes</span>
+                    <span className="text-xs text-orange-500">{t("WORKFLOW_DETAILS.UNSAVED_CHANGES")}</span>
                   )}
                   <Separator orientation="vertical" className="h-4 bg-muted-foreground" />
                   <div className="flex items-center gap-2">
@@ -226,7 +229,7 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
                     ) : (
                       <Save className="h-4 w-4" />
                     )}
-                    Save
+                    {t("common:SAVE")}
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -240,21 +243,21 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
                         onClick={() => setModal("rename")}
                       >
                         <Pen className="mr-2 h-4 w-4" />
-                        <span>Rename</span>
+                        <span>{t("WORKFLOW_DETAILS.RENAME")}</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
                         onClick={() => setModal("duplicate")}
                       >
                         <Copy className="mr-2 h-4 w-4" />
-                        <span>Duplicate</span>
+                        <span>{t("WORKFLOW_DETAILS.DUPLICATE")}</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
                         onClick={() => setModal("settings")}
                       >
                         <Settings2 className="mr-2 h-4 w-4" />
-                        <span>Settings</span>
+                        <span>{t("common:SETTINGS")}</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
@@ -262,14 +265,14 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
                         onClick={() => void exportWorkflow(workflowId)}
                       >
                         <Download className="mr-2 h-4 w-4" />
-                        <span>Export</span>
+                        <span>{t("WORKFLOW_DETAILS.EXPORT")}</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer text-error"
                         onClick={() => setModal("delete")}
                       >
                         <Trash className="mr-2 h-4 w-4" />
-                        <span>Delete</span>
+                        <span>{t("common:DELETE")}</span>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

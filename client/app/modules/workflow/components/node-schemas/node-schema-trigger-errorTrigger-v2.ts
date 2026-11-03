@@ -1,5 +1,8 @@
 import { NodeGuideTriggerErrorTriggerV2 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
 
 export const NodeSchemaTriggerErrorTriggerV2: NodeSchemaDefinition = {
   guide: NodeGuideTriggerErrorTriggerV2,
@@ -11,16 +14,24 @@ export const NodeSchemaTriggerErrorTriggerV2: NodeSchemaDefinition = {
       {
         id: "runOnTestMode",
         type: "switch",
-        label: "Run on test mode",
-        info: "Also run when a test run (Execute workflow) of that workflow fails, using this workflow's saved draft.",
+        get label() {
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_ERROR_TRIGGER_V2.RUN_ON_TEST_MODE");
+        },
+        get info() {
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_ERROR_TRIGGER_V2.ALSO_RUN_WHEN_A");
+        },
         key: "runOnTestMode",
         defaultValue: false,
       },
       {
         id: "output",
         type: "display",
-        label: "Output",
-        info: "Structure of the trigger output data",
+        get label() {
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_ERROR_TRIGGER_V2.OUTPUT");
+        },
+        get info() {
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_ERROR_TRIGGER_V2.STRUCTURE_OF_THE_TRIGGER");
+        },
         key: "output",
         transient: true,
         displayValue: () => `\`\`\`json

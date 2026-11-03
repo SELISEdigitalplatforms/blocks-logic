@@ -1,5 +1,8 @@
 import { HttpTriggerVerb, ITriggerConfig, TriggerResponseMode } from "../types/function.types";
 import { FUNCTION_HTTP_VERBS } from "../constants/endpoint.constant";
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
 
 /** The values a trigger has for the reuse / response / verbs settings when the server sent none. */
 export const TRIGGER_REUSE_DEFAULTS: Pick<
@@ -38,26 +41,30 @@ export const withTriggerDefaults = (trigger: ITriggerConfig): ITriggerConfig => 
 
 /** Leftover work, by the async resource name the sandbox reports, in plain words. */
 const LEFTOVER_LABELS: Array<{ match: RegExp; label: string }> = [
-  { match: /^(timeout|interval|immediate)$/i, label: "a timer" },
-  { match: /^(httpclientrequest|httpincomingmessage|fetch)$/i, label: "an HTTP request" },
-  { match: /^(fsreq|filehandle|statwatcher|fsevent)/i, label: "a file operation" },
-  { match: /^(getaddrinfo|getnameinfo|querywrap)/i, label: "a DNS lookup" },
-  { match: /^(tcpconnect|pipeconnect|shutdownwrap|writewrap)/i, label: "a network connection" },
-  { match: /^processwrap$/i, label: "a child process" },
-  { match: /^worker$/i, label: "a worker thread" },
-  { match: /^waituntil$/i, label: "ctx.waitUntil() work that did not finish in time" },
+  { match: /^(timeout|interval|immediate)$/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_TIMER"); } },
+  { match: /^(httpclientrequest|httpincomingmessage|fetch)$/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.AN_HTTP_REQUEST"); } },
+  { match: /^(fsreq|filehandle|statwatcher|fsevent)/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_FILE_OPERATION"); } },
+  { match: /^(getaddrinfo|getnameinfo|querywrap)/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_DNS_LOOKUP"); } },
+  { match: /^(tcpconnect|pipeconnect|shutdownwrap|writewrap)/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_NETWORK_CONNECTION"); } },
+  { match: /^processwrap$/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_CHILD_PROCESS"); } },
+  { match: /^worker$/i, get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_WORKER_THREAD"); } },
+  {
+    match: /^waituntil$/i,
+    get label() {
+      return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.WAITUNTIL_WORK_UNFINISHED");
+    },
+  },
 ];
 
 const OTHER_DISCARD_REASONS: Record<string, string> = {
-  timeout:
-    "The call, or work passed to ctx.waitUntil(), ran past its time limit, so the sandbox was stopped.",
-  drain: "A newer version went live, so this version's sandbox was retired after the call.",
-  cancelled: "The run was cancelled.",
-  crash: "The sandbox crashed during the call.",
-  maxcalls: "The sandbox reached its call limit and was replaced with a fresh one.",
-  maxage: "The sandbox reached its age limit and was replaced with a fresh one.",
-  memory: "The sandbox's memory was close to its limit, so it was replaced with a fresh one.",
-  protocol: "The sandbox sent something unexpected, so it was replaced.",
+  get timeout() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_CALL_OR_WORK"); },
+  get drain() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.A_NEWER_VERSION_WENT"); },
+  get cancelled() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_RUN_WAS_CANCELLED"); },
+  get crash() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_SANDBOX_CRASHED_DURING"); },
+  get maxcalls() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_SANDBOX_REACHED_ITS"); },
+  get maxage() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_SANDBOX_REACHED_ITS_2"); },
+  get memory() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_SANDBOX_S_MEMORY"); },
+  get protocol() { return tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_SANDBOX_SENT_SOMETHING"); },
 };
 
 /**
@@ -83,12 +90,14 @@ export const explainDiscardReason = (reason?: string | null): string | null => {
     );
     // `late`: code that an EARLIER call left behind ran during this one — a different message.
     const late = leftovers.some((item) => /^late$/i.test(item));
-    const what = labels.length > 0 ? labels.join(", ") : late ? null : "some work";
+    let what: string | null = "some work";
+    if (labels.length > 0) what = labels.join(", ");
+    else if (late) what = null;
     const parts: string[] = [];
-    if (what) parts.push(`The function left ${what} running after it answered.`);
-    if (late) parts.push("Code left running by an earlier call ran during this call.");
+    if (what) parts.push(tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.THE_FUNCTION_LEFT_RUNNING", { what }));
+    if (late) parts.push(tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.CODE_LEFT_RUNNING_BY"));
     parts.push(
-      "Await every call, or use ctx.waitUntil() for work that should finish after the answer.",
+      tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.AWAIT_EVERY_CALL_OR"),
     );
     return parts.join(" ");
   }

@@ -14,8 +14,10 @@ import {
 import { Button } from "@/components/ui-kits/button/button";
 import { getAllPredecessors } from "../utils/predecessor.util";
 import { EditorNode } from "@blocks-workflow/models/node.model";
+import { useT } from "@seliseblocks/genesis-os";
 
 export const useHandleExecuteStep = () => {
+  const { t } = useT("logic.workflow");
   const { mutateAsync: stepExecute } = useStepExecute();
   const { mutateAsync: executeTriggerListener } = useExecuteTriggerListener();
   const { mutateAsync: updateWorkflow } = useUpdateWorkflow();
@@ -43,8 +45,8 @@ export const useHandleExecuteStep = () => {
       const detail =
         typeof errors === "string"
           ? errors
-          : Object.values(errors ?? {}).join(" ") || "Could not listen for this trigger.";
-      showErrorToast({ title: "Error", errors: detail });
+          : Object.values(errors ?? {}).join(" ") || t("USE_HANDLE_EXECUTE_STEP.COULD_NOT_LISTEN_FOR");
+      showErrorToast({ title: t("common:ERROR"), errors: detail });
       return false;
     }
 
@@ -104,7 +106,7 @@ export const useHandleExecuteStep = () => {
         setNextExecutionId(stepResp.itemId);
       }
     } catch {
-      showErrorToast({ title: "Error", errors: "Failed to execute step" });
+      showErrorToast({ title: t("common:ERROR"), errors: t("USE_HANDLE_EXECUTE_STEP.FAILED_TO_EXECUTE_STEP") });
     }
   };
 
@@ -120,11 +122,11 @@ export const useHandleExecuteStep = () => {
         onPointerDown={(e) => e.stopPropagation()}
       >
         <DialogHeader>
-          <DialogTitle>Select Trigger Node</DialogTitle>
+          <DialogTitle>{t("USE_HANDLE_EXECUTE_STEP.SELECT_TRIGGER_NODE")}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-2 py-4">
           <p className="text-sm text-medium-emphasis mb-2">
-            Multiple trigger nodes found. Please select which trigger to listen for:
+            {t("USE_HANDLE_EXECUTE_STEP.MULTIPLE_TRIGGER_NODES_FOUND")}
           </p>
           {triggerSelectionNodes.map((node) => (
             <Button 

@@ -1,19 +1,23 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideTriggerErrorTriggerV2 = () => (
-  <GuideContent
-    title="Error Trigger"
-    description="Use this trigger to start this workflow when a run of another workflow fails."
-    steps={[
-      "Add the Error Trigger and the nodes that should react, for example Send Mail.",
-      "Publish this workflow. A production failure runs the published version.",
-      "Open the other workflow's ⋮ menu, choose Settings, turn on Alert on failure and select this workflow. Publish it again so production runs use the alert.",
-    ]}
-    notes={[
-      "The output has the failed run in {{ $json.execution }} (workflowId, workflowName, executionId, mode, startedAt, finishedAt and error).",
-      "Turn on Run on test mode to also run when a test run (Execute workflow) of the other workflow fails. That uses this workflow's saved draft, and {{ $json.execution.mode }} is \"Test\". A failed Test step never starts it.",
-      "Test step on this trigger uses sample data.",
-      "A workflow can have one Error Trigger.",
-    ]}
-  />
-);
+export const NodeGuideTriggerErrorTriggerV2 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_TRIGGER_ERROR_TRIGGER_V2.ERROR_TRIGGER")}
+      description={t("NODE_GUIDE_TRIGGER_ERROR_TRIGGER_V2.USE_THIS_TRIGGER_TO")}
+      steps={[
+        t("NODE_GUIDE_TRIGGER_ERROR_TRIGGER_V2.ADD_THE_ERROR_TRIGGER"),
+        t("NODE_GUIDE_TRIGGER_ERROR_TRIGGER_V2.PUBLISH_THIS_WORKFLOW"),
+        t("NODE_GUIDE_TRIGGER_ERROR_TRIGGER_V2.OPEN_THE_OTHER_WORKFLOW"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_TRIGGER_ERROR_TRIGGER_V2.THE_OUTPUT_HAS_THE"),
+        t("NODE_GUIDE_TRIGGER_ERROR_TRIGGER_V2.TURN_ON_RUN_ON"),
+        t("NODE_GUIDE_TRIGGER_ERROR_TRIGGER_V2.TEST_STEP_ON_THIS"),
+        t("NODE_GUIDE_TRIGGER_ERROR_TRIGGER_V2.A_WORKFLOW_CAN_HAVE"),
+      ]}
+    />
+  );
+};

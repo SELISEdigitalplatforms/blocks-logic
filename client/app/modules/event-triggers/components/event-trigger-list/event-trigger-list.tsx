@@ -13,9 +13,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { BlocksEventFlag, IBlocksEventCatalogItem } from "../../types/event-triggers.type";
-
-export const READ_ONLY_TOOLTIP = "You need workflow manage permission";
-export const FUNCTION_HEADER_TOOLTIP = "Saved for function triggers. Functions do not use it yet.";
+import { useT } from "@seliseblocks/genesis-os";
 
 const COLUMN_COUNT = 5;
 const SKELETON_ROW_KEYS = ["skeleton-1", "skeleton-2", "skeleton-3", "skeleton-4", "skeleton-5"];
@@ -50,13 +48,15 @@ const FlagSwitch = ({
   isSaving: boolean;
   onToggle: EventTriggerListProps["onToggle"];
 }) => {
-  const target = flag === "isValidForWorkflow" ? "workflows" : "functions";
+  const { t } = useT("logic.event-triggers");
+  const target =
+    flag === "isValidForWorkflow" ? t("EVENT_TRIGGER_LIST.TARGET_WORKFLOWS") : t("EVENT_TRIGGER_LIST.TARGET_FUNCTIONS");
   const control = (
     <div className="flex items-center gap-2">
       <Switch
         checked={item[flag]}
         disabled={!canManage || isSaving}
-        aria-label={`Enable ${item.label} for ${target}`}
+        aria-label={t("EVENT_TRIGGER_LIST.ENABLE_FOR", { label: item.label, target })}
         onCheckedChange={(next) => onToggle(item, flag, next)}
       />
       {isSaving && <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-muted-foreground" />}
@@ -73,32 +73,33 @@ const FlagSwitch = ({
           {control}
         </span>
       </TooltipTrigger>
-      <TooltipContent>{READ_ONLY_TOOLTIP}</TooltipContent>
+      <TooltipContent>{t("EVENT_TRIGGER_LIST.READ_ONLY_TOOLTIP")}</TooltipContent>
     </Tooltip>
   );
 };
 
 export const EventTriggerList = ({ items, isLoading, canManage, pending, onToggle }: EventTriggerListProps) => {
+  const { t } = useT("logic.event-triggers");
   return (
     // Wide on purpose: on a tablet the table scrolls sideways instead of squeezing the columns.
     <div className="overflow-x-auto">
       <Table className="min-w-[860px] border-separate border-spacing-y-4">
         <TableHeader className="[&_tr]:border-0">
           <TableRow className="border-0">
-            <HeaderCell>Event</HeaderCell>
-            <HeaderCell>Service</HeaderCell>
-            <HeaderCell>Description</HeaderCell>
-            <HeaderCell>Workflow</HeaderCell>
+            <HeaderCell>{t("EVENT_TRIGGER_LIST.EVENT")}</HeaderCell>
+            <HeaderCell>{t("EVENT_TRIGGER_LIST.SERVICE")}</HeaderCell>
+            <HeaderCell>{t("common:DESCRIPTION")}</HeaderCell>
+            <HeaderCell>{t("EVENT_TRIGGER_LIST.WORKFLOW")}</HeaderCell>
             <HeaderCell>
               <span className="inline-flex items-center gap-1">
-                Function
+                {t("EVENT_TRIGGER_LIST.FUNCTION")}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button type="button" aria-label={FUNCTION_HEADER_TOOLTIP} className="inline-flex text-muted-foreground">
+                    <button type="button" aria-label={t("EVENT_TRIGGER_LIST.FUNCTION_HEADER_TOOLTIP")} className="inline-flex text-muted-foreground">
                       <Info aria-hidden="true" className="h-4 w-4" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>{FUNCTION_HEADER_TOOLTIP}</TooltipContent>
+                  <TooltipContent>{t("EVENT_TRIGGER_LIST.FUNCTION_HEADER_TOOLTIP")}</TooltipContent>
                 </Tooltip>
               </span>
             </HeaderCell>

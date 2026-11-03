@@ -19,13 +19,16 @@ import { cloneHandle, findNodeDefinition } from "../../utils/node-upgraders";
 import { NodeSchemasDefinition } from "../node-schemas";
 import { v4 as uuidv4 } from "uuid";
 import { findFreePosition } from "../../utils/find-free-position";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
 
 // Panel order of the categories; nodes inside each are sorted by title.
 const NODE_CATEGORIES = [
-  { key: "trigger", label: "Triggers" },
-  { key: "logic", label: "Logic" },
-  { key: "transform", label: "Transform" },
-  { key: "action", label: "Actions" },
+  { key: "trigger", labelKey: "NODE_LIBRARY_PANEL.CATEGORY_TRIGGERS" },
+  { key: "logic", labelKey: "NODE_LIBRARY_PANEL.CATEGORY_LOGIC" },
+  { key: "transform", labelKey: "NODE_LIBRARY_PANEL.CATEGORY_TRANSFORM" },
+  { key: "action", labelKey: "NODE_LIBRARY_PANEL.CATEGORY_ACTIONS" },
 ];
 
 type NodeLibraryPanelProps = {
@@ -34,9 +37,10 @@ type NodeLibraryPanelProps = {
 };
 
 export const NodeLibraryPanel = ({
-  title = "Add a node",
-  description = "Search or browse by category.",
+  title = tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_LIBRARY_PANEL.ADD_A_NODE"),
+  description = tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_LIBRARY_PANEL.SEARCH_OR_BROWSE_BY_CATEGORY"),
 }: NodeLibraryPanelProps) => {
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const {
     isPanelOpen,
     closeNodeLibraryPanel,
@@ -69,6 +73,7 @@ export const NodeLibraryPanel = ({
   )
     .map((category) => ({
       ...category,
+      label: t(category.labelKey),
       options: filteredOptions
         .filter((option) => option.category === category.key)
         .sort((a, b) => a.title.localeCompare(b.title)),
@@ -176,14 +181,14 @@ export const NodeLibraryPanel = ({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search nodes"
+                placeholder={t("NODE_LIBRARY_PANEL.SEARCH_NODES")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
-            <div role="tablist" aria-label="Node categories" className="flex flex-wrap gap-1.5">
-              {[{ key: "all", label: "All" }, ...NODE_CATEGORIES].map((category) => (
+            <div role="tablist" aria-label={t("NODE_LIBRARY_PANEL.NODE_CATEGORIES")} className="flex flex-wrap gap-1.5">
+              {[{ key: "all", labelKey: "common:ALL" }, ...NODE_CATEGORIES].map((category) => (
                 <button
                   key={category.key}
                   type="button"
@@ -197,7 +202,7 @@ export const NodeLibraryPanel = ({
                       : "text-medium-emphasis hover:bg-accent",
                   )}
                 >
-                  {category.label}
+                  {t(category.labelKey)}
                 </button>
               ))}
             </div>
@@ -227,7 +232,7 @@ export const NodeLibraryPanel = ({
                         <span className="text-sm font-semibold text-high-emphasis">{option.title}</span>
                         {option.isComingSoon && (
                           <Badge variant="info" className="ml-auto h-fit w-fit">
-                            Coming soon
+                            {t("NODE_LIBRARY_PANEL.COMING_SOON")}
                           </Badge>
                         )}
                       </span>
@@ -241,7 +246,7 @@ export const NodeLibraryPanel = ({
             ))}
             {groups.length === 0 && (
               <div className="py-8 text-center text-sm text-muted-foreground">
-                No nodes match &quot;{searchQuery}&quot;
+                {t("NODE_LIBRARY_PANEL.NO_NODES_MATCH", { searchQuery })}
               </div>
             )}
           </div>
