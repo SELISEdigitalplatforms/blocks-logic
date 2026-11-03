@@ -18,7 +18,7 @@ import {
 	Merge,
 	Filter,
 	BetweenHorizontalStart,
-	Zap,
+	// Zap, // Blocks Event trigger is commented out below.
 	TriangleAlert,
 } from "lucide-react";
 import { deriveMergeHandle } from "@blocks-workflow/utils/merge-handles";
@@ -69,20 +69,21 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 			targets: [],
 		},
 	},
-	{
-		id: "trigger-blocksEvent-v2",
-		icon: <Zap className="h-5 w-5 text-amber-500" />,
-		title: "Blocks Event",
-		description: "Starts the workflow when a Blocks service sends the selected event.",
-		type: "blocksEvent",
-		category: "trigger",
-		version: "v2",
-		defaultName: "Blocks Event",
-		handle: {
-			sources: [{ key: "source", label: "" }],
-			targets: [],
-		},
-	},
+	// Hotfix: Blocks Event trigger hidden from workflows for now.
+	// {
+	// 	id: "trigger-blocksEvent-v2",
+	// 	icon: <Zap className="h-5 w-5 text-amber-500" />,
+	// 	title: "Blocks Event",
+	// 	description: "Starts the workflow when a Blocks service sends the selected event.",
+	// 	type: "blocksEvent",
+	// 	category: "trigger",
+	// 	version: "v2",
+	// 	defaultName: "Blocks Event",
+	// 	handle: {
+	// 		sources: [{ key: "source", label: "" }],
+	// 		targets: [],
+	// 	},
+	// },
 	{
 		id: "trigger-errorTrigger-v2",
 		icon: <TriangleAlert className="h-5 w-5 text-error" />,
