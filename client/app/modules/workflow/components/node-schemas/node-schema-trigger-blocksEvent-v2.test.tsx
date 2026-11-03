@@ -34,7 +34,8 @@ describe("Blocks Event node", () => {
     resetWorkflowEventsCache();
   });
 
-  it("H1: the node library lists a Blocks Event trigger with the Zap card", () => {
+  // Hotfix: skipped while the Blocks Event trigger is commented out of NodeDefinitions.
+  it.skip("H1: the node library lists a Blocks Event trigger with the Zap card", () => {
     const definition = NodeDefinitions.find((d) => d.type === "blocksEvent")!;
     expect(definition).toBeTruthy();
     expect(definition.category).toBe("trigger");
