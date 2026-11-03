@@ -58,7 +58,7 @@ export const CalloutAccordionDisplayField = ({
         value="item-1"
         className="rounded-lg border bg-slate-50/50 px-4 dark:border-blue-900/50 dark:bg-blue-950/20"
       >
-        <AccordionTrigger className="py-3 hover:no-underline">
+        <AccordionTrigger className="py-3 hover:bg-transparent hover:no-underline">
           <div className="flex items-center gap-2 text-left">
             <Info className="h-4 w-4 shrink-0 text-slate-500 dark:text-blue-500" />
             <div className="text-sm font-medium text-slate-700 dark:text-blue-400">
