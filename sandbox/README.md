@@ -229,6 +229,43 @@ by a timer that would only run once the disk was already full.
 Runs are queued by the control plane, not from here. To queue one by hand for a test, use
 `FunctionRunnerTests/verify/verify.sh`'s `enqueue_run` helper.
 
+## Health: metrics and police
+
+The runner records its own state, and a separate root check watches it. Both write under
+`/var/lib/blocks-runner/metrics` (`RUNNER__MetricsDir`).
+
+What the runner records (`Health/MetricsRecorder`, every 10 s):
+
+- `samples-<yyyyMMddHHmm>.jsonl` (UTC, 10-minute files): healthy, warm busy/idle, running
+  sandboxes, per stream (runs, event runs, tests, builds) length, pending and lag, RAM, swap,
+  cache, CPU, load, Docker disk, shims, orphan shims, containers. Kept **1 hour**.
+- `events-<yyyyMMdd>.jsonl`: a line when a sample crosses a limit (RAM free under 10%, swap over
+  80%, CPU over 90%, disk over 85%, orphan shims, stream lag over 100, not healthy), once on
+  entry and at most every 10 min while it lasts; and every runner Error/Critical log, at most
+  60 a minute (extras are counted in one summary line). Kept **7 days**.
+- `gc-last.json`: when the last image sweep ran and what it removed.
+
+`fnctl police --fix` (root, from a timer every minute) does not trust the runner. It checks the
+service, the newest sample (under 60 s), orphan containerd shims, paused warm sandboxes past
+their age limit, sandboxes past the hard limit, unlabelled `blocks-fn-artifact` images, the last
+image sweep (under 2 h) and RAM/swap/disk. It ends only shims whose container Docker no longer
+lists and that are older than 2 min (SIGTERM, then SIGKILL after 5 s). It writes WARN and FAIL to
+`police-<yyyyMMdd>.jsonl` (kept 7 days) and exits 1 on any FAIL.
+
+Commands (`--dir PATH` reads another directory):
+
+```
+fnctl stats            # latest sample; warns if it is older than 60 s
+fnctl stats --hour     # last hour per 5 minutes: min/avg/max
+fnctl events           # last 7 days, newest first; --days N, --errors
+fnctl watch            # stats every 2 s until Ctrl+C
+fnctl police [--fix]   # the independent check
+```
+
+No manual step: `make install` (so every `deploy.sh`) installs and enables the police timer
+(units in `deploy/`), and `deploy.sh` phase 6 runs `fnctl police --fix` and fails the deploy on
+any FAIL.
+
 ## Security
 
 See `SECURITY.md`. The short version: gVisor is mandatory and never falls back — for dependency
