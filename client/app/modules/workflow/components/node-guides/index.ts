@@ -2,6 +2,7 @@ export { NodeGuideActionAiAgentV1 } from "./node-guide-action-aiAgent-v1";
 export { NodeGuideActionDataActionV1 } from "./node-guide-action-dataAction-v1";
 export { NodeGuideActionFunction } from "./node-guide-action-function";
 export { NodeGuideActionHttpRequestV1 } from "./node-guide-action-httpRequest-v1";
+export { NodeGuideActionNotification } from "./node-guide-action-notification";
 export { NodeGuideActionProxy } from "./node-guide-action-proxy";
 export { NodeGuideActionSendMailV1 } from "./node-guide-action-sendMail-v1";
 export { NodeGuideLogicIfV1 } from "./node-guide-logic-if-v1";
