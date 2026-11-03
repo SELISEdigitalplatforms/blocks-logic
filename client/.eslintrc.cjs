@@ -1,3 +1,8 @@
+const {
+  noHardcodedTextRule,
+  hardcodedTextExemptFiles,
+} = require("@seliseblocks/genesis-os/eslint");
+
 module.exports = {
   root: true,
   env: {
@@ -48,33 +53,14 @@ module.exports = {
         caughtErrorsIgnorePattern: "^_",
       },
     ],
-    // Naming conventions. Kept intentionally permissive to match the code that exists today
-    // (see CONTRIBUTING.md for the target conventions); ratchet toward stricter formats over time.
-    // Object/property/import names are left unchecked because they mirror server wire fields.
     // No hard-coded user-facing text: JSX text and the placeholder/title/alt/aria-label attributes must come
     // from an i18n key (useT/tStatic) in the owning module's .en.json. Other languages come from the
     // localization service. Text needs two lowercase letters to match, so acronyms (SAST, OK) pass; a genuinely
     // non-translatable token gets an eslint-disable-next-line with its reason.
-    "no-restricted-syntax": [
-      "error",
-      {
-        selector: "JSXText[value=/[a-z]{2,}/]",
-        message:
-          "User-facing text must use an i18n key (useT/tStatic) in the module's .en.json, not a hard-coded string.",
-      },
-      {
-        selector:
-          "JSXAttribute[name.name=/^(placeholder|title|alt|aria-label)$/] > Literal[value=/[a-z]{2,}/]",
-        message:
-          "User-facing text must use an i18n key (useT/tStatic) in the module's .en.json, not a hard-coded string.",
-      },
-      {
-        selector:
-          "JSXAttribute[name.name=/^(placeholder|title|alt|aria-label)$/] > JSXExpressionContainer > TemplateLiteral[expressions.length=0][quasis.0.value.raw=/[a-z]{2,}/]",
-        message:
-          "User-facing text must use an i18n key (useT/tStatic) in the module's .en.json, not a hard-coded string.",
-      },
-    ],
+    "no-restricted-syntax": noHardcodedTextRule,
+    // Naming conventions. Kept intentionally permissive to match the code that exists today
+    // (see CONTRIBUTING.md for the target conventions); ratchet toward stricter formats over time.
+    // Object/property/import names are left unchecked because they mirror server wire fields.
     "@typescript-eslint/naming-convention": [
       "warn",
       {
@@ -109,14 +95,7 @@ module.exports = {
   overrides: [
     {
       // Tests, stories and test helpers may use literal text.
-      files: [
-        "**/*.test.{ts,tsx}",
-        "**/*.spec.{ts,tsx}",
-        "**/*.stories.{ts,tsx}",
-        "**/__tests__/**",
-        "**/__mocks__/**",
-        "**/test-utils/**",
-      ],
+      files: [...hardcodedTextExemptFiles],
       rules: { "no-restricted-syntax": "off" },
     },
   ],
