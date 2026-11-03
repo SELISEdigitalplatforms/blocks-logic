@@ -16,7 +16,7 @@ import {
   Braces,
 } from "lucide-react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT, tStatic } from "@seliseblocks/genesis-os";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { Badge } from "@/components/ui-kits/badge/badge";
 import { Button } from "@/components/ui-kits/button/button";
@@ -45,6 +45,7 @@ import { ScheduleTimingFields } from "../../components/schedule-timing-fields";
 import { UTC } from "../../utils/timezone";
 
 export const ScheduleDetails = () => {
+  const { t } = useT("logic.scheduler");
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { pathname } = useLocation();
@@ -71,7 +72,7 @@ export const ScheduleDetails = () => {
 
   useEffect(() => {
     if (scheduleId && isFetched && !isLoading && !schedule) {
-      showErrorToast({ errors: "Schedule not found" });
+      showErrorToast({ errors: tStatic("logic.scheduler", "SCHEDULE_DETAILS.SCHEDULE_NOT_FOUND") });
       navigate(scoped("/app/schedule"));
     }
   }, [scheduleId, isFetched, isLoading, schedule, navigate, scoped]);
@@ -98,11 +99,11 @@ export const ScheduleDetails = () => {
       });
       if (!res.isSuccess) return showErrorToast({ errors: res.errors });
       showSuccessToast({
-        description: checked ? "Schedule activated." : "Schedule deactivated.",
+        description: checked ? t("SCHEDULE_DETAILS.SCHEDULE_ACTIVATED") : t("SCHEDULE_DETAILS.SCHEDULE_DEACTIVATED"),
       });
     } catch (error) {
       if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to update schedule status" });
+      return showErrorToast({ errors: t("SCHEDULE_DETAILS.FAILED_TO_UPDATE_SCHEDULE") });
     }
   };
 
@@ -139,13 +140,13 @@ export const ScheduleDetails = () => {
           <div>
             <div className="flex items-center gap-2.5">
               <h1 className="text-2xl font-bold tracking-tight">
-                {schedule.name || "Untitled Schedule"}
+                {schedule.name || t("SCHEDULE_DETAILS.UNTITLED_SCHEDULE")}
               </h1>
               <Badge
                 variant={schedule.isActive ? "success" : "error"}
                 className="rounded-md px-2.5 py-0.5 text-xs font-semibold"
               >
-                {schedule.isActive ? "Active" : "Inactive"}
+                {schedule.isActive ? t("SCHEDULE_DETAILS.ACTIVE") : t("SCHEDULE_DETAILS.INACTIVE")}
               </Badge>
               {/* {isInternal && (
                 <Badge variant="info" className="rounded-md px-2 py-0.5 text-xs">
@@ -162,7 +163,7 @@ export const ScheduleDetails = () => {
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Status</span>
+              <span className="text-xs font-medium text-muted-foreground">{t("common:STATUS")}</span>
               <Switch
                 size="md"
                 checked={schedule.isActive}
@@ -179,7 +180,7 @@ export const ScheduleDetails = () => {
               onClick={() => navigate(scoped(`schedule/${schedule.itemId}/edit`))}
             >
               <Pen className="h-3.5 w-3.5" />
-              Edit
+              {t("common:EDIT")}
             </Button>
 
             <Button
@@ -190,7 +191,7 @@ export const ScheduleDetails = () => {
               onClick={() => setIsDeleteDialogOpen(true)}
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Delete
+              {t("common:DELETE")}
             </Button>
           </div>
         </div>
@@ -199,10 +200,10 @@ export const ScheduleDetails = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col gap-4">
           <TabsList className="w-fit">
             <TabsTrigger value="general" className="gap-2">
-              Overview
+              {t("SCHEDULE_DETAILS.OVERVIEW")}
             </TabsTrigger>
             <TabsTrigger value="executions" className="gap-2">
-              Executions
+              {t("SCHEDULE_DETAILS.EXECUTIONS")}
             </TabsTrigger>
           </TabsList>
 
@@ -218,12 +219,12 @@ export const ScheduleDetails = () => {
                       <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <CalendarClock className="h-4 w-4" />
                       </span>
-                      <CardTitle className="text-base">Timing & Schedule</CardTitle>
+                      <CardTitle className="text-base">{t("SCHEDULE_DETAILS.TIMING_SCHEDULE")}</CardTitle>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <span className="text-xs font-medium text-muted-foreground">Cron Expression</span>
+                      <span className="text-xs font-medium text-muted-foreground">{t("SCHEDULE_DETAILS.CRON_EXPRESSION")}</span>
                       <div className="mt-1 flex items-center gap-2">
                         <code className="rounded bg-muted px-2.5 py-1 font-mono text-sm font-semibold text-foreground">
                           {schedule.cronExpression}
@@ -235,8 +236,7 @@ export const ScheduleDetails = () => {
                         )}
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Evaluated in {timeZone}
-                      </p>
+                        {t("SCHEDULE_DETAILS.EVALUATED_IN", { timeZone })}</p>
                     </div>
 
                     <ScheduleTimingFields schedule={schedule} />
@@ -251,9 +251,9 @@ export const ScheduleDetails = () => {
                         <Braces className="h-4 w-4" />
                       </span>
                       <div>
-                        <CardTitle className="text-base">Payload</CardTitle>
+                        <CardTitle className="text-base">{t("SCHEDULE_DETAILS.PAYLOAD")}</CardTitle>
                         <CardDescription>
-                          Body sent to the webhook endpoint upon invocation.
+                          {t("SCHEDULE_DETAILS.BODY_SENT_TO_THE")}
                         </CardDescription>
                       </div>
                     </div>
@@ -267,12 +267,12 @@ export const ScheduleDetails = () => {
                         {copiedKey === "payload" ? (
                           <>
                             <Check className="h-3.5 w-3.5 text-green-500" />
-                            Copied
+                            {t("common:COPIED")}
                           </>
                         ) : (
                           <>
                             <Copy className="h-3.5 w-3.5" />
-                            Copy Payload
+                            {t("SCHEDULE_DETAILS.COPY_PAYLOAD")}
                           </>
                         )}
                       </Button>
@@ -296,7 +296,7 @@ export const ScheduleDetails = () => {
                         className="overflow-hidden rounded-lg border"
                       />
                     ) : (
-                      <p className="text-sm text-muted-foreground">No payload specified.</p>
+                      <p className="text-sm text-muted-foreground">{t("SCHEDULE_DETAILS.NO_PAYLOAD_SPECIFIED")}</p>
                     )}
                   </CardContent>
                 </Card>
@@ -310,12 +310,12 @@ export const ScheduleDetails = () => {
                       <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <Webhook className="h-4 w-4" />
                       </span>
-                      <CardTitle className="text-base">Webhook Configuration</CardTitle>
+                      <CardTitle className="text-base">{t("SCHEDULE_DETAILS.WEBHOOK_CONFIGURATION")}</CardTitle>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <span className="text-xs font-medium text-muted-foreground">Endpoint URL</span>
+                      <span className="text-xs font-medium text-muted-foreground">{t("SCHEDULE_DETAILS.ENDPOINT_URL")}</span>
                       <div className="mt-1 flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2">
                         <Badge variant="outline" className="font-mono text-xs uppercase">
                           {schedule.webhook?.method || "POST"}
@@ -341,14 +341,14 @@ export const ScheduleDetails = () => {
                     </div>
 
                     <div>
-                      <span className="text-xs font-medium text-muted-foreground">Signing Secret</span>
+                      <span className="text-xs font-medium text-muted-foreground">{t("SCHEDULE_DETAILS.SIGNING_SECRET")}</span>
                       <div className="mt-1 flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2">
                         <span className="font-mono text-xs text-foreground">
                           {schedule.webhook?.signingSecret
                             ? showSecret
                               ? schedule.webhook.signingSecret
                               : "••••••••••••••••••••••••••••••"
-                            : "None"}
+                            : t("SCHEDULE_DETAILS.NONE")}
                         </span>
                         {schedule.webhook?.signingSecret && (
                           <div className="flex items-center gap-1">
@@ -384,9 +384,9 @@ export const ScheduleDetails = () => {
                     </div>
 
                     <div>
-                      <span className="text-xs font-medium text-muted-foreground">Custom Headers</span>
+                      <span className="text-xs font-medium text-muted-foreground">{t("SCHEDULE_DETAILS.CUSTOM_HEADERS")}</span>
                       {headersList.length === 0 ? (
-                        <p className="mt-1 text-xs text-muted-foreground">No custom headers configured.</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{t("SCHEDULE_DETAILS.NO_CUSTOM_HEADERS_CONFIGURED")}</p>
                       ) : (
                         <div className="mt-1.5 space-y-1.5">
                           {headersList.map(([key, value]) => (

@@ -7,12 +7,14 @@ import { Button } from "@/components/ui-kits/button/button";
 import { Input } from "@/components/ui-kits/input/input";
 import { FieldProps } from "../form-field.types";
 import { emptySplitOutField, splitOutFields, toFieldPath, type SplitOutField } from "@blocks-workflow/utils/split-out";
+import { useT } from "@seliseblocks/genesis-os";
 
 /**
  * Split Out's `fields`: one row per field to split, each with an optional output field name. Several rows
  * are combined by position, as in n8n.
  */
 export const SplitOutFieldsField = ({ field, value, onChange, readOnly }: FieldProps<SplitOutField[]>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   // Rows are kept here so an empty row (just added) stays on screen until it is filled in.
   const [rows, setRows] = useState<SplitOutField[]>(() => {
     const saved = splitOutFields(value);
@@ -42,11 +44,11 @@ export const SplitOutFieldsField = ({ field, value, onChange, readOnly }: FieldP
         <div key={index} className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] items-center gap-2">
           <Input
             id={index === 0 ? field.id : `${field.id}.${index}`}
-            aria-label={`Field to split out ${index + 1}`}
-            title="The name of the input field to break out into separate items."
+            aria-label={t("SPLIT_OUT_FIELDS_FIELD.FIELD_TO_SPLIT_OUT", { value: index + 1 })}
+            title={t("SPLIT_OUT_FIELDS_FIELD.THE_NAME_OF_THE")}
             className="font-mono"
             value={row.fieldName}
-            placeholder="Drag a field from the left or type its name"
+            placeholder={t("SPLIT_OUT_FIELDS_FIELD.DRAG_A_FIELD_FROM")}
             disabled={locked}
             readOnly={readOnly}
             onChange={(e) => update(index, { fieldName: e.target.value })}
@@ -56,10 +58,10 @@ export const SplitOutFieldsField = ({ field, value, onChange, readOnly }: FieldP
           />
           <Input
             id={`${field.id}.${index}.outputFieldName`}
-            aria-label={`Output field name ${index + 1}`}
-            title="The field in the output under which to put the split field contents. Optional: empty keeps the field name."
+            aria-label={t("SPLIT_OUT_FIELDS_FIELD.OUTPUT_FIELD_NAME", { value: index + 1 })}
+            title={t("SPLIT_OUT_FIELDS_FIELD.THE_FIELD_IN_THE")}
             value={row.outputFieldName}
-            placeholder="Output field name"
+            placeholder={t("SPLIT_OUT_FIELDS_FIELD.OUTPUT_FIELD_NAME_2")}
             disabled={locked}
             readOnly={readOnly}
             onChange={(e) => update(index, { outputFieldName: e.target.value })}
@@ -68,7 +70,7 @@ export const SplitOutFieldsField = ({ field, value, onChange, readOnly }: FieldP
             type="button"
             variant="ghost"
             size="icon"
-            aria-label={`Remove field ${index + 1}`}
+            aria-label={t("SPLIT_OUT_FIELDS_FIELD.REMOVE_FIELD", { value: index + 1 })}
             disabled={locked || rows.length === 1}
             className="h-8 w-8 hover:text-destructive"
             onClick={() => emit(rows.filter((_, i) => i !== index))}
@@ -85,11 +87,11 @@ export const SplitOutFieldsField = ({ field, value, onChange, readOnly }: FieldP
         className="border border-dashed text-primary"
         onClick={() => emit([...rows, emptySplitOutField()])}
       >
-        <Plus className="mr-1 h-4 w-4" /> Add field
+        <Plus className="mr-1 h-4 w-4" /> {t("SPLIT_OUT_FIELDS_FIELD.ADD_FIELD")}
       </Button>
       {rows.filter((row) => row.fieldName.trim()).length > 1 && (
         <p className="text-xs text-muted-foreground">
-          Several fields are combined by position: the first new item gets the first element of each field, and so on.
+          {t("SPLIT_OUT_FIELDS_FIELD.SEVERAL_FIELDS_ARE_COMBINED")}
         </p>
       )}
     </div>

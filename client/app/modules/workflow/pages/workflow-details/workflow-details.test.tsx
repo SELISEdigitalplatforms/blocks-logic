@@ -60,13 +60,13 @@ const workflow = (extra: Record<string, unknown> = {}) => ({
   },
 });
 
-const renderPage = () => {
+const renderPage = (path = PATH) => {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[PATH]}>
+      <MemoryRouter initialEntries={[path]}>
         <TooltipProvider>
           <Routes>
             <Route path="/:scope/app/workflow/:id" element={<WorkflowDetails />} />
@@ -106,6 +106,18 @@ describe("WorkflowDetails", () => {
     await screen.findByRole("button", { name: /save/i });
     expect(screen.getByText("Wf1")).toBeTruthy();
     expect(BREADCRUMB_CUSTOM_TITLES[PATH]).toBeUndefined();
+  });
+
+  it("opens the tab named in the URL, so a reload keeps the open tab", async () => {
+    renderPage(`${PATH}?tab=executions`);
+    const tab = await screen.findByRole("tab", { name: "Executions" });
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("falls back to the editor for an unknown tab in the URL", async () => {
+    renderPage(`${PATH}?tab=nope`);
+    const tab = await screen.findByRole("tab", { name: "Editor" });
+    expect(tab.getAttribute("aria-selected")).toBe("true");
   });
 
   it("lists rename, duplicate, settings, export and delete in the actions menu", async () => {

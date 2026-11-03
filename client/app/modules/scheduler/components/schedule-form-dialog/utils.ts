@@ -3,16 +3,19 @@ import { format } from "date-fns";
 import { isParseableUrl, parseDateString } from "@/lib/utils";
 import { formatInZone, UTC, zonedDateToUtcIso } from "../../utils/timezone";
 import { validateCronExpression } from "./cron-validation";
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_SCHEDULER_MODULE = "logic.scheduler";
 
 export const WEBHOOK_METHODS = ["POST", "GET", "PUT", "PATCH", "DELETE"] as const;
 
 export const CRON_PRESETS = [
-  { label: "Every minute", value: "* * * * *" },
-  { label: "Hourly", value: "0 * * * *" },
-  { label: "Daily 9 AM", value: "0 9 * * *" },
-  { label: "Weekdays 9 AM", value: "0 9 * * MON-FRI" },
-  { label: "Weekly Mon", value: "0 9 * * MON" },
-  { label: "Monthly 1st", value: "0 9 1 * *" },
+  { get label() { return tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.EVERY_MINUTE"); }, value: "* * * * *" },
+  { get label() { return tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.HOURLY"); }, value: "0 * * * *" },
+  { get label() { return tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.DAILY_9_AM"); }, value: "0 9 * * *" },
+  { get label() { return tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.WEEKDAYS_9_AM"); }, value: "0 9 * * MON-FRI" },
+  { get label() { return tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.WEEKLY_MON"); }, value: "0 9 * * MON" },
+  { get label() { return tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.MONTHLY_1ST"); }, value: "0 9 1 * *" },
 ] as const;
 
 const webhookHeadersSchema = z.array(
@@ -24,18 +27,18 @@ const webhookHeadersSchema = z.array(
 
 export const scheduleFormSchema = z
   .object({
-    name: z.string().trim().min(1, "Name is required").max(100, "Name cannot exceed 100 characters"),
-    description: z.string().max(500, "Description cannot exceed 500 characters"),
+    name: z.string().trim().min(1, { error: () => tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.NAME_IS_REQUIRED") }).max(100, { error: () => tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.NAME_TOO_LONG") }),
+    description: z.string().max(500, { error: () => tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.DESCRIPTION_TOO_LONG") }),
     webhook: z.object({
 
-      url: z.string().min(1, "Webhook URL is required").refine(isParseableUrl, "Enter a valid URL"),
+      url: z.string().min(1, { error: () => tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.WEBHOOK_URL_IS_REQUIRED") }).refine(isParseableUrl, { error: () => tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.ENTER_A_VALID_URL") }),
       method: z.string().default("POST"),
       headers: webhookHeadersSchema,
       signingSecret: z.string(),
     }),
     cronExpression: z
       .string()
-      .min(1, "Cron expression is required")
+      .min(1, { error: () => tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.CRON_EXPRESSION_IS_REQUIRED") })
       .superRefine((value, ctx) => {
         if (!value) return;
         const error = validateCronExpression(value);
@@ -51,11 +54,11 @@ export const scheduleFormSchema = z
           return false;
         }
       },
-      { message: "Payload must be valid JSON" },
+      { error: () => tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.PAYLOAD_MUST_BE_VALID") },
     ),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
-    timeZone: z.string().min(1, "Timezone is required"),
+    timeZone: z.string().min(1, { error: () => tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.TIMEZONE_IS_REQUIRED") }),
     isActive: z.boolean(),
   })
   .superRefine((values, ctx) => {
@@ -66,7 +69,7 @@ export const scheduleFormSchema = z
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "End date must be after start date",
+        message: tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.END_DATE_MUST_BE"),
         path: ["endDate"],
       });
     }
@@ -75,7 +78,7 @@ export const scheduleFormSchema = z
       if (header.key.trim() && !header.value.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Header value is required when a key is set",
+          message: tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.HEADER_VALUE_IS_REQUIRED"),
           path: ["webhook", "headers", index, "value"],
         });
       }

@@ -1,7 +1,7 @@
 "use client";
 
 import Editor, { useMonaco, type Monaco, type OnMount } from "@monaco-editor/react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import { FieldProps } from "../form-field.types";
 import { cn } from "@/lib/utils";
@@ -88,6 +88,14 @@ const getMonacoLanguage = (value: string | undefined): string => {
   return "javascript";
 };
 
+// The editor grows with its content between these bounds; past the max it
+// scrolls internally and the surrounding panel scrolls for the rest.
+const MIN_EDITOR_HEIGHT = 300;
+const MAX_EDITOR_HEIGHT = 600;
+
+const clampEditorHeight = (contentHeight: number) =>
+  Math.min(MAX_EDITOR_HEIGHT, Math.max(MIN_EDITOR_HEIGHT, Math.ceil(contentHeight)));
+
 export const CodeEditorField = ({
   field,
   value,
@@ -107,6 +115,7 @@ export const CodeEditorField = ({
   const upstreamKeys = useMemo(() => configUpstreamKeys ?? [], [configUpstreamKeys]);
   const monaco = useMonaco();
   const providerRef = useRef<{ dispose: () => void } | null>(null);
+  const [editorHeight, setEditorHeight] = useState(MIN_EDITOR_HEIGHT);
 
   // Register `$...` completion provider once Monaco is loaded.
   useEffect(() => {
@@ -174,7 +183,13 @@ export const CodeEditorField = ({
     container.addEventListener("dragover", handleDragOver, true);
     container.addEventListener("drop", handleDrop, true);
 
+    setEditorHeight(clampEditorHeight(editor.getContentHeight()));
+    const contentSizeListener = editor.onDidContentSizeChange((event) => {
+      if (event.contentHeightChanged) setEditorHeight(clampEditorHeight(event.contentHeight));
+    });
+
     editor.onDidDispose(() => {
+      contentSizeListener.dispose();
       container.removeEventListener("keydown", stopKeyPropagation);
       container.removeEventListener("keyup", stopKeyPropagation);
       container.removeEventListener("keypress", stopKeyPropagation);
@@ -189,7 +204,7 @@ export const CodeEditorField = ({
   return (
     <div className={cn("relative flex-1", className)}>
       <Editor
-        height="300px"
+        height={editorHeight}
         language={language}
         theme={theme}
         value={value ?? ""}
@@ -204,6 +219,9 @@ export const CodeEditorField = ({
           automaticLayout: true,
           fixedOverflowWidgets: true,
           dropIntoEditor: { enabled: false },
+          // Let wheel events bubble to the panel when the editor has nothing
+          // left to scroll, so the Parameters tab can still scroll over it.
+          scrollbar: { alwaysConsumeMouseWheel: false },
         }}
         className="overflow-hidden rounded-md border"
       />

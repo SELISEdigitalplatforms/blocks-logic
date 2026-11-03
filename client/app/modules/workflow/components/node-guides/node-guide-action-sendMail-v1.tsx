@@ -1,24 +1,28 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideActionSendMailV1 = () => (
-  <GuideContent
-    title="Send Mail action"
-    description="Use this node to send an email from a project email template. The node asks for the template, language, recipient, and values for any dynamic template keys."
-    steps={[
-      "Select the Template you want to send.",
-      "Choose the Language version of that template.",
-      "Enter the recipient in To Email. You can use an expression when the recipient comes from the input item.",
-      "Use Map (Body) to provide values for the dynamic keys found in the selected template body. Mapped values can also use expressions.",
-      "Optionally add one or more Attachments. Each entry can be a literal storage File ID, or an expression such as {{$json.fileId}} or {{$node[\"NodeName\"].json.output.fileId}} that resolves to one.",
-      "Test with a safe recipient or sample data before enabling it in a live path.",
-    ]}
-    notes={[
-      "The node sends one email for each input item.",
-      "The output includes Success, Errors, and To so later nodes can inspect the send result.",
-      "The output also includes AttachmentCount and AttachmentsSent: the attachment entries after expressions are resolved, blank ones included. If sending throws an error, the output is an error item instead.",
-      "Attachments left blank, or that resolve to an empty/unresolvable expression, are silently skipped - no error is raised for those entries.",
-      "Template and language options are loaded from the current project.",
-      "The body mapping keys are derived from the selected template body, so changing the template can change which mappings are shown.",
-    ]}
-  />
-);
+export const NodeGuideActionSendMailV1 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_ACTION_SEND_MAIL_V1.SEND_MAIL_ACTION")}
+      description={t("NODE_GUIDE_ACTION_SEND_MAIL_V1.USE_THIS_NODE_TO")}
+      steps={[
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.SELECT_THE_TEMPLATE_YOU"),
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.CHOOSE_THE_LANGUAGE_VERSION"),
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.ENTER_THE_RECIPIENT_IN"),
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.USE_MAP_BODY_TO"),
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.OPTIONALLY_ADD_ONE_OR"),
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.TEST_WITH_A_SAFE"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.THE_NODE_SENDS_ONE"),
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.THE_OUTPUT_INCLUDES_SUCCESS"),
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.THE_OUTPUT_ALSO_INCLUDES"),
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.ATTACHMENTS_LEFT_BLANK_OR"),
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.TEMPLATE_AND_LANGUAGE_OPTIONS"),
+        t("NODE_GUIDE_ACTION_SEND_MAIL_V1.THE_BODY_MAPPING_KEYS"),
+      ]}
+    />
+  );
+};

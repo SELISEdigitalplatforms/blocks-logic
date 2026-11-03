@@ -17,6 +17,7 @@ import type { ExecutedItem, ExecutedNode } from "../../../../models/workflow.mod
 import { SchemaTab } from "./components/schema-tab";
 import { TableTab } from "./components/table-tab";
 import { JsonTab } from "./components/json-tab";
+import { useT } from "@seliseblocks/genesis-os";
 
 const getLastExecutionNodes = (
   isLastExecutionEditor: boolean,
@@ -35,6 +36,7 @@ export const InputPanel = ({
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 } = {}) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const [tab, setTab] = useState("schema");
   const {
     selectedNode,
@@ -117,11 +119,11 @@ export const InputPanel = ({
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="font-medium text-high-emphasis">Input</h3>
+          <h3 className="font-medium text-high-emphasis">{t("INPUT_PANEL.INPUT")}</h3>
           {displayPredecessors.length > 1 && (
             <Select value={resolvedPredecessorId || ""} onValueChange={setSelectedPredecessorId}>
               <SelectTrigger className="h-7 w-[160px] text-xs">
-                <SelectValue placeholder="Select node" />
+                <SelectValue placeholder={t("INPUT_PANEL.SELECT_NODE")} />
               </SelectTrigger>
               <SelectContent>
                 {displayPredecessors.map((p) => (
@@ -136,15 +138,17 @@ export const InputPanel = ({
         <div className="flex items-center gap-2">
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList>
-              <TabsTrigger value="schema">Schema</TabsTrigger>
-              <TabsTrigger value="table">Table</TabsTrigger>
+              <TabsTrigger value="schema">{t("INPUT_PANEL.SCHEMA")}</TabsTrigger>
+              <TabsTrigger value="table">{t("INPUT_PANEL.TABLE")}</TabsTrigger>
               <TabsTrigger value="json">JSON</TabsTrigger>
             </TabsList>
           </Tabs>
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
-              aria-label={isCollapsed ? "Expand input" : "Collapse input"}
+              aria-label={
+                isCollapsed ? t("INPUT_PANEL.EXPAND_INPUT") : t("INPUT_PANEL.COLLAPSE_INPUT")
+              }
               className="text-low-emphasis hover:bg-surface-hover rounded p-1 transition-colors"
             >
               {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
@@ -170,8 +174,8 @@ export const InputPanel = ({
         <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
           {runtimeInputRows.length === 0 || isLastExecutionEditor ? (
             <p className="text-xs text-low-emphasis">
-              {"No input data available."}
-              {isLastExecutionEditor && " Execute Node to view."}
+              {t("INPUT_PANEL.NO_INPUT_DATA_AVAILABLE")}
+              {isLastExecutionEditor && t("INPUT_PANEL.EXECUTE_NODE_TO_VIEW")}
             </p>
           ) : (
             <TableTab
@@ -189,8 +193,8 @@ export const InputPanel = ({
         <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
           {runtimeInputRows.length === 0 || isLastExecutionEditor ? (
             <p className="text-xs text-low-emphasis">
-              {"No input data available."}
-              {isLastExecutionEditor && " Execute Node to view."}
+              {t("INPUT_PANEL.NO_INPUT_DATA_AVAILABLE")}
+              {isLastExecutionEditor && t("INPUT_PANEL.EXECUTE_NODE_TO_VIEW")}
             </p>
           ) : (
             <JsonTab

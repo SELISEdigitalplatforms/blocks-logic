@@ -3,14 +3,15 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
-import { navigationMenus } from "@/constants/navigation-menus";
+import { buildNavigationMenus } from "@/constants/navigation-menus";
 import { showErrorToast, showSuccessToast } from "@/hooks/use-toast";
-import { EventTriggers, NOT_SEEDED_MESSAGE } from "./pages/event-triggers/event-triggers";
+import { EventTriggers } from "./pages/event-triggers/event-triggers";
 import { ManageBlocksEventsLink } from "./components/manage-blocks-events-link/manage-blocks-events-link";
 import { eventTriggersService } from "./services/event-triggers.service";
 import { EVENT_TRIGGERS_ENDPOINTS } from "./constants/endpoint.constant";
 import { filterEvents, DEFAULT_EVENT_TRIGGER_FILTERS } from "./utils/filter-events";
 import { IBlocksEventCatalogItem } from "./types/event-triggers.type";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 vi.mock("@seliseblocks/genesis-os", async () => {
   const actual = await vi.importActual("@seliseblocks/genesis-os");
@@ -89,7 +90,7 @@ describe("Event Triggers page", () => {
   it("C12: a tenant without a catalog sees the not-seeded alert and no switches", async () => {
     setup({ isSeeded: false });
 
-    expect(await screen.findByText(NOT_SEEDED_MESSAGE)).toBeTruthy();
+    expect(await screen.findByText(tStatic("logic.event-triggers", "EVENT_TRIGGERS.NOT_SEEDED_MESSAGE"))).toBeTruthy();
     expect(screen.queryAllByRole("switch")).toHaveLength(0);
   });
 
@@ -149,7 +150,7 @@ describe("Event Triggers page", () => {
     await userEvent.click(workflowSwitch("SMS status"));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/2 published workflow\(s\) use this event/)).toBeTruthy();
+    expect(within(dialog).getByText(/2 published workflows use this event/)).toBeTruthy();
     expect(update).not.toHaveBeenCalled();
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Disable" }));
@@ -197,7 +198,7 @@ describe("Manage events link and navigation", () => {
         const m = menu as { path?: string; name?: string; children?: unknown[] };
         return [m.path ?? "", m.name ?? "", ...flatten(m.children ?? [])];
       });
-    const entries = flatten(navigationMenus as unknown[]).join(" ").toLowerCase();
+    const entries = flatten(buildNavigationMenus((key) => key) as unknown[]).join(" ").toLowerCase();
     expect(entries).not.toContain("event-triggers");
     expect(entries).not.toContain("event triggers");
   });

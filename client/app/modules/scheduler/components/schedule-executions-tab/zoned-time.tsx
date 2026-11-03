@@ -1,5 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { browserTimeZone, formatInZone } from "../../utils/timezone";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface ZonedTimeProps {
   iso: string | null | undefined;
@@ -8,6 +9,7 @@ interface ZonedTimeProps {
 
 /** A time in the schedule's zone, with UTC and the viewer's local time in a tooltip. "—" when null. */
 export const ZonedTime = ({ iso, tz }: Readonly<ZonedTimeProps>) => {
+  const { t } = useT("logic.scheduler");
   if (!iso) return <span className="text-muted-foreground">—</span>;
 
   const viewerZone = browserTimeZone();
@@ -20,8 +22,11 @@ export const ZonedTime = ({ iso, tz }: Readonly<ZonedTimeProps>) => {
       </TooltipTrigger>
       <TooltipContent>
         <p>
-          UTC: {formatInZone(iso, "UTC", "datetime")} · Your time:{" "}
-          {formatInZone(iso, viewerZone, "datetime")} ({viewerZone})
+          {t("ZONED_TIME.UTC_YOUR_TIME", {
+            value: formatInZone(iso, "UTC", "datetime"),
+            value2: formatInZone(iso, viewerZone, "datetime"),
+            viewerZone,
+          })}
         </p>
       </TooltipContent>
     </Tooltip>

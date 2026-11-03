@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui-kits/select/select";
 import { Button } from "@/components/ui-kits/button/button";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface TablePaginationProps<TData> {
   table: Table<TData>;
@@ -22,6 +23,7 @@ export function TablePagination<TData>({
   onPageChange,
   totalCount,
 }: TablePaginationProps<TData>) {
+  const { t } = useT("logic.shared");
   const pageSize = 10;
   const totalDataLength = table.getFilteredRowModel().rows.length;
   const rowPerPage = [];
@@ -34,19 +36,19 @@ export function TablePagination<TData>({
     <div className="flex items-center justify-between px-2 py-4">
       <div className="flex-1 pl-4 text-sm text-muted-foreground">
         {totalCount ? (
-          <div>
-            Total {totalCount} {totalCount > 1 ? "items" : "item"}
-          </div>
+          <div>{t("TABLE_PAGINATION.TOTAL_ITEMS", { count: totalCount })}</div>
         ) : (
           <div>
-            {table.getFilteredSelectedRowModel().rows.length} of{" "}
-            {table.getFilteredRowModel().rows.length} row(s) selected.
+            {t("TABLE_PAGINATION.ROWS_SELECTED", {
+              selected: table.getFilteredSelectedRowModel().rows.length,
+              total: table.getFilteredRowModel().rows.length,
+            })}
           </div>
         )}
       </div>
       <div className="flex items-center space-x-6 lg:space-x-8">
         <div className="flex items-center space-x-2">
-          <p className="text-sm font-medium">Rows per page</p>
+          <p className="text-sm font-medium">{t("TABLE_PAGINATION.ROWS_PER_PAGE")}</p>
           <Select
             value={`${table.getState().pagination.pageSize}`}
             onValueChange={(value) => {
@@ -66,7 +68,10 @@ export function TablePagination<TData>({
           </Select>
         </div>
         <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-          Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          {t("TABLE_PAGINATION.PAGE_OF", {
+            page: table.getState().pagination.pageIndex + 1,
+            totalPage: table.getPageCount(),
+          })}
         </div>
         <div className="flex items-center space-x-2">
           <Button

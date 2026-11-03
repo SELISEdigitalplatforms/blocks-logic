@@ -22,9 +22,10 @@ import { Input } from "@/components/ui-kits/input/input";
 import { isErrorWithErrors } from "@/lib/error";
 import { useUpdateWorkflow } from "@blocks-workflow/hooks/use-workflow-api";
 import { z } from "zod";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 const renameWorkflowSchema = z.object({
-  name: z.string().trim().min(1, "Workflow name is required"),
+  name: z.string().trim().min(1, { error: () => tStatic("logic.workflow", "SCHEMAS.WORKFLOW_NAME_IS_REQUIRED") }),
 });
 
 type RenameWorkflowFormValues = z.infer<typeof renameWorkflowSchema>;
@@ -42,6 +43,7 @@ export const RenameWorkflow = ({
   workflowId,
   initialName,
 }: RenameWorkflowProps) => {
+  const { t } = useT("logic.workflow");
   const { isPending, mutateAsync } = useUpdateWorkflow();
 
   const form = useForm<RenameWorkflowFormValues>({
@@ -55,12 +57,12 @@ export const RenameWorkflow = ({
 
       const res = await mutateAsync(payload);
       if (!res.isSuccess) return showErrorToast({ errors: res.errors });
-      showSuccessToast({ description: "Workflow successfully renamed." });
+      showSuccessToast({ description: t("RENAME_WORKFLOW.WORKFLOW_SUCCESSFULLY_RENAMED") });
       onOpenChange(false);
     } catch (error) {
       if (isErrorWithErrors(error))
         return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: "Failed to rename workflow" });
+      return showErrorToast({ errors: t("RENAME_WORKFLOW.FAILED_TO_RENAME_WORKFLOW") });
     }
   };
 
@@ -72,9 +74,9 @@ export const RenameWorkflow = ({
     <Dialog open={open} onOpenChange={handleModalClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Rename workflow</DialogTitle>
+          <DialogTitle>{t("RENAME_WORKFLOW.RENAME_WORKFLOW")}</DialogTitle>
           <DialogDescription>
-            Enter a new name for your workflow.
+            {t("RENAME_WORKFLOW.ENTER_A_NEW_NAME")}
           </DialogDescription>
         </DialogHeader>
 
@@ -88,9 +90,9 @@ export const RenameWorkflow = ({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Workflow Name</FormLabel>
+                  <FormLabel>{t("RENAME_WORKFLOW.WORKFLOW_NAME")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter workflow name" {...field} />
+                    <Input placeholder={t("RENAME_WORKFLOW.ENTER_WORKFLOW_NAME")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -103,10 +105,10 @@ export const RenameWorkflow = ({
                 onClick={() => handleModalClose(false)}
                 disabled={isPending}
               >
-                Cancel
+                {t("common:CANCEL")}
               </Button>
               <Button type="submit" disabled={isPending}>
-                Rename
+                {t("RENAME_WORKFLOW.RENAME")}
               </Button>
             </div>
           </form>

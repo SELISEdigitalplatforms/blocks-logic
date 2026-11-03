@@ -15,7 +15,9 @@ import { cn } from "@/lib/utils";
 import { HTTP_METHOD_OPTIONS } from "../../constants/limits.constant";
 import { IOutputAction } from "../../types/function.types";
 import { VariableTokenField, secretIdRef } from "@/components/variable-picker";
-import { TYPED_CREDENTIAL_MESSAGE, isTypedCredential } from "../../utils/secret-literals";
+import { isTypedCredential } from "../../utils/secret-literals";
+import { renderRichText } from "@/lib/rich-text";
+import { useT } from "@seliseblocks/genesis-os";
 
 type OutputActionsEditorProps = {
   value: IOutputAction[];
@@ -48,6 +50,7 @@ const newOutputAction = (): IOutputAction => ({
  * placeholder is all this editor ever holds.
  */
 export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProps) => {
+  const { t } = useT("logic.functions.components");
   const update = (index: number, partial: Partial<IOutputAction>) => {
     onChange(value.map((action, i) => (i === index ? { ...action, ...partial } : action)));
   };
@@ -82,8 +85,7 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <p className="max-w-[66ch] text-xs leading-relaxed text-medium-emphasis">
-          What happens to the value the function returns. Actions run in order on the Blocks host —
-          outside the sandbox — so they can use stored secrets the code never sees.
+          {t("OUTPUT_ACTIONS_EDITOR.WHAT_HAPPENS_TO_THE")}
         </p>
         <Button
           type="button"
@@ -93,16 +95,19 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
           onClick={add}
         >
           <Plus className="h-3.5 w-3.5" />
-          Add action
+          {t("OUTPUT_ACTIONS_EDITOR.ADD_ACTION")}
         </Button>
       </div>
 
       {value.length === 0 && (
         <div className="flex flex-col gap-1 rounded-lg border border-dashed px-5 py-8 text-center">
-          <span className="text-sm font-semibold">No output actions</span>
+          <span className="text-sm font-semibold">
+            {t("OUTPUT_ACTIONS_EDITOR.NO_OUTPUT_ACTIONS")}
+          </span>
           <span className="text-xs text-medium-emphasis">
-            The return value is stored on the run and available from{" "}
-            <code className="font-mono">GET …/fn/runs/{"{runId}"}</code>.
+            {renderRichText(t("OUTPUT_ACTIONS_EDITOR.RETURN_VALUE_STORED"), [
+              (text) => <code className="font-mono">{text}</code>,
+            ])}
           </span>
         </div>
       )}
@@ -116,16 +121,18 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blocks-primary-50 text-xs font-semibold text-primary">
                 {index + 1}
               </span>
-              <span className="min-w-0 truncate text-sm font-semibold">External HTTP call</span>
+              <span className="min-w-0 truncate text-sm font-semibold">
+                {t("OUTPUT_ACTIONS_EDITOR.EXTERNAL_HTTP_CALL")}
+              </span>
               {!isEnabled && (
                 <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-medium-emphasis">
-                  Off — skipped
+                  {t("OUTPUT_ACTIONS_EDITOR.OFF_SKIPPED")}
                 </span>
               )}
               <span className="flex-1" />
               {/* The host skips a disabled action (FN-48); turning one off keeps its settings. */}
               <Switch
-                aria-label={`Action ${index + 1} on`}
+                aria-label={t("OUTPUT_ACTIONS_EDITOR.ACTION_ON", { value: index + 1 })}
                 checked={isEnabled}
                 onCheckedChange={(checked) => update(index, { enabled: checked })}
                 className="flex-shrink-0"
@@ -134,7 +141,7 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label="Move earlier"
+                aria-label={t("OUTPUT_ACTIONS_EDITOR.MOVE_EARLIER")}
                 disabled={index === 0}
                 className="h-7 w-7 disabled:opacity-30"
                 onClick={() => move(index, -1)}
@@ -145,7 +152,7 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label="Move later"
+                aria-label={t("OUTPUT_ACTIONS_EDITOR.MOVE_LATER")}
                 disabled={index === value.length - 1}
                 className="h-7 w-7 disabled:opacity-30"
                 onClick={() => move(index, 1)}
@@ -160,14 +167,16 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                 onClick={() => remove(index)}
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Remove
+                {t("common:REMOVE")}
               </Button>
             </div>
 
             <div className={cn("flex flex-col gap-3.5 p-4", !isEnabled && "opacity-60")}>
               <div className="flex flex-wrap items-end gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold">Method</Label>
+                  <Label className="text-xs font-semibold">
+                    {t("OUTPUT_ACTIONS_EDITOR.METHOD")}
+                  </Label>
                   <Select value={action.method} onValueChange={(v) => update(index, { method: v })}>
                     <SelectTrigger className="h-9 w-28">
                       <SelectValue />
@@ -182,7 +191,9 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                   </Select>
                 </div>
                 <div className="flex min-w-[220px] flex-1 flex-col gap-1.5">
-                  <Label className="text-xs font-semibold">Endpoint</Label>
+                  <Label className="text-xs font-semibold">
+                    {t("OUTPUT_ACTIONS_EDITOR.ENDPOINT")}
+                  </Label>
                   <Input
                     className="h-9 font-mono text-xs"
                     placeholder="https://api.vendor.com/v1/events"
@@ -191,7 +202,9 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold">Timeout</Label>
+                  <Label className="text-xs font-semibold">
+                    {t("OUTPUT_ACTIONS_EDITOR.TIMEOUT")}
+                  </Label>
                   <Select
                     value={String(action.timeoutSeconds)}
                     onValueChange={(v) => update(index, { timeoutSeconds: Number(v) })}
@@ -212,7 +225,9 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
 
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-3">
-                  <Label className="text-xs font-semibold">Headers</Label>
+                  <Label className="text-xs font-semibold">
+                    {t("OUTPUT_ACTIONS_EDITOR.HEADERS")}
+                  </Label>
                   <Button
                     type="button"
                     variant="ghost"
@@ -221,21 +236,22 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                     onClick={() => updateHeader(index, "", "")}
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Add header
+                    {t("OUTPUT_ACTIONS_EDITOR.ADD_HEADER")}
                   </Button>
                 </div>
                 {Object.entries(action.headers).length === 0 && (
                   <p className="text-xs text-medium-emphasis">
-                    No headers. A POST, PUT or PATCH sends{" "}
-                    <code className="font-mono">Content-Type: application/json</code> by default.
+                    {renderRichText(t("OUTPUT_ACTIONS_EDITOR.NO_HEADERS_A_POST"), [
+                      (children) => <code className="font-mono">{children}</code>,
+                    ])}
                   </p>
                 )}
                 {Object.entries(action.headers).map(([key, headerValue]) => (
                   <div key={key} className="flex flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Input
-                        aria-label="Header name"
-                        placeholder="Header name"
+                        aria-label={t("OUTPUT_ACTIONS_EDITOR.HEADER_NAME")}
+                        placeholder={t("OUTPUT_ACTIONS_EDITOR.HEADER_NAME")}
                         className="h-9 min-w-[140px] flex-[0_1_190px] font-mono text-xs"
                         value={key}
                         onChange={(e) => renameHeader(index, key, e.target.value)}
@@ -245,15 +261,15 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                           value={headerValue}
                           onChange={(next) => updateHeader(index, key, next)}
                           codec={secretIdRef}
-                          ariaLabel="Header value"
-                          placeholder="Value"
+                          ariaLabel={t("OUTPUT_ACTIONS_EDITOR.HEADER_VALUE")}
+                          placeholder={t("OUTPUT_ACTIONS_EDITOR.VALUE")}
                         />
                       </div>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        aria-label="Remove header"
+                        aria-label={t("OUTPUT_ACTIONS_EDITOR.REMOVE_HEADER")}
                         className="h-8 w-8 shrink-0 text-medium-emphasis hover:text-error"
                         onClick={() => removeHeader(index, key)}
                       >
@@ -262,7 +278,9 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                     </div>
                     {/* Same rule as the host's save check (FunctionSecretLiterals). */}
                     {isTypedCredential(key, headerValue) && (
-                      <p className="text-xs text-warning-800">{TYPED_CREDENTIAL_MESSAGE}</p>
+                      <p className="text-xs text-warning-800">
+                        {t("SECRET_LITERALS.TYPED_CREDENTIAL_MESSAGE")}
+                      </p>
                     )}
                   </div>
                 ))}
@@ -270,14 +288,15 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
 
               {!hasBody(action.method) ? (
                 <p className="text-xs text-medium-emphasis">
-                  A <code className="font-mono">{action.method}</code> carries no body — the
-                  function result is not sent. Use the URL or a header to pass anything the endpoint
-                  needs.
+                  {renderRichText(
+                    t("OUTPUT_ACTIONS_EDITOR.A_0_0_CARRIES", { method: action.method }),
+                    [(children) => <code className="font-mono">{children}</code>],
+                  )}
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
                   <Label className="text-xs font-semibold" id={`fn-body-mode-${action.id}`}>
-                    Body
+                    {t("OUTPUT_ACTIONS_EDITOR.BODY")}
                   </Label>
                   <div
                     className="flex flex-wrap gap-2"
@@ -285,8 +304,8 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                     aria-labelledby={`fn-body-mode-${action.id}`}
                   >
                     {[
-                      { label: "Function result", isTemplate: false },
-                      { label: "Template", isTemplate: true },
+                      { label: t("OUTPUT_ACTIONS_EDITOR.FUNCTION_RESULT"), isTemplate: false },
+                      { label: t("OUTPUT_ACTIONS_EDITOR.TEMPLATE"), isTemplate: true },
                     ].map((option) => {
                       const isSelected = (action.bodyTemplate != null) === option.isTemplate;
                       return (
@@ -312,7 +331,7 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                   </div>
                   {action.bodyTemplate == null ? (
                     <p className="text-xs text-medium-emphasis">
-                      The returned value is sent as the JSON body, unchanged.
+                      {t("OUTPUT_ACTIONS_EDITOR.THE_RETURNED_VALUE_IS")}
                     </p>
                   ) : (
                     <>
@@ -321,7 +340,7 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                         value={action.bodyTemplate}
                         onChange={(next) => update(index, { bodyTemplate: next })}
                         codec={secretIdRef}
-                        ariaLabel="Body template"
+                        ariaLabel={t("OUTPUT_ACTIONS_EDITOR.BODY_TEMPLATE")}
                         placeholder={'{ "payload": {{result}} }'}
                         className="min-h-[90px] resize-y font-mono text-xs"
                       />
@@ -340,8 +359,7 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
 
       {value.length > 0 && (
         <p className="text-xs text-medium-emphasis">
-          Configuration variables are resolved here, never inside the function — a header or body
-          carries a reference and the value is substituted on the host.
+          {t("OUTPUT_ACTIONS_EDITOR.CONFIGURATION_VARIABLES_ARE_RESOLVED")}
         </p>
       )}
     </div>

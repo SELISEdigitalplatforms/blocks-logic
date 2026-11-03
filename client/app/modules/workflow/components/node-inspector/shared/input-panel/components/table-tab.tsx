@@ -3,6 +3,7 @@ import { DraggableProperty } from "./draggable-property";
 import { RecursiveSchemaViewer } from "./recursive-schema-viewer";
 import { formatCellValue } from "../utils/format.util";
 import { isPlainObject, type FieldReferenceTarget } from "../utils/field-reference.util";
+import { useT } from "@seliseblocks/genesis-os";
 
 type TableTabProps = Readonly<{
   rows: unknown[];
@@ -78,8 +79,9 @@ export function TableTab({
   target,
   isDraggable = true,
 }: TableTabProps) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   if (rows.length === 0) {
-    return <p className="text-xs text-low-emphasis">No runtime input data available.</p>;
+    return <p className="text-xs text-low-emphasis">{t("TABLE_TAB.NO_RUNTIME_INPUT_DATA")}</p>;
   }
 
   const primitiveColumn = "(value)";

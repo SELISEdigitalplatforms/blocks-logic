@@ -1,10 +1,12 @@
 "use client";
 import { FilterToolbar } from "@/components/filter-toolbar";
 import { useProxyFilterQueryParams } from "../hooks";
+import { useT } from "@seliseblocks/genesis-os";
 
 type ProxyFilter = { search: string; isActive: string };
 
 export function ProxyFilterToolBar() {
+  const { t } = useT("logic.proxy.components");
   const { queryParams, setQueryParams } = useProxyFilterQueryParams();
 
   const changeHandler = (key: string, value: unknown) => {
@@ -20,12 +22,12 @@ export function ProxyFilterToolBar() {
         {
           key: "isActive",
           type: "Radio",
-          label: "Status",
+          label: t("common:STATUS"),
           props: {
             options: [
-              { label: "All", value: "all" },
-              { label: "Active", value: "1" },
-              { label: "Inactive", value: "0" },
+              { label: t("common:ALL"), value: "all" },
+              { label: t("PROXY_FILTER_TOOLBAR.ACTIVE"), value: "1" },
+              { label: t("PROXY_FILTER_TOOLBAR.INACTIVE"), value: "0" },
             ],
           },
         },

@@ -8,6 +8,7 @@ import { FieldProps } from "../form-field.types";
 import { cn } from "@/lib/utils";
 import { ExpressionHighlighter } from "../utils/expression-highlighter";
 import { pickerTarget, showsVariablePicker } from "./secret-picker";
+import { useT } from "@seliseblocks/genesis-os";
 
 /**
  * Repeatable, single-column list of expression-highlighted text rows.
@@ -26,6 +27,7 @@ export const ExpressionListField = ({
   className,
   variablePicker,
 }: FieldProps<string[]>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const [items, setItems] = useState<string[]>(Array.isArray(value) ? value : []);
 
   const isDisabled = typeof field.disabled === "function" ? false : field.disabled || readOnly;
@@ -57,7 +59,7 @@ export const ExpressionListField = ({
           onClick={handleAdd}
           disabled={isDisabled}
         >
-          {field.addButtonText || "Add"}
+          {field.addButtonText || t("common:ADD")}
         </Button>
       </div>
     );
@@ -108,7 +110,7 @@ export const ExpressionListField = ({
         onClick={handleAdd}
         disabled={isDisabled}
       >
-        {field.addButtonText || "Add"}
+        {field.addButtonText || t("common:ADD")}
       </Button>
     </div>
   );

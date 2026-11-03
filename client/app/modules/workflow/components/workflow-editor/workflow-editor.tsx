@@ -15,12 +15,14 @@ import {
   EditorFitConfig,
   WorkflowEditorControls,
 } from "../workflow-editor-controls";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface WorkflowEditorProps {
   isReadonly?: boolean;
 }
 
 export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
+  const { t } = useT("logic.workflow");
   const {
     nodes,
     edges,
@@ -119,7 +121,7 @@ export const WorkflowEditor = ({ isReadonly = false }: WorkflowEditorProps) => {
               className="z-50 gap-2 shadow-md"
             >
               <Plus className="h-5 w-5" />
-              Add first step
+              {t("WORKFLOW_EDITOR.ADD_FIRST_STEP")}
             </Button>
           </div>
         )}

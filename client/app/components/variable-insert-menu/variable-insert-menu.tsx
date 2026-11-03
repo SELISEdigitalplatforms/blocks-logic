@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/po
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { VariablePicker } from "@/components/variable-picker";
 import { SecretListItem } from "@/models/secret";
+import { useT } from "@seliseblocks/genesis-os";
 
 type Props = {
   variables?: SecretListItem[];
@@ -32,17 +33,15 @@ export const VariableInsertMenu = ({
   onPick,
   ariaLabel,
 }: Props) => {
+  const { t } = useT("logic.shared");
   const [open, setOpen] = useState(false);
   const usable = variables ?? [];
   const disabled = Boolean(variablesLoading) || Boolean(variablesError) || usable.length === 0;
 
-  const hint = variablesError
-    ? "Unable to load secret keys"
-    : variablesLoading
-      ? "Loading secret keys…"
-      : usable.length === 0
-        ? "No secret keys — add one in Secret management"
-        : "Insert a configuration variable";
+  let hint = t("VARIABLE_INSERT_MENU.INSERT_A_CONFIGURATION_VARIABLE");
+  if (variablesError) hint = t("VARIABLE_INSERT_MENU.UNABLE_TO_LOAD_SECRET");
+  else if (variablesLoading) hint = t("VARIABLE_INSERT_MENU.LOADING_SECRET_KEYS");
+  else if (usable.length === 0) hint = t("VARIABLE_INSERT_MENU.NO_SECRET_KEYS_ADD");
 
   const triggerIcon = (
     <>

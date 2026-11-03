@@ -1,6 +1,16 @@
 import type { IFunctionExportFile } from "../types/transfer.types";
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
 
 /** The server's ceiling for an import (FunctionTransferCodec.MaxImportBytes): checked here first. */
+// The version as the file wrote it; an object is shown as JSON instead of "[object Object]".
+const describeSchemaVersion = (version: unknown): string => {
+  if (version == null) return "(none)";
+  if (typeof version === "string") return version;
+  return JSON.stringify(version);
+};
+
 export const MAX_IMPORT_BYTES = 3 * 1024 * 1024;
 
 export const EXPORT_FORMAT = "blocks.function.export";
@@ -13,10 +23,11 @@ export const EXPORT_SCHEMA_VERSION = 2;
  * Returns the message to show, or null when the file may go on.
  */
 export const checkImportFile = (file: File): string | null => {
-  if (!file.name.toLowerCase().endsWith(".json")) return "Only .json export files can be imported.";
-  if (file.size === 0) return "This file is empty.";
+  if (!file.name.toLowerCase().endsWith(".json"))
+    return tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.ONLY_JSON_EXPORT_FILES");
+  if (file.size === 0) return tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THIS_FILE_IS_EMPTY");
   if (file.size > MAX_IMPORT_BYTES) {
-    return "This file is larger than 3 MB, so it cannot be a function export.";
+    return tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THIS_FILE_IS_LARGER");
   }
   return null;
 };
@@ -33,19 +44,22 @@ export const readImportFile = async (file: File): Promise<IFunctionExportFile> =
   try {
     parsed = JSON.parse(await file.text());
   } catch {
-    throw new Error("This file is not valid JSON.");
+    throw new Error(tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THIS_FILE_IS_NOT_VALID_JSON"));
   }
   const head =
     parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as { format?: unknown; schemaVersion?: unknown })
       : null;
   if (head?.format === "blocks.proxy.export") {
-    throw new Error("This is a proxy export, not a function export.");
+    throw new Error(tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THIS_IS_A_PROXY_EXPORT"));
   }
-  if (head?.format !== EXPORT_FORMAT) throw new Error("This is not a function export file.");
+  if (head?.format !== EXPORT_FORMAT) throw new Error(tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THIS_IS_NOT_A_FUNCTION_EXPORT"));
   if (head.schemaVersion !== EXPORT_SCHEMA_VERSION) {
     throw new Error(
-      `This export uses schema version ${String(head.schemaVersion ?? "(none)")}, but this environment reads version ${EXPORT_SCHEMA_VERSION}. Export the function again and import the new file.`,
+      tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.SCHEMA_VERSION_MISMATCH", {
+        found: describeSchemaVersion(head.schemaVersion),
+        expected: EXPORT_SCHEMA_VERSION,
+      }),
     );
   }
   return parsed as IFunctionExportFile;
@@ -97,7 +111,10 @@ export const importErrorOf = (error: unknown): { status?: number; message: strin
     if (values.length) message = values.join(" ");
   }
   if (!message && typeof raw?.message === "string" && raw.message) message = raw.message;
-  return { status, message: message ?? "The request could not be completed." };
+  return {
+    status,
+    message: message ?? tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.THE_REQUEST_COULD_NOT"),
+  };
 };
 
 // ─── secrets kept by name ────────────────────────────────────────────────────
