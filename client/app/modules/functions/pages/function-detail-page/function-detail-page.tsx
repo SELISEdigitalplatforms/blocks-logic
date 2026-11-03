@@ -189,6 +189,28 @@ const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
   versions: "Versions",
 };
 
+/** The server's field errors when it sent them, else the fallback message. */
+const showRequestError = (error: unknown, fallback: string) =>
+  showErrorToast({ errors: isErrorWithErrors(error) ? error.errors : fallback });
+
+/** The deployed version's badge (the same test as `isDeployed`); nothing before the first deploy. */
+const versionBadge = (activeVersionNumber: number | null | undefined) =>
+  activeVersionNumber == null ? "" : `v${activeVersionNumber}`;
+
+/** A tab's count badge; nothing for zero. */
+const countBadge = (count: number | undefined) => (count ? String(count) : "");
+
+/** The deploy button: building, first deploy, the next version, or up to date. */
+const deployButtonLabel = (
+  upToDate: string,
+  state: { isBuilding: boolean; isDeployed: boolean; hasUndeployedChanges: boolean; nextVersion: number },
+) => {
+  if (state.isBuilding) return "Building…";
+  if (!state.isDeployed) return "Deploy";
+  if (state.hasUndeployedChanges) return `Deploy v${state.nextVersion}`;
+  return upToDate;
+};
+
 export const FunctionDetailPage = () => {
   const { t } = useT(LOGIC_FUNCTIONS_MODULE);
   const navigate = useNavigate();
@@ -222,10 +244,7 @@ export const FunctionDetailPage = () => {
     buildId: deployBuildId,
   } = useDeploy(functionId, {
     onDeployed: (version) => showSuccessToast({ description: t("FUNCTION_DETAIL_PAGE.DEPLOYED_AS_V", { number: version.number }) }),
-    onFailed: (error) =>
-      isErrorWithErrors(error)
-        ? showErrorToast({ errors: error.errors })
-        : showErrorToast({ errors: t("FUNCTION_DETAIL_PAGE.FAILED_TO_DEPLOY_FUNCTION") }),
+    onFailed: (error) => showRequestError(error, t("FUNCTION_DETAIL_PAGE.FAILED_TO_DEPLOY_FUNCTION")),
   });
   const { mutateAsync: renameAsync, isPending: isRenaming } = useUpdateFunction();
   const { mutateAsync: exportAsync, isPending: isExporting } = useExportFunction();
@@ -341,8 +360,7 @@ export const FunctionDetailPage = () => {
       // Toasts come from useDeploy: the version may arrive now or after the build (202).
       await deploy();
     } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: t("FUNCTION_DETAIL_PAGE.FAILED_TO_DEPLOY_FUNCTION") });
+      showRequestError(error, t("FUNCTION_DETAIL_PAGE.FAILED_TO_DEPLOY_FUNCTION"));
     }
   };
 
@@ -359,8 +377,7 @@ export const FunctionDetailPage = () => {
       await renameAsync({ functionId, name, description: fn.description });
       setRenameDraft(null);
     } catch (error) {
-      if (isErrorWithErrors(error)) return showErrorToast({ errors: error.errors });
-      return showErrorToast({ errors: t("FUNCTION_DETAIL_PAGE.FAILED_TO_RENAME_FUNCTION") });
+      showRequestError(error, t("FUNCTION_DETAIL_PAGE.FAILED_TO_RENAME_FUNCTION"));
     } finally {
       isRenameSubmitting.current = false;
     }
@@ -384,25 +401,26 @@ export const FunctionDetailPage = () => {
   // "Building…" covers the deploy request and, when it answered 202, the build it is watching.
   const isDeployed = fn.activeVersionNumber != null;
   const hasUndeployedChanges = isDirty || fn.isDirty;
-  let deployLabel = t("FUNCTION_DETAIL_PAGE.UP_TO_DATE");
-  if (isBuilding) deployLabel = "Building…";
-  else if (!isDeployed) deployLabel = "Deploy";
-  else if (hasUndeployedChanges) deployLabel = `Deploy v${fn.lastVersionNumber + 1}`;
+  const deployLabel = deployButtonLabel(t("FUNCTION_DETAIL_PAGE.UP_TO_DATE"), {
+    isBuilding,
+    isDeployed,
+    hasUndeployedChanges,
+    nextVersion: fn.lastVersionNumber + 1,
+  });
 
   const runs = runsData?.data ?? [];
   const hasActiveRun = runs.some((run) => !TERMINAL_RUN_STATUSES.includes(run.status));
-  const hasRunFilters =
-    !!queryParams.runStatus || !!queryParams.runTrigger || !!queryParams.runSearch;
+  const hasRunFilters = [queryParams.runStatus, queryParams.runTrigger, queryParams.runSearch].some(Boolean);
 
   const eventCount = eventSettings?.events.length ?? 0;
   const tabBadges: Record<(typeof TAB_ORDER)[number], string> = {
     code: "",
     trigger: "",
-    output: outputActions.length ? String(outputActions.length) : "",
-    events: eventCount ? String(eventCount) : "",
-    configuration: variables.length ? String(variables.length) : "",
-    runs: runsData?.totalCount ? String(runsData.totalCount) : "",
-    versions: isDeployed ? `v${fn.activeVersionNumber}` : "",
+    output: countBadge(outputActions.length),
+    events: countBadge(eventCount),
+    configuration: countBadge(variables.length),
+    runs: countBadge(runsData?.totalCount),
+    versions: versionBadge(fn.activeVersionNumber),
   };
 
   return (

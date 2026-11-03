@@ -106,6 +106,12 @@ const ScheduleNoResultsState = () => {
   );
 };
 
+/** A column title in the list's header style. */
+const columnHeader = (label: string) =>
+  function ColumnHeader() {
+    return <div className="font-bold text-medium-emphasis">{label}</div>;
+  };
+
 export const ScheduleList = ({
   schedules,
   isLoading,
@@ -120,7 +126,7 @@ export const ScheduleList = ({
   const columns: ColumnDef<ISchedule>[] = [
     {
       id: "name",
-      header: () => <div className="font-bold text-medium-emphasis">{t("common:NAME")}</div>,
+      header: columnHeader(t("common:NAME")),
       cell: (info) => (
         <div
           className="w-[200px] truncate font-semibold md:w-[240px]"
@@ -148,7 +154,7 @@ export const ScheduleList = ({
     },
     {
       id: "cronExpression",
-      header: () => <div className="font-bold text-medium-emphasis">{t("SCHEDULE_LIST.CRON_EXPRESSION")}</div>,
+      header: columnHeader(t("SCHEDULE_LIST.CRON_EXPRESSION")),
       cell: (info) => (
         <div className="font-mono text-sm text-muted-foreground">
           {info.row.original.cronExpression || "-"}
@@ -157,7 +163,7 @@ export const ScheduleList = ({
     },
     {
       id: "startDate",
-      header: () => <div className="font-bold text-medium-emphasis">{t("SCHEDULE_LIST.START_DATE")}</div>,
+      header: columnHeader(t("SCHEDULE_LIST.START_DATE")),
       cell: (info) => (
         <div className="whitespace-nowrap text-muted-foreground">
           {info.row.original.startDate
@@ -168,7 +174,7 @@ export const ScheduleList = ({
     },
     {
       id: "endDate",
-      header: () => <div className="font-bold text-medium-emphasis">{t("SCHEDULE_LIST.END_DATE")}</div>,
+      header: columnHeader(t("SCHEDULE_LIST.END_DATE")),
       cell: (info) => (
         <div className="whitespace-nowrap text-muted-foreground">
           {info.row.original.endDate
@@ -179,7 +185,7 @@ export const ScheduleList = ({
     },
     {
       id: "isActive",
-      header: () => <div className="font-bold text-medium-emphasis">{t("common:STATUS")}</div>,
+      header: columnHeader(t("common:STATUS")),
       cell: (info) => (
         <div>
           <Badge

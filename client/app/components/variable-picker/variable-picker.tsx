@@ -66,13 +66,10 @@ export const VariablePicker = ({
     });
   }, [variables, search, activeTag]);
 
-  const emptyMessage = isLoading
-    ? t("VARIABLE_PICKER.LOADING_VARIABLES")
-    : isError
-      ? t("VARIABLE_PICKER.UNABLE_TO_LOAD_VARIABLES")
-      : variables.length === 0
-        ? t("VARIABLE_PICKER.NO_VARIABLES_YET")
-        : t("VARIABLE_PICKER.NO_VARIABLE_MATCHES_SEARCH");
+  let emptyMessage = t("VARIABLE_PICKER.NO_VARIABLE_MATCHES_SEARCH");
+  if (isLoading) emptyMessage = t("VARIABLE_PICKER.LOADING_VARIABLES");
+  else if (isError) emptyMessage = t("VARIABLE_PICKER.UNABLE_TO_LOAD_VARIABLES");
+  else if (variables.length === 0) emptyMessage = t("VARIABLE_PICKER.NO_VARIABLES_YET");
 
   return (
     <div className="flex flex-col">
@@ -88,10 +85,9 @@ export const VariablePicker = ({
       </div>
 
       {tags.length > 0 && (
-        <div
-          role="group"
+        <fieldset
           aria-label={t("VARIABLE_PICKER.FILTER_BY_TAG")}
-          className="flex flex-wrap gap-1 border-b px-2 py-1.5"
+          className="min-w-0 flex flex-wrap gap-1 border-b px-2 py-1.5"
         >
           {tags.map((each) => {
             const pressed = activeTag === each;
@@ -114,7 +110,7 @@ export const VariablePicker = ({
               </button>
             );
           })}
-        </div>
+        </fieldset>
       )}
 
       <div /* NOSONAR custom rich listbox, a native <select> cannot render these options */

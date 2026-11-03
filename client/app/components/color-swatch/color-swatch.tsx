@@ -42,7 +42,7 @@ export const ColorSwatch: React.FC<ColorSwatchProps> = ({
           hasError ? "border-destructive" : "",
         )}
       >
-        <div
+        <div /* NOSONAR: the color input inside covers this swatch and is the keyboard control; the click only opens it */
           className="relative h-6 min-h-6 w-6 min-w-6 cursor-pointer rounded-sm border"
           style={{ backgroundColor: value }}
           onClick={handleColorPickerClick}

@@ -188,14 +188,16 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
                   className="h-4 bg-muted-foreground"
                 /> */}
                   <div className="text-sm text-muted-foreground">
-                    {isSaving ? (
+                    {isSaving && (
                       <span className="flex items-center gap-1">
                         <Loader2 className="h-3 w-3 animate-spin" />
                         {t("WORKFLOW_DETAILS.SAVING")}
                       </span>
-                    ) : data?.data?.lastUpdatedDate ? (
+                    )}
+                    {!isSaving && data?.data?.lastUpdatedDate && (
                       `Last saved: ${format(new Date(data.data.lastUpdatedDate), "dd/MM/yyyy, hh:mm a")}`
-                    ) : (
+                    )}
+                    {!isSaving && !data?.data?.lastUpdatedDate && (
                       t("WORKFLOW_DETAILS.NOT_SAVED_YET")
                     )}
                   </div>

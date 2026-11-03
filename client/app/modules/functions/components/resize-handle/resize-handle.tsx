@@ -94,7 +94,7 @@ export const ResizeHandle = ({
   };
 
   return (
-    <div
+    <div /* NOSONAR: focusable window splitter (ARIA separator with value); <hr> cannot take focus or drag */
       role="separator"
       aria-orientation="horizontal"
       aria-label={label}

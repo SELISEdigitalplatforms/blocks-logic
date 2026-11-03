@@ -59,6 +59,10 @@ type FunctionCreateDialogProps = {
   onOpenChange: (value: boolean) => void;
 };
 
+const renderOptionalHint = (children: string) => (
+  <span className="ml-1.5 text-xs font-normal text-muted-foreground">{children}</span>
+);
+
 export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialogProps) => {
   const { t: tr } = useT(LOGIC_FUNCTIONS_COMPONENTS_MODULE);
   const navigate = useNavigate();
@@ -170,7 +174,7 @@ export const FunctionCreateDialog = ({ open, onOpenChange }: FunctionCreateDialo
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>
-                    {renderRichText(tr("FUNCTION_CREATE_DIALOG.DESCRIPTION_0_OPTIONAL_0"), [(children) => <span className="ml-1.5 text-xs font-normal text-muted-foreground">{children}</span>])}
+                    {renderRichText(tr("FUNCTION_CREATE_DIALOG.DESCRIPTION_0_OPTIONAL_0"), [renderOptionalHint])}
                   </FormLabel>
                   <FormControl>
                     <Textarea

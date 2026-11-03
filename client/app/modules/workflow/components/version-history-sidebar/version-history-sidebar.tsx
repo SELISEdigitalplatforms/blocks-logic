@@ -41,15 +41,17 @@ export const VersionHistorySidebar = ({ onSelectVersion, selectedVersionId }: Ve
         )}
       </div> */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {isLoading ? (
+        {isLoading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : versions.length === 0 ? (
+        )}
+        {!isLoading && versions.length === 0 && (
           <div className="text-center text-sm text-muted-foreground py-8">
             {t("VERSION_HISTORY_SIDEBAR.NO_VERSIONS_FOUND")}
           </div>
-        ) : (
+        )}
+        {!isLoading && versions.length > 0 && (
           versions.map((version: WorkflowVersion) => {
             const isSelected = selectedVersionId === version.itemId;
             return (

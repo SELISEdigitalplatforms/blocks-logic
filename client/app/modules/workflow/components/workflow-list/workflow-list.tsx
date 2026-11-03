@@ -128,6 +128,12 @@ type WorkflowListProps = {
   isFiltered?: boolean;
 };
 
+/** A column title in the list's header style. */
+const columnHeader = (label: string) =>
+  function ColumnHeader() {
+    return <div className="font-bold text-medium-emphasis">{label}</div>;
+  };
+
 export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListProps) => {
   const { t } = useT(LOGIC_WORKFLOW_MODULE);
   const navigate = useNavigate();
@@ -180,7 +186,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
     () => [
       {
         id: "name",
-        header: () => <div className="font-bold text-medium-emphasis">{t("common:NAME")}</div>,
+        header: columnHeader(t("common:NAME")),
         cell: (info) => (
           <div className="w-[180px] truncate font-semibold md:w-[240px]">
             {`${info.row.original.name || ""}`.trim() || "-"}
@@ -189,7 +195,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
       },
       {
         id: "createdDate",
-        header: () => <div className="font-bold text-medium-emphasis">{t("WORKFLOW_LIST.CREATED_ON")}</div>,
+        header: columnHeader(t("WORKFLOW_LIST.CREATED_ON")),
         cell: (info) => (
           <div className="whitespace-nowrap text-muted-foreground">
             {formatDate(parseDateString(info.row.original.createdDate))}
@@ -198,7 +204,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
       },
       {
         id: "lastUpdatedDate",
-        header: () => <div className="font-bold text-medium-emphasis">{t("WORKFLOW_LIST.LAST_UPDATED")}</div>,
+        header: columnHeader(t("WORKFLOW_LIST.LAST_UPDATED")),
         cell: (info) => (
           <div className="whitespace-nowrap text-muted-foreground">
             {formatDate(parseDateString(info.row.original.lastUpdatedDate))}
@@ -207,7 +213,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
       },
       {
         id: "isPublished",
-        header: () => <div className="font-bold text-medium-emphasis">{t("common:STATUS")}</div>,
+        header: columnHeader(t("common:STATUS")),
         cell: (info) => (
           <div>
             <Badge

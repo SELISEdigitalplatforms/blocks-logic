@@ -29,12 +29,9 @@ export const ProxyRateLimitCard = ({ control }: Props) => {
     field.onChange(text.trim() === "" ? null : Number(text));
   };
 
-  const effective =
-    value != null && !fieldState.error
-      ? `${value.toLocaleString("en")} calls a minute (your limit).`
-      : isPublic
-        ? `${PROXY_PUBLIC_DEFAULT_PER_MINUTE} calls a minute (the default for public proxies).`
-        : t("PROXY_RATE_LIMIT_CARD.NO_LIMIT_THE_DEFAULT");
+  let effective = t("PROXY_RATE_LIMIT_CARD.NO_LIMIT_THE_DEFAULT");
+  if (value != null && !fieldState.error) effective = `${value.toLocaleString("en")} calls a minute (your limit).`;
+  else if (isPublic) effective = `${PROXY_PUBLIC_DEFAULT_PER_MINUTE} calls a minute (the default for public proxies).`;
 
   return (
     <Card className="rounded-xl">

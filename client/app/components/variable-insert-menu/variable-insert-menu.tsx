@@ -38,13 +38,10 @@ export const VariableInsertMenu = ({
   const usable = variables ?? [];
   const disabled = Boolean(variablesLoading) || Boolean(variablesError) || usable.length === 0;
 
-  const hint = variablesError
-    ? t("VARIABLE_INSERT_MENU.UNABLE_TO_LOAD_SECRET")
-    : variablesLoading
-      ? t("VARIABLE_INSERT_MENU.LOADING_SECRET_KEYS")
-      : usable.length === 0
-        ? t("VARIABLE_INSERT_MENU.NO_SECRET_KEYS_ADD")
-        : t("VARIABLE_INSERT_MENU.INSERT_A_CONFIGURATION_VARIABLE");
+  let hint = t("VARIABLE_INSERT_MENU.INSERT_A_CONFIGURATION_VARIABLE");
+  if (variablesError) hint = t("VARIABLE_INSERT_MENU.UNABLE_TO_LOAD_SECRET");
+  else if (variablesLoading) hint = t("VARIABLE_INSERT_MENU.LOADING_SECRET_KEYS");
+  else if (usable.length === 0) hint = t("VARIABLE_INSERT_MENU.NO_SECRET_KEYS_ADD");
 
   const triggerIcon = (
     <>

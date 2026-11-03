@@ -56,11 +56,9 @@ export const SecretPicker = ({ onPick, target, onOpenChange, className }: Props)
     onOpenChange?.(next);
   };
 
-  const status = isError
-    ? t("SECRET_PICKER.UNABLE_TO_LOAD_SECRET")
-    : isLoading
-      ? t("SECRET_PICKER.LOADING_SECRET_KEYS")
-      : t("SECRET_PICKER.NO_SECRET_KEYS_ADD");
+  let status = t("SECRET_PICKER.NO_SECRET_KEYS_ADD");
+  if (isError) status = t("SECRET_PICKER.UNABLE_TO_LOAD_SECRET");
+  else if (isLoading) status = t("SECRET_PICKER.LOADING_SECRET_KEYS");
 
   return (
     <Popover open={open} onOpenChange={changeOpen}>

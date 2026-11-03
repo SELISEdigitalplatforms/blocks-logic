@@ -86,6 +86,12 @@ type FunctionsTableProps = {
   onCreateFunction: () => void;
 };
 
+const triggerLabel = (fn: { httpEnabled?: boolean; workflowEnabled?: boolean }, t: (key: string) => string) => {
+  if (fn.httpEnabled && fn.workflowEnabled) return t("FUNCTIONS_TABLE.HTTP_WORKFLOW");
+  if (fn.workflowEnabled) return t("FUNCTIONS_TABLE.WORKFLOW");
+  return "HTTP";
+};
+
 export const FunctionsTable = ({
   functions,
   isLoading,
@@ -188,11 +194,7 @@ export const FunctionsTable = ({
 
               <TableCell className={CELL_CLASS}>
                 <span className="whitespace-nowrap text-sm text-muted-foreground">
-                  {fn.httpEnabled && fn.workflowEnabled
-                    ? t("FUNCTIONS_TABLE.HTTP_WORKFLOW")
-                    : fn.workflowEnabled
-                      ? t("FUNCTIONS_TABLE.WORKFLOW")
-                      : "HTTP"}
+                  {triggerLabel(fn, t)}
                 </span>
               </TableCell>
 

@@ -52,6 +52,9 @@ export const GUIDE_SECTIONS = [
   "debugging",
 ] as const;
 
+const renderCode = (children: string) => <Code>{children}</Code>;
+const renderStrong = (children: string) => <strong>{children}</strong>;
+
 export const FunctionGuide = () => {
   const { t } = useT("logic.functions.components");
   return (
@@ -67,16 +70,16 @@ export const FunctionGuide = () => {
               <Items
                 items={[
                   <>
-                    {renderRichText(t("FUNCTION_GUIDE.N_0_INPUT_0_1"), [(children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>])}
+                    {renderRichText(t("FUNCTION_GUIDE.N_0_INPUT_0_1"), [renderCode, renderCode, renderCode, renderCode, renderCode, renderCode, renderCode])}
                   </>,
                   <>
-                    {renderRichText(t("FUNCTION_GUIDE.N_0_CTX_0_1"), [(children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>])}
+                    {renderRichText(t("FUNCTION_GUIDE.N_0_CTX_0_1"), [renderCode, renderCode, renderCode, renderCode, renderCode, renderCode, renderCode])}
                   </>,
                   <>
-                    {renderRichText(t("FUNCTION_GUIDE.N_0_INPUT_0_AND"), [(children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>])}
+                    {renderRichText(t("FUNCTION_GUIDE.N_0_INPUT_0_AND"), [renderCode, renderCode])}
                   </>,
                   <>
-                    {renderRichText(t("FUNCTION_GUIDE.GET_THE_CALLER_S"), [(children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>])}
+                    {renderRichText(t("FUNCTION_GUIDE.GET_THE_CALLER_S"), [renderCode, renderCode])}
                   </>,
                 ]}
               />
@@ -117,7 +120,7 @@ export const FunctionGuide = () => {
             <AccordionTrigger className="px-2 text-sm">{t("FUNCTION_GUIDE.ANSWERING_AS_AN_API")}</AccordionTrigger>
             <AccordionContent className="flex flex-col gap-2 px-2">
               <P>
-                {renderRichText(t("FUNCTION_GUIDE.WITH_RESPONSE_0_WAIT"), [(children) => <strong>{children}</strong>])}
+                {renderRichText(t("FUNCTION_GUIDE.WITH_RESPONSE_0_WAIT"), [renderStrong])}
               </P>
               <Block>{`return {
     statusCode: 201,
@@ -139,7 +142,7 @@ export const FunctionGuide = () => {
             <AccordionTrigger className="px-2 text-sm">{t("FUNCTION_GUIDE.RECEIVING_WEBHOOKS")}</AccordionTrigger>
             <AccordionContent className="flex flex-col gap-2 px-2">
               <P>
-                {renderRichText(t("FUNCTION_GUIDE.VERIFY_A_WEBHOOK_WITH"), [(children) => <Code>{children}</Code>, (children) => <Code>{children}</Code>])}
+                {renderRichText(t("FUNCTION_GUIDE.VERIFY_A_WEBHOOK_WITH"), [renderCode, renderCode])}
               </P>
               <Block>{`import Stripe from "stripe";
   const stripe = new Stripe("unused"); // module level
@@ -166,7 +169,7 @@ export const FunctionGuide = () => {
             <AccordionTrigger className="px-2 text-sm">{t("FUNCTION_GUIDE.STREAMING_ANSWERS_AI")}</AccordionTrigger>
             <AccordionContent className="flex flex-col gap-2 px-2">
               <P>
-                {renderRichText(t("FUNCTION_GUIDE.WITH_RESPONSE_0_WAIT_2"), [(children) => <strong>{children}</strong>, (children) => <strong>{children}</strong>])}
+                {renderRichText(t("FUNCTION_GUIDE.WITH_RESPONSE_0_WAIT_2"), [renderStrong, renderStrong])}
               </P>
               <Block>{`export default async function* handler(input, ctx) {
     const stream = await openai.chat.completions.create({

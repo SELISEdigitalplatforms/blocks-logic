@@ -127,9 +127,10 @@ export const ConditionalMultiselectField = ({
               className="flex flex-1 items-center justify-between gap-2 truncate text-left outline-none disabled:cursor-not-allowed"
             >
               <span className="flex items-center gap-1.5 truncate">
-                {isLoading ? (
+                {isLoading && (
                   <span className="text-muted-foreground">{t("common:LOADING")}</span>
-                ) : currentValue.values.length > 0 ? (
+                )}
+                {!isLoading && currentValue.values.length > 0 && (
                   <>
                     {previewItems.map((v) => (
                       <span
@@ -163,7 +164,8 @@ export const ConditionalMultiselectField = ({
                       </TooltipProvider>
                     )}
                   </>
-                ) : (
+                )}
+                {!isLoading && currentValue.values.length === 0 && (
                   <span className="text-muted-foreground">
                     {field.placeholder || t("CONDITIONAL_MULTISELECT_FIELD.SELECT")}
                   </span>

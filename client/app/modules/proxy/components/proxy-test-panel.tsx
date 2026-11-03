@@ -101,6 +101,9 @@ export const ProxyTestPanel = ({
     />
   );
 
+  const hasMethod = Boolean(methods?.length && method);
+  const canChooseMethod = hasMethod && (methods?.length ?? 0) > 1 && Boolean(onMethodChange);
+
   return (
     <Card>
       <CardHeader className="mb-4 gap-1">
@@ -109,11 +112,10 @@ export const ProxyTestPanel = ({
       </CardHeader>
       <CardContent className="space-y-3 p-0">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {methods?.length && method ? (
-            methods.length > 1 && onMethodChange ? (
+          {canChooseMethod && method && (
               <Select
                 value={method}
-                onValueChange={(value) => onMethodChange(value as ProxyMethod)}
+                onValueChange={(value) => onMethodChange?.(value as ProxyMethod)}
               >
                 <SelectTrigger
                   className="h-10 w-full shrink-0 sm:w-[120px]"
@@ -122,17 +124,17 @@ export const ProxyTestPanel = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {methods.map((item) => (
+                  {methods?.map((item) => (
                     <SelectItem key={item} value={item}>
                       {item}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            ) : (
-              <ProxyMethodBadge method={method} className="h-10 shrink-0 px-3 py-0 leading-10" />
-            )
-          ) : null}
+          )}
+          {hasMethod && !canChooseMethod && method && (
+            <ProxyMethodBadge method={method} className="h-10 shrink-0 px-3 py-0 leading-10" />
+          )}
           {pathPrefix ? (
             <div className="flex min-w-0 flex-1 items-center rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
               <span className="max-w-[55%] shrink-0 truncate border-r border-input px-3 py-2.5 font-mono text-xs text-muted-foreground">

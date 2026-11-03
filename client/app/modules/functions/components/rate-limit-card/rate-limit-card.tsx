@@ -42,12 +42,9 @@ export const RateLimitCard = ({ authMode, value, onChange }: RateLimitCardProps)
     onChange(parsed);
   };
 
-  const effective =
-    value != null
-      ? `${value.toLocaleString("en")} calls a minute (your limit).`
-      : isPublic
-        ? `${PUBLIC_DEFAULT_PER_MINUTE} calls a minute (the default for public functions).`
-        : t("RATE_LIMIT_CARD.NO_LIMIT_THE_DEFAULT");
+  let effective = t("RATE_LIMIT_CARD.NO_LIMIT_THE_DEFAULT");
+  if (value != null) effective = `${value.toLocaleString("en")} calls a minute (your limit).`;
+  else if (isPublic) effective = `${PUBLIC_DEFAULT_PER_MINUTE} calls a minute (the default for public functions).`;
 
   return (
     <Card>

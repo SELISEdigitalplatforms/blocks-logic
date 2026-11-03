@@ -292,17 +292,19 @@ export const ScheduleForm = ({
             )}
 
             <Button type="submit" disabled={isPending} className="gap-2 w-fit">
-              {isPending ? (
+              {isPending && (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   {t("SCHEDULE_FORM.SAVING")}
                 </>
-              ) : isEdit ? (
+              )}
+              {!isPending && isEdit && (
                 <>
                   <Save className="h-4 w-4" />
                   {t("SCHEDULE_FORM.SAVE_CHANGES")}
                 </>
-              ) : (
+              )}
+              {!isPending && !isEdit && (
                 <>
                   <Plus className="h-4 w-4" />
                   {t("common:CREATE")}

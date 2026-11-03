@@ -83,6 +83,276 @@ const confirmLabel = (status: Done["status"] | undefined, takeCount: number) => 
  * Import one proxy from an export file. The preview writes nothing; Apply sends the same file back and
  * the server checks everything again, so what the dialog shows is advice, never the authority.
  */
+const renderMono = (text: string) => <span className="font-mono">{text}</span>;
+
+/** How a changed proxy is written: every incoming value, or a field-by-field merge. */
+const resolutionFor = (status: ProxyImportResult["status"], allIncoming: boolean) => {
+  if (status !== "changed") return undefined;
+  return allIncoming ? "takeIncoming" : "merge";
+};
+
+/** Something to write: a new proxy, or a changed one with at least one incoming value taken. */
+const isApplicable = (status: ProxyImportResult["status"], takeCount: number) =>
+  status === "new" || (status === "changed" && takeCount > 0);
+
+/** Choose file, review, done. */
+const importStep = (isDone: boolean, hasResult: boolean) => {
+  if (isDone) return 2;
+  return hasResult ? 1 : 0;
+};
+
+const ErrorAlert = ({ message }: Readonly<{ message: string | null }>) =>
+  message ? (
+    <Alert variant="destructive" role="alert">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertDescription className="text-xs">{message}</AlertDescription>
+    </Alert>
+  ) : null;
+
+/** The server refused the file outright: its message, then any further reasons. */
+const RefusalAlert = ({ message, errors }: Readonly<{ message: string; errors: string[] }>) => (
+  <Alert variant="destructive" role="alert">
+    <AlertTriangle className="h-4 w-4" />
+    <AlertDescription className="text-xs">
+      <p>{message}</p>
+      {errors.filter((e) => e !== message).length ? (
+        <ul className="mt-1 list-disc space-y-0.5 pl-4">
+          {errors
+            .filter((e) => e !== message)
+            .map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+        </ul>
+      ) : null}
+    </AlertDescription>
+  </Alert>
+);
+
+type Change = Extract<ProxyImportOutcome, { ok: true }>["result"]["changes"][number];
+
+type PreviewProps = Readonly<{
+  result: ProxyImportResult;
+  changes: Change[];
+  choices: Record<string, Choice>;
+  takeCount: number;
+  showJson: boolean;
+  darkTheme: boolean;
+  onSetAll: (choice: Choice) => void;
+  onChoose: (field: string, choice: Choice) => void;
+  onToggleJson: () => void;
+}>;
+
+/** A changed proxy's fields, each to take from the file or keep, with an optional JSON diff. */
+const ChangesSection = ({
+  result,
+  changes,
+  choices,
+  takeCount,
+  showJson,
+  darkTheme,
+  onSetAll,
+  onChoose,
+  onToggleJson,
+}: PreviewProps) => {
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-medium-emphasis" aria-live="polite">
+          {t("PROXY_IMPORT_DIALOG.OF_CHANGES_WILL_BE", {
+            takeCount,
+            length: changes.length,
+          })}
+          {result.currentVersion
+            ? t("PROXY_IMPORT_DIALOG.THIS_PROXY_IS_AT", {
+                currentVersion: result.currentVersion,
+              })
+            : ""}
+        </span>
+        <Button size="xs" variant="ghost" onClick={() => onSetAll("incoming")}>
+          {t("PROXY_IMPORT_DIALOG.TAKE_ALL_INCOMING")}
+        </Button>
+        <Button size="xs" variant="ghost" onClick={() => onSetAll("mine")}>
+          {t("PROXY_IMPORT_DIALOG.KEEP_ALL_MINE")}
+        </Button>
+        {result.mineJson && result.incomingJson ? (
+          <Button size="xs" variant="ghost" onClick={onToggleJson}>
+            {showJson
+              ? t("PROXY_IMPORT_DIALOG.HIDE_JSON")
+              : t("PROXY_IMPORT_DIALOG.COMPARE_JSON")}
+          </Button>
+        ) : null}
+      </div>
+
+      {changes.map((change) => (
+        <ImportChangeRow
+          key={change.field}
+          label={change.label}
+          value={choices[change.field] ?? "mine"}
+          onChange={(choice) => onChoose(change.field, choice)}
+        >
+          <ImportValuePair mine={change.mine} incoming={change.incoming} />
+        </ImportChangeRow>
+      ))}
+
+      {showJson && result.mineJson && result.incomingJson ? (
+        <div className="overflow-hidden rounded-lg border">
+          <DiffEditor
+            height="320px"
+            language="json"
+            theme={darkTheme ? "vs-dark" : "vs"}
+            original={result.mineJson}
+            modified={result.incomingJson}
+            options={{
+              readOnly: true,
+              renderSideBySide: true,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              fontSize: 12,
+            }}
+          />
+          <p className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
+            {t("PROXY_IMPORT_DIALOG.LEFT_MINE_THIS_ENVIRONMENT")}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+/** What the file would do here: status, secrets, hidden values and, for a changed proxy, each field to take or keep. */
+const ImportPreview = ({
+  result,
+  changes,
+  choices,
+  takeCount,
+  showJson,
+  darkTheme,
+  onSetAll,
+  onChoose,
+  onToggleJson,
+}: PreviewProps) => {
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
+  return (
+    <div className="flex flex-col gap-4" data-testid="proxy-import-preview">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold">{result.name}</span>
+          <ImportStatusChip status={result.status} />
+          <span className="font-mono text-xs font-normal text-medium-emphasis">
+            {result.slug}
+          </span>
+        </div>
+        <p className="text-sm" data-testid="proxy-import-status">
+          {STATUS_TEXT[result.status]}
+        </p>
+      </div>
+
+      {result.status === "blocked" ? (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-xs">
+            {result.reason ?? t("PROXY_IMPORT_DIALOG.THIS_FILE_CANNOT_BE")}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {result.status === "new" && result.historyExists ? (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription className="text-xs">
+            {t("PROXY_IMPORT_DIALOG.A_PROXY_WITH_THIS", {
+              currentVersion: result.currentVersion ?? "",
+            })}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <ImportSecretChecklist
+        missing={result.missingSecrets}
+        duplicate={result.duplicateSecrets}
+        unchecked={result.secretCheckUnavailable}
+      />
+
+      {result.maskedValues.length && result.status !== "blocked" ? (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription className="text-xs">
+            {renderRichText(
+              t("PROXY_IMPORT_DIALOG.FILE_HIDES_VALUES", {
+                count: result.maskedValues.length,
+                names: result.maskedValues.join(", "),
+              }),
+              [renderMono, renderMono, renderMono, renderMono],
+            )}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {result.status === "changed" && changes.length ? (
+        <ChangesSection
+          result={result}
+          changes={changes}
+          choices={choices}
+          takeCount={takeCount}
+          showJson={showJson}
+          darkTheme={darkTheme}
+          onSetAll={onSetAll}
+          onChoose={onChoose}
+          onToggleJson={onToggleJson}
+        />
+      ) : null}
+    </div>
+  );
+};
+
+/** Close or open the imported proxy once done; before that, cancel or confirm the import. */
+const ImportActions = ({
+  doneItemId,
+  sameAsHere,
+  confirmText,
+  canConfirm,
+  applying,
+  onClose,
+  onConfirm,
+  onOpenProxy,
+}: Readonly<{
+  doneItemId: string | null;
+  sameAsHere: boolean;
+  confirmText: string;
+  canConfirm: boolean;
+  applying: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  onOpenProxy: (id: string) => void;
+}>) => {
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
+  if (doneItemId !== null) {
+    return (
+      <>
+        <Button type="button" variant="outline" onClick={onClose}>
+          {t("common:CLOSE")}
+        </Button>
+        <Button type="button" onClick={() => onOpenProxy(doneItemId)}>
+          {t("PROXY_IMPORT_DIALOG.OPEN_PROXY")}
+        </Button>
+      </>
+    );
+  }
+  return (
+    <>
+      <Button type="button" variant="outline" onClick={onClose}>
+        {sameAsHere ? t("common:CLOSE") : t("common:CANCEL")}
+      </Button>
+      <Button type="button" disabled={!canConfirm} onClick={onConfirm}>
+        {applying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        {confirmText}
+      </Button>
+    </>
+  );
+};
+
 export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => {
   const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -166,11 +436,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
   const result = outcome?.ok ? outcome.result : (outcome?.result ?? null);
   const changes = outcome?.ok ? outcome.result.changes : [];
   const takeCount = changes.filter((c) => choices[c.field] === "incoming").length;
-  const canApply =
-    !!file &&
-    !done &&
-    outcome?.ok === true &&
-    (outcome.result.status === "new" || (outcome.result.status === "changed" && takeCount > 0));
+  const canApply = !!file && !done && outcome?.ok === true && isApplicable(outcome.result.status, takeCount);
 
   const setAll = (choice: Choice) =>
     setChoices(Object.fromEntries(changes.map((c) => [c.field, choice])));
@@ -182,7 +448,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
     const allIncoming = takeCount === changes.length;
     const response = await apply.mutateAsync({
       file,
-      resolution: status === "changed" ? (allIncoming ? "takeIncoming" : "merge") : undefined,
+      resolution: resolutionFor(status, allIncoming),
       fieldChoices: status === "changed" && !allIncoming ? choices : undefined,
       expectedVersion: outcome.result.currentVersion,
     });
@@ -214,7 +480,7 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
   };
 
   const busy = checking || preview.isPending || apply.isPending;
-  const step = done ? 2 : result ? 1 : 0;
+  const step = importStep(!!done, !!result);
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
@@ -258,167 +524,27 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
             />
           ) : null}
 
-          {readError ? (
-            <Alert variant="destructive" role="alert">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="text-xs">{readError}</AlertDescription>
-            </Alert>
-          ) : null}
+          <ErrorAlert message={readError} />
 
           {outcome && !outcome.ok && !outcome.result ? (
-            <Alert variant="destructive" role="alert">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="text-xs">
-                <p>{outcome.message}</p>
-                {outcome.errors.filter((e) => e !== outcome.message).length ? (
-                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                    {outcome.errors
-                      .filter((e) => e !== outcome.message)
-                      .map((message) => (
-                        <li key={message}>{message}</li>
-                      ))}
-                  </ul>
-                ) : null}
-              </AlertDescription>
-            </Alert>
+            <RefusalAlert message={outcome.message} errors={outcome.errors} />
           ) : null}
 
           {result && !done ? (
-            <div className="flex flex-col gap-4" data-testid="proxy-import-preview">
-              <div className="flex flex-col gap-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold">{result.name}</span>
-                  <ImportStatusChip status={result.status} />
-                  <span className="font-mono text-xs font-normal text-medium-emphasis">
-                    {result.slug}
-                  </span>
-                </div>
-                <p className="text-sm" data-testid="proxy-import-status">
-                  {STATUS_TEXT[result.status]}
-                </p>
-              </div>
-
-              {result.status === "blocked" ? (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    {result.reason ?? t("PROXY_IMPORT_DIALOG.THIS_FILE_CANNOT_BE")}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-
-              {result.status === "new" && result.historyExists ? (
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    {t("PROXY_IMPORT_DIALOG.A_PROXY_WITH_THIS", {
-                      currentVersion: result.currentVersion ?? "",
-                    })}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-
-              <ImportSecretChecklist
-                missing={result.missingSecrets}
-                duplicate={result.duplicateSecrets}
-                unchecked={result.secretCheckUnavailable}
-              />
-
-              {result.maskedValues.length && result.status !== "blocked" ? (
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    {renderRichText(
-                      t("PROXY_IMPORT_DIALOG.FILE_HIDES_VALUES", {
-                        count: result.maskedValues.length,
-                        names: result.maskedValues.join(", "),
-                      }),
-                      [
-                        (text) => <span className="font-mono">{text}</span>,
-                        (text) => <span className="font-mono">{text}</span>,
-                        (text) => <span className="font-mono">{text}</span>,
-                        (text) => <span className="font-mono">{text}</span>,
-                      ],
-                    )}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-
-              {result.status === "changed" && changes.length ? (
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm text-medium-emphasis" aria-live="polite">
-                      {t("PROXY_IMPORT_DIALOG.OF_CHANGES_WILL_BE", {
-                        takeCount,
-                        length: changes.length,
-                      })}
-                      {result.currentVersion
-                        ? t("PROXY_IMPORT_DIALOG.THIS_PROXY_IS_AT", {
-                            currentVersion: result.currentVersion,
-                          })
-                        : ""}
-                    </span>
-                    <Button size="xs" variant="ghost" onClick={() => setAll("incoming")}>
-                      {t("PROXY_IMPORT_DIALOG.TAKE_ALL_INCOMING")}
-                    </Button>
-                    <Button size="xs" variant="ghost" onClick={() => setAll("mine")}>
-                      {t("PROXY_IMPORT_DIALOG.KEEP_ALL_MINE")}
-                    </Button>
-                    {result.mineJson && result.incomingJson ? (
-                      <Button size="xs" variant="ghost" onClick={() => setShowJson((v) => !v)}>
-                        {showJson
-                          ? t("PROXY_IMPORT_DIALOG.HIDE_JSON")
-                          : t("PROXY_IMPORT_DIALOG.COMPARE_JSON")}
-                      </Button>
-                    ) : null}
-                  </div>
-
-                  {changes.map((change) => (
-                    <ImportChangeRow
-                      key={change.field}
-                      label={change.label}
-                      value={choices[change.field] ?? "mine"}
-                      onChange={(choice) =>
-                        setChoices((current) => ({ ...current, [change.field]: choice }))
-                      }
-                    >
-                      <ImportValuePair mine={change.mine} incoming={change.incoming} />
-                    </ImportChangeRow>
-                  ))}
-
-                  {showJson && result.mineJson && result.incomingJson ? (
-                    <div className="overflow-hidden rounded-lg border">
-                      <DiffEditor
-                        height="320px"
-                        language="json"
-                        theme={resolvedTheme === "dark" ? "vs-dark" : "vs"}
-                        original={result.mineJson}
-                        modified={result.incomingJson}
-                        options={{
-                          readOnly: true,
-                          renderSideBySide: true,
-                          minimap: { enabled: false },
-                          scrollBeyondLastLine: false,
-                          automaticLayout: true,
-                          fontSize: 12,
-                        }}
-                      />
-                      <p className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
-                        {t("PROXY_IMPORT_DIALOG.LEFT_MINE_THIS_ENVIRONMENT")}
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
+            <ImportPreview
+              result={result}
+              changes={changes}
+              choices={choices}
+              takeCount={takeCount}
+              showJson={showJson}
+              darkTheme={resolvedTheme === "dark"}
+              onSetAll={setAll}
+              onChoose={(field, choice) => setChoices((current) => ({ ...current, [field]: choice }))}
+              onToggleJson={() => setShowJson((v) => !v)}
+            />
           ) : null}
 
-          {applyError ? (
-            <Alert variant="destructive" role="alert">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="text-xs">{applyError}</AlertDescription>
-            </Alert>
-          ) : null}
+          <ErrorAlert message={applyError} />
 
           {done && result ? (
             <div className="flex flex-col gap-3" data-testid="proxy-import-result">
@@ -438,33 +564,19 @@ export const ProxyImportDialog = ({ open, onOpenChange, onImported }: Props) => 
         </div>
 
         <DialogFooter>
-          {done ? (
-            <>
-              <Button type="button" variant="outline" onClick={close}>
-                {t("common:CLOSE")}
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  const id = done.itemId;
-                  close();
-                  onImported?.(id);
-                }}
-              >
-                {t("PROXY_IMPORT_DIALOG.OPEN_PROXY")}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button type="button" variant="outline" onClick={close}>
-                {result?.status === "same" ? t("common:CLOSE") : t("common:CANCEL")}
-              </Button>
-              <Button type="button" disabled={!canApply || busy} onClick={confirm}>
-                {apply.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {confirmLabel(result?.status, takeCount)}
-              </Button>
-            </>
-          )}
+          <ImportActions
+            doneItemId={done?.itemId ?? null}
+            sameAsHere={result?.status === "same"}
+            confirmText={confirmLabel(result?.status, takeCount)}
+            canConfirm={canApply && !busy}
+            applying={apply.isPending}
+            onClose={close}
+            onConfirm={confirm}
+            onOpenProxy={(id) => {
+              close();
+              onImported?.(id);
+            }}
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>

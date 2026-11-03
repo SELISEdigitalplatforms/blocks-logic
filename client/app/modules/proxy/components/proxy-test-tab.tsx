@@ -142,8 +142,89 @@ const filterBadge = (note: string | null | undefined) => {
   }
 };
 
-const statusClass = (status: number) =>
-  status >= 500 ? "text-red-700" : status >= 400 ? "text-amber-700" : "text-green-700";
+const statusClass = (status: number) => {
+  if (status >= 500) return "text-red-700";
+  if (status >= 400) return "text-amber-700";
+  return "text-green-700";
+};
+
+type Translate = ReturnType<typeof useT>["t"];
+
+/** Why the request cannot be sent yet, or null when it can. */
+const whyBlocked = (
+  t: Translate,
+  state: {
+    enabled: boolean;
+    hasRoute: boolean;
+    method: ProxyMethod;
+    missingParams: string[];
+    bodyTooLarge: boolean;
+  },
+): string | null => {
+  if (!state.enabled) return t("PROXY_TEST_TAB.THIS_PROXY_IS_PAUSED");
+  if (!state.hasRoute) return t("PROXY_TEST_TAB.NO_ROUTE_IS_DECLARED", { method: state.method });
+  if (state.missingParams.length) {
+    return t("PROXY_TEST_TAB.FILL_IN_TO_SEND", {
+      value: state.missingParams.map((name) => `{${name}}`).join(", "),
+    });
+  }
+  if (state.bodyTooLarge) return t("PROXY_TEST_TAB.THE_REQUEST_BODY_IS", { value: MAX_REQUEST_BODY_BYTES / MB });
+  return null;
+};
+
+/** The last test call's status, timing, filter outcome and body. */
+const TestResponseCard = ({
+  response,
+  isCopying,
+  onCopy,
+}: Readonly<{ response: ProxyTestResponse; isCopying: boolean; onCopy: (text: string) => void }>) => {
+  const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
+  return (
+    <Card className="rounded-xl">
+      <CardContent className="space-y-3 pt-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={response.ok ? "success" : "error"}>
+            <span className={cn("font-mono", statusClass(response.status))}>
+              {response.status}
+            </span>
+            <span className="ml-1">{response.statusText}</span>
+          </Badge>
+          {filterBadge(response.responseFilterNote) ? (
+            <Badge variant={filterBadge(response.responseFilterNote)!.variant}>
+              {filterBadge(response.responseFilterNote)!.label}
+            </Badge>
+          ) : null}
+          <span className="text-xs text-muted-foreground">
+            {t("PROXY_TEST_TAB.MS", { latencyMs: response.latencyMs })}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {t("PROXY_TEST_TAB.BYTES", { responseBodyBytes: response.responseBodyBytes })}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="ml-auto gap-2"
+            onClick={() => onCopy(response.responseBody)}
+            disabled={!response.responseBody}
+          >
+            {isCopying ? (
+              <Check className="h-4 w-4 text-green-600" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+            {t("PROXY_TEST_TAB.COPY_RESPONSE")}
+          </Button>
+        </div>
+        <p className="break-all text-sm text-muted-foreground">{response.meta}</p>
+        <pre className="max-h-96 overflow-auto rounded-sm bg-muted/30 p-3 text-xs">
+          {formatProxyBody(response.responseBody, response.contentType) ||
+            t("PROXY_TEST_TAB.EMPTY_RESPONSE_BODY")}
+        </pre>
+      </CardContent>
+    </Card>
+  );
+};
 
 /**
  * "Test" tab of the proxy detail page: run a saved proxy against its upstream from the console.
@@ -197,18 +278,13 @@ export const ProxyTestTab = ({ proxy }: Props) => {
   const requestUrl = `${getProxyClientUrl(selectedProject, proxy.slug, pathSuffix)}${
     trimmedQuery ? `?${trimmedQuery}` : ""
   }`;
-  let blockedReason: string | null = null;
-  if (!proxy.enabled) {
-    blockedReason = t("PROXY_TEST_TAB.THIS_PROXY_IS_PAUSED");
-  } else if (!route) {
-    blockedReason = t("PROXY_TEST_TAB.NO_ROUTE_IS_DECLARED", { method });
-  } else if (missingParams.length) {
-    blockedReason = t("PROXY_TEST_TAB.FILL_IN_TO_SEND", {
-      value: missingParams.map((name) => `{${name}}`).join(", "),
-    });
-  } else if (sendsBody && bodyBytes > MAX_REQUEST_BODY_BYTES) {
-    blockedReason = t("PROXY_TEST_TAB.THE_REQUEST_BODY_IS", { value: MAX_REQUEST_BODY_BYTES / MB });
-  }
+  const blockedReason = whyBlocked(t, {
+    enabled: proxy.enabled,
+    hasRoute: Boolean(route),
+    method,
+    missingParams,
+    bodyTooLarge: sendsBody && bodyBytes > MAX_REQUEST_BODY_BYTES,
+  });
 
   const changeMethod = (next: ProxyMethod) => {
     setMethod(next);
@@ -402,49 +478,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
       </Card>
 
       {response ? (
-        <Card className="rounded-xl">
-          <CardContent className="space-y-3 pt-6">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={response.ok ? "success" : "error"}>
-                <span className={cn("font-mono", statusClass(response.status))}>
-                  {response.status}
-                </span>
-                <span className="ml-1">{response.statusText}</span>
-              </Badge>
-              {filterBadge(response.responseFilterNote) ? (
-                <Badge variant={filterBadge(response.responseFilterNote)!.variant}>
-                  {filterBadge(response.responseFilterNote)!.label}
-                </Badge>
-              ) : null}
-              <span className="text-xs text-muted-foreground">
-                {t("PROXY_TEST_TAB.MS", { latencyMs: response.latencyMs })}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {t("PROXY_TEST_TAB.BYTES", { responseBodyBytes: response.responseBodyBytes })}
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="ml-auto gap-2"
-                onClick={() => copyResponse(response.responseBody)}
-                disabled={!response.responseBody}
-              >
-                {isCopying ? (
-                  <Check className="h-4 w-4 text-green-600" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-                {t("PROXY_TEST_TAB.COPY_RESPONSE")}
-              </Button>
-            </div>
-            <p className="break-all text-sm text-muted-foreground">{response.meta}</p>
-            <pre className="max-h-96 overflow-auto rounded-sm bg-muted/30 p-3 text-xs">
-              {formatProxyBody(response.responseBody, response.contentType) ||
-                t("PROXY_TEST_TAB.EMPTY_RESPONSE_BODY")}
-            </pre>
-          </CardContent>
-        </Card>
+        <TestResponseCard response={response} isCopying={isCopying} onCopy={copyResponse} />
       ) : null}
     </div>
   );

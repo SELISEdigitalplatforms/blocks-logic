@@ -77,11 +77,13 @@ export const MultiselectField = ({
             className="w-full justify-between font-normal"
           >
             <span className="flex items-center gap-2 truncate">
-              {isLoading ? (
+              {isLoading && (
                 <span className="text-muted-foreground">{t("common:LOADING")}</span>
-              ) : selected.length > 0 ? (
+              )}
+              {!isLoading && selected.length > 0 && (
                 <span>{t("MULTISELECT_FIELD.SELECTED", { length: selected.length })}</span>
-              ) : (
+              )}
+              {!isLoading && selected.length === 0 && (
                 <span className="text-muted-foreground">{field.placeholder || t("MULTISELECT_FIELD.SELECT")}</span>
               )}
               {isLoading && <Loader2 className="h-4 w-4 animate-spin opacity-50" />}

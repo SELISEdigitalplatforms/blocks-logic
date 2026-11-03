@@ -4,6 +4,13 @@ import { tStatic } from "@seliseblocks/genesis-os";
 const LOGIC_FUNCTIONS_MODULE = "logic.functions";
 
 /** The server's ceiling for an import (FunctionTransferCodec.MaxImportBytes): checked here first. */
+// The version as the file wrote it; an object is shown as JSON instead of "[object Object]".
+const describeSchemaVersion = (version: unknown): string => {
+  if (version == null) return "(none)";
+  if (typeof version === "string") return version;
+  return JSON.stringify(version);
+};
+
 export const MAX_IMPORT_BYTES = 3 * 1024 * 1024;
 
 export const EXPORT_FORMAT = "blocks.function.export";
@@ -50,7 +57,7 @@ export const readImportFile = async (file: File): Promise<IFunctionExportFile> =
   if (head.schemaVersion !== EXPORT_SCHEMA_VERSION) {
     throw new Error(
       tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.SCHEMA_VERSION_MISMATCH", {
-        found: String(head.schemaVersion ?? "(none)"),
+        found: describeSchemaVersion(head.schemaVersion),
         expected: EXPORT_SCHEMA_VERSION,
       }),
     );

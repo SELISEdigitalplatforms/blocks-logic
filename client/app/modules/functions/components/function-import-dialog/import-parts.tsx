@@ -73,7 +73,7 @@ export const ImportDropZone = ({ disabled, onBrowse, onDropFiles }: DropZoneProp
   };
 
   return (
-    <div
+    <div /* NOSONAR: drop target that holds block content (not allowed in <button>); Enter/Space handled in onKeyDown */
       role="button"
       tabIndex={disabled ? -1 : 0}
       aria-disabled={disabled || undefined}

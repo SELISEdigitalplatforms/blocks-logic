@@ -14,6 +14,8 @@ type DeleteProxyDialogProps = {
   onDeleted?: () => void;
 };
 
+const renderBold = (children: string) => <span className="font-semibold">{children}</span>;
+
 export const DeleteProxyDialog = ({
   open,
   onOpenChange,
@@ -49,7 +51,7 @@ export const DeleteProxyDialog = ({
             <>
               {renderRichText(
                 t("DELETE_PROXY_DIALOG.ARE_YOU_SURE_YOU", { name: proxy?.name ?? "" }),
-                [(children) => <span className="font-semibold">{children}</span>],
+                [renderBold],
               )}
             </>
           ),

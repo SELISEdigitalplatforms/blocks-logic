@@ -41,13 +41,10 @@ export const VariablePickerPopover = ({
   const [open, setOpen] = useState(false);
   const disabled = Boolean(isLoading) || Boolean(isError) || variables.length === 0;
 
-  const reason = isError
-    ? t("VARIABLE_PICKER_POPOVER.UNABLE_TO_LOAD_VARIABLES")
-    : isLoading
-      ? t("VARIABLE_PICKER_POPOVER.LOADING_VARIABLES")
-      : variables.length === 0
-        ? t("VARIABLE_PICKER_POPOVER.NO_VARIABLES_ADD_ONE")
-        : buttonLabel;
+  let reason = buttonLabel;
+  if (isError) reason = t("VARIABLE_PICKER_POPOVER.UNABLE_TO_LOAD_VARIABLES");
+  else if (isLoading) reason = t("VARIABLE_PICKER_POPOVER.LOADING_VARIABLES");
+  else if (variables.length === 0) reason = t("VARIABLE_PICKER_POPOVER.NO_VARIABLES_ADD_ONE");
 
   const trigger = (
     <Button

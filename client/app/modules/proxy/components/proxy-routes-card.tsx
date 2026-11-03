@@ -132,6 +132,66 @@ const countReplaced = (
 };
 
 
+type Translate = ReturnType<typeof useT>["t"];
+
+/** The row's sentence parts: what the endpoint sends, what it returns, and what happens if it fails. */
+const describeRoute = (
+  t: Translate,
+  route: ProxyRoute,
+  connection: { headers: ProxyKeyValue[]; query: ProxyKeyValue[] },
+  connectionResilience: ProxyRoute["resilience"],
+) => {
+  const sends = [
+    hasBody(route.method) && route.bodyMerge?.length
+      ? t("PROXY_ROUTES_CARD.BODY_FIELDS_MERGED", { count: route.bodyMerge.length })
+      : null,
+    route.headers?.length
+      ? t("PROXY_ROUTES_CARD.EXTRA_HEADERS", { count: route.headers.length })
+      : null,
+    route.query?.length
+      ? t("PROXY_ROUTES_CARD.EXTRA_QUERY_PARAMS", { count: route.query.length })
+      : null,
+  ].filter(Boolean);
+  const replacedHeaders = countReplaced(route.headers, connection.headers, "header");
+  const replacedQuery = countReplaced(route.query, connection.query, "query");
+  const replacesSummary = [
+    replacedHeaders
+      ? t("PROXY_ROUTES_CARD.REPLACES_HEADERS", { count: replacedHeaders })
+      : null,
+    replacedQuery
+      ? t("PROXY_ROUTES_CARD.REPLACES_QUERY_PARAMS", { count: replacedQuery })
+      : null,
+  ].filter(Boolean);
+  let sendsSummary = hasBody(route.method)
+    ? t("PROXY_ROUTES_CARD.BODY_AS_YOUR_CLIENT")
+    : t("PROXY_ROUTES_CARD.THE_CONNECTION_S_HEADERS");
+  if (sends.length) sendsSummary = [...sends, ...replacesSummary].join(" · ");
+  const included = (route.responseInclude ?? []).map((path) => path.trim()).filter(Boolean);
+  let returnsSummary = t("PROXY_ROUTES_CARD.WHOLE_RESPONSE");
+  if (route.responseMode === "select") {
+    returnsSummary = included.length
+      ? t("PROXY_ROUTES_CARD.ONLY_FIELDS", { fields: included.join(", ") })
+      : t("PROXY_ROUTES_CARD.ONLY_THE_LISTED_FIELDS");
+  }
+  let resilienceNote = t("PROXY_ROUTES_CARD.THIS_ENDPOINT_IGNORES_THE");
+  if (!route.resilience) {
+    resilienceNote = t("PROXY_ROUTES_CARD.USES_THE_CONNECTION_S", {
+      value: describeResilience(connectionResilience).toLowerCase(),
+    });
+  } else if (describeResilience(route.resilience) === "Not configured") {
+    resilienceNote = t("PROXY_ROUTES_CARD.NOTHING_SET_YET_SO");
+  }
+  return { sendsSummary, returnsSummary, resilienceNote };
+};
+
+/** The upstream path's placeholder: blank means the client path is forwarded as typed. */
+const upstreamPlaceholder = (t: Translate, template: string) =>
+  template ? t("PROXY_ROUTES_CARD.SAME_AS_CLIENT_PATH", { template }) : t("PROXY_ROUTES_CARD.SAME_AS_CLIENT_PATH_2");
+
+/** A field's validation message under it; nothing when the field is valid. */
+const FieldError = ({ message }: Readonly<{ message?: string }>) =>
+  message ? <p className="mt-1 text-[11px] text-destructive">{message}</p> : null;
+
 const joinPath = (base: string, suffix: string) => {
   const root = base.replace(/\/+$/, "");
   const rest = trimRoutePath(suffix);
@@ -316,46 +376,12 @@ export const ProxyRoutesCard = ({
         const forwardsTo = joinPath(upstreamUrl || "https://…", route.upstreamPath ?? route.path);
         const isOnlyEndpoint = routes.length === 1;
 
-        const sends = [
-          hasBody(route.method) && route.bodyMerge?.length
-            ? t("PROXY_ROUTES_CARD.BODY_FIELDS_MERGED", { count: route.bodyMerge.length })
-            : null,
-          route.headers?.length
-            ? t("PROXY_ROUTES_CARD.EXTRA_HEADERS", { count: route.headers.length })
-            : null,
-          route.query?.length
-            ? t("PROXY_ROUTES_CARD.EXTRA_QUERY_PARAMS", { count: route.query.length })
-            : null,
-        ].filter(Boolean);
-        const replacedHeaders = countReplaced(route.headers, connection.headers, "header");
-        const replacedQuery = countReplaced(route.query, connection.query, "query");
-        const replacesSummary = [
-          replacedHeaders
-            ? t("PROXY_ROUTES_CARD.REPLACES_HEADERS", { count: replacedHeaders })
-            : null,
-          replacedQuery
-            ? t("PROXY_ROUTES_CARD.REPLACES_QUERY_PARAMS", { count: replacedQuery })
-            : null,
-        ].filter(Boolean);
-        let sendsSummary = hasBody(route.method)
-          ? t("PROXY_ROUTES_CARD.BODY_AS_YOUR_CLIENT")
-          : t("PROXY_ROUTES_CARD.THE_CONNECTION_S_HEADERS");
-        if (sends.length) sendsSummary = [...sends, ...replacesSummary].join(" · ");
-        const included = (route.responseInclude ?? []).map((path) => path.trim()).filter(Boolean);
-        let returnsSummary = t("PROXY_ROUTES_CARD.WHOLE_RESPONSE");
-        if (route.responseMode === "select") {
-          returnsSummary = included.length
-            ? t("PROXY_ROUTES_CARD.ONLY_FIELDS", { fields: included.join(", ") })
-            : t("PROXY_ROUTES_CARD.ONLY_THE_LISTED_FIELDS");
-        }
-        let resilienceNote = t("PROXY_ROUTES_CARD.THIS_ENDPOINT_IGNORES_THE");
-        if (!route.resilience) {
-          resilienceNote = t("PROXY_ROUTES_CARD.USES_THE_CONNECTION_S", {
-            value: describeResilience(connectionResilience).toLowerCase(),
-          });
-        } else if (describeResilience(route.resilience) === "Not configured") {
-          resilienceNote = t("PROXY_ROUTES_CARD.NOTHING_SET_YET_SO");
-        }
+        const { sendsSummary, returnsSummary, resilienceNote } = describeRoute(
+          t,
+          route,
+          connection,
+          connectionResilience,
+        );
 
         return (
           <div key={`route-${index}`} className="rounded-md border p-3">
@@ -384,9 +410,7 @@ export const ProxyRoutesCard = ({
                     ))}
                   </SelectContent>
                 </Select>
-                {errorAt(index, "method") ? (
-                  <p className="mt-1 text-[11px] text-destructive">{errorAt(index, "method")}</p>
-                ) : null}
+                <FieldError message={errorAt(index, "method")} />
               </div>
 
               <div className="min-w-[180px] flex-1">
@@ -398,9 +422,7 @@ export const ProxyRoutesCard = ({
                   value={route.path}
                   onChange={(event) => patch(index, { path: event.target.value })}
                 />
-                {errorAt(index, "path") ? (
-                  <p className="mt-1 text-[11px] text-destructive">{errorAt(index, "path")}</p>
-                ) : null}
+                <FieldError message={errorAt(index, "path")} />
               </div>
 
               <div className="min-w-[180px] flex-1">
@@ -409,9 +431,7 @@ export const ProxyRoutesCard = ({
                 </Label>
                 <Input
                   className="mt-1 h-9 font-mono text-xs"
-                  placeholder={
-                    template ? t("PROXY_ROUTES_CARD.SAME_AS_CLIENT_PATH", { template }) : t("PROXY_ROUTES_CARD.SAME_AS_CLIENT_PATH_2")
-                  }
+                  placeholder={upstreamPlaceholder(t, template)}
                   aria-label={t("PROXY_ROUTES_CARD.UPSTREAM_PATH_FOR_ENDPOINT", { value: index + 1 })}
                   value={route.upstreamPath ?? ""}
                   onChange={(event) =>
@@ -420,11 +440,7 @@ export const ProxyRoutesCard = ({
                     })
                   }
                 />
-                {errorAt(index, "upstreamPath") ? (
-                  <p className="mt-1 text-[11px] text-destructive">
-                    {errorAt(index, "upstreamPath")}
-                  </p>
-                ) : null}
+                <FieldError message={errorAt(index, "upstreamPath")} />
               </div>
 
               <div className="mt-5 flex shrink-0 items-center gap-1">

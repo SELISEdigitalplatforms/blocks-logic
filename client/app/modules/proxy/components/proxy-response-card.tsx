@@ -52,6 +52,12 @@ const prettyBytes = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+/** How many fields a "select" response forwards; none selected forwards an empty object. */
+const selectionSummary = (selecting: boolean, selectedCount: number) => {
+  if (selecting && selectedCount === 0) return "Nothing selected — clients receive {}";
+  return `${selectedCount} field${selectedCount === 1 ? "" : "s"} selected`;
+};
+
 /**
  * The "Response" card. `responseMode` + `responseInclude` are the single source of truth (form
  * fields); the field tree and its checked-id set are ephemeral component state rebuilt from
@@ -183,9 +189,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
   const selectedCount = encodedPaths.length;
   const summary = wholeResponse
     ? t("PROXY_RESPONSE_CARD.WHOLE_RESPONSE_FORWARDED")
-    : modeField.value === "select" && selectedCount === 0
-      ? "Nothing selected — clients receive {}"
-      : `${selectedCount} field${selectedCount === 1 ? "" : "s"} selected`;
+    : selectionSummary(modeField.value === "select", selectedCount);
   const summaryAmber = modeField.value === "select" && !wholeResponse && selectedCount === 0;
 
   // ---- tree mutations -------------------------------------------------------
@@ -490,7 +494,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("PROXY_RESPONSE_CARD.FIELDS")}
                 </p>
-                {wholeResponse ? (
+                {wholeResponse && (
                   <div className="space-y-2 text-sm">
                     <label className="flex items-center gap-2 text-muted-foreground">
                       <Checkbox checked disabled />
@@ -507,11 +511,13 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
                       {t("PROXY_RESPONSE_CARD.FILTER_FIELDS_INSTEAD")}
                     </button>
                   </div>
-                ) : tree.length === 0 ? (
+                )}
+                {!wholeResponse && tree.length === 0 && (
                   <p className="py-4 text-center text-xs text-muted-foreground">
                     {t("PROXY_RESPONSE_CARD.NO_FIELDS_YET_ADD")}
                   </p>
-                ) : (
+                )}
+                {!wholeResponse && tree.length > 0 && (
                   <ResponseFieldTree
                     nodes={tree}
                     checked={checked}

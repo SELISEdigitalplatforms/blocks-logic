@@ -84,6 +84,210 @@ const toRoute = (operation: ProxyOpenApiOperation): ProxyRoute => ({
   resilience: null,
 });
 
+const renderMono = (children: string) => <span className="break-all font-mono">{children}</span>;
+
+/** The document's errors (red) or warnings, as a list; nothing when there are none. */
+const PreviewMessages = ({
+  messages,
+  variant,
+}: Readonly<{ messages: string[]; variant?: "destructive" }>) => {
+  if (!messages.length) return null;
+  const Icon = variant === "destructive" ? AlertTriangle : Info;
+  return (
+    <Alert variant={variant}>
+      <Icon className="h-4 w-4" />
+      <AlertDescription>
+        <ul className="list-disc space-y-0.5 pl-4 text-xs">
+          {messages.map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
+  );
+};
+
+type PreviewOperation = ProxyOpenApiOperation & { alreadyExists: boolean };
+
+/** One operation of the document: ticked to import it, disabled when its address is already taken. */
+const OperationRow = ({
+  operation,
+  checked,
+  onToggle,
+}: Readonly<{ operation: PreviewOperation; checked: boolean; onToggle: (on: boolean) => void }>) => {
+  const { t } = useT("logic.proxy.components");
+  const queryCount = operation.queryParameters.length;
+  const headerCount = operation.headerParameters.length;
+  let bringsText = t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_HEADER", { count: headerCount });
+  if (queryCount > 0 && headerCount > 0) {
+    bringsText = t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_BOTH", { query: queryCount, header: headerCount });
+  } else if (queryCount > 0) {
+    bringsText = t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_QUERY", { count: queryCount });
+  }
+
+  return (
+    <li>
+      <label
+        className={cn(
+          "flex items-start gap-2 rounded-md border p-2",
+          operation.alreadyExists
+            ? "cursor-not-allowed bg-muted/40"
+            : "cursor-pointer hover:bg-muted/40",
+        )}
+      >
+        <Checkbox
+          className="mt-0.5"
+          checked={checked && !operation.alreadyExists}
+          disabled={operation.alreadyExists}
+          aria-label={t("PROXY_OPENAPI_IMPORT_DIALOG.IMPORT", { method: operation.method, path: operation.path })}
+          onCheckedChange={(value) => onToggle(value === true)}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <ProxyMethodBadge method={operation.method} />
+            <code className="break-all font-mono text-xs">
+              /{operation.path}
+            </code>
+            {operation.alreadyExists ? (
+              <span className="text-[11px] text-muted-foreground">
+                {t("PROXY_OPENAPI_IMPORT_DIALOG.ALREADY_DEFINED_KEPT_AS")}
+              </span>
+            ) : null}
+          </span>
+          {operation.summary ? (
+            <span className="block text-[11px] text-muted-foreground">
+              {operation.summary}
+            </span>
+          ) : null}
+          {queryCount + headerCount > 0 ? (
+            <span className="block text-[11px] text-muted-foreground">
+              {bringsText}
+            </span>
+          ) : null}
+        </span>
+      </label>
+    </li>
+  );
+};
+
+type Translate = ReturnType<typeof useT>["t"];
+
+/** What adopting the document's server URL does to the connection's current vendor URL. */
+const replaceNote = (t: Translate, upstreamUrl: string, differentHost: boolean) => {
+  if (upstreamUrl.trim() === "") return t("PROXY_OPENAPI_IMPORT_DIALOG.THE_CONNECTION_HAS_NO");
+  if (differentHost) return t("PROXY_OPENAPI_IMPORT_DIALOG.THIS_REPLACES_WHICH_POINTS", { upstreamUrl });
+  return t("PROXY_OPENAPI_IMPORT_DIALOG.THIS_REPLACES", { upstreamUrl });
+};
+
+/** Where the document comes from: pasted JSON or a URL Blocks fetches. */
+const SpecSource = ({
+  source,
+  onSourceChange,
+  specJson,
+  onSpecJsonChange,
+  specUrl,
+  onSpecUrlChange,
+}: Readonly<{
+  source: Source;
+  onSourceChange: (source: Source) => void;
+  specJson: string;
+  onSpecJsonChange: (value: string) => void;
+  specUrl: string;
+  onSpecUrlChange: (value: string) => void;
+}>) => {
+  const { t } = useT("logic.proxy.components");
+  return (
+    <>
+      <div className="flex gap-2">
+        {(
+          [
+            { value: "paste", label: t("PROXY_OPENAPI_IMPORT_DIALOG.PASTE_THE_DOCUMENT"), icon: FileJson },
+            { value: "url", label: t("PROXY_OPENAPI_IMPORT_DIALOG.FETCH_FROM_A_URL"), icon: Link2 },
+          ] as const
+        ).map((option) => (
+          <Button
+            key={option.value}
+            type="button"
+            size="xs"
+            variant={source === option.value ? "default" : "outline"}
+            className="gap-1.5"
+            onClick={() => onSourceChange(option.value)}
+          >
+            <option.icon className="h-3.5 w-3.5" />
+            {option.label}
+          </Button>
+        ))}
+      </div>
+
+      {source === "paste" ? (
+        <div>
+          <Label htmlFor="openapi-spec" className="text-xs">
+            {t("PROXY_OPENAPI_IMPORT_DIALOG.OPENAPI_3_DOCUMENT_JSON")}
+          </Label>
+          <Textarea
+            id="openapi-spec"
+            rows={7}
+            className="font-mono text-xs"
+            placeholder='{ "openapi": "3.0.0", "paths": { … } }'
+            value={specJson}
+            onChange={(event) => onSpecJsonChange(event.target.value)}
+          />
+        </div>
+      ) : (
+        <div>
+          <Label htmlFor="openapi-url" className="text-xs">
+            {t("PROXY_OPENAPI_IMPORT_DIALOG.DOCUMENT_URL")}
+          </Label>
+          <Input
+            id="openapi-url"
+            className="h-9 text-xs"
+            placeholder="https://api.vendor.com/openapi.json"
+            value={specUrl}
+            onChange={(event) => onSpecUrlChange(event.target.value)}
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {t("PROXY_OPENAPI_IMPORT_DIALOG.BLOCKS_FETCHES_IT_FROM")}
+          </p>
+        </div>
+      )}
+    </>
+  );
+};
+
+/** "N of M operations can be added" with a button that ticks or clears them all. */
+const OperationsHeader = ({
+  importable,
+  count,
+  clashes,
+  allChosen,
+  onSelectAll,
+}: Readonly<{
+  importable: number;
+  count: number;
+  clashes: number;
+  allChosen: boolean;
+  onSelectAll: (all: boolean) => void;
+}>) => {
+  const { t } = useT("logic.proxy.components");
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-xs font-medium">
+        {t("PROXY_OPENAPI_IMPORT_DIALOG.OPERATIONS_CAN_BE_ADDED", { importable, count })}
+        {clashes ? t("PROXY_OPENAPI_IMPORT_DIALOG.ALREADY_DEFINED", { clashes }) : ""}
+      </p>
+      <Button
+        type="button"
+        size="xs"
+        variant="ghost"
+        disabled={importable === 0}
+        onClick={() => onSelectAll(!allChosen)}
+      >
+        {allChosen ? t("PROXY_OPENAPI_IMPORT_DIALOG.CLEAR_ALL") : t("PROXY_OPENAPI_IMPORT_DIALOG.SELECT_ALL")}
+      </Button>
+    </div>
+  );
+};
+
 /**
  * Import endpoints from an OpenAPI document.
  *
@@ -169,6 +373,7 @@ export const ProxyOpenApiImportDialog = ({
   const baseUrl = preview?.baseUrl ?? "";
   const differentHost =
     baseUrl !== "" && upstreamUrl !== "" && hostOf(baseUrl) !== hostOf(upstreamUrl);
+  const baseUrlReplaceNote = replaceNote(t, upstreamUrl, differentHost);
 
   const read = async () => {
     const result = await previewOpenApi.mutateAsync(
@@ -216,58 +421,14 @@ export const ProxyOpenApiImportDialog = ({
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="flex gap-2">
-            {(
-              [
-                { value: "paste", label: t("PROXY_OPENAPI_IMPORT_DIALOG.PASTE_THE_DOCUMENT"), icon: FileJson },
-                { value: "url", label: t("PROXY_OPENAPI_IMPORT_DIALOG.FETCH_FROM_A_URL"), icon: Link2 },
-              ] as const
-            ).map((option) => (
-              <Button
-                key={option.value}
-                type="button"
-                size="xs"
-                variant={source === option.value ? "default" : "outline"}
-                className="gap-1.5"
-                onClick={() => setSource(option.value)}
-              >
-                <option.icon className="h-3.5 w-3.5" />
-                {option.label}
-              </Button>
-            ))}
-          </div>
-
-          {source === "paste" ? (
-            <div>
-              <Label htmlFor="openapi-spec" className="text-xs">
-                {t("PROXY_OPENAPI_IMPORT_DIALOG.OPENAPI_3_DOCUMENT_JSON")}
-              </Label>
-              <Textarea
-                id="openapi-spec"
-                rows={7}
-                className="font-mono text-xs"
-                placeholder='{ "openapi": "3.0.0", "paths": { … } }'
-                value={specJson}
-                onChange={(event) => setSpecJson(event.target.value)}
-              />
-            </div>
-          ) : (
-            <div>
-              <Label htmlFor="openapi-url" className="text-xs">
-                {t("PROXY_OPENAPI_IMPORT_DIALOG.DOCUMENT_URL")}
-              </Label>
-              <Input
-                id="openapi-url"
-                className="h-9 text-xs"
-                placeholder="https://api.vendor.com/openapi.json"
-                value={specUrl}
-                onChange={(event) => setSpecUrl(event.target.value)}
-              />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {t("PROXY_OPENAPI_IMPORT_DIALOG.BLOCKS_FETCHES_IT_FROM")}
-              </p>
-            </div>
-          )}
+          <SpecSource
+            source={source}
+            onSourceChange={setSource}
+            specJson={specJson}
+            onSpecJsonChange={setSpecJson}
+            specUrl={specUrl}
+            onSpecUrlChange={setSpecUrl}
+          />
 
           <Button
             type="button"
@@ -284,31 +445,9 @@ export const ProxyOpenApiImportDialog = ({
 
         {preview ? (
           <div className="space-y-3">
-            {preview.errors.length ? (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  <ul className="list-disc space-y-0.5 pl-4 text-xs">
-                    {preview.errors.map((message) => (
-                      <li key={message}>{message}</li>
-                    ))}
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            ) : null}
+            <PreviewMessages messages={preview.errors} variant="destructive" />
 
-            {preview.warnings.length ? (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  <ul className="list-disc space-y-0.5 pl-4 text-xs">
-                    {preview.warnings.map((message) => (
-                      <li key={message}>{message}</li>
-                    ))}
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            ) : null}
+            <PreviewMessages messages={preview.warnings} />
 
             {baseUrl ? (
               <label className="flex cursor-pointer items-start gap-2 rounded-md border p-2">
@@ -320,14 +459,10 @@ export const ProxyOpenApiImportDialog = ({
                 />
                 <span className="min-w-0 text-xs">
                   <span className="block font-medium">
-                    {renderRichText(t("PROXY_OPENAPI_IMPORT_DIALOG.USE_0_0_AS", { baseUrl }), [(children) => <span className="break-all font-mono">{children}</span>])}
+                    {renderRichText(t("PROXY_OPENAPI_IMPORT_DIALOG.USE_0_0_AS", { baseUrl }), [renderMono])}
                   </span>
                   <span className="block text-[11px] text-muted-foreground">
-                    {upstreamUrl.trim() === ""
-                      ? t("PROXY_OPENAPI_IMPORT_DIALOG.THE_CONNECTION_HAS_NO")
-                      : differentHost
-                        ? t("PROXY_OPENAPI_IMPORT_DIALOG.THIS_REPLACES_WHICH_POINTS", { upstreamUrl })
-                        : t("PROXY_OPENAPI_IMPORT_DIALOG.THIS_REPLACES", { upstreamUrl })}
+                    {baseUrlReplaceNote}
                   </span>
                 </span>
               </label>
@@ -335,86 +470,25 @@ export const ProxyOpenApiImportDialog = ({
 
             {operations.length ? (
               <div>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-medium">
-                    {t("PROXY_OPENAPI_IMPORT_DIALOG.OPERATIONS_CAN_BE_ADDED", { importable: importable.length, count: operations.length })}
-                    {clashes ? t("PROXY_OPENAPI_IMPORT_DIALOG.ALREADY_DEFINED", { clashes }) : ""}
-                  </p>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    disabled={importable.length === 0}
-                    onClick={() =>
-                      setSelected(
-                        chosen.length === importable.length
-                          ? new Set()
-                          : new Set(importable.map((operation) => operation.operationId)),
-                      )
-                    }
-                  >
-                    {chosen.length === importable.length ? t("PROXY_OPENAPI_IMPORT_DIALOG.CLEAR_ALL") : t("PROXY_OPENAPI_IMPORT_DIALOG.SELECT_ALL")}
-                  </Button>
-                </div>
+                <OperationsHeader
+                  importable={importable.length}
+                  count={operations.length}
+                  clashes={clashes}
+                  allChosen={chosen.length === importable.length}
+                  onSelectAll={(all) =>
+                    setSelected(all ? new Set(importable.map((operation) => operation.operationId)) : new Set())
+                  }
+                />
 
                 <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-1">
-                  {operations.map((operation) => {
-                    const checked = selected.has(operation.operationId);
-                    const queryCount = operation.queryParameters.length;
-                    const headerCount = operation.headerParameters.length;
-                    let bringsText = t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_HEADER", { count: headerCount });
-                    if (queryCount > 0 && headerCount > 0) {
-                      bringsText = t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_BOTH", { query: queryCount, header: headerCount });
-                    } else if (queryCount > 0) {
-                      bringsText = t("PROXY_OPENAPI_IMPORT_DIALOG.BRINGS_QUERY", { count: queryCount });
-                    }
-
-                    return (
-                      <li key={`${operation.method} ${operation.path}`}>
-                        <label
-                          className={cn(
-                            "flex items-start gap-2 rounded-md border p-2",
-                            operation.alreadyExists
-                              ? "cursor-not-allowed bg-muted/40"
-                              : "cursor-pointer hover:bg-muted/40",
-                          )}
-                        >
-                          <Checkbox
-                            className="mt-0.5"
-                            checked={checked && !operation.alreadyExists}
-                            disabled={operation.alreadyExists}
-                            aria-label={t("PROXY_OPENAPI_IMPORT_DIALOG.IMPORT", { method: operation.method, path: operation.path })}
-                            onCheckedChange={(value) =>
-                              toggle(operation.operationId, value === true)
-                            }
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-center gap-2">
-                              <ProxyMethodBadge method={operation.method} />
-                              <code className="break-all font-mono text-xs">
-                                /{operation.path}
-                              </code>
-                              {operation.alreadyExists ? (
-                                <span className="text-[11px] text-muted-foreground">
-                                  {t("PROXY_OPENAPI_IMPORT_DIALOG.ALREADY_DEFINED_KEPT_AS")}
-                                </span>
-                              ) : null}
-                            </span>
-                            {operation.summary ? (
-                              <span className="block text-[11px] text-muted-foreground">
-                                {operation.summary}
-                              </span>
-                            ) : null}
-                            {queryCount + headerCount > 0 ? (
-                              <span className="block text-[11px] text-muted-foreground">
-                                {bringsText}
-                              </span>
-                            ) : null}
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
+                  {operations.map((operation) => (
+                    <OperationRow
+                      key={`${operation.method} ${operation.path}`}
+                      operation={operation}
+                      checked={selected.has(operation.operationId)}
+                      onToggle={(on) => toggle(operation.operationId, on)}
+                    />
+                  ))}
                 </ul>
               </div>
             ) : null}

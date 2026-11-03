@@ -110,6 +110,23 @@ const ResponseFilterTree = ({
 );
 
 /** One endpoint as the read side shows it: what the client calls, what we forward, what it carries back. */
+type Translate = ReturnType<typeof useT>["t"];
+
+/** What the endpoint adds to the vendor call: body fields (its own or the proxy's), headers, query. */
+const describeExtras = (
+  t: Translate,
+  route: ProxyRoute,
+  proxyWide: Pick<Proxy, "bodyMerge">,
+): string[] => {
+  const extras: string[] = [];
+  if (route.bodyMerge?.length) extras.push(t("PROXY_DETAILS.BODY_FIELDS", { count: route.bodyMerge.length }));
+  else if (!route.bodyMerge && proxyWide.bodyMerge.length)
+    extras.push(t("PROXY_DETAILS.BODY_FIELDS_PROXY_WIDE", { count: proxyWide.bodyMerge.length }));
+  if (route.headers?.length) extras.push(t("PROXY_DETAILS.EXTRA_HEADERS", { count: route.headers.length }));
+  if (route.query?.length) extras.push(t("PROXY_DETAILS.EXTRA_QUERY_PARAMS", { count: route.query.length }));
+  return extras;
+};
+
 const EndpointRow = ({
   route,
   clientUrl,
@@ -134,15 +151,7 @@ const EndpointRow = ({
   const paths = route.responseInclude ?? proxyWide.responseInclude ?? [];
   const filterFromProxy = filters && !route.responseMode;
   const { tree } = pathsToTree(paths);
-  const extras = [
-    route.bodyMerge?.length
-      ? t("PROXY_DETAILS.BODY_FIELDS", { count: route.bodyMerge.length })
-      : !route.bodyMerge && proxyWide.bodyMerge.length
-        ? t("PROXY_DETAILS.BODY_FIELDS_PROXY_WIDE", { count: proxyWide.bodyMerge.length })
-        : null,
-    route.headers?.length ? t("PROXY_DETAILS.EXTRA_HEADERS", { count: route.headers.length }) : null,
-    route.query?.length ? t("PROXY_DETAILS.EXTRA_QUERY_PARAMS", { count: route.query.length }) : null,
-  ].filter(Boolean);
+  const extras = describeExtras(t, route, proxyWide);
 
   let returns: ReactNode;
   if (filters && paths.length) {
@@ -431,6 +440,12 @@ const NeedsSecretBanner = ({ missing, duplicates }: { missing: string[]; duplica
   );
 };
 
+/** Spinner while pausing or resuming, else the action the button performs. */
+const ToggleIcon = ({ pending, enabled }: Readonly<{ pending: boolean; enabled: boolean }>) => {
+  if (pending) return <Loader2 className="mr-2 h-4 w-4 animate-spin" />;
+  return enabled ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />;
+};
+
 const proxyDetailTabs = [
   { value: "overview", get label() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_DETAILS.OVERVIEW"); } },
   { value: "test", get label() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_DETAILS.TEST"); } },
@@ -456,6 +471,7 @@ export const ProxyDetails = () => {
   const exportProxy = useProxyExport();
   const toggleLabel = proxy?.enabled ? t("PROXY_DETAILS.PAUSE") : t("PROXY_DETAILS.RESUME");
   const pendingToggleLabel = proxy?.enabled ? t("PROXY_DETAILS.PAUSING") : t("PROXY_DETAILS.RESUMING");
+  const currentToggleLabel = toggleProxy.isPending ? pendingToggleLabel : toggleLabel;
 
   useEffect(() => {
     if (proxyId && isFetched && !isLoading && !proxy) {
@@ -534,14 +550,8 @@ export const ProxyDetails = () => {
                   disabled={toggleProxy.isPending}
                   onClick={handleToggleEnabled}
                 >
-                  {toggleProxy.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : proxy.enabled ? (
-                    <Pause className="mr-2 h-4 w-4" />
-                  ) : (
-                    <Play className="mr-2 h-4 w-4" />
-                  )}
-                  <span>{toggleProxy.isPending ? pendingToggleLabel : toggleLabel}</span>
+                  <ToggleIcon pending={toggleProxy.isPending} enabled={proxy.enabled} />
+                  <span>{currentToggleLabel}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer"
@@ -574,18 +584,12 @@ export const ProxyDetails = () => {
               type="button"
               variant="outline"
               disabled={toggleProxy.isPending}
-              aria-label={toggleProxy.isPending ? pendingToggleLabel : toggleLabel}
-              title={toggleProxy.isPending ? pendingToggleLabel : toggleLabel}
+              aria-label={currentToggleLabel}
+              title={currentToggleLabel}
               onClick={handleToggleEnabled}
             >
-              {toggleProxy.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : proxy.enabled ? (
-                <Pause className="mr-2 h-4 w-4" />
-              ) : (
-                <Play className="mr-2 h-4 w-4" />
-              )}
-              {toggleProxy.isPending ? pendingToggleLabel : toggleLabel}
+              <ToggleIcon pending={toggleProxy.isPending} enabled={proxy.enabled} />
+              {currentToggleLabel}
             </Button>
             <Button
               aria-label={t(COMMON_EDIT)}
