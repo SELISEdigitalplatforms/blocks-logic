@@ -68,13 +68,17 @@ const SECRET_LOOKING_VALUE = /^[A-Za-z0-9_\-.]{32,}$/;
 
 const keyError = (key: string, index: number, all: IVariableBinding[]) => {
   if (!key) return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.A_KEY_IS_REQUIRED");
-  if (!KEY_PATTERN.test(key)) return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.UPPER_CASE_DIGITS_AND");
-  if (all.some((other, i) => i !== index && other.key === key)) return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.THAT_KEY_IS_ALREADY");
+  if (!KEY_PATTERN.test(key))
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.UPPER_CASE_DIGITS_AND");
+  if (all.some((other, i) => i !== index && other.key === key))
+    return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.THAT_KEY_IS_ALREADY");
   return null;
 };
 
 const valueError = (value: string) =>
-  value.length > MAX_VALUE_LENGTH ? tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.THIS_VALUE_IS_TOO") : null;
+  value.length > MAX_VALUE_LENGTH
+    ? tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "VARIABLES_EDITOR.THIS_VALUE_IS_TOO")
+    : null;
 
 const looksLikeSecret = ({ value }: IVariableBinding) => SECRET_LOOKING_VALUE.test(value);
 
@@ -102,10 +106,18 @@ export const VariablesEditor = ({
       <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
         <div className="flex flex-col gap-0.5">
           <span className="flex items-center gap-2 text-sm font-semibold">
-            {renderRichText(t("VARIABLES_EDITOR.VARIABLES_0_0", { length: value.length }), [(children) => <span className="rounded-full bg-surface-app px-2 py-0.5 text-xs font-semibold text-medium-emphasis">{children}</span>])}
+            {renderRichText(t("VARIABLES_EDITOR.VARIABLES_0_0", { length: value.length }), [
+              (children) => (
+                <span className="rounded-full bg-surface-app px-2 py-0.5 text-xs font-semibold text-medium-emphasis">
+                  {children}
+                </span>
+              ),
+            ])}
           </span>
           <span className="text-xs text-medium-emphasis">
-            {renderRichText(t("VARIABLES_EDITOR.STRINGS_ON_0_CTX"), [(children) => <code className="font-mono">{children}</code>])}
+            {renderRichText(t("VARIABLES_EDITOR.STRINGS_ON_0_CTX"), [
+              (children) => <code className="font-mono">{children}</code>,
+            ])}
           </span>
         </div>
         <Button type="button" size="sm" className="gap-1.5" onClick={add}>
@@ -116,7 +128,9 @@ export const VariablesEditor = ({
 
       {value.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-medium-emphasis">
-          {renderRichText(t("VARIABLES_EDITOR.NOTHING_BOUND_YET_ADD"), [(children) => <code className="font-mono">{children}</code>])}
+          {renderRichText(t("VARIABLES_EDITOR.NOTHING_BOUND_YET_ADD"), [
+            (children) => <code className="font-mono">{children}</code>,
+          ])}
         </p>
       ) : (
         <>
@@ -168,13 +182,14 @@ export const VariablesEditor = ({
                       onChange={(next) => update(index, { value: next })}
                       codec={secretIdRef}
                       ariaLabel={t("VARIABLES_EDITOR.VARIABLE_VALUE", { value: index + 1 })}
+                      // eslint-disable-next-line no-restricted-syntax -- example secret id, not prose
                       placeholder="acct_1P9…"
                       hint={t("VARIABLES_EDITOR.STORED_AS_A_REFERENCE")}
                     />
                   )}
 
                   <code className="min-w-0 truncate font-mono text-xs text-medium-emphasis">
-                    ctx.env.{variable.key || "NAME"}
+                    {`ctx.env.${variable.key || "NAME"}`}
                   </code>
                   <Button
                     type="button"

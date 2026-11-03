@@ -247,6 +247,7 @@ export const ConnectionsCard = ({
                 <span className="min-w-0 [overflow-wrap:anywhere]">
                   {setup.missingVariables.map((key) => (
                     <Fragment key={key}>
+                      {/* eslint-disable-next-line no-restricted-syntax -- code identifier, not prose */}
                       <code className="font-mono">ctx.env.{key}</code>{" "}
                     </Fragment>
                   ))}
@@ -386,7 +387,9 @@ const PresetStatusBadge = ({
   if (status === "partial") {
     return <Badge variant="warning">{t("CONNECTIONS_CARD.INCOMPLETE")}</Badge>;
   }
-  return <span className="text-xs font-semibold text-primary">{t("CONNECTIONS_CARD.SET_UP_2")}</span>;
+  return (
+    <span className="text-xs font-semibold text-primary">{t("CONNECTIONS_CARD.SET_UP_2")}</span>
+  );
 };
 
 const SetupIssue = ({ children }: { children: React.ReactNode }) => (
