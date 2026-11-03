@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using MimeKit;
 using Microsoft.Net.Http.Headers;
 using MongoDB.Bson;
 
@@ -251,12 +252,16 @@ namespace Workflow.DomainService.Services
             }
 
             var files = form.Files
-                .Select(file => new WebhookPendingFile
+                .Select(file =>
                 {
-                    Field = file.Name,
-                    Name = SanitizeFileName(file.FileName),
-                    ContentType = string.IsNullOrWhiteSpace(file.ContentType) ? OctetStream : file.ContentType,
-                    File = file,
+                    var partType = string.IsNullOrWhiteSpace(file.ContentType) ? OctetStream : file.ContentType;
+                    return new WebhookPendingFile
+                    {
+                        Field = file.Name,
+                        Name = EnsureExtension(SanitizeFileName(file.FileName), partType),
+                        ContentType = partType,
+                        File = file,
+                    };
                 })
                 .ToList();
 
@@ -314,8 +319,8 @@ namespace Workflow.DomainService.Services
                 return empty();
             }
 
-            var name = SanitizeFileName(FileNameFromDisposition(request));
             var contentType = mediaType.Length > 0 ? mediaType : OctetStream;
+            var name = EnsureExtension(SanitizeFileName(FileNameFromDisposition(request)), contentType);
             var stream = new FileStream(tempPath, FileMode.Open, FileAccess.Read, FileShare.Read,
                 CopyBufferSize, FileOptions.Asynchronous);
             var file = new FormFile(stream, 0, length, "body", name)
@@ -492,6 +497,27 @@ namespace Workflow.DomainService.Services
                 candidate = candidate[..WebhookIntakeLimits.MaxFileNameLength];
             }
             return candidate.Length == 0 ? "upload" : candidate;
+        }
+
+        /// <summary>
+        /// Storage refuses a file name without an extension, so a name that has none (for example the "upload"
+        /// fallback of a raw binary body) gets one from its content type, or ".bin" when the type is unknown (C13).
+        /// The result stays within <see cref="WebhookIntakeLimits.MaxFileNameLength"/>.
+        /// </summary>
+        public static string EnsureExtension(string name, string? contentType)
+        {
+            var trimmed = name.TrimEnd('.', ' ');
+            if (trimmed.Length == 0) trimmed = "upload";
+            if (Path.HasExtension(trimmed)) return trimmed;
+
+            var mediaType = (contentType ?? string.Empty).Split(';')[0].Trim();
+            var extension = mediaType.Length > 0 && MimeTypes.TryGetExtension(mediaType, out var known) && !string.IsNullOrEmpty(known)
+                ? (known.StartsWith('.') ? known : "." + known)
+                : ".bin";
+
+            var maxBase = WebhookIntakeLimits.MaxFileNameLength - extension.Length;
+            if (trimmed.Length > maxBase) trimmed = trimmed[..maxBase];
+            return trimmed + extension;
         }
 
         private static async Task<byte[]> ReadLimitedAsync(Stream body, long max, string tooLargeMessage, CancellationToken ct)

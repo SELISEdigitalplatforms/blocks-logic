@@ -120,14 +120,14 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task Body_without_content_type_is_binary_named_upload()
+        public async Task Body_without_content_type_is_binary_named_upload_bin()
         {
             var request = WebhookRequests.Create(null, new byte[] { 1 });
 
             using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
 
             content.BodyFormat.Should().Be("binary");
-            content.Files.Single().Name.Should().Be("upload");
+            content.Files.Single().Name.Should().Be("upload.bin");
             content.Files.Single().ContentType.Should().Be("application/octet-stream");
         }
 
@@ -318,6 +318,52 @@ namespace XUnitTest.Workflow
         public void File_names_are_truncated_to_255_characters()
         {
             WebhookContentReader.SanitizeFileName(new string('n', 300)).Length.Should().Be(255);
+        }
+
+        // ------------------------------------------------------------ extension fallback (C13: storage requires one)
+
+        [Theory]
+        [InlineData("upload", "image/png", "upload.png")]
+        [InlineData("report", "application/pdf", "report.pdf")]
+        [InlineData("report", "application/pdf; name=x", "report.pdf")]
+        [InlineData("a.txt", "image/png", "a.txt")]
+        [InlineData("upload", "application/x-blocks-unknown", "upload.bin")]
+        [InlineData("upload", null, "upload.bin")]
+        [InlineData("file.", "image/png", "file.png")]
+        [InlineData("...", "image/png", "upload.png")]
+        public void Names_without_an_extension_get_one_from_the_content_type(string name, string? contentType, string expected)
+        {
+            WebhookContentReader.EnsureExtension(name, contentType).Should().Be(expected);
+        }
+
+        [Fact]
+        public void Added_extension_keeps_the_name_within_255_characters()
+        {
+            var name = WebhookContentReader.EnsureExtension(new string('n', 255), "image/png");
+
+            name.Length.Should().Be(255);
+            name.Should().EndWith(".png");
+        }
+
+        [Fact]
+        public async Task Binary_body_without_a_file_name_is_named_from_its_content_type()
+        {
+            using var content = await WebhookContentReader.ReadAnyContentAsync(
+                WebhookRequests.Create("image/png", new byte[] { 1, 2 }), AnyContent);
+
+            var file = content.Files.Single();
+            file.Name.Should().Be("upload.png");
+            file.File.FileName.Should().Be("upload.png");
+        }
+
+        [Fact]
+        public async Task Multipart_file_without_an_extension_is_named_from_its_content_type()
+        {
+            var request = WebhookRequests.Multipart([], [("doc", "report", "application/pdf", new byte[] { 1 })]);
+
+            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+
+            content.Files.Single().Name.Should().Be("report.pdf");
         }
     }
 }

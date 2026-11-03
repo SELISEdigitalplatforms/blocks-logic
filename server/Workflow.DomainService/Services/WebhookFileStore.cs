@@ -148,7 +148,7 @@ namespace Workflow.DomainService.Services
             });
             if (session is null || !session.IsSuccess || string.IsNullOrWhiteSpace(session.UploadUrl))
             {
-                throw RefusedBy(session?.Errors, file.Name);
+                throw RefusedBy(session?.Errors, file.Name, session?.UploadUrl);
             }
 
             using (var client = _httpClientFactory.CreateClient(HttpClientName))
@@ -217,7 +217,7 @@ namespace Workflow.DomainService.Services
             });
             if (response is null || !response.IsSuccess || string.IsNullOrWhiteSpace(response.FileId))
             {
-                throw RefusedBy(response?.Errors, file.Name);
+                throw RefusedBy(response?.Errors, file.Name, null);
             }
             return response.FileId;
         }
@@ -260,7 +260,11 @@ namespace Workflow.DomainService.Services
         private static string ObjectAccessLevel(WebhookFileTarget target) =>
             target.Caller is not null && !string.IsNullOrWhiteSpace(target.Caller.UserId) ? "Creator" : "Organization";
 
-        private static WebhookIntakeException RefusedBy(IDictionary<string, string>? errors, string fileName)
+        /// <param name="reason">
+        /// Storage's own text for a refusal it reports without <c>Errors</c>: the upload-session endpoint puts it in
+        /// <c>UploadUrl</c> (for example "File name does not have any extension"). Never echoed when it is a URL.
+        /// </param>
+        private static WebhookIntakeException RefusedBy(IDictionary<string, string>? errors, string fileName, string? reason)
         {
             var values = errors?.Values ?? (ICollection<string>)Array.Empty<string>();
             if (values.Any(IsSizeError)) return StorageLimit(fileName);
@@ -268,7 +272,19 @@ namespace Workflow.DomainService.Services
             {
                 return new WebhookIntakeException(403, "storage_forbidden", "Not allowed to store files in the configured folder");
             }
-            return new WebhookIntakeException(422, "storage_rejected", $"File '{fileName}' was rejected by storage");
+            var detail = values.Count == 0 ? ReadableReason(reason) : null;
+            return new WebhookIntakeException(422, "storage_rejected", detail is null
+                ? $"File '{fileName}' was rejected by storage"
+                : $"File '{fileName}' was rejected by storage: {detail}");
+        }
+
+        private const int MaxReasonLength = 200;
+
+        private static string? ReadableReason(string? reason)
+        {
+            var text = reason?.Trim();
+            if (string.IsNullOrEmpty(text) || Uri.IsWellFormedUriString(text, UriKind.Absolute)) return null;
+            return text.Length > MaxReasonLength ? text[..MaxReasonLength] : text;
         }
 
         private static bool IsSizeError(string? reason) =>

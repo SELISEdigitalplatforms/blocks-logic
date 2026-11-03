@@ -68,7 +68,7 @@ namespace XUnitTest.Workflow
             var fileId = await _sut.StoreAsync(file, Anonymous);
 
             fileId.Should().Be("file-1");
-            sent!.Name.Should().Be("upload");
+            sent!.Name.Should().Be("upload.pdf");
             sent.ParentDirectoryId.Should().Be("dir-1");
             sent.ConfigurationName.Should().Be("wf-50");
             sent.AccessModifier.Should().Be("Private");
@@ -115,9 +115,9 @@ namespace XUnitTest.Workflow
         }
 
         [Theory]
-        [InlineData("declared_size_exceeds_maximum_allowed", 413, "File 'upload' exceeds the storage limit")]
+        [InlineData("declared_size_exceeds_maximum_allowed", 413, "File 'upload.pdf' exceeds the storage limit")]
         [InlineData("forbidden", 403, "Not allowed to store files in the configured folder")]
-        [InlineData("something_else", 422, "File 'upload' was rejected by storage")]
+        [InlineData("something_else", 422, "File 'upload.pdf' was rejected by storage")]
         public async Task Refused_upload_session_maps_to_a_status(string error, int status, string message)   // C6, A6
         {
             var key = error == "forbidden" ? "access" : "SizeInBytes";
@@ -133,6 +133,21 @@ namespace XUnitTest.Workflow
             var thrown = (await act.Should().ThrowAsync<WebhookIntakeException>()).Which;
             (thrown.StatusCode, thrown.Message).Should().Be((status, message));
             _provider.Method.Should().BeNull("nothing is uploaded after a refusal");
+        }
+
+        [Theory]
+        [InlineData("File extension .exe is not supported", "File 'upload.pdf' was rejected by storage: File extension .exe is not supported")]
+        [InlineData("https://storage.example/upload?sig=secret", "File 'upload.pdf' was rejected by storage")]
+        [InlineData(null, "File 'upload.pdf' was rejected by storage")]
+        public async Task Refusal_without_errors_carries_storages_reason_but_never_a_url(string? reason, string message)   // C13
+        {
+            // The upload-session endpoint reports name/extension refusals in UploadUrl, with no Errors.
+            SessionReturns(new GetPreSignedUrlForUploadResponse { IsSuccess = false, UploadUrl = reason });
+            using var file = await PdfAsync();
+
+            var thrown = (await ((Func<Task>)(() => _sut.StoreAsync(file, Anonymous))).Should().ThrowAsync<WebhookIntakeException>()).Which;
+
+            (thrown.StatusCode, thrown.Message).Should().Be((422, message));
         }
 
         [Theory]
