@@ -31,6 +31,9 @@ namespace Workflow.DomainService.Nodes.ActionStorageV2
 
         private const string SourceBranch = "source";
 
+        /// <summary>Configuration key for the public API base, e.g. <c>https://&lt;host&gt;/data/v4</c> (A2).</summary>
+        private const string ApiBaseUrlKey = "ApiBaseUrl";
+
         /// <summary>The node type saved in workflows (<c>storage</c>).</summary>
         public const string Type = "storage";
 
@@ -103,7 +106,7 @@ namespace Workflow.DomainService.Nodes.ActionStorageV2
         /// <summary>Null when the Files API base is usable; otherwise the message every item gets (C6).</summary>
         private async Task<string?> CheckBaseAsync(CancellationToken ct)
         {
-            var target = FilesUri(_configuration["ApiBaseUrl"], "get-file");
+            var target = FilesUri(_configuration[ApiBaseUrlKey], "get-file");
             if (target is null) return MessageNotReachable;
             try
             {
@@ -141,7 +144,7 @@ namespace Workflow.DomainService.Nodes.ActionStorageV2
 
         private async Task<BsonDocument> GetAsync(RunState run, string token, string fileId)
         {
-            var uri = FilesUri(_configuration["ApiBaseUrl"], $"get-file?FileId={Uri.EscapeDataString(fileId)}")!;
+            var uri = FilesUri(_configuration[ApiBaseUrlKey], $"get-file?FileId={Uri.EscapeDataString(fileId)}")!;
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             var (status, body) = await SendAsync(run, request, token, "get-file", fileId);
             var root = ParseObject(body, status);
@@ -156,7 +159,7 @@ namespace Workflow.DomainService.Nodes.ActionStorageV2
 
         private async Task<BsonDocument> DeleteAsync(RunState run, string token, string fileId)
         {
-            var uri = FilesUri(_configuration["ApiBaseUrl"], "delete-file")!;
+            var uri = FilesUri(_configuration[ApiBaseUrlKey], "delete-file")!;
             using var request = new HttpRequestMessage(HttpMethod.Post, uri)
             {
                 Content = Json(new { FileId = fileId, Permanent = run.Parameters.Permanent }),
@@ -177,7 +180,7 @@ namespace Workflow.DomainService.Nodes.ActionStorageV2
 
         private async Task<BsonDocument> RenameAsync(RunState run, string token, string fileId, string newName)
         {
-            var uri = FilesUri(_configuration["ApiBaseUrl"], "rename-file")!;
+            var uri = FilesUri(_configuration[ApiBaseUrlKey], "rename-file")!;
             using var request = new HttpRequestMessage(HttpMethod.Post, uri)
             {
                 Content = Json(new { FileId = fileId, Name = newName }),
@@ -307,8 +310,7 @@ namespace Workflow.DomainService.Nodes.ActionStorageV2
         private static string? ErrorKey(JsonElement? root)
         {
             if (root is null || Property(root.Value, "errors") is not { ValueKind: JsonValueKind.Object } errors) return null;
-            foreach (var error in errors.EnumerateObject()) return error.Name;
-            return null;
+            return errors.EnumerateObject().Select(error => error.Name).FirstOrDefault();
         }
 
         private static string? ReadMessage(string body)
@@ -378,8 +380,5 @@ namespace Workflow.DomainService.Nodes.ActionStorageV2
             public Task<string> TokenAsync(ActionStorageV2Node node) =>
                 _token ??= node.FetchTokenAsync(Context, Parameters);
         }
-
-        /// <summary>An item-level failure whose message is safe to show (SPEC11 § Error mapping).</summary>
-        private sealed class StorageItemException(string message) : Exception(message);
     }
 }
