@@ -52,10 +52,14 @@ async function signedInApi(page: Page): Promise<{ api: Api; workflowIds: string[
     response = await reloaded
   }
   const sent = await response.request().allHeaders()
-  const headers = Object.fromEntries(
-    Object.entries(sent).filter(([name]) => ["authorization", "x-blocks-key"].includes(name.toLowerCase())),
-  )
   const origin = new URL(response.url()).origin
+  // The console authenticates with its session cookie, the tenant key and its own Origin/Referer (no bearer
+  // header on this host); send the same set, as the browser did.
+  const headers: Record<string, string> = Object.fromEntries(
+    Object.entries(sent).filter(([name]) => ["cookie", "authorization", "x-blocks-key"].includes(name.toLowerCase())),
+  )
+  headers.origin = origin
+  headers.referer = `${origin}/`
   const body = (await response.json()) as { data?: WorkflowSummary[] }
   const workflowIds = (body.data ?? []).map((w) => w.id ?? w.itemId).filter((id): id is string => !!id)
 
