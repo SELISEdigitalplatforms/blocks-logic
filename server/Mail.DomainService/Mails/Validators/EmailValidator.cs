@@ -39,6 +39,20 @@ namespace Mail.DomainService.Mails
                 .Must(commonEmailValidator.HaveARegisteredTemplate).WithMessage("The purpose and language combination does not have a registered email template. Please check the EmailTemplates collection")
                 .Must(commonEmailValidator.HaveAValiMailServerConfiguration).WithMessage("The purpose and language combination does not have a registered email server configuration. Please check the MailServerConfiguration collection");
 
+            // A stored template can lack a subject or a body (a template save does not require them). MimeKit throws
+            // on a null subject, so such a mail is rejected here instead, test mails included.
+            RuleFor(r => r.EmailTemplate)
+                .Must(template => !string.IsNullOrWhiteSpace(template.TemplateSubject))
+                .OverridePropertyName("TemplateSubject")
+                .WithMessage("The email template for this purpose and language has no subject.")
+                .When(mailToBeSent => mailToBeSent.EmailTemplate != null);
+
+            RuleFor(r => r.EmailTemplate)
+                .Must(template => !string.IsNullOrWhiteSpace(template.TemplateBody))
+                .OverridePropertyName("TemplateBody")
+                .WithMessage("The email template for this purpose and language has no body.")
+                .When(mailToBeSent => mailToBeSent.EmailTemplate != null);
+
             RuleFor(r => r.BodyDataContext)
                 .Must(commonEmailValidator.BeAVaildDataContext)
                 .WithMessage("Data context does not have some values needed for the targeted template")

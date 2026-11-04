@@ -34,7 +34,7 @@ namespace Workflow.DomainService.Repositories
         Task<bool> TryReopenFailedExecutionAsync(string executionId, string tenantId);
         Task AtomicUpdateNodeExecutionCompletedAsync(string executionId, string tenantId, string nodeExecutionId, int outputItemCount, Dictionary<string, int> outputCountsByBranch, BsonDocument? contextUpdates);
         Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error, int outputItemCount, Dictionary<string, int> outputCountsByBranch);
-        Task<List<WorkflowExecutionEntity>> GetByWorkflowIdAsync(string workflowId, string tenantId);
+        Task<List<WorkflowExecutionListRow>> GetByWorkflowIdAsync(string workflowId, string tenantId);
 
         Task<List<WorkflowExecutionListRow>> GetPageAsync(string workflowId, string tenantId, int pageSize);
 

@@ -19,11 +19,16 @@ namespace XUnitTest.Controllers
         private readonly Mock<INotifierSendGuard> _guard = new();
         private readonly Mock<INotifierSendPermission> _permission = new();
         private readonly NotifierController _controller;
+        private readonly NotifierSendController _sender;
 
         public NotifierControllerTests()
         {
             GuardReturns(true);
-            _controller = new NotifierController(_inbox.Object, _service.Object, _guard.Object, _permission.Object,
+            _controller = new NotifierController(_inbox.Object)
+            {
+                ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+            };
+            _sender = new NotifierSendController(_service.Object, _guard.Object, _permission.Object,
                 Mock.Of<ILogger<NotifierController>>())
             {
                 ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
@@ -40,7 +45,7 @@ namespace XUnitTest.Controllers
             var response = new BaseResponse { IsSuccess = true };
             _service.Setup(s => s.NotifyAsync(It.IsAny<NotifyRequest>())).ReturnsAsync(response);
 
-            var result = await _controller.Notify(new NotifyRequest());
+            var result = await _sender.Notify(new NotifyRequest());
 
             result.Value.Should().BeSameAs(response);
         }
@@ -51,7 +56,7 @@ namespace XUnitTest.Controllers
             var response = new BaseResponse { IsSuccess = true };
             _service.Setup(s => s.NotifyAsync(It.IsAny<NotifyRequest>())).ReturnsAsync(response);
 
-            var result = await _controller.SendSecretNotification(new NotifyRequest());
+            var result = await _sender.SendSecretNotification(new NotifyRequest());
 
             result.Value.Should().BeSameAs(response);
         }
@@ -60,7 +65,7 @@ namespace XUnitTest.Controllers
         public async Task Notify_PassesTheSecretHeaderToTheGuard()
         {
             _service.Setup(s => s.NotifyAsync(It.IsAny<NotifyRequest>())).ReturnsAsync(new BaseResponse());
-            await _controller.Notify(new NotifyRequest(), "header-value");
+            await _sender.Notify(new NotifyRequest(), "header-value");
 
             _guard.Verify(g => g.IsAllowedAsync("header-value", It.IsAny<Func<Task<NotifierCallerToken>>>(), "Notify"),
                 Times.Once);
@@ -71,7 +76,7 @@ namespace XUnitTest.Controllers
         {
             GuardReturns(false);
 
-            var result = await _controller.Notify(new NotifyRequest());
+            var result = await _sender.Notify(new NotifyRequest());
 
             result.Result.Should().BeOfType<UnauthorizedResult>();
             _service.Verify(s => s.NotifyAsync(It.IsAny<NotifyRequest>()), Times.Never);
@@ -82,7 +87,7 @@ namespace XUnitTest.Controllers
         {
             GuardReturns(false);
 
-            var result = await _controller.SendSecretNotification(new NotifyRequest());
+            var result = await _sender.SendSecretNotification(new NotifyRequest());
 
             result.Result.Should().BeOfType<UnauthorizedResult>();
             _service.Verify(s => s.NotifyAsync(It.IsAny<NotifyRequest>()), Times.Never);
@@ -98,10 +103,10 @@ namespace XUnitTest.Controllers
                     It.IsAny<string>()))
                 .Callback((string? _, Func<Task<NotifierCallerToken>> check, string _) => captured = check)
                 .ReturnsAsync(false);
-            _permission.Setup(p => p.CheckAsync(_controller.ControllerContext.HttpContext))
+            _permission.Setup(p => p.CheckAsync(_sender.ControllerContext.HttpContext))
                 .ReturnsAsync(NotifierCallerToken.Permitted);
 
-            await _controller.Notify(new NotifyRequest());
+            await _sender.Notify(new NotifyRequest());
 
             (await captured()).Should().Be(NotifierCallerToken.Permitted);
         }
@@ -114,9 +119,9 @@ namespace XUnitTest.Controllers
             started.SetupGet(f => f.HasStarted).Returns(true);
             started.SetupProperty(f => f.StatusCode, StatusCodes.Status429TooManyRequests);
             started.SetupProperty(f => f.Headers, new HeaderDictionary());
-            _controller.ControllerContext.HttpContext.Features.Set(started.Object);
+            _sender.ControllerContext.HttpContext.Features.Set(started.Object);
 
-            var result = await _controller.Notify(new NotifyRequest());
+            var result = await _sender.Notify(new NotifyRequest());
 
             result.Result.Should().BeOfType<EmptyResult>();
             _service.Verify(s => s.NotifyAsync(It.IsAny<NotifyRequest>()), Times.Never);
@@ -125,9 +130,9 @@ namespace XUnitTest.Controllers
         [Fact]
         public void SendActions_ValidateATokenButStayOpenWithoutOne()
         {
-            foreach (var action in new[] { nameof(NotifierController.Notify), nameof(NotifierController.SendSecretNotification) })
+            foreach (var action in new[] { nameof(NotifierSendController.Notify), nameof(NotifierSendController.SendSecretNotification) })
             {
-                var method = typeof(NotifierController).GetMethod(action)!;
+                var method = typeof(NotifierSendController).GetMethod(action)!;
                 method.GetCustomAttributes(typeof(NotifierOptionalTokenAttribute), false).Should().ContainSingle();
                 method.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true)
                     .Should().BeEmpty();
@@ -179,7 +184,48 @@ namespace XUnitTest.Controllers
 
             var result = await _controller.GetNotifications(new GetNotificationsRequest());
 
-            result.Should().BeSameAs(response);
+            result.Value.Should().BeSameAs(response);
+        }
+
+        [Theory]
+        [InlineData(0, 10)]   // H5
+        [InlineData(2, 10)]   // H6
+        [InlineData(0, 100)]  // H7
+        public async Task GetNotifications_ValidPaging_PassesTheRequestThroughUnchanged(int page, int pageSize)
+        {
+            var response = new GetNotificationsResponse();
+            var request = new GetNotificationsRequest { Page = page, PageSize = pageSize };
+            _inbox.Setup(s => s.GetNotificationsAsync(request)).ReturnsAsync(response);
+
+            var result = await _controller.GetNotifications(request);
+
+            result.Result.Should().BeNull("a valid page is the plain 200 body, as before");
+            result.Value.Should().BeSameAs(response);
+            request.Page.Should().Be(page);
+            request.PageSize.Should().Be(pageSize);
+        }
+
+        [Theory]
+        [InlineData(-1, 10, new[] { "Page" }, new[] { "Page must be 0 or greater." })]                                     // C1
+        [InlineData(0, 0, new[] { "PageSize" }, new[] { "PageSize must be between 1 and 100." })]                            // C2
+        [InlineData(0, 101, new[] { "PageSize" }, new[] { "PageSize must be between 1 and 100." })]                          // C2
+        [InlineData(int.MaxValue, 10, new[] { "Page" }, new[] { "Page is too large for this PageSize." })]                   // C3
+        [InlineData(-1, 0, new[] { "Page", "PageSize" }, new[] { "Page must be 0 or greater.", "PageSize must be between 1 and 100." })] // C4
+        public async Task GetNotifications_InvalidPaging_Is400WithTheErrors_BeforeAnyLookup(
+            int page, int pageSize, string[] keys, string[] messages)
+        {
+            var result = await _controller.GetNotifications(new GetNotificationsRequest { Page = page, PageSize = pageSize });
+
+            var badRequest = result.Result.Should().BeOfType<BadRequestObjectResult>().Subject;
+            badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+            var body = badRequest.Value.Should().BeOfType<BaseResponse>().Subject;
+            body.IsSuccess.Should().BeFalse();
+            body.Errors.Should().BeEquivalentTo(keys.Zip(messages).ToDictionary(p => p.First, p => p.Second));
+            // C1-C4: no user (ViewerAsync) or database lookup. C5: the 400 is a returned result, not an exception,
+            // and this controller has no logger, so nothing is logged at Error level.
+            _inbox.VerifyNoOtherCalls();
+            typeof(NotifierController).GetConstructors().Should().ContainSingle()
+                .Which.GetParameters().Select(p => p.ParameterType).Should().Equal(typeof(INotificationService));
         }
     }
 }
