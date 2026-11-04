@@ -8,6 +8,9 @@ using XUnitTest.TestHelpers;
 namespace XUnitTest.Workflow
 {
     /// <summary>SPEC8 content-type mapping, limits and sanitization of the webhook body reader.</summary>
+    // These classes create blocks-webhook-* temp files, and some assert the temp folder is left clean, so they
+    // must not run in parallel with each other.
+    [Collection(WebhookTempFileCollection.Name)]
     public class WebhookContentReaderTests
     {
         private static readonly WebhookIntakeSettings AnyContent = new() { BodyMode = WebhookBodyModes.AnyContent };

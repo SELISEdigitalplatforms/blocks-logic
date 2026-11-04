@@ -7,6 +7,9 @@ using XUnitTest.TestHelpers;
 namespace XUnitTest.Workflow
 {
     /// <summary>SPEC8/SPEC10 settings resolution and the all-or-nothing, caller-only file intake.</summary>
+    // These classes create blocks-webhook-* temp files, and some assert the temp folder is left clean, so they
+    // must not run in parallel with each other.
+    [Collection(WebhookTempFileCollection.Name)]
     public class WebhookIntakeTests
     {
         private readonly Mock<IWebhookFileStore> _store = new();

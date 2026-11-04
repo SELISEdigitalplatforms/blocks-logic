@@ -18,6 +18,9 @@ namespace XUnitTest.Workflow
     /// SPEC8 ordering in the webhook service: workflow checks and auth before the body is read (A1), the body mode
     /// picks the intake, and files of a run that could not be created are discarded.
     /// </summary>
+    // These classes create blocks-webhook-* temp files, and some assert the temp folder is left clean, so they
+    // must not run in parallel with each other.
+    [Collection(WebhookTempFileCollection.Name)]
     public class WebhookAnyContentServiceTests : IDisposable
     {
         private readonly Mock<IWorkflowRepository> _workflows = new();
