@@ -131,12 +131,28 @@ namespace Workflow.DomainService.Services
                 return Empty();
             }
 
+            var format = EnsureAccepted(mediaType, settings);
+            return format switch
+            {
+                FormatMultipart => await ReadMultipartAsync(request, parsed!, mediaType, headers, query, settings.FilesAllowed, ct),
+                FormatForm => await ReadUrlEncodedAsync(request, mediaType, headers, query, ct),
+                FormatJson or FormatText => await ReadJsonOrTextAsync(request, parsed, mediaType, format, headers, query, Empty, ct),
+                _ => await ReadBinaryAsync(request, mediaType, headers, query, Empty, ct),
+            };
+        }
+
+        /// <summary>
+        /// The refusals decided by the declared type alone, before a byte of the body is read: XML, a type outside
+        /// the webhook's Accepted Body Types (SPEC10 K9), and a binary body without an authenticated caller (K1).
+        /// Returns the body format.
+        /// </summary>
+        private static string EnsureAccepted(string mediaType, WebhookIntakeSettings settings)
+        {
             if (IsXml(mediaType))
             {
                 throw WebhookIntakeException.Unsupported("XML bodies are not supported yet");
             }
 
-            // Both gates run on the declared type, before a byte of the body is read (SPEC10 K9, K1).
             var format = FormatOf(mediaType);
             if (!settings.Accepts(format))
             {
@@ -146,54 +162,33 @@ namespace Workflow.DomainService.Services
             {
                 throw WebhookIntakeException.FilesNotAllowed();
             }
+            return format;
+        }
 
-            if (mediaType == "multipart/form-data")
+        private static async Task<WebhookContent> ReadJsonOrTextAsync(
+            HttpRequest request, MediaTypeHeaderValue? parsed, string mediaType, string format,
+            BsonDocument headers, BsonDocument query, Func<WebhookContent> empty, CancellationToken ct)
+        {
+            if (request.ContentLength > WebhookIntakeLimits.NonFileMaxBytes)
             {
-                return await ReadMultipartAsync(request, parsed!, mediaType, headers, query, settings.FilesAllowed, ct);
+                throw WebhookIntakeException.TooLarge(MessageNonFileTooLarge);
             }
 
-            if (mediaType is "application/x-www-form-urlencoded")
+            var isJson = format == FormatJson;
+            // Resolve the charset before reading, so an unusable one is refused without consuming the body.
+            var encoding = isJson ? Encoding.UTF8 : ResolveEncoding(parsed);
+            var bytes = await ReadLimitedAsync(request.Body, WebhookIntakeLimits.NonFileMaxBytes, MessageNonFileTooLarge, ct);
+            if (bytes.Length == 0) return empty();
+
+            return new WebhookContent
             {
-                return await ReadUrlEncodedAsync(request, mediaType, headers, query, ct);
-            }
-
-            if (IsJson(mediaType) || mediaType.StartsWith("text/", StringComparison.Ordinal))
-            {
-                if (request.ContentLength > WebhookIntakeLimits.NonFileMaxBytes)
-                {
-                    throw WebhookIntakeException.TooLarge(MessageNonFileTooLarge);
-                }
-
-                // Resolve the charset before reading, so an unusable one is refused without consuming the body.
-                var encoding = IsJson(mediaType) ? Encoding.UTF8 : ResolveEncoding(parsed);
-                var bytes = await ReadLimitedAsync(request.Body, WebhookIntakeLimits.NonFileMaxBytes, MessageNonFileTooLarge, ct);
-                if (bytes.Length == 0) return Empty();
-
-                if (IsJson(mediaType))
-                {
-                    return new WebhookContent
-                    {
-                        BodyFormat = FormatJson,
-                        ContentType = mediaType,
-                        Bodies = ParseJsonBodies(bytes),
-                        Headers = headers,
-                        Query = query,
-                        Bytes = bytes.Length,
-                    };
-                }
-
-                return new WebhookContent
-                {
-                    BodyFormat = FormatText,
-                    ContentType = mediaType,
-                    Bodies = [new BsonString(encoding.GetString(bytes))],
-                    Headers = headers,
-                    Query = query,
-                    Bytes = bytes.Length,
-                };
-            }
-
-            return await ReadBinaryAsync(request, mediaType, headers, query, Empty, ct);
+                BodyFormat = format,
+                ContentType = mediaType,
+                Bodies = isJson ? ParseJsonBodies(bytes) : [new BsonString(encoding.GetString(bytes))],
+                Headers = headers,
+                Query = query,
+                Bytes = bytes.Length,
+            };
         }
 
         private static async Task<WebhookContent> ReadUrlEncodedAsync(
@@ -263,8 +258,8 @@ namespace Workflow.DomainService.Services
                 throw WebhookIntakeException.TooLarge(MessageNonFileTooLarge);
             }
 
-            // After the limits, so an oversized request still gets 413 (SPEC10 K7). Nothing has been stored yet;
-            // the form's buffered parts are removed with the request.
+            // Checked after the size limits so that an oversized request still gets 413, as SPEC10 K7 requires.
+            // Nothing is stored at this point, and the buffered form parts are removed with the request.
             if (form.Files.Count > 0 && !filesAllowed)
             {
                 throw WebhookIntakeException.FilesNotAllowed();
@@ -552,9 +547,11 @@ namespace Workflow.DomainService.Services
             if (Path.HasExtension(trimmed)) return trimmed;
 
             var mediaType = (contentType ?? string.Empty).Split(';')[0].Trim();
-            var extension = mediaType.Length > 0 && MimeTypes.TryGetExtension(mediaType, out var known) && !string.IsNullOrEmpty(known)
-                ? (known.StartsWith('.') ? known : "." + known)
-                : ".bin";
+            var extension = ".bin";
+            if (mediaType.Length > 0 && MimeTypes.TryGetExtension(mediaType, out var known) && !string.IsNullOrEmpty(known))
+            {
+                extension = known.StartsWith('.') ? known : "." + known;
+            }
 
             var maxBase = WebhookIntakeLimits.MaxFileNameLength - extension.Length;
             if (trimmed.Length > maxBase) trimmed = trimmed[..maxBase];
