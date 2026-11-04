@@ -135,12 +135,9 @@ namespace XUnitTest.Controllers
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "ResumeExecution", L + "workflow::manage"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "GetExecutionLogs", L + "workflow::read"),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "LastSuccessfullExecution", L + "workflow::read"),
-            // Blocks Event Trigger catalog (blocks-logic#375): reads need workflow read, changes need workflow manage.
-            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "GetAll", L + "workflow::read"),
-            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "GetWorkflowEvents", L + "workflow::read"),
-            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "GetUsage", L + "workflow::read"),
-            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "CanManage", L + "workflow::manage"),
-            Row(typeof(global::Utilities.Api.Controllers.BlocksEventTriggerController), "Update", L + "workflow::manage"),
+            // Actions the editors pick (blocks-os owns the list): workflow read for the node, function read for the Trigger section.
+            Row(typeof(global::Utilities.Api.Controllers.ActionsController), "GetForWorkflow", L + "workflow::read"),
+            Row(typeof(global::Utilities.Api.Controllers.ActionsController), "GetForFunction", L + "function::read"),
         };
 
         [Theory]
@@ -157,8 +154,8 @@ namespace XUnitTest.Controllers
         [Fact]
         public void NewLogicPermissionListIsComplete()
         {
-            NewLogicPermissions().Should().HaveCount(63, "the Blocks Event Trigger catalog endpoints added 2026-10-31");
-            NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(15, "mail::send-any was split from mail::manage, 2026-10-28");
+            NewLogicPermissions().Should().HaveCount(60, "the Blocks Event Trigger catalog endpoints (5) were replaced by the two Actions reads, 2026-11-04");
+            NewLogicPermissions().Select(r => (string)r[2]).Distinct().Should().HaveCount(16, "Actions/GetForFunction uses the seeded function::read, 2026-11-04");
         }
 
         // Open by design (data plane with its own check, or a public callback): no named permission, no [Authorize].

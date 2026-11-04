@@ -35,15 +35,23 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionEventSettingsRepository> _settings = new();
         private readonly Mock<IFunctionAuditService> _audit = new();
         private readonly IValidator<SaveEventSettingsRequestDto> _validator = new SaveEventSettingsRequestValidator();
+        private readonly Mock<global::Workflow.DomainService.Actions.IActionsRepository> _actions = new();
 
         public FunctionEventSettingsTests()
         {
+            // The tenant's actions: every name the tests save, one with its Function switch off.
+            _actions.Setup(a => a.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+            [
+                .. new[] { "order.created", "iam.user.created" }.Concat(Enumerable.Range(0, 21).Select(i => $"event.n{i:00}"))
+                    .Select(name => new ActionDefinition { Name = name, Function = true }),
+                new ActionDefinition { Name = "iam.user.deactivated", Function = false },
+            ]);
             _functions.Setup(f => f.GetByIdAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new FunctionEntity { ItemId = "fn-1" });
         }
 
         private FunctionEventSettingsService Service() =>
-            new(_functions.Object, _runs.Object, _settings.Object, _audit.Object, _validator);
+            new(_functions.Object, _runs.Object, _settings.Object, _audit.Object, _validator, _actions.Object);
 
         private static SaveEventSettingsRequestDto Request(string[]? triggers = null) => new()
         {
@@ -83,6 +91,26 @@ namespace XUnitTest.Functions
 
             var twenty = Enumerable.Range(0, 20).Select(i => $"event.n{i:00}").ToArray();
             await Service().SaveAsync(Tenant, Request(twenty), "user-1", "u@x");
+        }
+
+        [Fact]
+        public async Task A_name_that_is_not_an_action_of_the_tenant_is_refused_with_ACTION_NOT_FOUND_and_nothing_is_saved()
+        {
+            var message = await SaveErrorAsync(Service(), Request(["order.created", "order.paid"]));
+
+            message.Should().Be("triggerEvents[1]: ACTION_NOT_FOUND: 'order.paid' is not an action of this project");
+            _settings.Verify(s => s.SaveDraftAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task An_action_whose_Function_switch_is_off_can_still_be_kept()
+        {
+            // The switch is the admin's in OS; turning it off must not block other edits of the list.
+            await Service().SaveAsync(Tenant, Request(["iam.user.deactivated"]), "user-1", "u@x");
+
+            _settings.Verify(s => s.SaveDraftAsync(
+                Tenant, "fn-1", It.IsAny<List<string>>(), "user-1", It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]

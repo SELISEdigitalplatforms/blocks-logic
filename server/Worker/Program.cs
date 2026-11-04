@@ -84,10 +84,9 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<AddExcuationNodeEvent>, AddExcuationNodeConsumer>();
             services.AddSingleton<IConsumer<WorkflowImportEvent>, WorkflowImportConsumer>();
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
-            services.AddSingleton<IConsumer<BlocksEventTriggerMessage>, BlocksEventTriggerConsumer>();
+            // The Action trigger: one consumer for both logic action queues (workflows and functions).
+            services.AddSingleton<IConsumer<BlocksAction>, Worker.Consumers.Actions.BlocksActionConsumer>();
             services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
-            // The event trigger: starts the functions that subscribe to a FunctionEvent.
-            services.AddSingleton<IConsumer<Functions.DomainService.Events.FunctionEvent>, Functions.DomainService.Consumers.FunctionEventConsumer>();
             services.AddSingleton<IConsumer<PublishScheduleCommand>, SchedulerTriggerConsumer>();
             services.AddSingleton<IConsumer<ErrorTriggerEvent>, ErrorTriggerConsumer>();
             // Mobile push: genesis senders queue PushRequested; this worker renders and sends it through FCM.

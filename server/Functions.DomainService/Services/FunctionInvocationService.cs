@@ -91,7 +91,7 @@ namespace Functions.DomainService.Services
 
         /// <summary>
         /// Starts a run of the function's <b>active, deployed</b> version for a function event, without waiting for it
-        /// (the event trigger: <see cref="Consumers.FunctionEventConsumer"/>). Authorized by the version's own
+        /// (the Action trigger: <see cref="FunctionActionTriggerService"/>). Authorized by the version's own
         /// subscription to the event (<see cref="IFunctionAuthorizationService.AuthorizeForEvent"/>); the run's identity is
         /// the message's context, <paramref name="callerContext"/>.
         /// <para>

@@ -5,7 +5,7 @@ namespace Functions.DomainService.Dtos.Requests
     {
         public string FunctionId { get; set; } = string.Empty;
 
-        /// <summary><c>FunctionEvent</c> names that start this function (used by the event trigger).</summary>
+        /// <summary>Action names that start this function (the Action trigger). Each must be in the tenant's actions.</summary>
         public List<string> TriggerEvents { get; set; } = [];
     }
 }

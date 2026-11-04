@@ -56,19 +56,28 @@ namespace Functions.DomainService.Repositories
         }
 
         public async Task<IReadOnlyList<FunctionEventSubscription>> FindSubscriptionsAsync(
-            string tenantId, string eventName, int limit, CancellationToken cancellationToken = default)
+            string tenantId, string eventName, FunctionEventSubscription? after, int limit, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(eventName) || limit <= 0) return [];
 
             await EnsureIndexesAsync(tenantId, cancellationToken);
             var f = Builders<FunctionEventSettingsEntity>.Filter;
+            var filter = f.AnyEq(s => s.TriggerEvents, eventName) & f.Ne(s => s.VersionId, null);
+            if (after is not null)
+            {
+                // Keyset paging on (FunctionId, VersionId), the sort order: memory stays flat however many subscribe.
+                filter &= f.Gt(s => s.FunctionId, after.FunctionId)
+                    | (f.Eq(s => s.FunctionId, after.FunctionId) & f.Gt(s => s.VersionId, after.VersionId));
+            }
+
             var rows = await Collection(tenantId)
-                .Find(f.AnyEq(s => s.TriggerEvents, eventName) & f.Ne(s => s.VersionId, null))
-                .Sort(Builders<FunctionEventSettingsEntity>.Sort.Ascending(s => s.FunctionId))
+                .Find(filter)
+                .Sort(Builders<FunctionEventSettingsEntity>.Sort.Ascending(s => s.FunctionId).Ascending(s => s.VersionId))
                 .Project(s => new { s.FunctionId, s.VersionId })
                 .Limit(limit)
                 .ToListAsync(cancellationToken);
-            return [.. rows.Where(r => !string.IsNullOrEmpty(r.VersionId)).Select(r => new FunctionEventSubscription(r.FunctionId, r.VersionId!))];
+            // Every row is returned (a page shorter than the limit means the last page); an empty version id never matches an active version.
+            return [.. rows.Select(r => new FunctionEventSubscription(r.FunctionId, r.VersionId ?? string.Empty))];
         }
 
         public async Task SaveDraftAsync(
