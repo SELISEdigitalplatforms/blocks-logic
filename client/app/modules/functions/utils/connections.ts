@@ -151,9 +151,12 @@ export const presetStatus = (
   variables: IVariableBinding[],
 ): PresetStatus => {
   const keys = new Set(variables.map((variable) => variable.key));
+  // An optional variable the user removed (no client credentials needed) still counts as set up.
   const parts = [
     preset.packageName in dependencies,
-    ...preset.variables.map((variable) => keys.has(variable.key)),
+    ...preset.variables
+      .filter((variable) => !variable.optional)
+      .map((variable) => keys.has(variable.key)),
   ];
   if (parts.every(Boolean)) return "added";
   return parts.some(Boolean) ? "partial" : "none";
@@ -366,7 +369,11 @@ export const applyPreset = (
     packageJson: nextPackageJson,
     variables: [
       ...rows,
-      ...added.map((variable) => ({ key: variable.key, value: knownValue(variable, prefills) })),
+      ...added.map((variable) => ({
+        key: variable.key,
+        value: knownValue(variable, prefills),
+        ...(variable.optional ? { optional: true } : {}),
+      })),
     ],
     addedPackage,
     version,
@@ -375,6 +382,13 @@ export const applyPreset = (
     filledKeys,
   };
 };
+
+/** Keys a preset's snippet reads but can run without (client credentials, for example). */
+const OPTIONAL_PRESET_KEYS = new Set(
+  CONNECTION_PRESETS.flatMap((preset) => preset.variables)
+    .filter((variable) => variable.optional)
+    .map((variable) => variable.key),
+);
 
 export interface SetupCheck {
   manifestValid: boolean;
@@ -400,9 +414,12 @@ export const checkSetup = (
     missingPackages: manifestValid
       ? findImportedPackages(indexJs).filter((name) => !(name in dependencies))
       : [],
-    missingVariables: findEnvKeys(indexJs).filter((key) => !keys.has(key)),
+    missingVariables: findEnvKeys(indexJs).filter(
+      (key) => !keys.has(key) && !OPTIONAL_PRESET_KEYS.has(key),
+    ),
+    // An optional row may stay blank: the code is written to run without it.
     emptyVariables: variables
-      .filter((variable) => variable.key && variable.value.trim() === "")
+      .filter((variable) => variable.key && !variable.optional && variable.value.trim() === "")
       .map((variable) => variable.key),
   };
 };

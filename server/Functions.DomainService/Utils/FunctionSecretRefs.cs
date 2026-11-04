@@ -96,7 +96,7 @@ namespace Functions.DomainService.Utils
         {
             var vars = (variables ?? [])
                 .Where(v => v is not null)
-                .Select(v => new VariableBinding { Key = v.Key, Value = rewrite(v.Value ?? string.Empty) })
+                .Select(v => new VariableBinding { Key = v.Key, Value = rewrite(v.Value ?? string.Empty), Optional = v.Optional })
                 .ToList();
             var acts = (actions ?? [])
                 .Where(a => a is not null)

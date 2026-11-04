@@ -15,7 +15,6 @@ vi.mock("../../services/function.service", () => ({
 const CREATED = "order.created";
 const SETTINGS = {
   functionId: "fn_1",
-  events: [{ type: "SendMail", payload: { to: "a" } }],
   triggerEvents: [CREATED],
 };
 const EVENT_INPUT = "Event name";
@@ -35,7 +34,7 @@ describe("TriggerEventCard", () => {
     expect(screen.getByText(/5 minutes/)).toBeTruthy();
   });
 
-  it("adds a name and saves it with the latest events", async () => {
+  it("adds a name and saves the list", async () => {
     renderWithProviders(<TriggerEventCard functionId="fn_1" />);
     await screen.findByText(CREATED);
 
@@ -45,7 +44,6 @@ describe("TriggerEventCard", () => {
     await waitFor(() =>
       expect(saveEventSettings).toHaveBeenCalledWith({
         functionId: "fn_1",
-        events: SETTINGS.events,
         triggerEvents: [CREATED, "order.paid"],
       }),
     );
@@ -74,7 +72,6 @@ describe("TriggerEventCard", () => {
     await waitFor(() =>
       expect(saveEventSettings).toHaveBeenCalledWith({
         functionId: "fn_1",
-        events: SETTINGS.events,
         triggerEvents: [],
       }),
     );

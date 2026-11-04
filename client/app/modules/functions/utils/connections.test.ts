@@ -199,7 +199,17 @@ describe("applyPreset", () => {
     expect(result.variables).toEqual([
       { key: "BLOCKS_CLIENT_ID", value: "abc" },
       { key: "BLOCKS_API_URL", value: "" },
-      { key: "BLOCKS_CLIENT_SECRET", value: "" },
+      { key: "BLOCKS_CLIENT_SECRET", value: "", optional: true },
+    ]);
+  });
+
+  it("adds the Blocks client-credentials rows as optional, and the API URL as required", () => {
+    const result = applyPreset(preset("blocks"), MANIFEST, []);
+    if (!result.ok) throw new Error("setup");
+    expect(result.variables).toEqual([
+      { key: "BLOCKS_API_URL", value: "" },
+      { key: "BLOCKS_CLIENT_ID", value: "", optional: true },
+      { key: "BLOCKS_CLIENT_SECRET", value: "", optional: true },
     ]);
   });
 
@@ -241,7 +251,27 @@ describe("presetStatus", () => {
   });
 });
 
+describe("presetStatus with optional variables", () => {
+  it("is added without the optional client-credentials rows", () => {
+    expect(
+      presetStatus(preset("blocks"), { "@seliseblocks/client": "0.2.0" }, [
+        { key: "BLOCKS_API_URL", value: "https://api.example.com" },
+      ]),
+    ).toBe("added");
+  });
+});
+
 describe("checkSetup", () => {
+  it("does not flag optional rows that are blank, or optional preset keys the code reads", () => {
+    const code = `export default async (input, ctx) => [ctx.env.BLOCKS_CLIENT_ID, ctx.env.BLOCKS_CLIENT_SECRET, ctx.env.MODE];`;
+    const result = checkSetup(code, MANIFEST, [
+      { key: "BLOCKS_CLIENT_SECRET", value: "", optional: true },
+      { key: "MODE", value: "" },
+    ]);
+    expect(result.missingVariables).toEqual([]);
+    expect(result.emptyVariables).toEqual(["MODE"]);
+  });
+
   it("reports imports without a package, env keys without a variable, and empty variables", () => {
     const code = `import { MongoClient } from "mongodb"; import x from "left-pad";
       export default async (input, ctx) => ctx.env.MONGO_URL + ctx.env.MODE;`;
@@ -349,8 +379,8 @@ describe("applyPreset with a resolved version and prefills", () => {
     });
     expect(result.ok && result.variables).toEqual([
       { key: "BLOCKS_API_URL", value: "https://blocksapi.acme.com" },
-      { key: "BLOCKS_CLIENT_ID", value: "" },
-      { key: "BLOCKS_CLIENT_SECRET", value: "" },
+      { key: "BLOCKS_CLIENT_ID", value: "", optional: true },
+      { key: "BLOCKS_CLIENT_SECRET", value: "", optional: true },
     ]);
   });
 

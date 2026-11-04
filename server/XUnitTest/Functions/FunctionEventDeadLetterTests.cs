@@ -12,7 +12,7 @@ namespace XUnitTest.Functions
 {
     /// <summary>
     /// The stream of events no function ran (<c>functions:dead-function-events</c>): its fields, that it never holds the
-    /// payload, that only event runs reach it, and the logic-owned store of an event run's name and depth.
+    /// payload, that only event runs reach it, and the logic-owned store of an event run's id and name.
     /// </summary>
     public class FunctionEventDeadLetterTests
     {
@@ -69,7 +69,7 @@ namespace XUnitTest.Functions
         public async Task A_failed_event_run_is_dead_lettered_with_its_event_id_name_and_the_failure_as_reason()
         {
             var store = RunStore();
-            await store.SaveAsync("run-9", new FunctionEventRunInfo("evt-1", "order.created", 2));
+            await store.SaveAsync("run-9", new FunctionEventRunInfo("evt-1", "order.created"));
             _redis.Fake.Calls("StreamAddAsync").Should().BeEmpty();
             var run = new FunctionRunEntity
             {
@@ -119,9 +119,9 @@ namespace XUnitTest.Functions
         {
             var store = RunStore();
 
-            await store.SaveAsync("run-9", new FunctionEventRunInfo("evt-1", "order.created", 4));
+            await store.SaveAsync("run-9", new FunctionEventRunInfo("evt-1", "order.created"));
 
-            (await store.GetAsync("run-9")).Should().Be(new FunctionEventRunInfo("evt-1", "order.created", 4));
+            (await store.GetAsync("run-9")).Should().Be(new FunctionEventRunInfo("evt-1", "order.created"));
             _store.Keys.Should().ContainSingle().Which.Should().Be(FunctionWorkerQueueKeys.EventRunInfo("run-9"));
             FunctionWorkerQueueKeys.EventRunInfoTtl.Should().BeGreaterThan(FunctionQueueKeys.RunTtl);
         }
@@ -140,12 +140,12 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task A_failed_write_surfaces_so_no_run_is_created_without_its_depth()
+        public async Task A_failed_write_surfaces_so_no_run_is_created_without_its_event_info()
         {
             _redis.Fake.On("StringSetAsync", _ => throw new RedisConnectionException(ConnectionFailureType.UnableToConnect, "down"));
             var store = new FunctionEventRunStore(Cache(), NullLogger<FunctionEventRunStore>.Instance);
 
-            var act = () => store.SaveAsync("run-9", new FunctionEventRunInfo("evt-1", "order.created", 0));
+            var act = () => store.SaveAsync("run-9", new FunctionEventRunInfo("evt-1", "order.created"));
 
             await act.Should().ThrowAsync<RedisConnectionException>();
         }

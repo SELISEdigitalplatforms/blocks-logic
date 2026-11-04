@@ -3,8 +3,8 @@ using Functions.DomainService.Events;
 namespace Functions.DomainService.Repositories
 {
     /// <summary>
-    /// The events a function may send (<see cref="FunctionEventSettingsEntity"/>): the draft the editor changes and a
-    /// copy per deployed version. Every method takes the tenant explicitly, like the other Functions repositories.
+    /// The event settings of a function (<see cref="FunctionEventSettingsEntity"/>: the trigger event names): the draft
+    /// the editor changes and a copy per deployed version. Every method takes the tenant explicitly, like the other Functions repositories.
     /// </summary>
     /// <summary>A deployed version whose settings subscribe to an event name.</summary>
     public sealed record FunctionEventSubscription(string FunctionId, string VersionId);
@@ -25,12 +25,11 @@ namespace Functions.DomainService.Repositories
 
         /// <summary>Writes the draft row (replacing the whole row; there is one per function).</summary>
         Task SaveDraftAsync(
-            string tenantId, string functionId, List<FunctionEventSetting> events, List<string> triggerEvents,
-            string? actorId, CancellationToken cancellationToken = default);
+            string tenantId, string functionId, List<string> triggerEvents, string? actorId, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Deploy: copies the draft row to one for the new version. With no draft row there is nothing to copy and
-        /// no row is written (a version without a row sends no events). Repeating it overwrites the same row.
+        /// no row is written (a version without a row has no trigger events). Repeating it overwrites the same row.
         /// </summary>
         Task CopyDraftToVersionAsync(
             string tenantId, string functionId, string versionId, CancellationToken cancellationToken = default);

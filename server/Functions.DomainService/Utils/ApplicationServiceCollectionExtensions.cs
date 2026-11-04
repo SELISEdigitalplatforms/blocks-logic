@@ -51,12 +51,10 @@ namespace Functions.DomainService.Utils
             services.AddSingleton<IFunctionRunRepository, FunctionRunRepository>();
             services.AddSingleton<IFunctionRunLogRepository, FunctionRunLogRepository>();
             services.AddSingleton<IFunctionBuildRepository, FunctionBuildRepository>();
-            // Function events: what a function may send, and what happened to a run's events (logic-owned collections).
+            // Function events: the trigger event names of a function (a logic-owned collection).
             services.AddSingleton<IFunctionEventSettingsRepository, FunctionEventSettingsRepository>();
-            services.AddSingleton<IFunctionRunEventsRepository, FunctionRunEventsRepository>();
-            services.AddSingleton<IFunctionEventAllowList, FunctionEventAllowList>();
             services.AddSingleton<IFunctionEventSettingsService, FunctionEventSettingsService>();
-            // The event trigger: the name and depth a run's event had, and the dead-letter stream of events no function ran.
+            // The event trigger: the id and name a run's event had, and the dead-letter stream of events no function ran.
             services.AddSingleton<IFunctionEventRunStore, FunctionEventRunStore>();
             services.AddSingleton<IFunctionEventDeadLetters, FunctionEventDeadLetters>();
 
@@ -128,8 +126,6 @@ namespace Functions.DomainService.Utils
             // Output actions, decoupled from result processing so a slow endpoint never holds a
             // result entry long enough to be reclaimed and delivered twice.
             services.AddHostedService<FunctionOutputActionConsumer>();
-            // Sends a succeeded run's events over the Genesis bus, from the output consumer, after its output actions.
-            services.AddSingleton<IFunctionEventDispatcher, FunctionEventDispatcher>();
             services.AddHostedService<FunctionBuildResultConsumer>();
             // Closes runs that will never hear back (payload expired or lost, runner died,
             // output job lost), per tenant, with conditional writes only.

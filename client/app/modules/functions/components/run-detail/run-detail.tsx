@@ -31,7 +31,6 @@ import {
 import { explainDiscardReason } from "../../utils/trigger";
 import { RunStatusChip } from "../run-status-chip";
 import { RunTiming } from "../run-timing";
-import { RunEvents } from "../run-events";
 import { triggeredByLabel } from "../../utils/events";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 import { renderRichText } from "@/lib/rich-text";
@@ -620,8 +619,6 @@ export const RunDetail = ({
           }
         />
       </div>
-
-      <RunEvents runId={run.id} />
 
       {run.outputResults.length > 0 && (
         <Card className="overflow-hidden">

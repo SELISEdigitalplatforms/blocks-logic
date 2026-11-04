@@ -86,7 +86,7 @@ IHostBuilder CreateHostBuilder(string[] args) =>
             services.AddSingleton<IConsumer<DataChangeEvent>, DataTriggerConsumer>();
             services.AddSingleton<IConsumer<BlocksEventTriggerMessage>, BlocksEventTriggerConsumer>();
             services.AddSingleton<IConsumer<EmailTriggerEvent>, EmailTriggerConsumer>();
-            // The event trigger: starts the functions that subscribe to a FunctionEvent (ctx.events.add('FunctionEvent', ...)).
+            // The event trigger: starts the functions that subscribe to a FunctionEvent.
             services.AddSingleton<IConsumer<Functions.DomainService.Events.FunctionEvent>, Functions.DomainService.Consumers.FunctionEventConsumer>();
             services.AddSingleton<IConsumer<PublishScheduleCommand>, SchedulerTriggerConsumer>();
             services.AddSingleton<IConsumer<ErrorTriggerEvent>, ErrorTriggerConsumer>();

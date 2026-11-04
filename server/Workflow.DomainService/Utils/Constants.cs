@@ -65,8 +65,8 @@ namespace Workflow.DomainService.Utils
         public const string LogicMailQueueName = "blocks_email_listener";
 
         /// <summary>
-        /// Function events (a function's <c>ctx.events.add('FunctionEvent', …)</c>). The Worker sends to it and consumes
-        /// it: <c>FunctionEventConsumer</c> (the event trigger) starts the functions that subscribe to the event's name.
+        /// Function events. The Worker consumes it: <c>FunctionEventConsumer</c> (the event trigger) starts the functions
+        /// that subscribe to the event's name.
         /// </summary>
         public const string FunctionEventQueueName = "blocks_logic_function_event_listener";
         public const string MigrationCompletionTopic = "blocks_migration_topic1";

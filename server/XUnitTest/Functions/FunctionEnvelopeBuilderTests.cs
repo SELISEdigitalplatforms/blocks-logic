@@ -260,6 +260,30 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public void Optional_variables_are_listed_for_the_runner_and_required_ones_are_not()
+        {
+            var function = WithVariables(("DB_URL", "{{secret.sec_1}}"), ("CLIENT_SECRET", "{{secret.sec_2}}"));
+            function.Variables[1].Optional = true;
+
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, function, Context(), null);
+
+            using var doc = Parse(json);
+            doc.RootElement.GetProperty("optionalEnv").EnumerateArray().Select(e => e.GetString())
+                .Should().Equal("CLIENT_SECRET");
+            doc.RootElement.GetProperty("env").GetProperty("CLIENT_SECRET").GetString()
+                .Should().Be("{{secret.sec_2}}", "the runner decides at run start whether the secret is there");
+        }
+
+        [Fact]
+        public void No_optional_variables_gives_an_empty_list()
+        {
+            var json = FunctionEnvelopeBuilder.Build(Run(), null, WithVariables(("A", "x")), Context(), null);
+
+            using var doc = Parse(json);
+            doc.RootElement.GetProperty("optionalEnv").GetArrayLength().Should().Be(0);
+        }
+
+        [Fact]
         public void A_bound_variable_is_left_as_its_reference_for_the_runner_to_resolve()
         {
             var function = WithVariables(("STRIPE_API_KEY", "{{secret.sec_1}}"));

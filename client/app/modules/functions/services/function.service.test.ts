@@ -120,13 +120,6 @@ describe("functionService", () => {
     );
   });
 
-  it("reads the event catalog without a query string", async () => {
-    await functionService.getEventCatalog();
-    expect(http.logicService.get).toHaveBeenCalledWith(
-      expect.stringContaining("/Functions/GetEventCatalog"),
-    );
-  });
-
   it("reads event settings and queue status by function id", async () => {
     await functionService.getEventSettings("fn_1");
     expect(http.logicService.get).toHaveBeenLastCalledWith(
@@ -139,17 +132,9 @@ describe("functionService", () => {
     );
   });
 
-  it("reads a run's events by run id", async () => {
-    await functionService.getRunEvents("run_1");
-    expect(http.logicService.get).toHaveBeenCalledWith(
-      expect.stringMatching(/\/Functions\/GetRunEvents\?runId=run_1$/),
-    );
-  });
-
   it("saves event settings as the whole body", async () => {
     const body = {
       functionId: "fn_1",
-      events: [{ type: "FunctionEvent" as const, payload: { name: "order.paid" } }],
       triggerEvents: ["order.created"],
     };
     await functionService.saveEventSettings(body);
