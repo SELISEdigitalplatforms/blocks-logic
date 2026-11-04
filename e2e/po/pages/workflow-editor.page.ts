@@ -273,18 +273,33 @@ export class WorkflowEditorPage {
   }
 
   // ---- Node library (node-library-panel.tsx) ---------------------------------------
+  // Since 86b98dfb the library is the "Add a node" sheet: a "Search nodes" box, category tabs and one
+  // section per category, whose rows are buttons showing the node title and description.
 
   get nodeLibrarySheet(): Locator {
     return this.page
       .getByRole("dialog")
-      .filter({ has: this.page.getByPlaceholder("Search", { exact: true }) });
+      .filter({ has: this.page.getByPlaceholder("Search nodes", { exact: true }) });
   }
 
-  /** One library entry: a clickable row whose <h4> is the node title. */
+  get nodeLibrarySearchBox(): Locator {
+    return this.nodeLibrarySheet.getByPlaceholder("Search nodes", { exact: true });
+  }
+
+  /** One library entry: the row button whose title is exactly `title`. */
   libraryEntry(title: string): Locator {
     return this.nodeLibrarySheet
-      .locator("div.cursor-pointer")
-      .filter({ has: this.page.getByRole("heading", { level: 4, name: title, exact: true }) });
+      .getByRole("button")
+      .filter({ has: this.page.getByText(title, { exact: true }) });
+  }
+
+  /** The entry titles of one category section, in panel order. */
+  async libraryCategoryTitles(category: string): Promise<string[]> {
+    const titles = await this.nodeLibrarySheet
+      .getByRole("region", { name: category, exact: true })
+      .locator("button span.font-semibold")
+      .allTextContents();
+    return titles.map((title) => title.trim());
   }
 
   /**

@@ -156,17 +156,14 @@ test.describe("workflow — Filter node", () => {
         // node-definitions.tsx: lucide `Filter` icon → <svg class="lucide lucide-filter">.
         await expect(filterEntry.locator("svg.lucide-filter")).toHaveCount(1);
 
-        // The library is one flat list in definition order (no category headings); the Logic
-        // definitions (category "logic") are listed together: If, Switch, Filter. The saved
-        // category itself is checked on the exported JSON in step 2.
-        const titles = (
-          await editor.nodeLibrarySheet.getByRole("heading", { level: 4 }).allTextContents()
-        ).map((title) => title.trim());
-        expect(titles.indexOf("Switch"), "Switch is listed").toBeGreaterThan(-1);
-        expect(titles.indexOf("Switch")).toBe(titles.indexOf("If") + 1);
-        expect(titles.indexOf("Filter")).toBe(titles.indexOf("Switch") + 1);
+        // Drift (86b98dfb): the library groups nodes in one section per category, each sorted by
+        // title, so the Logic definitions (category "logic") share the Logic section: Filter, If,
+        // Switch. The saved category itself is checked on the exported JSON in step 2.
+        const logicTitles = await editor.libraryCategoryTitles("Logic");
+        expect(logicTitles).toEqual(expect.arrayContaining(["Filter", "If", "Switch"]));
+        expect(logicTitles).toEqual([...logicTitles].sort((a, b) => a.localeCompare(b)));
 
-        await editor.nodeLibrarySheet.getByPlaceholder("Search", { exact: true }).fill("Filter");
+        await editor.nodeLibrarySearchBox.fill("Filter");
         await expect(filterEntry).toBeVisible();
       });
 
