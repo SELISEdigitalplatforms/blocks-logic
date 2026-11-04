@@ -238,14 +238,14 @@ namespace Mail.DomainService.Mails
         {
             var template = await _mailRepository.GetEmailTemplateByIdAsync(request.TemplateId!);
             var organizationId = MailOrganization.Normalize(template?.OrganizationId);
-            var purpose = template?.Name ?? (string.IsNullOrWhiteSpace(request.Purpose) ? request.TemplateId! : request.Purpose);
+            var purpose = template?.Name ?? (string.IsNullOrWhiteSpace(request.Purpose) ? request.TemplateId! : request.Purpose!);
             var language = template?.Language ?? request.Language;
 
             return await CompleteMappingAsync(request, request.To, request.Cc, request.Bcc, template, organizationId, purpose, language, isTestMail: true);
         }
 
         private async Task<MailToBeSent> CompleteMappingAsync(BaseMailRequest request, IEnumerable<string> to, IEnumerable<string> cc,
-            IEnumerable<string> bcc, EmailTemplate? template, string organizationId, string purpose, string language, bool isTestMail)
+            IEnumerable<string> bcc, EmailTemplate? template, string organizationId, string? purpose, string? language, bool isTestMail)
         {
             var configuration = template is null
                 ? MailServerConfigurationChoice.None
@@ -280,8 +280,9 @@ namespace Mail.DomainService.Mails
                 Bcc = bcc,
 
                 BodyDataContext = request.BodyDataContext,
-                Name = purpose,
-                Language = language,
+                // A missing purpose or language stays null, as before, for EmailValidator to report.
+                Name = purpose!,
+                Language = language!,
                 Attachments = request.Attachments ?? Enumerable.Empty<string>(),// new string[] { },
                 ReplyTo = request.ReplyTo,
                 SubjectDataContext = request.SubjectDataContext,

@@ -13,8 +13,11 @@ namespace Mail.DomainService.Mails
         public static string Normalize(string? organizationId) =>
             string.IsNullOrWhiteSpace(organizationId) ? Default : organizationId;
 
-        /// <summary>Whether a stored <c>OrganizationId</c> belongs to <paramref name="organizationId"/>.</summary>
+        /// <summary>
+        /// Whether a stored <c>OrganizationId</c> belongs to <paramref name="organizationId"/>. Stored values count as
+        /// Default only when null or empty, exactly as the lookups' filters match them.
+        /// </summary>
         public static bool Owns(string organizationId, string? storedOrganizationId) =>
-            Normalize(storedOrganizationId) == Normalize(organizationId);
+            (string.IsNullOrEmpty(storedOrganizationId) ? Default : storedOrganizationId) == Normalize(organizationId);
     }
 }

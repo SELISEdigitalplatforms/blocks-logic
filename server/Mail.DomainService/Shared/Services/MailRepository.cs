@@ -149,7 +149,7 @@ namespace Mail.DomainService.Services
             using var cursor = await collection.FindAsync(FilterDefinition<MailServerConfiguration>.Empty, options);
             return await cursor.ToListAsync();
         }
-        public async Task<EmailTemplateChoice> GetEmailTemplateForOrganizationAsync(string purpose, string language, string organizationId)
+        public async Task<EmailTemplateChoice> GetEmailTemplateForOrganizationAsync(string? purpose, string? language, string organizationId)
         {
             var organization = MailOrganization.Normalize(organizationId);
             var filter =
@@ -159,10 +159,10 @@ namespace Mail.DomainService.Services
 
             // The organization's own templates rank before the Default organization's, so Default duplicates with
             // lower ids can never push the organization's template out of the limit. For the Default organization
-            // every match is its own.
+            // every match is its own. The id is a $literal so a value starting with "$" is never read as a field path.
             BsonValue rank = organization == MailOrganization.Default
                 ? 0
-                : new BsonDocument("$cond", new BsonArray { new BsonDocument("$eq", new BsonArray { "$" + OrganizationIdField, organization }), 0, 1 });
+                : new BsonDocument("$cond", new BsonArray { new BsonDocument("$eq", new BsonArray { "$" + OrganizationIdField, new BsonDocument("$literal", organization) }), 0, 1 });
 
             var templates = await GetCollection<EmailTemplate>().Aggregate()
                 .Match(filter)

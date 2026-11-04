@@ -211,7 +211,7 @@ namespace XUnitTest.Mail
             response.IsSuccess.Should().BeFalse();
             response.Errors.Should().ContainKey("Name").WhoseValue.Should().Be(TemplateMissingMessage);
             _sender.Verify(s => s.ProcessSendMailAsync(It.IsAny<MailToBeSent>()), Times.Never);
-            _selectionReads.Should().BeLessThanOrEqualTo(2);
+            _selectionReads.Should().Be(1, "no template, so no configuration read");
         }
 
         [Fact]
@@ -359,7 +359,7 @@ namespace XUnitTest.Mail
 
             response.IsSuccess.Should().BeFalse();
             response.Errors.Should().ContainKey("Name").WhoseValue.Should().Be(TemplateMissingMessage);
-            _selectionReads.Should().BeLessThanOrEqualTo(2);
+            _selectionReads.Should().Be(1, "no template, so no configuration read");
         }
 
         [Fact]
@@ -373,6 +373,16 @@ namespace XUnitTest.Mail
             });
 
             response.Errors.Should().ContainKey("Name").WhoseValue.Should().Be(TemplateMissingMessage);
+        }
+
+        [Fact]
+        public async Task H1_OrganizationIdStartingWithDollar_IsMatchedLiterally()
+        {
+            Templates().InsertOne(Template("T7", "$acme", ""));
+
+            (await HttpSend("$acme")).IsSuccess.Should().BeTrue();
+
+            _sent!.EmailTemplate.ItemId.Should().Be("T7");
         }
 
         [Fact]

@@ -27,7 +27,7 @@ namespace Mail.DomainService.Services
         /// One read: the template with this Name and Language in <paramref name="organizationId"/>, else in the Default
         /// organization (missing or empty OrganizationId included). Ties go to the lowest ItemId.
         /// </summary>
-        Task<EmailTemplateChoice> GetEmailTemplateForOrganizationAsync(string purpose, string language, string organizationId);
+        Task<EmailTemplateChoice> GetEmailTemplateForOrganizationAsync(string? purpose, string? language, string organizationId);
 
         /// <summary>One read: the template with this ItemId, or null.</summary>
         Task<EmailTemplate?> GetEmailTemplateByIdAsync(string templateId);

@@ -6,7 +6,7 @@ namespace Mail.DomainService.Mails
     /// <summary>
     /// The template chosen for a send. <see cref="TiedTemplateIds"/> lists every template that shared the winning
     /// rank (same Name and Language in the same organization; nothing enforces uniqueness), lowest ItemId first;
-    /// it is empty when the choice was unambiguous.
+    /// it is empty when the choice was unambiguous. The lookup reads at most 3 templates, so it lists at most 3.
     /// </summary>
     public sealed record EmailTemplateChoice(EmailTemplate? Template, IReadOnlyList<string> TiedTemplateIds)
     {
