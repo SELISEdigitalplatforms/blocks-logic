@@ -12,6 +12,7 @@ namespace DomainService.Entities
         public string TenantId { get; set; }
         public string TenantGroupId { get; set; }
         public bool IsDomainVerified { get; set; }
+        public string CookieDomain { get; set; }
         public bool IsCookieEnable { get; set; }
         public string Environment { get; set; }
         public bool IsDisabled { get; set; }

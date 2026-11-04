@@ -1,31 +1,39 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui-kits/button/button";
 import { AudioLines, Square } from "lucide-react";
-import { useWorkflow } from "@blocks-workflow/hooks";
+import { useWorkflow, useHandleExecuteStep } from "@blocks-workflow/hooks";
 import { useExecuteTriggerListener } from "@blocks-workflow/hooks/use-workflow-api";
 import { useT } from "@seliseblocks/genesis-os";
 
 export const ListenEventPanel = () => {
   const { t } = useT("logic.workflow.nodes.inspector");
   const { selectedNode, isListening, listeningNodeId, setIsListening } = useWorkflow();
-  const { mutate: executeTriggerListener, isPending } = useExecuteTriggerListener();
+  const { mutate: executeTriggerListener, isPending: isStopPending } = useExecuteTriggerListener();
+  // Starting a listen goes through the same path as "Execute Step": save the workflow, then
+  // step-execute, which turns the listener on when the server answers with the listening code.
+  const { handleExecuteStep, executeStepModal } = useHandleExecuteStep();
+  const [isStartPending, setIsStartPending] = useState(false);
 
   if (!selectedNode) return null;
 
   const isThisNodeListening = isListening && listeningNodeId === selectedNode.id;
+  const isPending = isStopPending || isStartPending;
 
-  const toggleListening = () => {
-    if (isThisNodeListening) {
-      executeTriggerListener(
-        { triggerId: selectedNode.id, enableListener: false },
-        { onSuccess: () => setIsListening(false) }
-      );
-    } else {
-      executeTriggerListener(
-        { triggerId: selectedNode.id, enableListener: true, completionNodeId: selectedNode.id },
-        { onSuccess: () => setIsListening(true, selectedNode.id) }
-      );
+  const stopListening = () => {
+    executeTriggerListener(
+      { triggerId: selectedNode.id, enableListener: false },
+      { onSuccess: () => setIsListening(false) }
+    );
+  };
+
+  const startListening = async () => {
+    setIsStartPending(true);
+    try {
+      await handleExecuteStep(selectedNode.id);
+    } finally {
+      setIsStartPending(false);
     }
   };
 
@@ -41,13 +49,13 @@ export const ListenEventPanel = () => {
             </span>
             <span>{t("LISTEN_EVENT_PANEL.LISTENING_FOR_EVENTS")}</span>
           </div>
-          <Button variant="outline" onClick={toggleListening} disabled={isPending}>
+          <Button variant="outline" onClick={stopListening} disabled={isPending}>
             <Square className="h-4 w-4" />
             <span className="ml-2">{t("LISTEN_EVENT_PANEL.STOP_LISTENING")}</span>
           </Button>
         </div>
       ) : (
-        <Button variant="outline" onClick={toggleListening} disabled={isPending}>
+        <Button variant="outline" onClick={startListening} disabled={isPending}>
           <AudioLines className="h-4 w-4" />
           <span className="ml-2">{t("LISTEN_EVENT_PANEL.LISTEN_FOR_TEST_EVENT")}</span>
         </Button>
@@ -55,6 +63,7 @@ export const ListenEventPanel = () => {
       <p className="text-sm font-normal text-medium-emphasis">
         {t("LISTEN_EVENT_PANEL.TRIGGER_THIS_WORKFLOW_AUTOMATICALLY")}
       </p>
+      {executeStepModal}
     </div>
   );
 };

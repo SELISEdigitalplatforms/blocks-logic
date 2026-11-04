@@ -116,7 +116,6 @@ DOTNET_ENVIRONMENT=Production
 # KeyVault__ClientSecret=
 # KeyVault__TenantId=
 # AZURE_CONFIG_DIR=
-# Secrets__ValueStore=
 #
 # On a host that is NOT an Azure VM, also set ASPNETCORE_ENVIRONMENT=Development. The Key Vault
 # credential in SeliseBlocks.Secrets.OS is a DefaultAzureCredential, which probes the instance
