@@ -176,14 +176,16 @@ export const ProxyForm = ({
         values: payload,
         expectedVersion: seededVersion.current,
       });
-      if (!res.isSuccess) return showErrorToast({ errors: res.errors || t("PROXY_FORM.FAILED_TO_SAVE_PROXY") });
+      if (!res.isSuccess)
+        return showErrorToast({ errors: res.errors || t("PROXY_FORM.FAILED_TO_SAVE_PROXY") });
       showSuccessToast({ description: t("PROXY_FORM.PROXY_UPDATED_SUCCESSFULLY") });
       onSuccess?.(proxy.id);
       return;
     }
 
     const res = await createProxy.mutateAsync(payload);
-    if (!res.isSuccess) return showErrorToast({ errors: res.errors || t("PROXY_FORM.FAILED_TO_CREATE_PROXY") });
+    if (!res.isSuccess)
+      return showErrorToast({ errors: res.errors || t("PROXY_FORM.FAILED_TO_CREATE_PROXY") });
     showSuccessToast({ description: t("PROXY_FORM.PROXY_CREATED_SUCCESSFULLY") });
     onSuccess?.(res.itemId);
   };
@@ -198,7 +200,11 @@ export const ProxyForm = ({
 
   return (
     <Form {...form}>
-      <form noValidate onSubmit={(event) => form.handleSubmit(handleSubmit)(event)} className="space-y-6">
+      <form
+        noValidate
+        onSubmit={(event) => form.handleSubmit(handleSubmit)(event)}
+        className="space-y-6"
+      >
         <div className="sticky top-0 z-30 -mx-6 -mt-4 bg-surface-app px-6 pb-4 pt-4 shadow-sm">
           {headerContent ? <div className="pb-6">{headerContent}</div> : null}
           <ProxyFormHeader isEdit={isEdit} isPending={isPending} onCancel={onCancel} />
@@ -237,6 +243,7 @@ export const ProxyForm = ({
                       <Input
                         type="text"
                         inputMode="url"
+                        // eslint-disable-next-line no-restricted-syntax -- example URL, not prose
                         placeholder="https://api.vendor.com"
                         {...field}
                       />
@@ -255,11 +262,7 @@ export const ProxyForm = ({
               label={t("PROXY_FORM.SENT_WITH_EVERY_REQUEST")}
               addLabel={t("common:ADD")}
               sendAsColumn
-              description={
-                <>
-                  {t("PROXY_FORM.THE_CREDENTIAL_LIVES_HERE")}
-                </>
-              }
+              description={<>{t("PROXY_FORM.THE_CREDENTIAL_LIVES_HERE")}</>}
               {...variableProps}
             />
           </CardContent>

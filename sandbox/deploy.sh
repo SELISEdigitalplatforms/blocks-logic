@@ -364,9 +364,9 @@ ok "runner id: $(env_val RUNNER__RunnerId)"
 
 
 # Secret-bound variables are resolved on this host at run start, through the same value store the
-# control plane writes to. Without a vault URL the secrets SDK falls back to its Database store,
-# which holds none of those values — the runner starts fine and every secret-bound run fails.
-[ -n "$(env_val KeyVault__KeyVaultUrl)" ] || [ "$(env_val Secrets__ValueStore)" = "Database" ] \
+# control plane writes to (Key Vault only). Without a vault URL the runner starts fine and every
+# secret-bound run fails.
+[ -n "$(env_val KeyVault__KeyVaultUrl)" ] \
   || warn "KeyVault__KeyVaultUrl is unset — runs whose variables are bound to secrets will fail as SECRET_UNRESOLVED"
 
 # A base image that is not digest-pinned is not an error — a shared-registry host may legitimately

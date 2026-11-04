@@ -13,6 +13,9 @@ namespace DomainService.Entities
         public bool IsInvitationConfirmed { get; set; }
         public bool IsCreator { get; set; }
 
+        /// <summary>Absent on existing documents, which deserialises to an empty list.</summary>
+        public List<string> AccessPolicies { get; set; } = [];
+
     }
 
 }

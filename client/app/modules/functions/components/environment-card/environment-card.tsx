@@ -38,7 +38,7 @@ export const EnvironmentCard = ({ variables, onEditVariables }: EnvironmentCardP
                 key={variable.key}
                 className="truncate border-b py-1.5 font-mono text-xs font-semibold text-primary last:border-b-0"
               >
-                ctx.env.{variable.key}
+                {`ctx.env.${variable.key}`}
               </code>
             ))}
           </div>

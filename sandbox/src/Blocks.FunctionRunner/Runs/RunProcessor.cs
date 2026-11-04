@@ -1051,6 +1051,13 @@ namespace Blocks.FunctionRunner.Runs
             // (never cached), and must match exactly one secret. The bound ids then join the same single value read.
             var idsByName = new Dictionary<string, string>(StringComparer.Ordinal);
             var broken = new List<string>();
+            // Optional keys whose secret is simply not there: left out of ctx.env, the run goes on.
+            var dropped = new HashSet<string>(StringComparer.Ordinal);
+            void Miss(string key, string reason, string text)
+            {
+                if (plan.OptionalKeys.Contains(key) && EnvSecretReferences.IsAbsence(reason)) dropped.Add(key);
+                else broken.Add(text);
+            }
             SecretLookup lookup;
             try
             {
@@ -1071,7 +1078,7 @@ namespace Blocks.FunctionRunner.Runs
                             var reason = matches.Count == 0
                                 ? SecretUnresolvedReasons.NoSuchName
                                 : SecretUnresolvedReasons.DuplicateName;
-                            broken.Add($"variable {key} references the secret named '{name}', but {reason}");
+                            Miss(key, reason, $"variable {key} references the secret named '{name}', but {reason}");
                         }
                     }
                 }
@@ -1100,10 +1107,11 @@ namespace Blocks.FunctionRunner.Runs
                 if (refusedForName) break;
                 foreach (var name in names.Distinct(StringComparer.Ordinal))
                 {
-                    var id = idsByName[name];
+                    // A name an optional key could not bind was dropped above; it has no id to read.
+                    if (!idsByName.TryGetValue(name, out var id)) continue;
                     if (lookup.Values.ContainsKey(id)) continue;
                     var reason = lookup.Unresolved.TryGetValue(id, out var r) ? r : SecretUnresolvedReasons.NotFound;
-                    broken.Add($"variable {key} references the secret named '{name}', but {reason}");
+                    Miss(key, reason, $"variable {key} references the secret named '{name}', but {reason}");
                 }
             }
 
@@ -1114,7 +1122,7 @@ namespace Blocks.FunctionRunner.Runs
                     if (lookup.Values.ContainsKey(id)) continue;
                     if (refusedForName) break;
                     var reason = lookup.Unresolved.TryGetValue(id, out var r) ? r : SecretUnresolvedReasons.NotFound;
-                    broken.Add($"variable {key} references secret '{id}', but {reason}");
+                    Miss(key, reason, $"variable {key} references secret '{id}', but {reason}");
                 }
             }
 
@@ -1125,7 +1133,19 @@ namespace Blocks.FunctionRunner.Runs
                 return new Prepared(null, (ErrorCodes.SecretUnresolved, message), []);
             }
 
-            var values = plan.Ids.Concat(idsByName.Values).Distinct(StringComparer.Ordinal)
+            if (dropped.Count > 0)
+            {
+                // Keys only, never ids or values.
+                _logger.LogInformation(
+                    "Run {RunId}: optional variables {Keys} left out, their configuration variable is gone",
+                    job.RunId, string.Join(", ", dropped.Order(StringComparer.Ordinal)));
+                envelope = EnvSecretReferences.Without(envelope, dropped);
+                plan = EnvSecretReferences.Collect(envelope);
+                if (plan.IsEmpty) return new Prepared(envelope, null, []);
+            }
+
+            var boundIds = plan.Names.Select(n => idsByName[n]);
+            var values = plan.Ids.Concat(boundIds).Distinct(StringComparer.Ordinal)
                 .Select(id => lookup.Values[id]).Distinct(StringComparer.Ordinal).ToArray();
             return new Prepared(EnvSecretReferences.Apply(envelope, plan, lookup.Values, idsByName), null, values);
         }
