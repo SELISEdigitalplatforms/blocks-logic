@@ -138,7 +138,7 @@ namespace Workflow.DomainService.Services
                 ParentDirectoryId = null,
                 ConfigurationName = null,
                 AccessModifier = PrivateAccess,
-                ObjectAccessLevel = CreatorAccess,
+                ObjectAccessLevel = OrganizationAccess,
                 SizeInBytes = file.Length,
                 ContentType = file.ContentType,
             });
@@ -206,7 +206,7 @@ namespace Workflow.DomainService.Services
                 ParentDirectoryId = null!,
                 ConfigurationName = DefaultConfigurationName,
                 AccessModifier = PrivateAccess,
-                ObjectAccessLevel = CreatorAccess,
+                ObjectAccessLevel = OrganizationAccess,
                 File = file.File,
                 MetaData = string.Empty,
                 Tags = string.Empty,
@@ -227,7 +227,8 @@ namespace Workflow.DomainService.Services
                 && category == StorageStrategyCategory.Local;
         }
 
-        private const string CreatorAccess = "Creator";
+        /// <summary>Organization-visible, so Client Credential runs and same-organization users can reach webhook files (SPEC11 D3).</summary>
+        private const string OrganizationAccess = "Organization";
 
         /// <summary>The caller as validated by the webhook's auth. A missing one is a programming error (SPEC10 K6).</summary>
         private static BlocksContext CallerOf(WebhookFileTarget target) =>

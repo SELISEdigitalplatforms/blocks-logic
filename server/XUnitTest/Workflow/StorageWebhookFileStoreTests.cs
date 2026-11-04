@@ -13,6 +13,9 @@ using XUnitTest.TestHelpers;
 namespace XUnitTest.Workflow
 {
     /// <summary>SPEC8 file upload: identity, the pre-signed upload path and how storage answers map to statuses.</summary>
+    // These classes create blocks-webhook-* temp files, and some assert the temp folder is left clean, so they
+    // must not run in parallel with each other.
+    [Collection(WebhookTempFileCollection.Name)]
     public class StorageWebhookFileStoreTests : IDisposable
     {
         private readonly Mock<IStorageDriverService> _driver = new();
@@ -94,7 +97,7 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task Authenticated_caller_uploads_as_themselves_with_creator_access()   // H9
+        public async Task Authenticated_caller_uploads_as_themselves_with_organization_access()   // H9, SPEC11 H9
         {
             BlocksContext? acting = null;
             GetPreSignedUrlForUploadRequest? sent = null;
@@ -107,7 +110,27 @@ namespace XUnitTest.Workflow
             await _sut.StoreAsync(file, target);
 
             acting!.UserId.Should().Be("user-7");
-            sent!.ObjectAccessLevel.Should().Be("Creator");
+            sent!.ObjectAccessLevel.Should().Be("Organization");
+        }
+
+        [Fact]
+        public async Task Local_storage_uploads_with_organization_access()   // SPEC11 H9
+        {
+            var configurations = new Mock<DomainService.Configuration.IStorageConfigurationProvider>();
+            configurations.Setup(c => c.GetByNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new StorageConfiguration { Name = "Default", StorageStrategy = "SftpStorage" });
+            LocalStorageUploadRequest? sent = null;
+            _driver.Setup(d => d.UploadFileToLocalStorageAsync(It.IsAny<LocalStorageUploadRequest>()))
+                .Callback<LocalStorageUploadRequest>(r => sent = r)
+                .ReturnsAsync(new LocalStorageUploadResponse { IsSuccess = true, FileId = "file-9" });
+            var factory = new Mock<IHttpClientFactory>();
+            var sut = new StorageWebhookFileStore(factory.Object, Options.Create(new WebhookUploadOptions()),
+                NullLogger<StorageWebhookFileStore>.Instance, _driver.Object, configurations.Object);
+            using var file = await PdfAsync();
+
+            (await sut.StoreAsync(file, Caller)).Should().Be("file-9");
+
+            sent!.ObjectAccessLevel.Should().Be("Organization");
         }
 
         [Fact]
