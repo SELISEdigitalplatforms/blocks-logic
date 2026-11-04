@@ -1199,27 +1199,12 @@
         </member>
         <member name="T:Api.Controllers.NotifierController">
             <summary>
-            Delivery and read-state for user notifications, routed as <c>/api/Notifier/{action}</c>.
-            The two send actions stay open without a bearer token because internal services call them with the
-            <c>Secret</c> sender header; a caller without it needs a valid token with
-            <c>blocks-logic::notifier::send</c> (<see cref="T:DomainService.Notification.INotifierSendGuard"/>, <see cref="T:BlocksTemplate.Api.Security.INotifierSendPermission"/>).
-            Everything that reads or mutates a user's own notifications requires a bearer token.
+            Read-state of the caller's own notifications, routed as <c>/api/Notifier/{action}</c>. Every action here
+            requires a bearer token. The two send actions on the same route are <see cref="T:Api.Controllers.NotifierSendController"/>.
             </summary>
         </member>
-        <member name="M:Api.Controllers.NotifierController.#ctor(DomainService.Notification.INotificationService,DomainService.Notification.INotifyService,DomainService.Notification.INotifierSendGuard,BlocksTemplate.Api.Security.INotifierSendPermission,Microsoft.Extensions.Logging.ILogger{Api.Controllers.NotifierController})">
-            <summary>Takes the inbox service, the send service, the send guard, the send permission check and a logger.</summary>
-        </member>
-        <member name="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest,System.String)">
-            <summary>
-            <c>POST</c> — validates the request and queues it (genesis publisher). Success means accepted: the
-            configuration decides receivers and channels after the answer.
-            </summary>
-        </member>
-        <member name="M:Api.Controllers.NotifierController.SendSecretNotification(DomainService.Shared.NotifyRequest,System.String)">
-            <summary>
-            <c>POST</c> — the secrets-pipeline variant of <see cref="M:Api.Controllers.NotifierController.Notify(DomainService.Shared.NotifyRequest,System.String)"/>, hidden from the API explorer.
-            Same service call; kept separate so its traffic is distinguishable in logs.
-            </summary>
+        <member name="M:Api.Controllers.NotifierController.#ctor(DomainService.Notification.INotificationService)">
+            <summary>Takes the inbox service.</summary>
         </member>
         <member name="M:Api.Controllers.NotifierController.GetUnreadNotificationsBySubscriptionFilter(DomainService.Shared.GetUnreadNotificationsRequestBySubscriptionFilter)">
             <summary>
@@ -1237,6 +1222,30 @@
             <summary>
             <c>GET</c> — the caller's notifications, filtered and paged by the query string. Paging outside
             <see cref="T:DomainService.Notification.NotificationPaging"/> is a 400 with one <c>Errors</c> entry per parameter, before any lookup.
+            </summary>
+        </member>
+        <member name="T:Api.Controllers.NotifierSendController">
+            <summary>
+            The two send actions of <c>/api/Notifier/{action}</c>: <see cref="M:Api.Controllers.NotifierSendController.Notify(DomainService.Shared.NotifyRequest,System.String)"/> and <see cref="M:Api.Controllers.NotifierSendController.SendSecretNotification(DomainService.Shared.NotifyRequest,System.String)"/>.
+            They stay open without a bearer token because internal services call them with the <c>Secret</c> sender
+            header; a caller without it needs a valid token with <c>blocks-logic::notifier::send</c>
+            (<see cref="T:DomainService.Notification.INotifierSendGuard"/>, <see cref="T:BlocksTemplate.Api.Security.INotifierSendPermission"/>). Split from
+            <see cref="T:Api.Controllers.NotifierController"/>, with which they share no dependency; the routes are unchanged.
+            </summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierSendController.#ctor(DomainService.Notification.INotifyService,DomainService.Notification.INotifierSendGuard,BlocksTemplate.Api.Security.INotifierSendPermission,Microsoft.Extensions.Logging.ILogger{Api.Controllers.NotifierController})">
+            <summary>Takes the send service, the send guard, the send permission check and a logger.</summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierSendController.Notify(DomainService.Shared.NotifyRequest,System.String)">
+            <summary>
+            <c>POST</c> — validates the request and queues it (genesis publisher). Success means accepted: the
+            configuration decides receivers and channels after the answer.
+            </summary>
+        </member>
+        <member name="M:Api.Controllers.NotifierSendController.SendSecretNotification(DomainService.Shared.NotifyRequest,System.String)">
+            <summary>
+            <c>POST</c> — the secrets-pipeline variant of <see cref="M:Api.Controllers.NotifierSendController.Notify(DomainService.Shared.NotifyRequest,System.String)"/>, hidden from the API explorer.
+            Same service call; kept separate so its traffic is distinguishable in logs.
             </summary>
         </member>
         <member name="T:Api.Controllers.NotifierDeviceAdminController">

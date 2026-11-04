@@ -9,30 +9,90 @@ using Blocks.Genesis.Entities.Logic;
 namespace Api.Controllers
 {
     /// <summary>
-    /// Delivery and read-state for user notifications, routed as <c>/api/Notifier/{action}</c>.
-    /// The two send actions stay open without a bearer token because internal services call them with the
-    /// <c>Secret</c> sender header; a caller without it needs a valid token with
-    /// <c>blocks-logic::notifier::send</c> (<see cref="INotifierSendGuard"/>, <see cref="INotifierSendPermission"/>).
-    /// Everything that reads or mutates a user's own notifications requires a bearer token.
+    /// Read-state of the caller's own notifications, routed as <c>/api/Notifier/{action}</c>. Every action here
+    /// requires a bearer token. The two send actions on the same route are <see cref="NotifierSendController"/>.
     /// </summary>
     [ApiController]
     [Route("[controller]/[action]")]
 
     public class NotifierController : ControllerBase
     {
+        private readonly INotificationService _notificationService;
+
+        /// <summary>Takes the inbox service.</summary>
+        public NotifierController(INotificationService notificationService)
+        {
+            _notificationService = notificationService;
+        }
+
+        /// <summary>
+        /// <c>GET</c> — the caller's unread notifications matching a subscription filter. Note the filter
+        /// arrives in the body despite the <c>GET</c> verb.
+        /// </summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::notifier::read")]
+        public async Task<List<OfflineNotification>> GetUnreadNotificationsBySubscriptionFilter([FromBody] GetUnreadNotificationsRequestBySubscriptionFilter request)
+        {
+            return await _notificationService.GetUnreadNotificationsBySubscriptionFilter(request);
+        }
+
+        /// <summary><c>POST</c> — marks every one of the caller's notifications read.</summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::notifier::manage")]
+        public async Task<BaseResponse> MarkAllNotificationAsRead()
+        {
+            return await _notificationService.MarkAllNotificationAsRead();
+        }
+
+        /// <summary><c>POST</c> — marks one notification read.</summary>
+        [HttpPost]
+        [ProtectedEndPoint("blocks-logic::notifier::manage")]
+        public async Task<BaseResponse> MarkNotificationAsRead([FromBody] MarkNotificationAsReadRequest request)
+        {
+            return await _notificationService.MarkNotificationAsRead(request);
+        }
+
+        /// <summary>
+        /// <c>GET</c> — the caller's notifications, filtered and paged by the query string. Paging outside
+        /// <see cref="NotificationPaging"/> is a 400 with one <c>Errors</c> entry per parameter, before any lookup.
+        /// </summary>
+        [HttpGet]
+        [ProtectedEndPoint("blocks-logic::notifier::read")]
+        public async Task<ActionResult<GetNotificationsResponse>> GetNotifications([FromQuery] GetNotificationsRequest request)
+        {
+            var pagingErrors = NotificationPaging.Validate(request);
+            if (pagingErrors != null)
+            {
+                return BadRequest(new BaseResponse { IsSuccess = false, Errors = pagingErrors });
+            }
+
+            return await _notificationService.GetNotificationsAsync(request);
+        }
+    }
+
+    /// <summary>
+    /// The two send actions of <c>/api/Notifier/{action}</c>: <see cref="Notify"/> and <see cref="SendSecretNotification"/>.
+    /// They stay open without a bearer token because internal services call them with the <c>Secret</c> sender
+    /// header; a caller without it needs a valid token with <c>blocks-logic::notifier::send</c>
+    /// (<see cref="INotifierSendGuard"/>, <see cref="INotifierSendPermission"/>). Split from
+    /// <see cref="NotifierController"/>, with which they share no dependency; the routes are unchanged.
+    /// </summary>
+    [ApiController]
+    [Route("Notifier/[action]")]
+    public class NotifierSendController : ControllerBase
+    {
         private const string SecretHeader = "Secret";
 
-        private readonly INotificationService _notificationService;
         private readonly INotifyService _notifyService;
         private readonly INotifierSendGuard _sendGuard;
         private readonly INotifierSendPermission _sendPermission;
+        // The NotifierController category, as before the split, so these log lines keep their source.
         private readonly ILogger<NotifierController> _logger;
 
-        /// <summary>Takes the inbox service, the send service, the send guard, the send permission check and a logger.</summary>
-        public NotifierController(INotificationService notificationService, INotifyService notifyService, INotifierSendGuard sendGuard,
+        /// <summary>Takes the send service, the send guard, the send permission check and a logger.</summary>
+        public NotifierSendController(INotifyService notifyService, INotifierSendGuard sendGuard,
             INotifierSendPermission sendPermission, ILogger<NotifierController> logger)
         {
-            _notificationService = notificationService;
             _notifyService = notifyService;
             _sendGuard = sendGuard;
             _sendPermission = sendPermission;
@@ -95,50 +155,6 @@ namespace Api.Controllers
 
             LogHandled(response);
             return response;
-        }
-
-        /// <summary>
-        /// <c>GET</c> — the caller's unread notifications matching a subscription filter. Note the filter
-        /// arrives in the body despite the <c>GET</c> verb.
-        /// </summary>
-        [HttpGet]
-        [ProtectedEndPoint("blocks-logic::notifier::read")]
-        public async Task<List<OfflineNotification>> GetUnreadNotificationsBySubscriptionFilter([FromBody] GetUnreadNotificationsRequestBySubscriptionFilter request)
-        {
-            return await _notificationService.GetUnreadNotificationsBySubscriptionFilter(request);
-        }
-
-        /// <summary><c>POST</c> — marks every one of the caller's notifications read.</summary>
-        [HttpPost]
-        [ProtectedEndPoint("blocks-logic::notifier::manage")]
-        public async Task<BaseResponse> MarkAllNotificationAsRead()
-        {
-            return await _notificationService.MarkAllNotificationAsRead();
-        }
-
-        /// <summary><c>POST</c> — marks one notification read.</summary>
-        [HttpPost]
-        [ProtectedEndPoint("blocks-logic::notifier::manage")]
-        public async Task<BaseResponse> MarkNotificationAsRead([FromBody] MarkNotificationAsReadRequest request)
-        {
-            return await _notificationService.MarkNotificationAsRead(request);
-        }
-
-        /// <summary>
-        /// <c>GET</c> — the caller's notifications, filtered and paged by the query string. Paging outside
-        /// <see cref="NotificationPaging"/> is a 400 with one <c>Errors</c> entry per parameter, before any lookup.
-        /// </summary>
-        [HttpGet]
-        [ProtectedEndPoint("blocks-logic::notifier::read")]
-        public async Task<ActionResult<GetNotificationsResponse>> GetNotifications([FromQuery] GetNotificationsRequest request)
-        {
-            var pagingErrors = NotificationPaging.Validate(request);
-            if (pagingErrors != null)
-            {
-                return BadRequest(new BaseResponse { IsSuccess = false, Errors = pagingErrors });
-            }
-
-            return await _notificationService.GetNotificationsAsync(request);
         }
     }
 }

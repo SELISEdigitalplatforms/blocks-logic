@@ -165,8 +165,8 @@ namespace XUnitTest.Controllers
         public static IEnumerable<object[]> OpenByDesign() => new[]
         {
             Row(typeof(HealthController), "Ping", ""),
-            Row(typeof(global::Api.Controllers.NotifierController), "Notify", ""),
-            Row(typeof(global::Api.Controllers.NotifierController), "SendSecretNotification", ""),
+            Row(typeof(global::Api.Controllers.NotifierSendController), "Notify", ""),
+            Row(typeof(global::Api.Controllers.NotifierSendController), "SendSecretNotification", ""),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "Webhook", ""),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "TestWebhook", ""),
             Row(typeof(global::Utilities.Api.Controllers.WorkflowController), "WebhookByHeader", ""),
