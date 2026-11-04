@@ -119,6 +119,67 @@ namespace XUnitTest.Workflow
             copy.ToArray().Should().Equal(9, 9, 9);
         }
 
+        [Theory]
+        [InlineData("text/plain", "server.log")]
+        [InlineData("application/json", "data.json")]
+        [InlineData("application/x-www-form-urlencoded", "a.txt")]
+        [InlineData("application/xml", "feed.xml")]
+        public async Task An_attachment_is_stored_as_a_file_whatever_its_type(string contentType, string fileName)   // D9
+        {
+            var request = WebhookRequests.Create(contentType, "a=1");
+            request.Headers.ContentDisposition = $"attachment; filename=\"{fileName}\"";
+
+            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+
+            content.BodyFormat.Should().Be("binary");
+            content.Bodies.Should().ContainSingle().Which.Should().Be(BsonNull.Value);
+            var file = content.Files.Should().ContainSingle().Subject;
+            (file.Name, file.ContentType, file.Length).Should().Be((fileName, contentType, 3L));
+        }
+
+        [Fact]
+        public async Task A_text_attachment_is_not_held_to_the_5_MiB_body_limit()   // D9
+        {
+            var request = WebhookRequests.Create("text/plain", new byte[WebhookIntakeLimits.NonFileMaxBytes + 1]);
+            request.Headers.ContentDisposition = "attachment; filename=\"big.log\"";
+
+            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+
+            content.Files.Single().Length.Should().Be(WebhookIntakeLimits.NonFileMaxBytes + 1);
+        }
+
+        [Theory]
+        [InlineData("inline; filename=\"a.txt\"")]
+        [InlineData("attachment")]
+        [InlineData("attachment; filename=\"\"")]
+        public async Task Without_an_attachment_filename_text_stays_inline(string disposition)   // D9
+        {
+            var request = WebhookRequests.Create("text/plain", "hello");
+            request.Headers.ContentDisposition = disposition;
+
+            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+
+            content.BodyFormat.Should().Be("text");
+            content.Files.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_text_attachment_needs_files_allowed_and_binary_accepted()   // D9, K1, K9
+        {
+            HttpRequest Attachment()
+            {
+                var request = Unreadable("text/plain");
+                request.Headers.ContentDisposition = "attachment; filename=\"a.log\"";
+                return request;
+            }
+
+            var forbidden = await Refused(() => WebhookContentReader.ReadAnyContentAsync(Attachment(), AnyContent.WithFilesAllowed(false)));
+            var notAccepted = await Refused(() => WebhookContentReader.ReadAnyContentAsync(Attachment(), Restricted("text")));
+
+            forbidden.StatusCode.Should().Be(403);
+            (notAccepted.StatusCode, notAccepted.Message).Should().Be((415, "This webhook does not accept binary bodies"));
+        }
+
         [Fact]
         public async Task Body_without_content_type_is_binary_named_upload_bin()
         {

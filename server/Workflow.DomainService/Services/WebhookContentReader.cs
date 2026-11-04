@@ -131,7 +131,7 @@ namespace Workflow.DomainService.Services
                 return Empty();
             }
 
-            var format = EnsureAccepted(mediaType, settings);
+            var format = EnsureAccepted(mediaType, IsAttachment(request), settings);
             return format switch
             {
                 FormatMultipart => await ReadMultipartAsync(request, parsed!, mediaType, headers, query, settings.FilesAllowed, ct),
@@ -144,16 +144,21 @@ namespace Workflow.DomainService.Services
         /// <summary>
         /// The refusals decided by the declared type alone, before a byte of the body is read: XML, a type outside
         /// the webhook's Accepted Body Types (SPEC10 K9), and a binary body without an authenticated caller (K1).
-        /// Returns the body format.
+        /// Returns the body format. A non-multipart body sent as an attachment is a file, so its format is binary
+        /// whatever its Content-Type (SPEC10 D9).
         /// </summary>
-        private static string EnsureAccepted(string mediaType, WebhookIntakeSettings settings)
+        private static string EnsureAccepted(string mediaType, bool attachment, WebhookIntakeSettings settings)
         {
-            if (IsXml(mediaType))
+            var format = FormatOf(mediaType);
+            if (attachment && format != FormatMultipart)
+            {
+                format = FormatBinary;
+            }
+            else if (IsXml(mediaType))
             {
                 throw WebhookIntakeException.Unsupported("XML bodies are not supported yet");
             }
 
-            var format = FormatOf(mediaType);
             if (!settings.Accepts(format))
             {
                 throw WebhookIntakeException.TypeNotAccepted(format);
@@ -510,6 +515,19 @@ namespace Workflow.DomainService.Services
                     : new BsonArray(values.Select(v => new BsonString(v ?? string.Empty)));
             }
             return query;
+        }
+
+        /// <summary>
+        /// True for <c>Content-Disposition: attachment</c> with a non-blank <c>filename</c> or <c>filename*</c>: the
+        /// sender marks the body as a file to store (SPEC10 D9).
+        /// </summary>
+        private static bool IsAttachment(HttpRequest request)
+        {
+            var raw = request.Headers.ContentDisposition.ToString();
+            return !string.IsNullOrWhiteSpace(raw)
+                && ContentDispositionHeaderValue.TryParse(raw, out var disposition)
+                && string.Equals(disposition.DispositionType.Value, "attachment", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(FileNameFromDisposition(request));
         }
 
         private static string? FileNameFromDisposition(HttpRequest request)
