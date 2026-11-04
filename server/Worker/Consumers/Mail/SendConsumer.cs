@@ -14,7 +14,7 @@ namespace Worker.Consumers.Mail
 
         public async Task Consume ( SendMail context )
         {
-            await _mailService.ProcessMailAsync(context);
+            await _mailService.ProcessQueuedMailAsync(context);
         }
     }
 }
