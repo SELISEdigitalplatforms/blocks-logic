@@ -468,6 +468,40 @@ namespace XUnitTest.Mail
         }
 
         [Fact]
+        public async Task H11_MappingLines_CarryIdsAndOrganizationsOnly_NoRequestValueOrAddress()
+        {
+            SignIn("acme");
+            await _service.ProcessMailAsync(new SendMail
+            {
+                Purpose = Purpose, Language = Language, To = [Recipient], Cc = [Recipient], CorrelationId = "corr-406"
+            });
+            Templates().InsertOne(Template("T0-acme-dup", "acme", ""));
+            await _service.ProcessMailAsync(Send());
+            Configurations().DeleteMany(FilterDefinition<BsonDocument>.Empty);
+            await _service.ProcessMailAsync(Send());
+            await _service.ProcessMailAsync(Send(language: "zz-ZZ"));
+
+            var mapping = _logger.Lines.Where(l => l.Message.StartsWith("MAIL MAPPING")).ToList();
+            mapping.Select(l => l.Level).Should().Contain([LogLevel.Information, LogLevel.Warning, LogLevel.Error]);
+            mapping.Should().OnlyContain(l => l.Message.Contains("organizationId=acme"));
+            foreach (var value in new[] { Recipient, "@app.test", Purpose, Language, "zz-ZZ", "corr-406" })
+            {
+                mapping.Should().NotContain(l => l.Message.Contains(value), $"no request value ({value}) belongs in a MAIL MAPPING line");
+            }
+        }
+
+        [Fact]
+        public async Task H11_ATokenOrganizationWithLineBreaks_CannotForgeALogEntry()
+        {
+            await HttpSend("acme\r\nMAIL PERSISTED: forged");
+
+            var mapping = _logger.Lines.Where(l => l.Message.StartsWith("MAIL MAPPING")).ToList();
+            mapping.Should().NotBeEmpty();
+            mapping.Should().OnlyContain(l => !l.Message.Contains('\r') && !l.Message.Contains('\n'));
+            _logger.Lines.Should().NotContain(l => l.Message.StartsWith("MAIL PERSISTED: forged"));
+        }
+
+        [Fact]
         public async Task H11_MissingConfigurationIsLoggedWithSourceNone()
         {
             Configurations().DeleteMany(FilterDefinition<BsonDocument>.Empty);
