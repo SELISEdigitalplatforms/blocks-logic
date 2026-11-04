@@ -403,19 +403,19 @@ namespace Workflow.DomainService.Repositories
             return QueryListAsync(tenantId, WorkflowFilter(workflowId) & newer, OldestFirst, pageSize);
         }
 
-        public static FilterDefinition<WorkflowExecutionEntity> BlocksEventExecutionFilter(string workflowId, string eventId)
+        public static FilterDefinition<WorkflowExecutionEntity> ActionExecutionFilter(string workflowId, string eventId)
         {
             var builder = Builders<WorkflowExecutionEntity>.Filter;
             return builder.Eq(e => e.WorkflowId, workflowId)
-                & builder.Eq("TriggerMetadata.TriggerType", LogicConstants.BlocksEventNodeType)
-                & builder.Eq("TriggerMetadata.TriggerData.0.EventId", eventId);
+                & builder.Eq("TriggerMetadata.TriggerType", LogicConstants.ActionTriggerNodeType)
+                & builder.Eq("TriggerMetadata.TriggerData.0." + Actions.ActionTriggerData.IdField, eventId);
         }
 
-        public async Task<bool> ExistsForBlocksEventAsync(string tenantId, string workflowId, string eventId)
+        public async Task<bool> ExistsForActionAsync(string tenantId, string workflowId, string eventId)
         {
             await EnsureIndexesAsync(tenantId);
             return await GetCollection(tenantId).CountDocumentsAsync(
-                BlocksEventExecutionFilter(workflowId, eventId), new CountOptions { Limit = 1 }) > 0;
+                ActionExecutionFilter(workflowId, eventId), new CountOptions { Limit = 1 }) > 0;
         }
 
         public async Task<long> CountByWorkflowIdAsync(string workflowId, string tenantId)

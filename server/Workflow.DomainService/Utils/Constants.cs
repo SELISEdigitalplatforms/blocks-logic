@@ -46,10 +46,15 @@ namespace Workflow.DomainService.Utils
         }
         public const string EmailTriggerQueue = CommunicationConstants.EmailTriggerQueueName;
         public const string DataTriggerQueue = "blocks_logic_workflow_data_trigger_listener";
-        /// <summary>Platform events Genesis forwards for the Blocks Event trigger (blocks-genesis-net#167).</summary>
-        public const string BlocksEventTriggerQueue = BlocksEventTriggerConstants.QueueName;
-        /// <summary>Node type of the Blocks Event trigger, on the client and in <c>PublishedMeta.TriggerNodes</c>.</summary>
-        public const string BlocksEventNodeType = "blocksEvent";
+        /// <summary>Actions with the Workflow switch on (Genesis <see cref="ActionConstants"/>).</summary>
+        public const string ActionWorkflowQueue = ActionConstants.WorkflowQueue;
+        /// <summary>Actions with the Function switch on (Genesis <see cref="ActionConstants"/>).</summary>
+        public const string ActionFunctionQueue = ActionConstants.FunctionQueue;
+        /// <summary>
+        /// Node type of the Action trigger, on the client and in <c>PublishedMeta.TriggerNodes</c>. The value is the old
+        /// Blocks Event node's, kept so saved workflows still load.
+        /// </summary>
+        public const string ActionTriggerNodeType = "blocksEvent";
         /// <summary>Node type of the Error Trigger, which starts a workflow when another workflow's production run fails.</summary>
         public const string ErrorTriggerNodeType = "errorTrigger";
         /// <summary>Failed production runs whose workflow has an alert set; the Worker starts the alert's error workflow.</summary>
@@ -64,11 +69,6 @@ namespace Workflow.DomainService.Utils
         public const string WorkflowImportNotificationConfigurationName = "workflow-import";
         public const string LogicMailQueueName = "blocks_email_listener";
 
-        /// <summary>
-        /// Function events. The Worker consumes it: <c>FunctionEventConsumer</c> (the event trigger) starts the functions
-        /// that subscribe to the event's name.
-        /// </summary>
-        public const string FunctionEventQueueName = "blocks_logic_function_event_listener";
         public const string MigrationCompletionTopic = "blocks_migration_topic1";
         public const string AccessTokenCookieName = "access_token";
         public const string RefreshTokenCookieName = "refresh_token";
@@ -107,14 +107,13 @@ namespace Workflow.DomainService.Utils
                     // Genesis and made one-at-a-time per queue by NodeQueueLanes in the consumer.
                     ConsumerSubscriptions = [ConsumerSubscription.BindToQueue(EmailTriggerQueue),
                                              ConsumerSubscription.BindToQueue(DataTriggerQueue,10),
-                                             ConsumerSubscription.BindToQueue(BlocksEventTriggerQueue,10),
+                                             // Both action queues carry BlocksAction; the Worker's one BlocksActionConsumer takes both.
+                                             ConsumerSubscription.BindToQueue(ActionWorkflowQueue,10),
+                                             ConsumerSubscription.BindToQueue(ActionFunctionQueue,10),
                                              ConsumerSubscription.BindToQueue(SchedulerTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(ErrorTriggerQueue,10),
                                              ConsumerSubscription.BindToQueue(WorkflowImportQueue),
                                              ConsumerSubscription.BindToQueue(LogicMailQueueName),
-                                             // Consumed by the event trigger. It also makes sure the queue exists, which RabbitMQ needs
-                                             // before a function can send to it (a message to a missing queue is dropped).
-                                             ConsumerSubscription.BindToQueue(FunctionEventQueueName),
                                              ConsumerSubscription.BindToQueue(CommunicationConstants.MailStatusQueueName),
                                              ConsumerSubscription.BindToQueue(MigrationCompletionTopic),
                                              // Mobile push requests from every Blocks service (genesis). Only the Worker
@@ -136,7 +135,7 @@ namespace Workflow.DomainService.Utils
             {
                 AzureServiceBusConfiguration = new AzureServiceBusConfiguration
                 {
-                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, BlocksEventTriggerQueue, SchedulerTriggerQueue, ErrorTriggerQueue, WorkflowImportQueue, LogicMailQueueName, FunctionEventQueueName, CommunicationConstants.MailStatusQueueName, NotificationQueues.Push, .. registry],
+                    Queues = [.. AllNodeQueues, EmailTriggerQueue, DataTriggerQueue, ActionWorkflowQueue, ActionFunctionQueue, SchedulerTriggerQueue, ErrorTriggerQueue, WorkflowImportQueue, LogicMailQueueName, CommunicationConstants.MailStatusQueueName, NotificationQueues.Push, .. registry],
                     Topics = [MigrationCompletionTopic],
                     QueuePrefetchCount = 40,
                     MaxConcurrentCalls = 40

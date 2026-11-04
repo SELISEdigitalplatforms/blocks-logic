@@ -2,7 +2,6 @@ import { createBrowserRouter, Navigate, Outlet } from "react-router";
 
 import WorkflowsPage from "./routes/private/workflows/workflows-page";
 import SchedulesPage from "./routes/private/schedules/schedules-page";
-import EventTriggersPage from "./routes/private/event-triggers/event-triggers-page";
 import ScheduleCreatePage from "./routes/private/schedules/schedule-create-page";
 import ScheduleEditPage from "./routes/private/schedules/schedule-edit-page";
 import ScheduleDetailsPage from "./routes/private/schedules/schedule-details-page";
@@ -101,8 +100,6 @@ export const router = createBrowserRouter([
               { path: "workflow/:id", element: <WorkflowDetailsPage /> },
               { path: "workflow", element: <WorkflowsPage /> },
               { path: "schedule", element: <SchedulesPage /> },
-              // No menu item: the Blocks Event node opens it in a new tab ("Manage events").
-              { path: "event-triggers", element: <EventTriggersPage /> },
               { path: "schedule/new", element: <ScheduleCreatePage /> },
               { path: "schedule/:scheduleId/edit", element: <ScheduleEditPage /> },
               { path: "schedule/:scheduleId", element: <ScheduleDetailsPage /> },

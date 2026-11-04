@@ -5,7 +5,7 @@ using Functions.DomainService.Events;
 namespace Functions.DomainService.Validation
 {
     /// <summary>
-    /// The event settings of a function's draft (its trigger event names). Every message starts with the field it is
+    /// The event settings of a function's draft (its trigger action names). Every message starts with the field it is
     /// about (<c>triggerEvents[0]: …</c>), so the editor can put it next to the input.
     /// </summary>
     public class SaveEventSettingsRequestValidator : AbstractValidator<SaveEventSettingsRequestDto>
@@ -20,7 +20,7 @@ namespace Functions.DomainService.Validation
                 {
                     if (names.Count > FunctionEventCatalog.MaxTriggerEvents)
                     {
-                        context.AddFailure($"triggerEvents: at most {FunctionEventCatalog.MaxTriggerEvents} event names");
+                        context.AddFailure($"triggerEvents: at most {FunctionEventCatalog.MaxTriggerEvents} actions");
                     }
 
                     var seen = new HashSet<string>(StringComparer.Ordinal);

@@ -26,7 +26,7 @@ describe("addTriggerEvent", () => {
 
   it("refuses an invalid name, a duplicate and the 21st", () => {
     expect(addTriggerEvent([], "Bad").ok).toBe(false);
-    expect(addTriggerEvent(["abc"], "abc")).toEqual({ ok: false, error: "This event is already in the list." });
+    expect(addTriggerEvent(["abc"], "abc")).toEqual({ ok: false, error: "This action is already in the list." });
     const full = Array.from({ length: MAX_TRIGGER_EVENTS }, (_, i) => `event${i}`);
     expect(addTriggerEvent(full, "another").ok).toBe(false);
   });

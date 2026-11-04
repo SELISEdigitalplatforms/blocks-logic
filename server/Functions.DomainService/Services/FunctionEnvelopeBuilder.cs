@@ -81,7 +81,7 @@ namespace Functions.DomainService.Services
         /// </param>
         /// <param name="inputJson">The caller's input as raw JSON, or null.</param>
         /// <param name="eventName">
-        /// The name of the <c>FunctionEvent</c> that started the run (<c>run.invokedBy.name</c>); null for any other run.
+        /// The name of the action that started the run (<c>run.invokedBy.name</c>); null for any other run.
         /// </param>
         public static string Build(
             FunctionRunEntity run,

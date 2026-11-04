@@ -104,7 +104,7 @@ namespace Functions.DomainService.Queue
         public static string RunsStream => _prefix + "functions:runs";
 
         /// <summary>
-        /// Runs started by a function event (<see cref="Events.FunctionEvent"/>): the same entry format as
+        /// Runs started by an action (the Action trigger): the same entry format as
         /// <see cref="RunsStream"/>, read by the same runners with the same group, from a queue of their own so HTTP
         /// runs always go first. Mirrors <c>RedisKeys.EventRunsStream</c> in the runner.
         /// </summary>

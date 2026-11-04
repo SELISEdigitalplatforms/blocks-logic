@@ -4,36 +4,20 @@
         <name>Api</name>
     </assembly>
     <members>
-        <member name="T:Utilities.Api.Controllers.BlocksEventTriggerController">
+        <member name="T:Utilities.Api.Controllers.ActionsController">
             <summary>
-            The tenant's Blocks Event Trigger catalog, routed as <c>/api/BlocksEventTrigger/{action}</c>: which platform
-            events may start workflows (and, later, functions). Reads need workflow read, changes need workflow manage;
-            the tenant always comes from <see cref="T:Blocks.Genesis.BlocksContext"/>.
+            The tenant's actions the editors may pick, routed as <c>/api/Actions/{action}</c>. blocks-os owns the list and its
+            switches; logic only reads it. The tenant always comes from <see cref="T:Blocks.Genesis.BlocksContext"/>.
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.#ctor(Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService)">
-            <summary>Takes the catalog service.</summary>
+        <member name="M:Utilities.Api.Controllers.ActionsController.#ctor(Workflow.DomainService.Actions.IActionsService)">
+            <summary>Takes the actions service.</summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.GetAll">
-            <summary><c>GET</c> — every catalog event, sorted by service then label; <c>isSeeded=false</c> when the tenant has no catalog.</summary>
+        <member name="M:Utilities.Api.Controllers.ActionsController.GetForWorkflow">
+            <summary><c>GET</c> — actions with the Workflow switch on: the Action trigger node's options.</summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.GetWorkflowEvents">
-            <summary><c>GET</c> — the events enabled for workflows: the Blocks Event node's options.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.GetUsage(System.String)">
-            <summary><c>GET</c> — how many published workflows use the event; shown before turning Workflow off.</summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.CanManage">
-            <summary>
-            <c>GET</c> — succeeds only for callers who may change the catalog (workflow manage); anyone else gets
-            403. The page uses it to show the switches read-only before a change is attempted.
-            </summary>
-        </member>
-        <member name="M:Utilities.Api.Controllers.BlocksEventTriggerController.Update(Workflow.DomainService.BlocksEvents.BlocksEventFlagUpdateRequest)">
-            <summary>
-            <c>POST</c> — sets one event's workflow and/or function flag. A missing name or no flag is a 400; an
-            unknown event or a tenant without a catalog is <c>isSuccess=false</c> with the reason.
-            </summary>
+        <member name="M:Utilities.Api.Controllers.ActionsController.GetForFunction">
+            <summary><c>GET</c> — actions with the Function switch on: the function Trigger section's options.</summary>
         </member>
         <member name="T:Utilities.Api.Controllers.ProxiesController">
             <summary>

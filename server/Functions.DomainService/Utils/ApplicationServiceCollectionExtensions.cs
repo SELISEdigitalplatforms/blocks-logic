@@ -122,6 +122,8 @@ namespace Functions.DomainService.Utils
         /// <summary>Worker only: the consumers that apply results and dead letters, plus the sweeps.</summary>
         public static IServiceCollection AddFunctionsWorkerServices(this IServiceCollection services)
         {
+            // The Action trigger: starts the functions subscribed to a received action.
+            services.AddSingleton<IFunctionActionTriggerService, FunctionActionTriggerService>();
             services.AddHostedService<FunctionResultConsumer>();
             // Output actions, decoupled from result processing so a slow endpoint never holds a
             // result entry long enough to be reclaimed and delivered twice.
