@@ -42,11 +42,11 @@ export const ScheduleExecutionsTab = ({ schedule, active }: Readonly<ScheduleExe
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const payload = useMemo(() => toExecutionsPayload(schedule.itemId, queryParams, tz), [schedule.itemId, queryParams, tz]);
-  const { data, isLoading, isFetching, isError, refetch } = useGetScheduleExecutions(payload, {
+  const { data, isLoading, isError, refetch } = useGetScheduleExecutions(payload, {
     enabled: active && !!schedule.itemId,
   });
 
-  const isListLoading = isLoading || isFetching;
+  const isListLoading = isLoading;
   const isFiltered = isExecutionsFiltered(payload);
   const state = listStateOf(data, isError, isListLoading, isFiltered);
   const showDatesNote = payload.startDate !== null && tz !== browserTimeZone();
