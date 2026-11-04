@@ -76,7 +76,7 @@ namespace XUnitTest.Functions
 
             _started.Select(s => s.FunctionId).Should().Equal("fn-a", "fn-b");
             _started.Should().OnlyContain(s => s.Tenant == Tenant && s.ContextTenant == Tenant);
-            _started[0].Event.Should().Be(new FunctionEventInvocation("run-0-1-1", "order.created", """{"a":1}""", 0));
+            _started[0].Event.Should().Be(new FunctionEventInvocation("run-0-1-1", "order.created", """{"a":1}"""));
             _dead.VerifyNoOtherCalls();
         }
 

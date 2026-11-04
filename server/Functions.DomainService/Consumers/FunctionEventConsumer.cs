@@ -212,7 +212,7 @@ namespace Functions.DomainService.Consumers
         /// <summary>Starts one function; up to <see cref="MaxInvokeAttempts"/> tries, then the dead-letter stream.</summary>
         private async Task StartAsync(string tenantId, string functionId, FunctionEvent message, BlocksContext? context)
         {
-            var invocation = new FunctionEventInvocation(message.EventId, message.Name, message.DataJson, message.Depth);
+            var invocation = new FunctionEventInvocation(message.EventId, message.Name, message.DataJson);
             Exception? last = null;
             for (var attempt = 1; attempt <= MaxInvokeAttempts; attempt++)
             {

@@ -9,14 +9,13 @@ namespace Functions.DomainService.Events
     /// <summary>What a run started by a function event remembers about that event. No payload.</summary>
     /// <param name="EventId">The event's id (the run's <c>InvokedById</c>).</param>
     /// <param name="Name">The event's name, for the dead-letter entry. The function sees it in <c>ctx.run.invokedBy.name</c>.</param>
-    /// <param name="Depth">The event's own <see cref="FunctionEvent.Depth"/>: the events this run sends are one deeper.</param>
-    public sealed record FunctionEventRunInfo(string EventId, string Name, int Depth);
+    public sealed record FunctionEventRunInfo(string EventId, string Name);
 
     /// <summary>
     /// Logic-owned storage of <see cref="FunctionEventRunInfo"/>, keyed by run id. Genesis' run entity has no place for it
     /// and is not changed; a Redis key with a TTL longer than the run's payload (see
     /// <see cref="FunctionWorkerQueueKeys.EventRunInfoTtl"/>) is the simplest thing that lives exactly as long as the
-    /// run can still act. A missing key reads as "unknown": the depth then falls back to the one-hop default.
+    /// run can still act. A missing key reads as "unknown".
     /// </summary>
     public interface IFunctionEventRunStore
     {

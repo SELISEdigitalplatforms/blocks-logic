@@ -73,7 +73,6 @@ namespace Functions.DomainService.Consumers
         [
             FunctionQueueKeys.DeadStream,
             FunctionQueueKeys.DeadResultsStream,
-            FunctionQueueKeys.DeadEventsStream,
             FunctionQueueKeys.DeadFunctionEventsStream,
         ];
 

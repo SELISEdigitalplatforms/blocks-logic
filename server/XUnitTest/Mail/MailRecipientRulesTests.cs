@@ -26,6 +26,9 @@ namespace XUnitTest.Mail
             _repo.Setup(r => r.GetEmailAdressOfUsers(It.IsAny<IEnumerable<string>>())).ReturnsAsync([]);
             _repo.Setup(r => r.GetPhoneEmailAddressesOfUsers(It.IsAny<IEnumerable<string>>())).ReturnsAsync([]);
             _repo.Setup(r => r.GetUserEmailAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync((string?)null);
+            // The selection contract returns a choice object, never null (SPEC10); no template is found here.
+            _repo.Setup(r => r.GetEmailTemplateForOrganizationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(EmailTemplateChoice.None);
             // Stop right after mapping: the test only needs what would be sent, not the sending.
             _validator.Setup(v => v.ValidateAsync(It.IsAny<MailToBeSent>(), It.IsAny<CancellationToken>()))
                 .Callback<MailToBeSent, CancellationToken>((m, _) => _mapped = m)

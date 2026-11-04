@@ -42,14 +42,15 @@ namespace XUnitTest.Mail
         public void Dispose() => BlocksContext.ClearContext();
 
         /// <summary>
-        /// The only coupling to how MailService looks the template and configuration up. #406 (open in parallel)
-        /// replaces these two repository methods; whichever PR merges second retargets this method only.
+        /// The only coupling to how MailService looks the template and configuration up (the organization-aware
+        /// selection from #406): any organization gets this test's template and its configuration.
         /// </summary>
         private void ServeTemplateAndConfiguration()
         {
-            _repository.Setup(r => r.GetEmailTemplateByPurpose("welcome", "en", It.IsAny<string>())).ReturnsAsync(() => _template);
-            _repository.Setup(r => r.GetMailServerConfigurationByPurpose("welcome", "en", It.IsAny<string>()))
-                .ReturnsAsync(new MailServerConfiguration { ItemId = "c1" });
+            _repository.Setup(r => r.GetEmailTemplateForOrganizationAsync("welcome", "en", It.IsAny<string>()))
+                .ReturnsAsync(() => new EmailTemplateChoice(_template, []));
+            _repository.Setup(r => r.GetMailServerConfigurationForSendAsync(It.IsAny<string?>(), It.IsAny<string>()))
+                .ReturnsAsync(new MailServerConfigurationChoice(new MailServerConfiguration { ItemId = "c1" }, MailConfigurationSource.Template));
         }
 
         private static EmailTemplate Template(string? subject, string? body) =>

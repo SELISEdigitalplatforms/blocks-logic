@@ -52,14 +52,6 @@ function envMap(value) {
 }
 
 /**
- * `events.allowed`: the event types this function may add (ctx.events). Absent → none.
- */
-function parseEvents(ev) {
-  if (ev !== undefined && ev !== null && !isPlainObject(ev)) fail('envelope.events must be an object');
-  return _freeze({ allowed: stringArray(ev?.allowed, 'events.allowed') });
-}
-
-/**
  * `trace`: set by the runner only — the run span's traceparent and the hosts that get it on fetch().
  * A traceparent that is not W3C-shaped is ignored rather than failing the run.
  */
@@ -180,12 +172,10 @@ export function parseEnvelope(raw) {
   const maskedEnv = stringArray(doc.maskedEnv, 'maskedEnv');
   const extraMasked = stringArray(doc.maskedValues, 'maskedValues');
 
-  const events = parseEvents(doc.events);
   const trace = parseTrace(doc.trace);
 
   return _freeze({
     run: frozenRun,
-    events,
     trace,
     context: ctxContext,
     blocks,

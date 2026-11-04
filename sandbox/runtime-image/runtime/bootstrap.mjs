@@ -17,7 +17,6 @@
 import { readFileSync } from 'node:fs';
 import { ProtocolWriter, LIMITS, EXIT, CODE, isStream, pumpStream } from './protocol.mjs';
 import { parseEnvelope, EnvelopeError, blocksWithToken } from './envelope.mjs';
-import { createEventBuffer } from './events.mjs';
 import { withTraceparent } from './trace.mjs';
 
 const ENVELOPE_PATH = process.env.BLOCKS_EXECUTION_FILE || '/run/blocks/execution.json';
@@ -125,12 +124,7 @@ function describe(err) {
  */
 const pendingWaits = [];
 
-/** The outbox behind `ctx.events` (set by buildContext); closed once the answer is written. */
-let outbox = null;
-
 function buildContext(envelope) {
-  outbox = createEventBuffer({ runId: envelope.run.id, attempt: envelope.run.attempt, allowed: envelope.events.allowed });
-
   const log = Object.freeze({
     debug: (msg, data) => writer.log('debug', msg, data),
     info:  (msg, data) => writer.log('info', msg, data),
@@ -144,7 +138,6 @@ function buildContext(envelope) {
     env: envelope.env,
     run: envelope.run,
     log,
-    events: outbox.events,
     waitUntil(promise) {
       pendingWaits.push(Promise.resolve(promise));
     },
@@ -302,7 +295,6 @@ async function main() {
     }
   } catch (err) {
     if (timer) _clearTimeout(timer);
-    outbox.close(); // a failed run sends nothing
     const d = describe(err);
     return finish(EXIT.USER_ERROR, {
       code: err?.__timeout ? CODE.TIMED_OUT : (err?.__code ?? CODE.USER_RUNTIME_ERROR),
@@ -313,9 +305,7 @@ async function main() {
   if (timer) _clearTimeout(timer);
 
   // --- return the result ------------------------------------------------------
-  // The list is closed with the answer: ctx.events.add, also from ctx.waitUntil work, now throws.
-  outbox.close();
-  const problem = writer.result(value, outbox.take());
+  const problem = writer.result(value);
   if (problem === CODE.RESULT_TOO_LARGE) {
     return finish(EXIT.USER_ERROR, {
       code: CODE.RESULT_TOO_LARGE,
