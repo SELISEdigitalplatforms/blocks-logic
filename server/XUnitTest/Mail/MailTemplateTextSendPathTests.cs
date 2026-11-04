@@ -35,13 +35,22 @@ namespace XUnitTest.Mail
                 Caller, [], "caller", "", "Caller", "token", "t1"));
             _repository.Setup(r => r.GetEmailAdressOfUsers(It.IsAny<IEnumerable<string>>()))
                 .ReturnsAsync((IEnumerable<string> users) => users?.ToList() ?? []);
-            _repository.Setup(r => r.GetEmailTemplateByPurpose("welcome", "en", It.IsAny<string>())).ReturnsAsync(() => _template);
-            _repository.Setup(r => r.GetMailServerConfigurationByPurpose("welcome", "en", It.IsAny<string>()))
-                .ReturnsAsync(new MailServerConfiguration { ItemId = "c1" });
+            ServeTemplateAndConfiguration();
             _sender.Setup(s => s.ProcessSendMailAsync(It.IsAny<MailToBeSent>())).ReturnsAsync(true);
         }
 
         public void Dispose() => BlocksContext.ClearContext();
+
+        /// <summary>
+        /// The only coupling to how MailService looks the template and configuration up. #406 (open in parallel)
+        /// replaces these two repository methods; whichever PR merges second retargets this method only.
+        /// </summary>
+        private void ServeTemplateAndConfiguration()
+        {
+            _repository.Setup(r => r.GetEmailTemplateByPurpose("welcome", "en", It.IsAny<string>())).ReturnsAsync(() => _template);
+            _repository.Setup(r => r.GetMailServerConfigurationByPurpose("welcome", "en", It.IsAny<string>()))
+                .ReturnsAsync(new MailServerConfiguration { ItemId = "c1" });
+        }
 
         private static EmailTemplate Template(string? subject, string? body) =>
             new() { ItemId = "t1", Name = "welcome", Language = "en", TemplateSubject = subject!, TemplateBody = body! };

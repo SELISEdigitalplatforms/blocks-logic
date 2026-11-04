@@ -55,8 +55,9 @@ namespace XUnitTest.Workflow
                 .Setup(d => d.ReadAsync(LogicSchemas.WorkflowExecutionEntity, It.IsAny<FilterDefinition<WorkflowExecutionEntity>>(),
                     It.IsAny<string>(), Tenant, It.IsAny<bool>()))
                 .Callback<string, FilterDefinition<WorkflowExecutionEntity>, string, string?, bool>((_, _, _, _, useProjection) => _readProjections.Add(useProjection))
+                // The resolver adds its row filter; the marker shows the find uses the scoped filter, not its own.
                 .ReturnsAsync((string _, FilterDefinition<WorkflowExecutionEntity> filter, string _, string? _, bool _) =>
-                    new ReadScope<WorkflowExecutionEntity>(granted, filter, null));
+                    new ReadScope<WorkflowExecutionEntity>(granted, filter & Builders<WorkflowExecutionEntity>.Filter.Eq("RowScope", "granted"), null));
 
         private WorkflowExecutionRepository Create() => new(_provider.Object, _dataAccess.Object);
 
@@ -102,12 +103,12 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task H3_SortsByStartedAtThenIdDescending_AndFiltersByTheWorkflow()
+        public async Task H3_SortsByStartedAtThenIdDescending_AndReadsThroughTheRowScope()
         {
             await Create().GetByWorkflowIdAsync("wf1", Tenant);
 
             _rowFinds.Single().Sort.Render(Args).ToJson().Should().Be("{ \"StartedAt\" : -1, \"_id\" : -1 }");
-            _rowFilter!.Render(Args).ToJson().Should().Be("{ \"WorkflowId\" : \"wf1\" }");
+            _rowFilter!.Render(Args).ToJson().Should().Be("{ \"WorkflowId\" : \"wf1\", \"RowScope\" : \"granted\" }");
         }
 
         [Fact]
