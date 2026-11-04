@@ -74,9 +74,9 @@ export class TopbarComponent {
     return this.page.getByRole("menuitem", { name });
   }
 
-  /** The language menu's entries other than English; each entry carries its language code in `lang`. */
+  /** The open language menu's entries other than English; each entry carries its language code in `lang`. */
   get otherLanguageMenuItems(): Locator {
-    return this.page.locator('[role="menuitem"][lang]:not([lang^="en"])');
+    return this.page.getByRole("menu").locator('[role="menuitem"][lang]:not([lang^="en"])');
   }
 
   // ---- Notifications ----
