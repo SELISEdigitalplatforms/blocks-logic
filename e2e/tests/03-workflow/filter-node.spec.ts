@@ -159,9 +159,7 @@ test.describe("workflow — Filter node", () => {
         // Drift (86b98dfb): the library groups nodes in one section per category, each sorted by
         // title, so the Logic definitions (category "logic") share the Logic section: Filter, If,
         // Switch. The saved category itself is checked on the exported JSON in step 2.
-        const logicTitles = await editor.libraryCategoryTitles("Logic");
-        expect(logicTitles).toEqual(expect.arrayContaining(["Filter", "If", "Switch"]));
-        expect(logicTitles).toEqual([...logicTitles].sort((a, b) => a.localeCompare(b)));
+        expect(await editor.libraryCategoryTitles("Logic")).toEqual(["Filter", "If", "Switch"]);
 
         await editor.nodeLibrarySearchBox.fill("Filter");
         await expect(filterEntry).toBeVisible();
