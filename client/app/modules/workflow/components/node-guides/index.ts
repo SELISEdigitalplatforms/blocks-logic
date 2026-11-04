@@ -4,6 +4,7 @@ export { NodeGuideActionFunction } from "./node-guide-action-function";
 export { NodeGuideActionHttpRequestV1 } from "./node-guide-action-httpRequest-v1";
 export { NodeGuideActionProxy } from "./node-guide-action-proxy";
 export { NodeGuideActionSendMailV1 } from "./node-guide-action-sendMail-v1";
+export { NodeGuideActionStorageV2 } from "./node-guide-action-storage-v2";
 export { NodeGuideLogicIfV1 } from "./node-guide-logic-if-v1";
 export { NodeGuideLogicSwitchV2 } from "./node-guide-logic-switch-v2";
 export { NodeGuideLogicFilterV2 } from "./node-guide-logic-filter-v2";

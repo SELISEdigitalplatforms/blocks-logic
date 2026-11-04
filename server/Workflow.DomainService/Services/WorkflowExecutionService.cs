@@ -793,13 +793,20 @@ namespace Workflow.DomainService.Services
             return response;
         }
 
+        /// <summary>Execution views show Storage download URLs as "[redacted]"; the saved items keep them (SPEC11 D4).</summary>
+        private static List<WorkflowItemExecutionEntity> MaskStorageUrls(
+            List<WorkflowItemExecutionEntity> items, WorkflowExecutionEntity execution) =>
+            ExecutionUrlMasker.Mask(items, ExecutionUrlMasker.StorageNodeIds(
+                (execution.WorkflowSnapshot?.Nodes ?? []).Select(n => (n.Id, n.Type))));
+
         public async Task<WorkflowExecutionGetResponseDto> GetExecutionByIdAsync(string tenantId, WorkflowExecutionGetRequestDto dto)
         {
             var execution = await _executionRepository.GetByIdForViewAsync(dto.ExecutionId, tenantId)
                 ?? throw new InvalidOperationException($"Execution {dto.ExecutionId} not found");
 
             // Get all workflow items - frontend will organize them into input/output structure
-            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(dto.ExecutionId, tenantId);
+            var allItems = MaskStorageUrls(
+                await _executionRepository.GetAllItemsByExecutionIdAsync(dto.ExecutionId, tenantId), execution);
 
             var nodes = execution.WorkflowSnapshot.Nodes.Select(item => new NodeDto
             {
@@ -904,7 +911,8 @@ namespace Workflow.DomainService.Services
                     Errors = new Dictionary<string, string> { { ErrorMessageKey, "No Execution" } }
                 };
             }
-            var allItems = await _executionRepository.GetAllItemsByExecutionIdAsync(execution.Id, tenantId);
+            var allItems = MaskStorageUrls(
+                await _executionRepository.GetAllItemsByExecutionIdAsync(execution.Id, tenantId), execution);
 
             var nodes = execution.WorkflowSnapshot.Nodes.Select(item => new NodeDto
             {

@@ -13,6 +13,7 @@ using Workflow.DomainService.Nodes.ActionAIAgentV1;
 using Workflow.DomainService.Nodes.ActionSendMailV1;
 using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 using Workflow.DomainService.Nodes.ActionDataV1;
+using Workflow.DomainService.Nodes.ActionStorageV2;
 using Workflow.DomainService.Nodes.ActionProxy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -101,6 +102,7 @@ namespace Workflow.DomainService
             services.AddSingleton<INodeExecutor, ActionSendMailV1Node>();
             services.AddSingleton<INodeExecutor, ActionHttpRequestV1Node>();
             services.AddSingleton<INodeExecutor, ActionDataV1Node>();
+            services.AddSingleton<INodeExecutor, ActionStorageV2Node>();
             services.AddSingleton<INodeExecutor, ActionProxyNode>();
 
 

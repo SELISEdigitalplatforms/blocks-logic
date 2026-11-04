@@ -19,7 +19,7 @@ namespace XUnitTest.Workflow
 
         /// <summary>The 13 node types that existed before SPEC6; they must keep resolving exactly as before.</summary>
         private static List<INodeExecutor> ProductionExecutors() =>
-            AllProductionExecutors().Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit" or "errorTrigger")).ToList();
+            AllProductionExecutors().Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit" or "errorTrigger" or "storage")).ToList();
 
         /// <summary>Every production executor class, read without running its constructor (NodeType/Versions need no state).</summary>
         private static List<INodeExecutor> AllProductionExecutors() =>
@@ -92,9 +92,24 @@ namespace XUnitTest.Workflow
                 var act = () => registry.Resolve("switch", version);
                 act.Should().Throw<InvalidOperationException>($"version '{version}'");
             }
-            foreach (var executor in all.Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit" or "errorTrigger")))
+            foreach (var executor in all.Where(e => e.NodeType is not ("switch" or "splitOut" or "merge" or "filter" or "blocksEvent" or "limit" or "errorTrigger" or "storage")))
             {
                 registry.Resolve(executor.NodeType, "v1").Executor.Should().BeSameAs(executor);
+            }
+        }
+
+        [Fact]
+        public void Storage_ResolvesOnlyAsV2_AndNeverFallsBack()   // SPEC11
+        {
+            var all = AllProductionExecutors();
+            var registry = new NodeExecutorRegistry(all);
+            var storage = all.Single(e => e.NodeType == "storage");
+
+            registry.Resolve("storage", "v2").Should().Be(new NodeExecutorResolution(storage, false));
+            foreach (var version in new[] { "v1", "v3", "", null })
+            {
+                var act = () => registry.Resolve("storage", version);
+                act.Should().Throw<InvalidOperationException>($"version '{version}'");
             }
         }
 

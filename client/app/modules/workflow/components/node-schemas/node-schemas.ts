@@ -19,6 +19,7 @@ import { NodeSchemaLogicFilterV2 } from "./node-schema-logic-filter-v2";
 import { NodeSchemaTransformSplitOutV2 } from "./node-schema-transform-splitOut-v2";
 import { NodeSchemaTransformMergeV2 } from "./node-schema-transform-merge-v2";
 import { NodeSchemaTransformLimitV2 } from "./node-schema-transform-limit-v2";
+import { NodeSchemaActionStorageV2 } from "./node-schema-action-storage-v2";
 
 const V1_SCHEMAS: Record<string, NodeSchemaDefinition> = {
   triggerwebhookv1: NodeSchemaTriggerWebhookV1,
@@ -53,4 +54,5 @@ export const NodeSchemasDefinition: Record<string, NodeSchemaDefinition> = {
   transformlimitv2: NodeSchemaTransformLimitV2,
   triggerblocksEventv2: NodeSchemaTriggerBlocksEventV2,
   triggererrorTriggerv2: NodeSchemaTriggerErrorTriggerV2,
+  actionstoragev2: NodeSchemaActionStorageV2,
 };
