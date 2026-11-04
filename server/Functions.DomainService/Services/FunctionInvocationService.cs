@@ -231,30 +231,8 @@ namespace Functions.DomainService.Services
             _syncWaits = new SemaphoreSlim(maxSyncWaits, maxSyncWaits);
         }
 
-        /// <summary>Event types a version may send, by version id (see <see cref="FunctionEventAllowedCache"/>).</summary>
-        private readonly FunctionEventAllowedCache _allowedEvents = new();
-
         private readonly IFunctionEventSettingsRepository? _eventSettings;
         private readonly IFunctionEventRunStore? _eventRuns;
-
-        /// <summary>
-        /// The event types this run may send. A deployed version's row is a snapshot that never changes, so its answer is
-        /// kept briefly; the draft (a Test run) is read every time because the editor changes it.
-        /// </summary>
-        private async Task<IReadOnlyCollection<string>> AllowedEventsAsync(
-            string tenantId, FunctionEntity function, FunctionVersionEntity? version, CancellationToken cancellationToken)
-        {
-            var settings = _eventSettings;
-            if (settings is null) return [];
-
-            var authMode = (version?.Trigger ?? function.Trigger).AuthMode;
-            async Task<IReadOnlyCollection<string>> ReadAsync() => FunctionEventPolicy.AllowedTypes(
-                await settings.GetAsync(tenantId, function.ItemId, version?.ItemId, cancellationToken), authMode);
-
-            return version is null
-                ? await ReadAsync()
-                : await _allowedEvents.GetOrReadAsync(tenantId, version.ItemId, ReadAsync);
-        }
 
         private Task<FunctionVersionEntity?> ActiveVersionAsync(string tenantId, string versionId, CancellationToken cancellationToken)
             => _versions.GetOrReadAsync(tenantId, versionId,
@@ -808,7 +786,7 @@ namespace Functions.DomainService.Services
             // retryable SecretStoreUnavailable when the store itself is down. A version snapshot
             // keeps the reference too, so rotating a secret takes effect on the next run.
             // The events it may send come from its version's own list (the draft's for a Test), narrowed for a Public trigger.
-            var allowedEvents = await AllowedEventsAsync(tenantId, function, version, cancellationToken);
+            var allowedEvents = FunctionEventPolicy.AllowedTypes((version?.Trigger ?? function.Trigger).AuthMode);
             var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson, allowedEvents, fromEvent?.Name);
 
             // The event's name and depth, kept for the events this run sends and for its dead-letter entry. Before the

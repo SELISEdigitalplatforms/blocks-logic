@@ -6,7 +6,6 @@ using Blocks.Genesis.Entities.Logic;
 using Functions.DomainService.Events;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
-using Mail.DomainService.Mails;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
@@ -50,8 +49,8 @@ namespace Functions.DomainService.Services
     /// succeeded, with the safeguards of a side effect that cannot be taken back.
     /// <list type="bullet">
     /// <item><b>Nothing the runner or the sandbox says is trusted.</b> Each event is checked again against the run's
-    /// <i>version</i> list (narrowed to <c>PublicAllowed</c> types for a Public trigger) and the catalog's shape. A
-    /// refused event is recorded as <c>Rejected</c> with its reason; the others go on.</item>
+    /// fixed rule for the function's trigger (<see cref="FunctionEventPolicy"/>: no events for a Public trigger) and the
+    /// catalog's shape. A refused event is recorded as <c>Rejected</c> with its reason; the others go on.</item>
     /// <item><b>Identity comes from the run record</b> (tenant; the user id for information only; no roles; not
     /// authenticated, so Genesis writes no delegation grant). <c>ConsumerMessage.Context</c> is never set, so Genesis builds
     /// it from that context — a function cannot name another caller. The previous context is restored afterwards.</item>
@@ -269,7 +268,7 @@ return count";
             if (type is null || !allowed.Contains(type)) return "the event type is not allowed for this function version";
 
             if (!item.TryGetProperty("payload", out payload)) return "the event has no payload";
-            return FunctionEventCatalog.Validate(type, payload, forSend: true);
+            return FunctionEventCatalog.Validate(type, payload);
         }
 
         // ------------------------------------------------------------------ send once ----
@@ -391,23 +390,12 @@ return count";
             try
             {
                 BlocksContext.SetContext(RunContext(tenantId, run), true);
-                if (entry.Type == FunctionEventCatalog.SendMailType)
+                await _messages.SendToConsumerAsync(new ConsumerMessage<FunctionEvent>
                 {
-                    await _messages.SendToConsumerAsync(new ConsumerMessage<SendMail>
-                    {
-                        ConsumerName = definition.Queue,
-                        Payload = FunctionEventCatalog.BuildSendMail(payload, entry.Id),
-                    });
-                }
-                else
-                {
-                    await _messages.SendToConsumerAsync(new ConsumerMessage<FunctionEvent>
-                    {
-                        ConsumerName = definition.Queue,
-                        Payload = FunctionEventCatalog.BuildFunctionEvent(
-                            payload, entry.Id, run.FunctionId, run.ItemId, await DepthOfEventsSentByAsync(run)),
-                    });
-                }
+                    ConsumerName = definition.Queue,
+                    Payload = FunctionEventCatalog.BuildFunctionEvent(
+                        payload, entry.Id, run.FunctionId, run.ItemId, await DepthOfEventsSentByAsync(run)),
+                });
             }
             finally
             {

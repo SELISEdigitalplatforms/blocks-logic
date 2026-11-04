@@ -1,8 +1,6 @@
-using System.Text.Json;
 using FluentValidation;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Events;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
 
@@ -10,12 +8,10 @@ namespace Functions.DomainService.Services
 {
     public interface IFunctionEventSettingsService
     {
-        FunctionEventCatalogDto GetCatalog();
-
-        /// <summary>The draft's events; empty when none were saved. A function of another tenant is not found.</summary>
+        /// <summary>The draft's trigger events; empty when none were saved. A function of another tenant is not found.</summary>
         Task<FunctionEventSettingsDto> GetAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
 
-        /// <summary>Saves the draft's events. Deploy copies them to the new version.</summary>
+        /// <summary>Saves the draft's trigger events. Deploy copies them to the new version.</summary>
         Task SaveAsync(
             string tenantId, SaveEventSettingsRequestDto request, string? actorId, string? actorEmail,
             CancellationToken cancellationToken = default);
@@ -28,8 +24,8 @@ namespace Functions.DomainService.Services
     }
 
     /// <summary>
-    /// The events a function may send (see <see cref="FunctionEventCatalog"/>): the editor's side — catalog, the draft's
-    /// settings, and what happened to a run's events. The Worker reads the same data through the repositories.
+    /// Function events, the editor's side: the draft's trigger events, the queue status, and what happened to a run's
+    /// events. The Worker reads the same data through the repositories.
     /// </summary>
     public class FunctionEventSettingsService : IFunctionEventSettingsService
     {
@@ -56,21 +52,6 @@ namespace Functions.DomainService.Services
             _validator = validator;
         }
 
-        public FunctionEventCatalogDto GetCatalog() => new()
-        {
-            Items =
-            [
-                .. FunctionEventCatalog.All.Select(d => new FunctionEventCatalogItemDto
-                {
-                    Type = d.Type,
-                    Title = d.Title,
-                    Description = d.Description,
-                    PublicAllowed = d.PublicAllowed,
-                    PayloadTemplate = ParseObject(d.PayloadTemplateJson),
-                }),
-            ],
-        };
-
         public async Task<FunctionEventSettingsDto> GetAsync(
             string tenantId, string functionId, CancellationToken cancellationToken = default)
         {
@@ -80,14 +61,6 @@ namespace Functions.DomainService.Services
             return new FunctionEventSettingsDto
             {
                 FunctionId = functionId,
-                Events =
-                [
-                    .. (row?.Events ?? []).Select(e => new FunctionEventSettingDto
-                    {
-                        Type = e.Type,
-                        Payload = ParseObject(e.PayloadTemplateJson),
-                    }),
-                ],
                 TriggerEvents = [.. row?.TriggerEvents ?? []],
             };
         }
@@ -106,15 +79,12 @@ namespace Functions.DomainService.Services
 
             await RequireFunctionAsync(tenantId, request.FunctionId, cancellationToken);
 
-            var events = request.Events
-                .Select(e => new FunctionEventSetting { Type = e.Type, PayloadTemplateJson = e.Payload.GetRawText() })
-                .ToList();
             await _settings.SaveDraftAsync(
-                tenantId, request.FunctionId, events, [.. request.TriggerEvents], actorId, cancellationToken);
+                tenantId, request.FunctionId, [.. request.TriggerEvents], actorId, cancellationToken);
 
             await _auditService.RecordAsync(
                 tenantId, request.FunctionId, FunctionsConstants.AuditActions.EventsUpdated, actorId, actorEmail,
-                new { Events = events.Select(e => e.Type).ToList(), TriggerEvents = request.TriggerEvents.Count },
+                new { TriggerEvents = request.TriggerEvents.Count },
                 cancellationToken);
         }
 
@@ -166,19 +136,6 @@ namespace Functions.DomainService.Services
                 ? null
                 : await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken);
             if (function is null) throw new FunctionNotFoundException($"function '{functionId}' was not found");
-        }
-
-        /// <summary>A stored template as a JSON value; a broken one (never written by this service) is an empty object.</summary>
-        private static JsonElement ParseObject(string json)
-        {
-            try
-            {
-                return JsonSerializer.Deserialize<JsonElement>(json);
-            }
-            catch (JsonException)
-            {
-                return JsonSerializer.Deserialize<JsonElement>("{}");
-            }
         }
     }
 }

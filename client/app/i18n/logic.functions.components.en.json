@@ -523,6 +523,8 @@
   "VARIABLES_EDITOR.READ_IN_CODE_AS": "Read in code as",
   "VARIABLES_EDITOR.REMOVE_VARIABLE": "Remove variable {{value}}",
   "VARIABLES_EDITOR.STORED_AS_A_REFERENCE": "Stored as a reference and resolved when the run starts, so the value is never saved here.",
+  "VARIABLES_EDITOR.OPTIONAL_RUNS_WITHOUT_IT": "Optional \u2014 if the configuration variable is gone, the function runs without it",
+  "VARIABLES_EDITOR.OPTIONAL_VARIABLE": "Variable {{value}} is optional",
   "VARIABLES_EDITOR.STRINGS_ON_0_CTX": "Strings on <0>ctx.env</0>. Bind one to a configuration variable to keep the value out of the editor.",
   "VARIABLES_EDITOR.THAT_KEY_IS_ALREADY": "That key is already used.",
   "VARIABLES_EDITOR.THIS_LOOKS_LIKE_A": "This looks like a credential. Bind it to a configuration variable instead — a typed value is stored in plain text and visible to anyone who can open this function.",

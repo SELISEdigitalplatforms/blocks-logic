@@ -7,7 +7,6 @@ using Functions.DomainService.Events;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
-using Mail.DomainService.Mails;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -30,7 +29,6 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionEventAllowList> _allowList = new();
         private readonly (IDatabase Database, FakeRedisDatabase Fake) _redis = FakeRedisDatabase.Create();
         private readonly Dictionary<string, string> _store = new(StringComparer.Ordinal);
-        private readonly List<ConsumerMessage<SendMail>> _mails = [];
         private readonly List<ConsumerMessage<FunctionEvent>> _functionEvents = [];
         private readonly List<BlocksContext?> _contextAtSend = [];
         private FunctionRunEventsEntity? _saved;
@@ -45,13 +43,10 @@ namespace XUnitTest.Functions
         public FunctionEventDispatcherTests()
         {
             _allowList.Setup(a => a.AllowedTypesAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(["SendMail", "FunctionEvent"]);
+                .ReturnsAsync(["FunctionEvent"]);
             _runEvents.Setup(r => r.SaveAsync(Tenant, It.IsAny<FunctionRunEventsEntity>(), It.IsAny<CancellationToken>()))
                 .Callback((string _, FunctionRunEventsEntity d, CancellationToken _) => _saved = d).Returns(Task.CompletedTask);
 
-            _bus.Setup(b => b.SendToConsumerAsync(It.IsAny<ConsumerMessage<SendMail>>()))
-                .Callback((ConsumerMessage<SendMail> m) => { _contextAtSend.Add(BlocksContext.GetContext()); _mails.Add(m); })
-                .Returns(Task.CompletedTask);
             _bus.Setup(b => b.SendToConsumerAsync(It.IsAny<ConsumerMessage<FunctionEvent>>()))
                 .Callback((ConsumerMessage<FunctionEvent> m) => { _contextAtSend.Add(BlocksContext.GetContext()); _functionEvents.Add(m); })
                 .Returns(Task.CompletedTask);
@@ -85,8 +80,8 @@ namespace XUnitTest.Functions
             };
         }
 
-        private static string Mail(int n, string payload = """{"purpose":"welcome","to":["a@b.c"]}""") =>
-            "{\"id\":\"run-1-1-" + n + "\",\"type\":\"SendMail\",\"payload\":" + payload + "}";
+        private static string Raw(int n, string type, string payload) =>
+            "{\"id\":\"run-1-1-" + n + "\",\"type\":\"" + type + "\",\"payload\":" + payload + "}";
 
         private static string Fn(int n, string name = "order.created") =>
             "{\"id\":\"run-1-1-" + n + "\",\"type\":\"FunctionEvent\",\"payload\":{\"name\":\"" + name + "\",\"data\":{\"id\":7}}}";
@@ -104,34 +99,16 @@ namespace XUnitTest.Functions
         // ---- what is sent, and as whom -----------------------------------------------------
 
         [Fact]
-        public async Task A_mail_is_sent_through_the_message_client_to_the_mail_queue_with_the_platform_fields_forced()
-        {
-            Events(Mail(1, """{"purpose":"welcome","language":"de","to":["a@b.c"],"bodyDataContext":{"name":"Ada"}}"""));
-
-            (await DispatchAsync(Handoff(1))).Should().BeTrue();
-
-            var message = _mails.Should().ContainSingle().Subject;
-            message.ConsumerName.Should().Be("blocks_email_listener");
-            message.Payload.Purpose.Should().Be("welcome");
-            message.Payload.Language.Should().Be("de");
-            message.Payload.SendPhoneNumberAsEmail.Should().BeFalse();
-            message.Payload.CorrelationId.Should().Be("run-1-1-1");
-            message.Payload.BodyDataContext.Should().Equal(new Dictionary<string, string> { ["name"] = "Ada" });
-            _saved!.Events.Should().ContainSingle().Which.Status.Should().Be(FunctionEventStatus.Sent);
-        }
-
-        [Fact]
         public async Task The_message_context_stays_empty_and_the_identity_comes_from_the_run_record()
         {
             BlocksContext.SetContext(BlocksContext.Create("someone-elses-tenant", ["Admin"], "admin-1", true, "", "", DateTime.MinValue, "", ["all"], "", "", "", "tok", "someone-elses-tenant"), true);
             try
             {
-                Events(Mail(1), Fn(2));
+                Events(Fn(1), Fn(2));
 
                 await DispatchAsync(Handoff(2));
 
-                _mails.Single().Context.Should().BeEmpty("a function can never fill the context");
-                _functionEvents.Single().Context.Should().BeEmpty();
+                _functionEvents.Should().HaveCount(2).And.OnlyContain(m => m.Context.Length == 0, "a function can never fill the context");
                 _contextAtSend.Should().HaveCount(2).And.OnlyContain(c => c != null);
                 foreach (var context in _contextAtSend)
                 {
@@ -158,7 +135,7 @@ namespace XUnitTest.Functions
         {
             _run.InvokedBy = InvokedByType.Workflow;
             _run.InvokedById = "execution-7";
-            Events(Mail(1));
+            Events(Fn(1));
 
             await DispatchAsync(Handoff(1));
 
@@ -186,7 +163,7 @@ namespace XUnitTest.Functions
         [Fact]
         public async Task The_events_key_is_deleted_and_the_results_written_once_every_event_has_an_outcome()
         {
-            Events(Mail(1), Fn(2));
+            Events(Fn(1), Fn(2));
 
             await DispatchAsync(Handoff(2));
 
@@ -202,11 +179,10 @@ namespace XUnitTest.Functions
         [Fact]
         public async Task A_payload_with_an_unknown_field_is_rejected_and_the_others_still_go()
         {
-            Events(Mail(1, """{"purpose":"p","to":["a@b.c"],"sendPhoneNumberAsEmail":true}"""), Fn(2));
+            Events(Raw(1, "FunctionEvent", """{"name":"order.created","queue":"other"}"""), Fn(2));
 
             await DispatchAsync(Handoff(2));
 
-            _mails.Should().BeEmpty();
             _functionEvents.Should().ContainSingle();
             _saved!.Events[0].Status.Should().Be(FunctionEventStatus.Rejected);
             _saved.Events[0].Error.Should().Contain("unknown field");
@@ -214,18 +190,30 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task A_type_that_is_not_on_the_versions_list_is_rejected()
+        public async Task A_type_that_is_not_allowed_for_the_function_is_rejected_and_nothing_is_sent()
         {
-            _allowList.Setup(a => a.AllowedTypesAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<CancellationToken>())).ReturnsAsync(["SendMail"]);
-            Events(Fn(1), Mail(2));
+            // A Public function: the allow list is empty, so even FunctionEvent is refused.
+            _allowList.Setup(a => a.AllowedTypesAsync(Tenant, It.IsAny<FunctionRunEntity>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            Events(Fn(1));
 
-            await DispatchAsync(Handoff(2));
+            await DispatchAsync(Handoff(1));
 
             _functionEvents.Should().BeEmpty();
-            _mails.Should().ContainSingle();
-            _saved!.Events[0].Status.Should().Be(FunctionEventStatus.Rejected);
+            _saved!.Events.Single().Status.Should().Be(FunctionEventStatus.Rejected);
             _saved.Events[0].Error.Should().Contain("not allowed");
             _store.Should().NotContainKey(MarkerKey(1), "a rejected event never takes a send-once marker");
+        }
+
+        [Fact]
+        public async Task A_SendMail_event_is_rejected_and_the_other_events_still_go()
+        {
+            Events(Raw(1, "SendMail", """{"purpose":"p","to":["a@b.c"]}"""), Fn(2));
+
+            (await DispatchAsync(Handoff(2))).Should().BeTrue();
+
+            _functionEvents.Should().ContainSingle().Which.Payload.EventId.Should().Be("run-1-1-2");
+            _saved!.Events[0].Status.Should().Be(FunctionEventStatus.Rejected);
+            _saved.Events[1].Status.Should().Be(FunctionEventStatus.Sent);
         }
 
         [Fact]
@@ -233,16 +221,16 @@ namespace XUnitTest.Functions
         {
             Events(
                 """{"id":"run-1-1-1","type":"DeleteEverything","payload":{}}""",
-                """{"id":"run-2-1-1","type":"SendMail","payload":{"purpose":"p","to":["a@b.c"]}}""",
-                Mail(3),
-                Mail(3));
+                """{"id":"run-2-1-1","type":"FunctionEvent","payload":{"name":"order.created"}}""",
+                Fn(3),
+                Fn(3));
 
             await DispatchAsync(Handoff(4));
 
             _saved!.Events.Select(e => e.Status).Should().Equal(
                 FunctionEventStatus.Rejected, FunctionEventStatus.Rejected, FunctionEventStatus.Sent, FunctionEventStatus.Rejected);
             _saved.Events[1].Id.Should().Be("run-1-1-2", "an id that is not the run's own is replaced, never echoed");
-            _mails.Should().ContainSingle();
+            _functionEvents.Should().ContainSingle();
         }
 
         [Fact]
@@ -253,7 +241,7 @@ namespace XUnitTest.Functions
             await DispatchAsync(new FunctionEventsHandoff("function:events:run-2", 1, null, null));
 
             _redis.Fake.Calls("StringGetAsync").Should().BeEmpty();
-            _mails.Should().BeEmpty();
+            _functionEvents.Should().BeEmpty();
             _saved!.Rejected.Should().Contain("does not belong");
         }
 
@@ -264,10 +252,10 @@ namespace XUnitTest.Functions
             await DispatchAsync(Handoff(1));
             _saved!.Rejected.Should().Contain("EVENTS_REJECTED");
 
-            _store[EventsKey] = $"[{string.Join(",", Enumerable.Range(1, 51).Select(n => Mail(n)))}]";
+            _store[EventsKey] = $"[{string.Join(",", Enumerable.Range(1, 51).Select(n => Fn(n)))}]";
             await DispatchAsync(Handoff(51));
             _saved!.Rejected.Should().Contain("at most 50");
-            _mails.Should().BeEmpty();
+            _functionEvents.Should().BeEmpty();
         }
 
         // ---- send once -------------------------------------------------------------------------
@@ -275,14 +263,14 @@ namespace XUnitTest.Functions
         [Fact]
         public async Task A_redelivered_job_does_not_send_an_event_twice()
         {
-            Events(Mail(1));
+            Events(Fn(1));
             await DispatchAsync(Handoff(1));
             // The first delivery died before the results document was written: the key and the markers are still there.
-            _store[EventsKey] = $"[{Mail(1)}]";
+            _store[EventsKey] = $"[{Fn(1)}]";
 
             await DispatchAsync(Handoff(1));
 
-            _mails.Should().ContainSingle();
+            _functionEvents.Should().ContainSingle();
             _saved!.Events.Single().Status.Should().Be(FunctionEventStatus.Sent);
             _saved.Events.Single().SentAt.Should().NotBeNull();
         }
@@ -294,11 +282,10 @@ namespace XUnitTest.Functions
             {
                 state = "inflight", owner = "dead-worker", at = DateTimeOffset.UtcNow.AddMinutes(-10),
             });
-            Events(Mail(1), Fn(2));
+            Events(Fn(1), Fn(2));
 
             (await DispatchAsync(Handoff(2))).Should().BeTrue();
 
-            _mails.Should().BeEmpty();
             _saved!.Events[0].Status.Should().Be(FunctionEventStatus.Failed);
             _saved.Events[0].Error.Should().Be("UNKNOWN_DELIVERY");
             _saved.Events[0].Attempts.Should().Be(0);
@@ -309,11 +296,11 @@ namespace XUnitTest.Functions
         public async Task A_marker_that_is_still_fresh_leaves_the_job_to_the_worker_that_holds_it()
         {
             _store[MarkerKey(1)] = JsonSerializer.Serialize(new { state = "inflight", owner = "other", at = DateTimeOffset.UtcNow });
-            Events(Mail(1));
+            Events(Fn(1));
 
             (await DispatchAsync(Handoff(1))).Should().BeFalse();
 
-            _mails.Should().BeEmpty();
+            _functionEvents.Should().BeEmpty();
             _saved.Should().BeNull();
             _store.Should().ContainKey(EventsKey, "the key stays until every event has an outcome");
         }
@@ -322,11 +309,11 @@ namespace XUnitTest.Functions
         public async Task A_run_whose_results_document_exists_is_done_and_sends_nothing()
         {
             _runEvents.Setup(r => r.ExistsAsync(Tenant, RunId, 1, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-            Events(Mail(1));
+            Events(Fn(1));
 
             (await DispatchAsync(Handoff(1))).Should().BeTrue();
 
-            _mails.Should().BeEmpty();
+            _functionEvents.Should().BeEmpty();
             _saved.Should().BeNull();
         }
 
@@ -336,9 +323,9 @@ namespace XUnitTest.Functions
         public async Task A_send_that_fails_twice_and_then_works_is_sent_on_the_third_attempt()
         {
             var calls = 0;
-            _bus.Setup(b => b.SendToConsumerAsync(It.IsAny<ConsumerMessage<SendMail>>()))
+            _bus.Setup(b => b.SendToConsumerAsync(It.IsAny<ConsumerMessage<FunctionEvent>>()))
                 .Returns(() => ++calls < 3 ? Task.FromException(new InvalidOperationException("bus down")) : Task.CompletedTask);
-            Events(Mail(1));
+            Events(Fn(1));
 
             await DispatchAsync(Handoff(1));
 
@@ -377,14 +364,14 @@ namespace XUnitTest.Functions
         [Fact]
         public async Task A_failed_event_is_not_sent_again_when_the_job_is_redelivered()
         {
-            _bus.Setup(b => b.SendToConsumerAsync(It.IsAny<ConsumerMessage<SendMail>>())).Returns(Task.FromException(new InvalidOperationException()));
-            Events(Mail(1));
+            _bus.Setup(b => b.SendToConsumerAsync(It.IsAny<ConsumerMessage<FunctionEvent>>())).Returns(Task.FromException(new InvalidOperationException()));
+            Events(Fn(1));
             await DispatchAsync(Handoff(1));
-            _store[EventsKey] = $"[{Mail(1)}]";
+            _store[EventsKey] = $"[{Fn(1)}]";
 
             await DispatchAsync(Handoff(1));
 
-            _bus.Verify(b => b.SendToConsumerAsync(It.IsAny<ConsumerMessage<SendMail>>()), Times.Exactly(3));
+            _bus.Verify(b => b.SendToConsumerAsync(It.IsAny<ConsumerMessage<FunctionEvent>>()), Times.Exactly(3));
             _saved!.Events.Single().Status.Should().Be(FunctionEventStatus.Failed);
             _redis.Fake.Calls("StreamAddAsync").Should().ContainSingle("the dead letter is written once");
         }
@@ -394,11 +381,11 @@ namespace XUnitTest.Functions
         [Fact]
         public async Task Events_over_the_tenants_per_minute_limit_fail_as_rate_limited_without_a_send()
         {
-            Events(Mail(1), Mail(2), Mail(3));
+            Events(Fn(1), Fn(2), Fn(3));
 
             await DispatchAsync(Handoff(3), Dispatcher(perMinute: 2));
 
-            _mails.Should().HaveCount(2);
+            _functionEvents.Should().HaveCount(2);
             _saved!.Events.Select(e => e.Status).Should().Equal(FunctionEventStatus.Sent, FunctionEventStatus.Sent, FunctionEventStatus.Failed);
             _saved.Events[2].Error.Should().Be("RATE_LIMITED");
             _saved.Events[2].Attempts.Should().Be(0);
@@ -408,7 +395,7 @@ namespace XUnitTest.Functions
         [Fact]
         public async Task The_limit_counter_is_one_atomic_script_per_tenant_and_minute()
         {
-            Events(Mail(1));
+            Events(Fn(1));
 
             await DispatchAsync(Handoff(1));
 
@@ -425,7 +412,6 @@ namespace XUnitTest.Functions
         {
             await DispatchAsync(Handoff(2));
 
-            _mails.Should().BeEmpty();
             _functionEvents.Should().BeEmpty();
             _saved!.Events.Select(e => (e.Id, e.Status, e.Error)).Should().Equal(
                 ("run-1-1-1", FunctionEventStatus.Failed, "EVENTS_EXPIRED"),
@@ -457,7 +443,7 @@ namespace XUnitTest.Functions
             };
             ActivitySource.AddActivityListener(listener);
             const string parent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
-            Events(Mail(1, """{"purpose":"p","to":["secret@person.example"]}"""));
+            Events(Fn(1, "secret.person"));
 
             await DispatchAsync(Handoff(1, parent), Dispatcher(traces: source));
 
@@ -468,52 +454,42 @@ namespace XUnitTest.Functions
             var tags = emit.Tags.ToDictionary(t => t.Key, t => t.Value);
             tags["blocks.tenant_id"].Should().Be(Tenant);
             tags["blocks.function.id"].Should().Be("fn-1");
-            tags["blocks.function.event_type"].Should().Be("SendMail");
+            tags["blocks.function.event_type"].Should().Be("FunctionEvent");
             tags["blocks.function.event_id"].Should().Be("run-1-1-1");
-            tags.Values.Should().NotContain(v => v != null && v.Contains("secret@person.example"));
+            tags.Values.Should().NotContain(v => v != null && v.Contains("secret.person"));
         }
 
         // ---- the allow list (real one) ---------------------------------------------------------------
 
         [Fact]
-        public async Task The_allow_list_reads_the_versions_row_and_narrows_it_for_a_public_trigger()
+        public async Task The_allow_list_is_empty_for_a_public_trigger_and_FunctionEvent_for_any_other()
         {
-            var settings = new Mock<IFunctionEventSettingsRepository>();
             var versions = new Mock<IFunctionVersionRepository>();
             var functions = new Mock<IFunctionRepository>();
-            settings.Setup(s => s.GetAsync(Tenant, "fn-1", "v-1", It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionEventSettingsEntity
-            {
-                Events = [new FunctionEventSetting { Type = "SendMail" }, new FunctionEventSetting { Type = "FunctionEvent" }],
-            });
             versions.Setup(v => v.GetByIdAsync(Tenant, "v-1", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new FunctionVersionEntity { ItemId = "v-1", Trigger = new TriggerConfig { AuthMode = AuthMode.Public } });
-            var list = new FunctionEventAllowList(settings.Object, versions.Object, functions.Object);
+            var list = new FunctionEventAllowList(versions.Object, functions.Object);
 
-            (await list.AllowedTypesAsync(Tenant, _run)).Should().Equal("SendMail");
+            (await list.AllowedTypesAsync(Tenant, _run)).Should().BeEmpty();
 
             versions.Setup(v => v.GetByIdAsync(Tenant, "v-1", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new FunctionVersionEntity { ItemId = "v-1", Trigger = new TriggerConfig { AuthMode = AuthMode.Token } });
-            (await list.AllowedTypesAsync(Tenant, _run)).Should().Equal("SendMail", "FunctionEvent");
+            (await list.AllowedTypesAsync(Tenant, _run)).Should().Equal("FunctionEvent");
         }
 
         [Fact]
-        public async Task A_test_run_uses_the_draft_row_and_a_function_that_is_gone_is_treated_as_public()
+        public async Task A_test_run_uses_the_functions_trigger_and_a_function_that_is_gone_is_treated_as_public()
         {
-            var settings = new Mock<IFunctionEventSettingsRepository>();
             var versions = new Mock<IFunctionVersionRepository>();
             var functions = new Mock<IFunctionRepository>();
-            settings.Setup(s => s.GetAsync(Tenant, "fn-1", null, It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionEventSettingsEntity
-            {
-                Events = [new FunctionEventSetting { Type = "SendMail" }, new FunctionEventSetting { Type = "FunctionEvent" }],
-            });
-            var list = new FunctionEventAllowList(settings.Object, versions.Object, functions.Object);
+            var list = new FunctionEventAllowList(versions.Object, functions.Object);
             var testRun = new FunctionRunEntity { ItemId = "r", FunctionId = "fn-1", VersionId = null };
 
-            (await list.AllowedTypesAsync(Tenant, testRun)).Should().Equal("SendMail");
+            (await list.AllowedTypesAsync(Tenant, testRun)).Should().BeEmpty();
 
             functions.Setup(f => f.GetByIdAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new FunctionEntity { ItemId = "fn-1", Trigger = new TriggerConfig { AuthMode = AuthMode.Token } });
-            (await list.AllowedTypesAsync(Tenant, testRun)).Should().Equal("SendMail", "FunctionEvent");
+            (await list.AllowedTypesAsync(Tenant, testRun)).Should().Equal("FunctionEvent");
         }
     }
 }

@@ -19,8 +19,8 @@ namespace Functions.DomainService.Utils
         public const string FunctionAuditEventsCollection = "FunctionAuditEvents";
 
         /// <summary>
-        /// Function events (logic-owned, not Genesis entities): the events a function may send, per function
-        /// (draft, <c>VersionId</c> null) and per deployed version.
+        /// Function events (logic-owned, not Genesis entities): the trigger event names of a function, per
+        /// function (draft, <c>VersionId</c> null) and per deployed version.
         /// </summary>
         public const string FunctionEventSettingsCollection = "FunctionEventSettings";
 

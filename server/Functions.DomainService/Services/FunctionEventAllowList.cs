@@ -11,19 +11,16 @@ namespace Functions.DomainService.Services
     }
 
     /// <summary>
-    /// The version's own list (the draft's for a Test run, which has no version), narrowed for a Public trigger. A
-    /// function that is gone is treated as Public: the narrowest answer.
+    /// The fixed rule for the run's trigger (the version's, or the function's for a Test run, which has no version):
+    /// <see cref="FunctionEventPolicy.AllowedTypes"/>. A function that is gone is treated as Public: the narrowest answer.
     /// </summary>
     public sealed class FunctionEventAllowList : IFunctionEventAllowList
     {
-        private readonly IFunctionEventSettingsRepository _settings;
         private readonly IFunctionVersionRepository _versions;
         private readonly IFunctionRepository _functions;
 
-        public FunctionEventAllowList(
-            IFunctionEventSettingsRepository settings, IFunctionVersionRepository versions, IFunctionRepository functions)
+        public FunctionEventAllowList(IFunctionVersionRepository versions, IFunctionRepository functions)
         {
-            _settings = settings;
             _versions = versions;
             _functions = functions;
         }
@@ -39,8 +36,7 @@ namespace Functions.DomainService.Services
             var trigger = version?.Trigger
                 ?? (await _functions.GetByIdAsync(tenantId, run.FunctionId, cancellationToken))?.Trigger;
 
-            var settings = await _settings.GetAsync(tenantId, run.FunctionId, run.VersionId, cancellationToken);
-            return FunctionEventPolicy.AllowedTypes(settings, trigger?.AuthMode ?? AuthMode.Public);
+            return FunctionEventPolicy.AllowedTypes(trigger?.AuthMode ?? AuthMode.Public);
         }
     }
 }

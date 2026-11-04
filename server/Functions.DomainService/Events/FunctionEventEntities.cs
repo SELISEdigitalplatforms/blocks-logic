@@ -4,9 +4,10 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace Functions.DomainService.Events
 {
     /// <summary>
-    /// The events one function may send. Logic-owned (the function entities live in Genesis and are not changed for
-    /// this): one row for the draft the editor changes (<see cref="VersionId"/> null) and one per deployed version,
-    /// copied from the draft at deploy so a version's list never changes at run time.
+    /// The event settings of one function: the <c>FunctionEvent</c> names that start it (the event trigger). Logic-owned
+    /// (the function entities live in Genesis and are not changed for this): one row for the draft the editor changes
+    /// (<see cref="VersionId"/> null) and one per deployed version, copied from the draft at deploy so a version's list
+    /// never changes at run time. Old rows may still hold an <c>Events</c> list; it is ignored and never read.
     /// </summary>
     [BsonIgnoreExtraElements]
     public class FunctionEventSettingsEntity
@@ -20,9 +21,6 @@ namespace Functions.DomainService.Events
         /// <summary>Null for the draft.</summary>
         public string? VersionId { get; set; }
 
-        /// <summary>The events the function may send, each with the payload template shown in the editor.</summary>
-        public List<FunctionEventSetting> Events { get; set; } = [];
-
         /// <summary>The <c>FunctionEvent</c> names that start this function. Read by the event trigger.</summary>
         public List<string> TriggerEvents { get; set; } = [];
 
@@ -33,16 +31,6 @@ namespace Functions.DomainService.Events
         public string? LastUpdatedBy { get; set; }
 
         public static string IdFor(string functionId, string? versionId) => $"{functionId}:{versionId ?? "draft"}";
-    }
-
-    [BsonIgnoreExtraElements]
-    public class FunctionEventSetting
-    {
-        /// <summary>A <see cref="FunctionEventCatalog"/> type.</summary>
-        public string Type { get; set; } = string.Empty;
-
-        /// <summary>The payload template as JSON text.</summary>
-        public string PayloadTemplateJson { get; set; } = "{}";
     }
 
     public enum FunctionEventStatus

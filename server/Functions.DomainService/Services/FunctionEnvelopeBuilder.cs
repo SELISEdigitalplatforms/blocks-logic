@@ -81,8 +81,8 @@ namespace Functions.DomainService.Services
         /// </param>
         /// <param name="inputJson">The caller's input as raw JSON, or null.</param>
         /// <param name="allowedEvents">
-        /// The event types this run may add with <c>ctx.events.add</c>, already narrowed by the version's list and a
-        /// Public trigger (<see cref="Events.FunctionEventPolicy.AllowedTypes"/>). Null or empty: the envelope has no
+        /// The event types this run may add with <c>ctx.events.add</c>, from the fixed rule for the trigger
+        /// (<see cref="Events.FunctionEventPolicy.AllowedTypes"/>: none for a Public trigger). Null or empty: the envelope has no
         /// <c>events</c> key and the function can add none.
         /// </param>
         /// <param name="eventName">
@@ -124,6 +124,9 @@ namespace Functions.DomainService.Services
                 // name contains "secret", and it is right to, so the marker is named for what it
                 // does instead.
                 ["maskedEnv"] = new JsonArray(maskedEnvKeys.Select(k => (JsonNode?)JsonValue.Create(k)).ToArray()),
+                // The keys the function can run without: when a reference in one of them is gone (not found,
+                // deleted, no value), the runner leaves the key out of ctx.env instead of failing the run.
+                ["optionalEnv"] = new JsonArray(OptionalKeys(variables).Select(k => (JsonNode?)JsonValue.Create(k)).ToArray()),
                 ["input"] = ParseInput(inputJson),
                 ["limits"] = new JsonObject
                 {
@@ -223,7 +226,8 @@ namespace Functions.DomainService.Services
         /// <para>
         /// A reference whose secret was deleted or can no longer be read is not caught here: the
         /// runner fails that run as <c>SECRET_UNRESOLVED</c> before the sandbox starts, naming
-        /// the variable. Checking here as well would mean reading the secret's value into this
+        /// the variable (an optional variable whose secret is gone is only left out). Checking here
+        /// as well would mean reading the secret's value into this
         /// process just to throw it away — the SDK's only lookups either return the value or
         /// return metadata under a different authorisation rule — and would still not settle it,
         /// because a secret can be deleted between the invoke and the run.
@@ -250,6 +254,12 @@ namespace Functions.DomainService.Services
             }
             return env;
         }
+
+        private static IEnumerable<string> OptionalKeys(IEnumerable<VariableBinding>? variables) =>
+            (variables ?? [])
+                .Where(v => v is { Optional: true } && !string.IsNullOrWhiteSpace(v.Key))
+                .Select(v => v.Key)
+                .Distinct(StringComparer.Ordinal);
 
         private static JsonNode? ParseInput(string? inputJson)
         {

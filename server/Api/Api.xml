@@ -477,14 +477,11 @@
             poll-token service behind the anonymous <see cref="M:BlocksTemplate.Api.Controllers.FunctionsController.PollRunResult(System.String)"/>.
             </summary>
         </member>
-        <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.GetEventCatalog(Functions.DomainService.Services.IFunctionEventSettingsService)">
-            <summary>The events a function can be allowed to send, each with its payload template.</summary>
-        </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.GetEventSettings(System.String,Functions.DomainService.Services.IFunctionEventSettingsService)">
-            <summary>The events of the function's draft; empty when none were saved.</summary>
+            <summary>The trigger events of the function's draft; empty when none were saved.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.SaveEventSettings(Functions.DomainService.Dtos.Requests.SaveEventSettingsRequestDto,Functions.DomainService.Services.IFunctionEventSettingsService)">
-            <summary>Saves the draft's events. A deploy copies them to the new version.</summary>
+            <summary>Saves the draft's trigger events. A deploy copies them to the new version.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.Controllers.FunctionsController.GetQueueStatus(System.String,Functions.DomainService.Services.IFunctionEventSettingsService)">
             <summary>

@@ -72,8 +72,7 @@ namespace Functions.DomainService.Repositories
         }
 
         public async Task SaveDraftAsync(
-            string tenantId, string functionId, List<FunctionEventSetting> events, List<string> triggerEvents,
-            string? actorId, CancellationToken cancellationToken = default)
+            string tenantId, string functionId, List<string> triggerEvents, string? actorId, CancellationToken cancellationToken = default)
         {
             await EnsureIndexesAsync(tenantId, cancellationToken);
 
@@ -82,7 +81,6 @@ namespace Functions.DomainService.Repositories
             var update = Builders<FunctionEventSettingsEntity>.Update
                 .Set(s => s.FunctionId, functionId)
                 .Set(s => s.VersionId, null)
-                .Set(s => s.Events, events)
                 .Set(s => s.TriggerEvents, triggerEvents)
                 .Set(s => s.LastUpdatedDate, now)
                 .Set(s => s.LastUpdatedBy, actorId)
@@ -103,7 +101,6 @@ namespace Functions.DomainService.Repositories
             var update = Builders<FunctionEventSettingsEntity>.Update
                 .Set(s => s.FunctionId, functionId)
                 .Set(s => s.VersionId, versionId)
-                .Set(s => s.Events, draft.Events)
                 .Set(s => s.TriggerEvents, draft.TriggerEvents)
                 .Set(s => s.LastUpdatedDate, now)
                 .Set(s => s.LastUpdatedBy, draft.LastUpdatedBy)

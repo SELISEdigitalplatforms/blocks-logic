@@ -225,8 +225,8 @@ describe("ConnectionsCard", () => {
     await waitFor(() => expect(handlers.onVariablesChange).toHaveBeenCalled());
     expect(handlers.onVariablesChange.mock.calls[0][0]).toEqual([
       { key: "BLOCKS_API_URL", value: "https://blocksapi.acme.com" },
-      { key: "BLOCKS_CLIENT_ID", value: "" },
-      { key: "BLOCKS_CLIENT_SECRET", value: "" },
+      { key: "BLOCKS_CLIENT_ID", value: "", optional: true },
+      { key: "BLOCKS_CLIENT_SECRET", value: "", optional: true },
     ]);
   });
 
