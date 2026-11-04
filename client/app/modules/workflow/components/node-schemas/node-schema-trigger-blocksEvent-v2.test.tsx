@@ -83,7 +83,7 @@ describe("Action trigger node", () => {
 
   it("the output preview is the simple action json", () => {
     const display = param("output").displayValue!;
-    const text = display({ eventName: USER_CREATED }, {} as any) as string;
+    const text = display({ eventName: USER_CREATED }, {} as Parameters<typeof display>[1]) as string;
     expect(text).toContain('"action": "iam.user.created"');
     expect(text).toContain('"organizationId"');
     expect(text).toContain('"data"');
@@ -94,7 +94,7 @@ describe("Action trigger node", () => {
     const options = param("event").options as (d: Record<string, unknown>) => Promise<unknown>;
     const details = param("eventStatus").details!;
 
-    await Promise.all([options({ eventName: "" }), details({ eventName: "" }, {} as any)]);
+    await Promise.all([options({ eventName: "" }), details({ eventName: "" }, {} as Parameters<typeof details>[1])]);
 
     expect(spy).toHaveBeenCalledTimes(1);
   });
