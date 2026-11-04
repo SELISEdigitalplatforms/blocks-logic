@@ -136,7 +136,7 @@ namespace Workflow.DomainService.Services
             {
                 FormatMultipart => await ReadMultipartAsync(request, parsed!, mediaType, headers, query, settings.FilesAllowed, ct),
                 FormatForm => await ReadUrlEncodedAsync(request, mediaType, headers, query, ct),
-                FormatJson or FormatText => await ReadJsonOrTextAsync(request, parsed, mediaType, format, headers, query, Empty, ct),
+                FormatJson or FormatText => await ReadJsonOrTextAsync(request, parsed, mediaType, headers, query, Empty, ct),
                 _ => await ReadBinaryAsync(request, mediaType, headers, query, Empty, ct),
             };
         }
@@ -165,8 +165,9 @@ namespace Workflow.DomainService.Services
             return format;
         }
 
+        /// <summary>A JSON or <c>text/*</c> body; which of the two follows from <paramref name="mediaType"/>.</summary>
         private static async Task<WebhookContent> ReadJsonOrTextAsync(
-            HttpRequest request, MediaTypeHeaderValue? parsed, string mediaType, string format,
+            HttpRequest request, MediaTypeHeaderValue? parsed, string mediaType,
             BsonDocument headers, BsonDocument query, Func<WebhookContent> empty, CancellationToken ct)
         {
             if (request.ContentLength > WebhookIntakeLimits.NonFileMaxBytes)
@@ -174,7 +175,8 @@ namespace Workflow.DomainService.Services
                 throw WebhookIntakeException.TooLarge(MessageNonFileTooLarge);
             }
 
-            var isJson = format == FormatJson;
+            var isJson = IsJson(mediaType);
+            var format = isJson ? FormatJson : FormatText;
             // Resolve the charset before reading, so an unusable one is refused without consuming the body.
             var encoding = isJson ? Encoding.UTF8 : ResolveEncoding(parsed);
             var bytes = await ReadLimitedAsync(request.Body, WebhookIntakeLimits.NonFileMaxBytes, MessageNonFileTooLarge, ct);
