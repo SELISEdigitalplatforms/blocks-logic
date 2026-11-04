@@ -33,7 +33,6 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionRepository> _functions = new();
         private readonly Mock<IFunctionRunRepository> _runs = new();
         private readonly Mock<IFunctionEventSettingsRepository> _settings = new();
-        private readonly Mock<IFunctionRunEventsRepository> _runEvents = new();
         private readonly Mock<IFunctionAuditService> _audit = new();
         private readonly IValidator<SaveEventSettingsRequestDto> _validator = new SaveEventSettingsRequestValidator();
 
@@ -44,7 +43,7 @@ namespace XUnitTest.Functions
         }
 
         private FunctionEventSettingsService Service() =>
-            new(_functions.Object, _runs.Object, _settings.Object, _runEvents.Object, _audit.Object, _validator);
+            new(_functions.Object, _runs.Object, _settings.Object, _audit.Object, _validator);
 
         private static SaveEventSettingsRequestDto Request(string[]? triggers = null) => new()
         {
@@ -128,45 +127,6 @@ namespace XUnitTest.Functions
             var dto = await Service().GetAsync(Tenant, "fn-1");
 
             dto.TriggerEvents.Should().Equal("order.created");
-        }
-
-        // ---- a run's events -------------------------------------------------------------
-
-        [Fact]
-        public async Task A_runs_events_come_from_its_newest_attempt_with_the_rejection_reason()
-        {
-            _runs.Setup(r => r.GetByIdAsync(Tenant, "run-1", It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionRunEntity { ItemId = "run-1" });
-            _runEvents.Setup(r => r.GetLatestAsync(Tenant, "run-1", It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionRunEventsEntity
-            {
-                RunId = "run-1",
-                Rejected = "EVENTS_REJECTED: 51 events",
-                Events = [new FunctionRunEventEntry { Id = "run-1-1-1", Type = "FunctionEvent", Status = FunctionEventStatus.Sent, Attempts = 1, SentAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) }],
-            });
-
-            var dto = await Service().GetRunEventsAsync(Tenant, "run-1");
-
-            dto.Rejected.Should().Be("EVENTS_REJECTED: 51 events");
-            var item = dto.Items.Should().ContainSingle().Subject;
-            item.Status.Should().Be("Sent");
-            item.Id.Should().Be("run-1-1-1");
-        }
-
-        [Fact]
-        public async Task A_run_without_an_events_document_has_no_items()
-        {
-            _runs.Setup(r => r.GetByIdAsync(Tenant, "run-1", It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionRunEntity { ItemId = "run-1" });
-
-            var dto = await Service().GetRunEventsAsync(Tenant, "run-1");
-
-            dto.Items.Should().BeEmpty();
-            dto.Rejected.Should().BeNull();
-        }
-
-        [Fact]
-        public async Task A_run_of_another_tenant_is_not_found()
-        {
-            await Service().Invoking(s => s.GetRunEventsAsync(Tenant, "run-elsewhere")).Should().ThrowAsync<FunctionNotFoundException>();
-            _runEvents.Verify(r => r.GetLatestAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         // ---- deploy copies the draft -----------------------------------------------------
@@ -257,7 +217,7 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task Purging_a_function_removes_its_event_settings_rows_and_run_events()
+        public async Task Purging_a_function_removes_its_event_settings_rows()
         {
             var versions = new Mock<IFunctionVersionRepository>();
             var builds = new Mock<IFunctionBuildRepository>();
@@ -272,12 +232,11 @@ namespace XUnitTest.Functions
             cache.Setup(c => c.CacheDatabase()).Returns(database);
             var service = new FunctionPurgeService(
                 versions.Object, builds.Object, _runs.Object, logs.Object, pins.Object, cache.Object,
-                NullLogger<FunctionPurgeService>.Instance, _settings.Object, _runEvents.Object);
+                NullLogger<FunctionPurgeService>.Instance, _settings.Object);
 
             await service.PurgeAsync(Tenant, "fn-1");
 
             _settings.Verify(s => s.DeleteAllForFunctionAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()), Times.Once);
-            _runEvents.Verify(r => r.DeleteAllForFunctionAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()), Times.Once);
         }
 
         // ---- the endpoints --------------------------------------------------------------
@@ -324,14 +283,13 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task A_function_or_run_of_another_tenant_is_a_not_found_through_the_endpoints()
+        public async Task A_function_of_another_tenant_is_a_not_found_through_the_endpoints()
         {
             var controller = Controller();
             var service = Service();
             try
             {
                 await controller.Invoking(c => c.GetEventSettings("fn-9", service)).Should().ThrowAsync<FunctionNotFoundException>();
-                await controller.Invoking(c => c.GetRunEvents("run-9", service)).Should().ThrowAsync<FunctionNotFoundException>();
                 await controller.Invoking(c => c.SaveEventSettings(new SaveEventSettingsRequestDto { FunctionId = "fn-9" }, service))
                     .Should().ThrowAsync<FunctionNotFoundException>();
             }
@@ -399,7 +357,6 @@ namespace XUnitTest.Functions
 
         [Theory]
         [InlineData("GetEventSettings", "blocks-logic::function::read")]
-        [InlineData("GetRunEvents", "blocks-logic::function::read")]
         [InlineData("GetQueueStatus", "blocks-logic::function::read")]
         [InlineData("SaveEventSettings", "blocks-logic::function::manage")]
         public void Each_endpoint_is_protected_with_the_read_or_manage_permission(string action, string permission)

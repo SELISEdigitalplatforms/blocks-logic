@@ -80,11 +80,6 @@ namespace Functions.DomainService.Services
         /// notably <c>OAuthToken</c> is not, and must never be.
         /// </param>
         /// <param name="inputJson">The caller's input as raw JSON, or null.</param>
-        /// <param name="allowedEvents">
-        /// The event types this run may add with <c>ctx.events.add</c>, from the fixed rule for the trigger
-        /// (<see cref="Events.FunctionEventPolicy.AllowedTypes"/>: none for a Public trigger). Null or empty: the envelope has no
-        /// <c>events</c> key and the function can add none.
-        /// </param>
         /// <param name="eventName">
         /// The name of the <c>FunctionEvent</c> that started the run (<c>run.invokedBy.name</c>); null for any other run.
         /// </param>
@@ -94,7 +89,6 @@ namespace Functions.DomainService.Services
             FunctionEntity function,
             BlocksContext? context,
             string? inputJson,
-            IReadOnlyCollection<string>? allowedEvents = null,
             string? eventName = null)
         {
             ArgumentNullException.ThrowIfNull(run);
@@ -133,14 +127,6 @@ namespace Functions.DomainService.Services
                     ["timeoutMs"] = limits.TimeoutSeconds * 1000,
                 },
             };
-
-            if (allowedEvents is { Count: > 0 })
-            {
-                envelope["events"] = new JsonObject
-                {
-                    ["allowed"] = new JsonArray(allowedEvents.Select(t => (JsonNode?)JsonValue.Create(t)).ToArray()),
-                };
-            }
 
             var json = envelope.ToJsonString(SerializerOptions);
 

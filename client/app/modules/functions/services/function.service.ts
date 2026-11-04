@@ -29,10 +29,8 @@ import {
 } from "../types/run.types";
 import { IFunctionSource } from "../types/function.types";
 import {
-  IEventCatalog,
   IEventSettings,
   IQueueStatus,
-  IRunEventsResponse,
   ISaveEventSettingsPayload,
 } from "../types/event.types";
 import {
@@ -205,26 +203,15 @@ export class FunctionService {
     return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.GET_AUDIT_LOG}?${params.toString()}`);
   };
 
-  /** The event types a function may send, each with the payload to start from. */
-  getEventCatalog = (): Promise<IEventCatalog> => {
-    return this.logicHttpClient.get(FUNCTIONS_ENDPOINTS.GET_EVENT_CATALOG);
-  };
-
-  /** The draft's events and trigger events. */
+  /** The draft's trigger events. */
   getEventSettings = (functionId: string): Promise<IEventSettings> => {
     const params = new URLSearchParams({ functionId });
     return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.GET_EVENT_SETTINGS}?${params.toString()}`);
   };
 
-  /** Replaces the draft's whole event settings. 400 `invalid_request` lists each bad field by path. */
+  /** Replaces the draft's trigger events. 400 `invalid_request` lists each bad field by path. */
   saveEventSettings = (payload: ISaveEventSettingsPayload): Promise<IBaseResponse> => {
     return this.logicHttpClient.post(FUNCTIONS_ENDPOINTS.SAVE_EVENT_SETTINGS, payload);
-  };
-
-  /** The events one run sent, and why they were dropped when they were. */
-  getRunEvents = (runId: string): Promise<IRunEventsResponse> => {
-    const params = new URLSearchParams({ runId });
-    return this.logicHttpClient.get(`${FUNCTIONS_ENDPOINTS.GET_RUN_EVENTS}?${params.toString()}`);
   };
 
   /** How many calls wait for a sandbox slot: HTTP ones and event ones. */

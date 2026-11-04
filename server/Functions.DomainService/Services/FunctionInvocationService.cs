@@ -97,7 +97,7 @@ namespace Functions.DomainService.Services
         /// <para>
         /// The handler's <c>input</c> is the event's data; <c>ctx.run.invokedBy</c> is <c>{ type: 'event', id: eventId,
         /// name }</c>. The run is counted by admission (the function's rate limit), goes to the event queue, and
-        /// remembers the event's depth for the events it sends. <b>One run per event and function:</b> a redelivered
+        /// remembers the event's id and name for its dead-letter entry. <b>One run per event and function:</b> a redelivered
         /// event finds the run it already started and starts no second one (the result carries that run's id).
         /// </para>
         /// </summary>
@@ -110,8 +110,7 @@ namespace Functions.DomainService.Services
     /// <param name="EventId">The event's id: the run's <c>InvokedById</c>, and half of its idempotency key.</param>
     /// <param name="Name">The event's name (checked against the version's subscription).</param>
     /// <param name="DataJson">The event's data as JSON text: the handler's <c>input</c>.</param>
-    /// <param name="Depth">The event's depth (<see cref="FunctionEvent.Depth"/>).</param>
-    public sealed record FunctionEventInvocation(string EventId, string Name, string DataJson, int Depth);
+    public sealed record FunctionEventInvocation(string EventId, string Name, string DataJson);
 
     /// <summary>
     /// Builds the envelope, admits and authorizes the caller, and queues a run — the write
@@ -785,15 +784,13 @@ namespace Functions.DomainService.Services
             // run as SecretUnresolved (naming the variable) when one cannot be read, and as the
             // retryable SecretStoreUnavailable when the store itself is down. A version snapshot
             // keeps the reference too, so rotating a secret takes effect on the next run.
-            // The events it may send come from its version's own list (the draft's for a Test), narrowed for a Public trigger.
-            var allowedEvents = FunctionEventPolicy.AllowedTypes((version?.Trigger ?? function.Trigger).AuthMode);
-            var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson, allowedEvents, fromEvent?.Name);
+            var envelopeJson = FunctionEnvelopeBuilder.Build(run, version, function, context, inputJson, fromEvent?.Name);
 
-            // The event's name and depth, kept for the events this run sends and for its dead-letter entry. Before the
-            // record exists (and before any grant is written), so a Redis failure leaves nothing behind to clean up.
+            // The event's id and name, kept for the run's dead-letter entry. Before the record exists (and before any
+            // grant is written), so a Redis failure leaves nothing behind to clean up.
             if (fromEvent is not null && _eventRuns is not null)
             {
-                await _eventRuns.SaveAsync(run.ItemId, new FunctionEventRunInfo(fromEvent.EventId, fromEvent.Name, fromEvent.Depth));
+                await _eventRuns.SaveAsync(run.ItemId, new FunctionEventRunInfo(fromEvent.EventId, fromEvent.Name));
             }
 
             // The caller's identity for ctx.blocks.accessToken, as a delegation grant id the runner

@@ -128,8 +128,8 @@ namespace BlocksTemplate.Api.Controllers
 
         // ------------------------------------------------------------------ events ----
         // Function events: the event names that start a function (trigger events), edited on the draft and copied to each
-        // version at deploy; and what happened to a run's events. Reads need read, the save needs manage (it decides what
-        // starts the function). Every lookup is inside the caller's tenant database, so another tenant's id is a 404.
+        // version at deploy. Reads need read, the save needs manage (it decides what starts the function). Every lookup is
+        // inside the caller's tenant database, so another tenant's id is a 404.
 
         /// <summary>The trigger events of the function's draft; empty when none were saved.</summary>
         [HttpGet]
@@ -157,13 +157,6 @@ namespace BlocksTemplate.Api.Controllers
         public async Task<QueueStatusDto> GetQueueStatus(
             [FromQuery] string functionId, [FromServices] IFunctionEventSettingsService events)
             => await events.GetQueueStatusAsync(GetTenantId(), functionId, HttpContext.RequestAborted);
-
-        /// <summary>What happened to the events of a run (its newest attempt that has any). Never a payload.</summary>
-        [HttpGet]
-        [ProtectedEndPoint("blocks-logic::function::read")]
-        public async Task<RunEventsDto> GetRunEvents(
-            [FromQuery] string runId, [FromServices] IFunctionEventSettingsService events)
-            => await events.GetRunEventsAsync(GetTenantId(), runId, HttpContext.RequestAborted);
 
         // -------------------------------------------------------- export / import ----
         // One function per file, the same id in every environment (2026-10-18). Both directions need manage: an export

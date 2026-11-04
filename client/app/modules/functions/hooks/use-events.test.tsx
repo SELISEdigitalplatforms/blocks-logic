@@ -18,7 +18,6 @@ import { useGetEventSettings, useGetQueueStatus, useSaveEventSettings } from "./
 
 const SETTINGS = {
   functionId: "fn_1",
-  events: [{ type: "SendMail", payload: { to: "a@b.c" } }],
   triggerEvents: ["order.paid"],
 };
 
@@ -33,68 +32,17 @@ const setup = () => {
 describe("useSaveEventSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // A server that keeps what it was sent, so the refetch after a save returns the new state.
-    let stored = SETTINGS;
-    getEventSettings.mockImplementation(async () => stored);
-    saveEventSettings.mockImplementation(async (body: typeof SETTINGS) => {
-      stored = body;
-      return { isSuccess: true };
-    });
-  });
-
-  it("a trigger-events save sends the latest events too", async () => {
-    const { wrapper } = setup();
-    const settings = renderHook(() => useGetEventSettings("fn_1"), { wrapper });
-    await waitFor(() => expect(settings.result.current.data).toBeTruthy());
-    const save = renderHook(() => useSaveEventSettings("fn_1"), { wrapper });
-
-    await act(() => save.result.current.mutateAsync({ triggerEvents: ["a.b.c"] }));
-
-    expect(saveEventSettings).toHaveBeenCalledWith({
-      functionId: "fn_1",
-      events: SETTINGS.events,
-      triggerEvents: ["a.b.c"],
-    });
-  });
-
-  it("the second save builds on the first, not on the stale load", async () => {
-    const { wrapper } = setup();
-    const settings = renderHook(() => useGetEventSettings("fn_1"), { wrapper });
-    await waitFor(() => expect(settings.result.current.data).toBeTruthy());
-    const save = renderHook(() => useSaveEventSettings("fn_1"), { wrapper });
-
-    await act(() => save.result.current.mutateAsync({ events: [] }));
-    await act(() => save.result.current.mutateAsync({ triggerEvents: ["x.y.z"] }));
-
-    expect(saveEventSettings).toHaveBeenLastCalledWith({
-      functionId: "fn_1",
-      events: [],
-      triggerEvents: ["x.y.z"],
-    });
-  });
-
-  it("loads the settings first when none are cached", async () => {
-    const { wrapper } = setup();
-    const save = renderHook(() => useSaveEventSettings("fn_1"), { wrapper });
-
-    await act(() => save.result.current.mutateAsync({ events: [] }));
-
-    expect(getEventSettings).toHaveBeenCalledWith("fn_1");
-    expect(saveEventSettings).toHaveBeenCalledWith({
-      functionId: "fn_1",
-      events: [],
-      triggerEvents: ["order.paid"],
-    });
+    getEventSettings.mockResolvedValue(SETTINGS);
   });
 
   it("a failed save leaves the cached settings alone and rejects", async () => {
     const { wrapper, client } = setup();
     const settings = renderHook(() => useGetEventSettings("fn_1"), { wrapper });
     await waitFor(() => expect(settings.result.current.data).toBeTruthy());
-    saveEventSettings.mockRejectedValue({ errors: { invalid_request: "events[0].payload: bad" } });
+    saveEventSettings.mockRejectedValue({ errors: { invalid_request: "triggerEvents[0]: bad" } });
     const save = renderHook(() => useSaveEventSettings("fn_1"), { wrapper });
 
-    await expect(act(() => save.result.current.mutateAsync({ events: [] }))).rejects.toBeTruthy();
+    await expect(act(() => save.result.current.mutateAsync({ triggerEvents: [] }))).rejects.toBeTruthy();
 
     expect(client.getQueryData(["functions", "events", "settings", "fn_1"])).toEqual(SETTINGS);
   });

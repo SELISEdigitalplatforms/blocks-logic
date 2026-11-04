@@ -18,21 +18,17 @@ namespace Functions.DomainService.Services
 
         /// <summary>Runs of the function still waiting to start, HTTP and event runs apart. A function of another tenant is not found.</summary>
         Task<QueueStatusDto> GetQueueStatusAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
-
-        /// <summary>What happened to a run's events (its newest attempt that has any). A run of another tenant is not found.</summary>
-        Task<RunEventsDto> GetRunEventsAsync(string tenantId, string runId, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
-    /// Function events, the editor's side: the draft's trigger events, the queue status, and what happened to a run's
-    /// events. The Worker reads the same data through the repositories.
+    /// Function events, the editor's side: the draft's trigger events and the queue status. The Worker reads the same
+    /// data through the repositories.
     /// </summary>
     public class FunctionEventSettingsService : IFunctionEventSettingsService
     {
         private readonly IFunctionRepository _functionRepository;
         private readonly IFunctionRunRepository _runRepository;
         private readonly IFunctionEventSettingsRepository _settings;
-        private readonly IFunctionRunEventsRepository _runEvents;
         private readonly IFunctionAuditService _auditService;
         private readonly IValidator<SaveEventSettingsRequestDto> _validator;
 
@@ -40,14 +36,12 @@ namespace Functions.DomainService.Services
             IFunctionRepository functionRepository,
             IFunctionRunRepository runRepository,
             IFunctionEventSettingsRepository settings,
-            IFunctionRunEventsRepository runEvents,
             IFunctionAuditService auditService,
             IValidator<SaveEventSettingsRequestDto> validator)
         {
             _functionRepository = functionRepository;
             _runRepository = runRepository;
             _settings = settings;
-            _runEvents = runEvents;
             _auditService = auditService;
             _validator = validator;
         }
@@ -101,32 +95,6 @@ namespace Functions.DomainService.Services
                 OldestEventQueuedAt = counts.OldestEventQueuedAt is { } oldest
                     ? DateTime.SpecifyKind(oldest, DateTimeKind.Utc).ToString("O", System.Globalization.CultureInfo.InvariantCulture)
                     : null,
-            };
-        }
-
-        public async Task<RunEventsDto> GetRunEventsAsync(
-            string tenantId, string runId, CancellationToken cancellationToken = default)
-        {
-            var run = await _runRepository.GetByIdAsync(tenantId, runId, cancellationToken)
-                ?? throw new FunctionNotFoundException($"run '{runId}' was not found");
-
-            var document = await _runEvents.GetLatestAsync(tenantId, run.ItemId, cancellationToken);
-            return new RunEventsDto
-            {
-                Rejected = document?.Rejected,
-                Items =
-                [
-                    .. (document?.Events ?? []).Select(e => new RunEventDto
-                    {
-                        Id = e.Id,
-                        Type = e.Type,
-                        Name = e.Name,
-                        Status = e.Status.ToString(),
-                        Error = e.Error,
-                        Attempts = e.Attempts,
-                        SentAt = e.SentAt,
-                    }),
-                ],
             };
         }
 
