@@ -179,7 +179,53 @@ namespace XUnitTest.Controllers
 
             var result = await _controller.GetNotifications(new GetNotificationsRequest());
 
-            result.Should().BeSameAs(response);
+            result.Value.Should().BeSameAs(response);
+        }
+
+        [Theory]
+        [InlineData(0, 10)]   // H5
+        [InlineData(2, 10)]   // H6
+        [InlineData(0, 100)]  // H7
+        public async Task GetNotifications_ValidPaging_PassesTheRequestThroughUnchanged(int page, int pageSize)
+        {
+            var response = new GetNotificationsResponse();
+            var request = new GetNotificationsRequest { Page = page, PageSize = pageSize };
+            _inbox.Setup(s => s.GetNotificationsAsync(request)).ReturnsAsync(response);
+
+            var result = await _controller.GetNotifications(request);
+
+            result.Result.Should().BeNull("a valid page is the plain 200 body, as before");
+            result.Value.Should().BeSameAs(response);
+            request.Page.Should().Be(page);
+            request.PageSize.Should().Be(pageSize);
+        }
+
+        [Theory]
+        [InlineData(-1, 10, new[] { "Page" }, new[] { "Page must be 0 or greater." })]                                     // C1
+        [InlineData(0, 0, new[] { "PageSize" }, new[] { "PageSize must be between 1 and 100." })]                            // C2
+        [InlineData(0, 101, new[] { "PageSize" }, new[] { "PageSize must be between 1 and 100." })]                          // C2
+        [InlineData(int.MaxValue, 10, new[] { "Page" }, new[] { "Page is too large for this PageSize." })]                   // C3
+        [InlineData(-1, 0, new[] { "Page", "PageSize" }, new[] { "Page must be 0 or greater.", "PageSize must be between 1 and 100." })] // C4
+        public async Task GetNotifications_InvalidPaging_Is400WithTheErrors_BeforeAnyLookup(
+            int page, int pageSize, string[] keys, string[] messages)
+        {
+            var logger = new Mock<ILogger<NotifierController>>();
+            var controller = new NotifierController(_inbox.Object, _service.Object, _guard.Object, _permission.Object, logger.Object)
+            {
+                ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+            };
+
+            var result = await controller.GetNotifications(new GetNotificationsRequest { Page = page, PageSize = pageSize });
+
+            var badRequest = result.Result.Should().BeOfType<BadRequestObjectResult>().Subject;
+            badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+            var body = badRequest.Value.Should().BeOfType<BaseResponse>().Subject;
+            body.IsSuccess.Should().BeFalse();
+            body.Errors.Should().BeEquivalentTo(keys.Zip(messages).ToDictionary(p => p.First, p => p.Second));
+            // C1-C4: no user (ViewerAsync) or database lookup; C5: no Error log, the 400 is not an exception.
+            _inbox.VerifyNoOtherCalls();
+            logger.Verify(l => l.Log(LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Never);
         }
     }
 }

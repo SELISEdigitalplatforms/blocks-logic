@@ -124,11 +124,20 @@ namespace Api.Controllers
             return await _notificationService.MarkNotificationAsRead(request);
         }
 
-        /// <summary><c>GET</c> — the caller's notifications, filtered and paged by the query string.</summary>
+        /// <summary>
+        /// <c>GET</c> — the caller's notifications, filtered and paged by the query string. Paging outside
+        /// <see cref="NotificationPaging"/> is a 400 with one <c>Errors</c> entry per parameter, before any lookup.
+        /// </summary>
         [HttpGet]
         [ProtectedEndPoint("blocks-logic::notifier::read")]
-        public async Task<GetNotificationsResponse> GetNotifications([FromQuery] GetNotificationsRequest request)
+        public async Task<ActionResult<GetNotificationsResponse>> GetNotifications([FromQuery] GetNotificationsRequest request)
         {
+            var pagingErrors = NotificationPaging.Validate(request);
+            if (pagingErrors != null)
+            {
+                return BadRequest(new BaseResponse { IsSuccess = false, Errors = pagingErrors });
+            }
+
             return await _notificationService.GetNotificationsAsync(request);
         }
     }

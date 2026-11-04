@@ -1234,7 +1234,10 @@
             <summary><c>POST</c> — marks one notification read.</summary>
         </member>
         <member name="M:Api.Controllers.NotifierController.GetNotifications(DomainService.Notification.GetNotificationsRequest)">
-            <summary><c>GET</c> — the caller's notifications, filtered and paged by the query string.</summary>
+            <summary>
+            <c>GET</c> — the caller's notifications, filtered and paged by the query string. Paging outside
+            <see cref="T:DomainService.Notification.NotificationPaging"/> is a 400 with one <c>Errors</c> entry per parameter, before any lookup.
+            </summary>
         </member>
         <member name="T:Api.Controllers.NotifierDeviceAdminController">
             <summary>
