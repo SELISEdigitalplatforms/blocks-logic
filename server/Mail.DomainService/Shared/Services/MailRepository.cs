@@ -178,14 +178,9 @@ namespace Mail.DomainService.Services
 
             var chosen = templates[0];
             var chosenIsOwn = MailOrganization.Owns(organization, chosen.OrganizationId);
-            var tied = new List<string>();
-            foreach (var template in templates)
-            {
-                if (MailOrganization.Owns(organization, template.OrganizationId) == chosenIsOwn)
-                {
-                    tied.Add(template.ItemId);
-                }
-            }
+            var tied = templates
+                .FindAll(t => MailOrganization.Owns(organization, t.OrganizationId) == chosenIsOwn)
+                .ConvertAll(t => t.ItemId);
 
             return new EmailTemplateChoice(chosen, tied.Count > 1 ? tied : []);
         }
