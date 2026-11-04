@@ -238,15 +238,34 @@ namespace XUnitTest.Mail
             ExpectSent("T3", "C-def");
         }
 
-        [Fact]
-        public async Task H5_DefaultOrganization_UsesItsOrganizationDefaultConfiguration_StoredWithoutOrganizationId()
+        [Theory]
+        [InlineData("default")]
+        [InlineData("")]
+        [InlineData("  ")]
+        [InlineData(null)]
+        public async Task H5_C6_DefaultOrganization_UsesItsOrganizationDefaultConfiguration_StoredWithoutOrganizationId(string? tokenOrganization)
         {
             Templates().InsertOne(Template("T4", "default", "", name: "Invoice"));
             Configurations().InsertOne(Configuration("C-org-def", organizationId: null, isOrganizationDefault: true));
 
-            (await HttpSend("default", purpose: "Invoice")).IsSuccess.Should().BeTrue();
+            (await HttpSend(tokenOrganization, purpose: "Invoice")).IsSuccess.Should().BeTrue();
 
             ExpectSent("T4", "C-org-def");
+            _logger.Lines.Should().Contain(l => l.Message.Contains(" organizationId=default ") && l.Message.Contains("configurationSource=organization-default"));
+        }
+
+        [Fact]
+        public async Task H5_AProjectDefaultThatIsAnotherOrganizationsDefault_IsUsedAsTheProjectDefault()
+        {
+            // C-0 sorts first and is both the project default and acme's organization default; for globex it can
+            // only be the project default.
+            Templates().InsertOne(Template("T4", "default", "", name: "Invoice"));
+            Configurations().InsertOne(Configuration("C-0", "acme", isDefault: true, isOrganizationDefault: true));
+
+            (await HttpSend("globex", purpose: "Invoice")).IsSuccess.Should().BeTrue();
+
+            ExpectSent("T4", "C-0");
+            _logger.Lines.Should().Contain(l => l.Message.StartsWith("MAIL MAPPING") && l.Message.Contains("configurationSource=project-default"));
         }
 
         [Fact]
