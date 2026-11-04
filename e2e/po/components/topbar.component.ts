@@ -74,8 +74,9 @@ export class TopbarComponent {
     return this.page.getByRole("menuitem", { name });
   }
 
-  async expectMenuItemDisabled(name: string | RegExp): Promise<void> {
-    await expect(this.menuItem(name)).toHaveAttribute("aria-disabled", "true");
+  /** The open language menu's entries other than English; each entry carries its language code in `lang`. */
+  get otherLanguageMenuItems(): Locator {
+    return this.page.getByRole("menu").locator('[role="menuitem"][lang]:not([lang^="en"])');
   }
 
   // ---- Notifications ----

@@ -22,8 +22,21 @@ namespace Mail.DomainService.Services
         Task<string?> GetUserEmailAsync(string tenantId, string userId);
         Task<MailServerConfiguration> GetMailServerConfigurationByTenantId(string tenantId);
         Task<List<MailServerConfigurationSummary>> GetMailServerConfigurationSummariesAsync();
-        Task<EmailTemplate> GetEmailTemplateByPurpose(string purpose, string language, string organizationId);
-        Task<MailServerConfiguration> GetMailServerConfigurationByPurpose(string purpose, string language, string organizationId);
+
+        /// <summary>
+        /// One read: the template with this Name and Language in <paramref name="organizationId"/>, else in the Default
+        /// organization (missing or empty OrganizationId included). Ties go to the lowest ItemId.
+        /// </summary>
+        Task<EmailTemplateChoice> GetEmailTemplateForOrganizationAsync(string? purpose, string? language, string organizationId);
+
+        /// <summary>One read: the template with this ItemId, or null.</summary>
+        Task<EmailTemplate?> GetEmailTemplateByIdAsync(string templateId);
+
+        /// <summary>
+        /// One read: the first outbound configuration of the template's own, the organization's default, then the
+        /// project default. Inbound configurations are never chosen.
+        /// </summary>
+        Task<MailServerConfigurationChoice> GetMailServerConfigurationForSendAsync(string? templateConfigurationId, string organizationId);
         Task<bool> MailTemplateForPurposeExists(string purpose, string language);
         Task<bool> MailServerConfigurationExists(string purpose, string language);
         Task<(List<MailBoxEntity> Mails, long TotalCount)> GetMailBoxMails(GetMailBoxMails request); //deprecated
