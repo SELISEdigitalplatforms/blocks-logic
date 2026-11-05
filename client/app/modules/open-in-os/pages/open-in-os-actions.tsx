@@ -18,7 +18,7 @@ const CouldNotOpen = ({ canRetry }: { canRetry: boolean }) => {
       </p>
       {canRetry ? (
         // A reload mints a new one-time sign-in URL; the failed one is never reused.
-        <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+        <Button type="button" variant="outline" onClick={() => globalThis.location.reload()}>
           {t("OPEN_IN_OS.TRY_AGAIN")}
         </Button>
       ) : null}
@@ -33,9 +33,8 @@ const Redirect = ({ clientId, redirectUri, forwardedTo }: { clientId: string; re
   if (error) return <CouldNotOpen canRetry />;
   return (
     <Centered>
-      <p role="status" className="text-sm text-muted-foreground">
-        {t("OPEN_IN_OS.OPENING")}
-      </p>
+      {/* <output> carries the status role (polite live region) natively. */}
+      <output className="text-sm text-muted-foreground">{t("OPEN_IN_OS.OPENING")}</output>
     </Centered>
   );
 };

@@ -98,7 +98,7 @@ describe("Open in OS: Actions", () => {
   it("C6/C7: when IAM fails it shows the error and Try again reloads the tab for a new sign-in URL", () => {
     mocks.initiate.mockReturnValue({ isLoading: false, error: new Error("Initiate request failed — HTTP 400") });
     const reload = vi.fn();
-    vi.spyOn(window, "location", "get").mockReturnValue({ ...window.location, reload });
+    vi.spyOn(globalThis, "location", "get").mockReturnValue({ ...globalThis.location, reload });
     renderAt(PROJECT);
     expect(screen.getByRole("alert").textContent).toBe("Could not open Blocks OS.");
     expect(screen.queryByRole("status")).toBeNull();
