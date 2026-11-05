@@ -73,6 +73,17 @@ describe("useSaveEventSettings", () => {
     });
   });
 
+  it("a save reloads the function, whose deploy state may have changed", async () => {
+    saveEventSettings.mockResolvedValue({ isSuccess: true });
+    const { wrapper, client } = setup();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const save = renderHook(() => useSaveEventSettings("fn_1"), { wrapper });
+
+    await act(() => save.result.current.mutateAsync({ actionsEnabled: false }));
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["functions", "detail", "fn_1"] });
+  });
+
   it("settings saved before the switch existed count as on", async () => {
     saveEventSettings.mockResolvedValue({ isSuccess: true });
     const { wrapper } = setup();

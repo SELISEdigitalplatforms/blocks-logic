@@ -55,6 +55,20 @@ namespace Functions.DomainService.Repositories
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
+        public async Task<IReadOnlyList<FunctionEventSettingsEntity>> GetManyAsync(
+            string tenantId, IReadOnlyCollection<(string FunctionId, string? VersionId)> rows, CancellationToken cancellationToken = default)
+        {
+            var ids = rows
+                .Where(r => !string.IsNullOrWhiteSpace(r.FunctionId))
+                .Select(r => FunctionEventSettingsEntity.IdFor(r.FunctionId, string.IsNullOrEmpty(r.VersionId) ? null : r.VersionId))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (ids.Count == 0) return [];
+
+            return await Collection(tenantId).Find(Builders<FunctionEventSettingsEntity>.Filter.In(s => s.ItemId, ids))
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task<IReadOnlyList<FunctionEventSubscription>> FindSubscriptionsAsync(
             string tenantId, string eventName, FunctionEventSubscription? after, int limit, CancellationToken cancellationToken = default)
         {

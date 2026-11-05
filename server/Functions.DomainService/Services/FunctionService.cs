@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Functions.DomainService.Dtos.Requests;
+using Functions.DomainService.Events;
 using Functions.DomainService.Dtos.Responses;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
@@ -62,6 +63,8 @@ namespace Functions.DomainService.Services
     /// than a single combined hash, because those are exactly the two identities
     /// <see cref="FunctionBuildService"/> already needs for its own cache key (DECISIONS D3);
     /// keeping one derivation avoids a second hash field that could drift from it.
+    /// A function is also dirty when a setting the deploy copies into the version changed after
+    /// that deploy (<see cref="SettingsChanged"/>): it works only after the next deploy.
     /// </para>
     /// </summary>
     public class FunctionService : IFunctionService
@@ -79,6 +82,7 @@ namespace Functions.DomainService.Services
         private readonly IConfiguration _configuration;
         private readonly IFunctionSecretCatalog? _secretCatalog;
         private readonly FunctionOwnerNotifier? _notifier;
+        private readonly IFunctionEventSettingsRepository? _eventSettings;
 
         public FunctionService(
             IFunctionRepository repository,
@@ -93,8 +97,10 @@ namespace Functions.DomainService.Services
             ILogger<FunctionService> logger,
             IConfiguration configuration,
             IFunctionSecretCatalog? secretCatalog = null,
-            IBuiltInNotificationSender? builtInNotifications = null)
+            IBuiltInNotificationSender? builtInNotifications = null,
+            IFunctionEventSettingsRepository? eventSettings = null)
         {
+            _eventSettings = eventSettings;
             _notifier = builtInNotifications is null ? null : new FunctionOwnerNotifier(repository, builtInNotifications);
             _configuration = configuration;
             _secretCatalog = secretCatalog;
@@ -298,13 +304,21 @@ namespace Functions.DomainService.Services
             var unbound = await UnboundNamesAsync(
                 items.SelectMany(f => FunctionSecretRefs.NamesIn(f.Variables, f.OutputActions)).ToList(), cancellationToken);
 
+            var activeVersions = new Dictionary<string, FunctionVersionEntity?>(StringComparer.Ordinal);
+            foreach (var function in items)
+            {
+                activeVersions[function.ItemId] = await GetActiveVersionAsync(tenantId, function, cancellationToken);
+            }
+            var actionRows = await ActionTriggerRowsAsync(tenantId, items, cancellationToken);
+
             var summaries = new List<FunctionSummaryDto>(items.Count);
             foreach (var function in items)
             {
-                var activeVersion = await GetActiveVersionAsync(tenantId, function, cancellationToken);
+                var activeVersion = activeVersions[function.ItemId];
                 // The list projects Source away, so the working copy is compared by its stored
                 // hash rather than re-hashed — hashing the missing source marked every row dirty.
-                function.IsDirty = IsDirtyByStoredHash(function, activeVersion);
+                function.IsDirty = IsDirtyByStoredHash(function, activeVersion)
+                    || SettingsChanged(function, activeVersion, actionRows);
                 runs24h.TryGetValue(function.ItemId, out var recentRuns);
                 var summary = FunctionSummaryDto.From(function, activeVersion?.Number, recentRuns);
                 if (unbound is not null)
@@ -375,7 +389,8 @@ namespace Functions.DomainService.Services
             string tenantId, FunctionEntity function, CancellationToken cancellationToken)
         {
             var activeVersion = await GetActiveVersionAsync(tenantId, function, cancellationToken);
-            function.IsDirty = IsDirty(function, activeVersion);
+            var actionRows = await ActionTriggerRowsAsync(tenantId, [function], cancellationToken);
+            function.IsDirty = IsDirty(function, activeVersion) || SettingsChanged(function, activeVersion, actionRows);
 
             var dto = FunctionDetailDto.From(function);
             dto.ActiveVersionNumber = activeVersion?.Number;
@@ -450,6 +465,36 @@ namespace Functions.DomainService.Services
         {
             if (activeVersion?.Source is null) return true;
             return FunctionHashing.IsDirty(activeVersion.Source, function.SourceHash);
+        }
+
+        /// <summary>
+        /// True when a setting the deploy copies into the version (limits, retry, trigger, output actions, variables, the
+        /// action trigger) was changed after that deploy: it works only after the next deploy, so the function needs one.
+        /// False with no active version — the code check already says dirty then.
+        /// </summary>
+        internal static bool SettingsChanged(
+            FunctionEntity function, FunctionVersionEntity? activeVersion,
+            IReadOnlyDictionary<string, FunctionEventSettingsEntity> actionRows)
+        {
+            if (activeVersion is null) return false;
+            actionRows.TryGetValue(FunctionEventSettingsEntity.IdFor(function.ItemId, null), out var draft);
+            actionRows.TryGetValue(FunctionEventSettingsEntity.IdFor(function.ItemId, activeVersion.ItemId), out var deployed);
+            return FunctionDeployedSettings.Differ(function, activeVersion)
+                || FunctionDeployedSettings.ActionTriggerDiffers(draft, deployed);
+        }
+
+        /// <summary>The action-trigger rows (draft and active version) of the given functions, by row id, in one read.</summary>
+        private async Task<IReadOnlyDictionary<string, FunctionEventSettingsEntity>> ActionTriggerRowsAsync(
+            string tenantId, IReadOnlyCollection<FunctionEntity> functions, CancellationToken cancellationToken)
+        {
+            var deployed = functions.Where(f => !string.IsNullOrEmpty(f.ActiveVersionId)).ToList();
+            if (_eventSettings is null || deployed.Count == 0) return new Dictionary<string, FunctionEventSettingsEntity>();
+
+            var keys = deployed
+                .SelectMany(f => new (string FunctionId, string? VersionId)[] { (f.ItemId, null), (f.ItemId, f.ActiveVersionId) })
+                .ToList();
+            var rows = await _eventSettings.GetManyAsync(tenantId, keys, cancellationToken);
+            return rows.ToDictionary(r => r.ItemId, StringComparer.Ordinal);
         }
 
         /// <summary>

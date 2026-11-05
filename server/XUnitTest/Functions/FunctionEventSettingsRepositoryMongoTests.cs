@@ -76,6 +76,21 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public async Task GetMany_reads_the_draft_and_version_rows_asked_for_in_one_go()
+        {
+            await DeployAsync("fn-1", actionsEnabled: true);
+            await _repository.SaveDraftAsync(Tenant, "fn-1", [Action], actionsEnabled: false, "user-1");
+            await DeployAsync("fn-2", actionsEnabled: true);
+
+            var rows = await _repository.GetManyAsync(Tenant, [("fn-1", null), ("fn-1", "fn-1-v1"), ("fn-3", null)]);
+
+            rows.Select(r => r.ItemId).Should().BeEquivalentTo(
+                FunctionEventSettingsEntity.IdFor("fn-1", null), FunctionEventSettingsEntity.IdFor("fn-1", "fn-1-v1"));
+            rows.Single(r => r.VersionId is null).ActionsEnabled.Should().BeFalse();
+            (await _repository.GetManyAsync(Tenant, [])).Should().BeEmpty();
+        }
+
+        [Fact]
         public async Task Deploy_copies_the_Actions_switch_to_the_version()
         {
             await DeployAsync("fn-1", actionsEnabled: false);

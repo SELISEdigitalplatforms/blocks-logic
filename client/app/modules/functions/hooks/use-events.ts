@@ -46,6 +46,8 @@ export const useSaveEventSettings = (functionId: string) => {
     onSuccess: (body) => {
       queryClient.setQueryData<IEventSettings>(key, body);
       queryClient.invalidateQueries({ queryKey: key });
+      // The deployed version keeps its own copy, so the function may now need a deploy: reload its "changed" state.
+      queryClient.invalidateQueries({ queryKey: [FUNCTIONS_QUERY_KEY, "detail", functionId] });
     },
   });
 };
