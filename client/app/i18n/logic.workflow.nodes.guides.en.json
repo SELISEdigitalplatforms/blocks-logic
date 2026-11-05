@@ -27,7 +27,7 @@
   "NODE_GUIDE_ACTION_FUNCTION.INVOKES_A_DEPLOYED_FUNCTION": "Invokes a deployed Function synchronously and uses its returned value as this step's output.",
   "NODE_GUIDE_ACTION_FUNCTION.IN_CUSTOM_JSON_MODE": "In Custom JSON mode, an input that is not valid JSON after the values are filled in fails the step before the function is called.",
   "NODE_GUIDE_ACTION_FUNCTION.ONE_INVOCATION_PER_INPUT": "One invocation per input item — a run that does not succeed fails the whole step.",
-  "NODE_GUIDE_ACTION_FUNCTION.PICK_A_FUNCTION_ONLY": "Pick a Function. Only Live (deployed) functions are listed, and not always all of them. One whose workflow trigger is turned off is shown greyed out — turn that trigger on in the function's own Triggers settings before selecting it.",
+  "NODE_GUIDE_ACTION_FUNCTION.PICK_A_FUNCTION_ONLY": "Pick a Function. Only Live (deployed) functions with Workflow step turned on are listed, and not always all of them. If the one this step uses was turned off, it stays greyed out: turn Workflow step back on in the function's Trigger tab, or pick another function.",
   "NODE_GUIDE_ACTION_FUNCTION.TEST_THE_WORKFLOW_AND": "Test the workflow and confirm the function's returned value maps into later steps as expected.",
   "NODE_GUIDE_ACTION_FUNCTION.THE_FUNCTION_RUNS_WITH": "The function runs with the caller's identity when the trigger has one. Schedule and email triggers have no caller.",
   "NODE_GUIDE_ACTION_FUNCTION.THE_FUNCTION_S_RUN": "The function's run is recorded under the function itself, triggered by this workflow execution.",

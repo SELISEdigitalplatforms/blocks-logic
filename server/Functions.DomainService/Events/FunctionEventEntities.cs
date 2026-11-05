@@ -23,6 +23,19 @@ namespace Functions.DomainService.Events
         /// <summary>The action names that start this function. Read by the Action trigger.</summary>
         public List<string> TriggerEvents { get; set; } = [];
 
+        /// <summary>
+        /// The Actions switch of the function's Trigger tab. Null (rows written before the switch existed) means on.
+        /// Off keeps <see cref="TriggerEvents"/> but no action starts the function.
+        /// </summary>
+        public bool? ActionsEnabled { get; set; }
+
+        /// <summary>
+        /// The one action that starts this function: the first stored name, when the Actions switch is on. Older rows may
+        /// hold several names; only the first counts (one action per function, 2026-11-05).
+        /// </summary>
+        [BsonIgnore]
+        public string? ActiveTrigger => ActionsEnabled != false && TriggerEvents.Count > 0 ? TriggerEvents[0] : null;
+
         public DateTime CreatedDate { get; set; }
 
         public DateTime LastUpdatedDate { get; set; }

@@ -38,7 +38,7 @@
   "NODE_SCHEMA_ACTION_FUNCTION.INPUT_JSON": "Input JSON",
   "NODE_SCHEMA_ACTION_FUNCTION.PREVIOUS_STEP_S_OUTPUT": "Previous step's output",
   "NODE_SCHEMA_ACTION_FUNCTION.SELECT_A_DEPLOYED_FUNCTION": "Select a deployed function",
-  "NODE_SCHEMA_ACTION_FUNCTION.THE_DEPLOYED_FUNCTION_THIS": "The deployed function this step runs. Only Live functions are listed, and not always all of them. One whose workflow trigger is turned off is shown greyed out until that trigger is enabled in the function's settings.",
+  "NODE_SCHEMA_ACTION_FUNCTION.THE_DEPLOYED_FUNCTION_THIS": "The deployed function this step runs. Only Live functions with Workflow step turned on are listed, and not always all of them. If this step already uses one that was turned off, it stays here greyed out: pick another function, or turn Workflow step back on in that function's Trigger tab.",
   "NODE_SCHEMA_ACTION_FUNCTION.THE_PAYLOAD_HANDED_TO": "The payload handed to the function as its input. Placeholders in {{ }} are resolved when the step runs; values inside quotes are escaped automatically. Must be valid JSON after that, or the step fails.",
   "NODE_SCHEMA_ACTION_FUNCTION.WHAT_THE_FUNCTION_RECEIVES": "What the function receives as its input. \"Previous step's output\" forwards the incoming item as-is; \"Custom JSON\" lets you compose the payload, pulling values from earlier steps.",
   "NODE_SCHEMA_ACTION_FUNCTION.WORKFLOW_TRIGGER_OFF": "{{name}} — workflow trigger off",

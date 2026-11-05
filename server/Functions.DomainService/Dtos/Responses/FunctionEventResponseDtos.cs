@@ -5,6 +5,9 @@ namespace Functions.DomainService.Dtos.Responses
     {
         public string FunctionId { get; set; } = string.Empty;
         public List<string> TriggerEvents { get; set; } = [];
+
+        /// <summary>The Actions switch; true when it was never saved.</summary>
+        public bool ActionsEnabled { get; set; } = true;
     }
 
     /// <summary>

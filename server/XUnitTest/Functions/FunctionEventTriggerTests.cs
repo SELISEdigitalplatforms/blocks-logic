@@ -227,6 +227,22 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public void Authorization_by_event_is_refused_when_the_Actions_switch_is_off_and_counts_only_the_first_name()
+        {
+            var auth = new FunctionAuthorizationService();
+
+            var off = new FunctionEventSettingsEntity { TriggerEvents = ["order.created"], ActionsEnabled = false };
+            auth.AuthorizeForEvent(off, "order.created").Allowed.Should().BeFalse();
+
+            var on = new FunctionEventSettingsEntity { TriggerEvents = ["order.created"], ActionsEnabled = true };
+            auth.AuthorizeForEvent(on, "order.created").Allowed.Should().BeTrue();
+
+            var older = new FunctionEventSettingsEntity { TriggerEvents = ["order.created", "order.paid"] };
+            auth.AuthorizeForEvent(older, "order.created").Allowed.Should().BeTrue();
+            auth.AuthorizeForEvent(older, "order.paid").Allowed.Should().BeFalse("one action per function: only the first counts");
+        }
+
+        [Fact]
         public async Task A_function_that_is_not_deployed_or_not_live_cannot_be_started()
         {
             _function.Status = FunctionStatus.Paused;

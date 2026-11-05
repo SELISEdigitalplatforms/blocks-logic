@@ -62,7 +62,8 @@ namespace Functions.DomainService.Repositories
 
             await EnsureIndexesAsync(tenantId, cancellationToken);
             var f = Builders<FunctionEventSettingsEntity>.Filter;
-            var filter = f.AnyEq(s => s.TriggerEvents, eventName) & f.Ne(s => s.VersionId, null);
+            // Ne(false) also matches rows written before the Actions switch existed (no field = on).
+            var filter = f.AnyEq(s => s.TriggerEvents, eventName) & f.Ne(s => s.VersionId, null) & f.Ne(s => s.ActionsEnabled, false);
             if (after is not null)
             {
                 // Keyset paging on (FunctionId, VersionId), the sort order: memory stays flat however many subscribe.
@@ -81,7 +82,8 @@ namespace Functions.DomainService.Repositories
         }
 
         public async Task SaveDraftAsync(
-            string tenantId, string functionId, List<string> triggerEvents, string? actorId, CancellationToken cancellationToken = default)
+            string tenantId, string functionId, List<string> triggerEvents, bool actionsEnabled, string? actorId,
+            CancellationToken cancellationToken = default)
         {
             await EnsureIndexesAsync(tenantId, cancellationToken);
 
@@ -91,6 +93,7 @@ namespace Functions.DomainService.Repositories
                 .Set(s => s.FunctionId, functionId)
                 .Set(s => s.VersionId, null)
                 .Set(s => s.TriggerEvents, triggerEvents)
+                .Set(s => s.ActionsEnabled, actionsEnabled)
                 .Set(s => s.LastUpdatedDate, now)
                 .Set(s => s.LastUpdatedBy, actorId)
                 .SetOnInsert(s => s.CreatedDate, now);
@@ -111,6 +114,7 @@ namespace Functions.DomainService.Repositories
                 .Set(s => s.FunctionId, functionId)
                 .Set(s => s.VersionId, versionId)
                 .Set(s => s.TriggerEvents, draft.TriggerEvents)
+                .Set(s => s.ActionsEnabled, draft.ActionsEnabled)
                 .Set(s => s.LastUpdatedDate, now)
                 .Set(s => s.LastUpdatedBy, draft.LastUpdatedBy)
                 .SetOnInsert(s => s.CreatedDate, now);

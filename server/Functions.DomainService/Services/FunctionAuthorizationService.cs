@@ -27,7 +27,7 @@ namespace Functions.DomainService.Services
 
         /// <summary>
         /// Authorizes an invocation from a function event. The deployed version's own subscription IS the authorization:
-        /// allowed exactly when its settings list <paramref name="eventName"/> in <c>TriggerEvents</c>. The run's identity is
+        /// allowed exactly when its Actions switch is on and its first <c>TriggerEvents</c> name is <paramref name="eventName"/>. The run's identity is
         /// the event message's context, so nothing else is checked — in particular the function need not be Public.
         /// </summary>
         AuthorizationResult AuthorizeForEvent(FunctionEventSettingsEntity? versionSettings, string eventName);
@@ -100,8 +100,14 @@ namespace Functions.DomainService.Services
 
         public AuthorizationResult AuthorizeForEvent(FunctionEventSettingsEntity? versionSettings, string eventName)
         {
+            if (versionSettings?.ActionsEnabled == false)
+            {
+                return AuthorizationResult.Deny("this function does not run on actions");
+            }
+
+            // Only the first stored name counts (one action per function); older rows may hold several.
             return !string.IsNullOrEmpty(eventName)
-                && versionSettings?.TriggerEvents.Contains(eventName, StringComparer.Ordinal) == true
+                && string.Equals(versionSettings?.ActiveTrigger, eventName, StringComparison.Ordinal)
                 ? AuthorizationResult.Allow()
                 : AuthorizationResult.Deny("this function does not subscribe to this event");
         }
