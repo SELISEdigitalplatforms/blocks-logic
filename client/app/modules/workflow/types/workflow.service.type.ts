@@ -136,9 +136,12 @@ export interface IGetWorkflowExecutionById {
   items: ExecutedItem[];
   executionMode: WorkflowExecutionMode;
   id: string;
+  workflowId?: string;
+  startedAt?: string;
   status?: number;
   finishedAt?: string | null;
   errorMessage?: string | null;
+  attemptNumber?: number;
 }
 
 export type ExecutionLogLevel = "Information" | "Warning" | "Error";
