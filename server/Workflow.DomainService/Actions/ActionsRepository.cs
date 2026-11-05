@@ -3,8 +3,8 @@ using Blocks.Genesis;
 namespace Workflow.DomainService.Actions
 {
     /// <summary>
-    /// The context tenant's <c>actions</c> list (<see cref="ActionConstants.ActionsKey"/>). Read only: blocks-os owns it and
-    /// is its only writer. Read directly every time (no cache), so a switch turned off in OS takes effect on the next
+    /// The context tenant's switched-on actions: one KeyValueStores entry per action (<see cref="ActionConstants.ActionKey"/>,
+    /// key <c>actions:&lt;name&gt;</c>). Read only: blocks-os owns them and is their only writer. Read directly every time (no cache), so a switch turned off in OS takes effect on the next
     /// message. Data access only.
     /// </summary>
     public interface IActionsRepository
@@ -29,16 +29,17 @@ namespace Workflow.DomainService.Actions
         // impersonated: true = the context tenant's database (the project), also for an impersonated root user.
         public async Task<IReadOnlyList<ActionDefinition>> GetAllAsync(CancellationToken cancellationToken = default)
         {
-            var actions = await _keyValueStore.GetAsync<List<ActionDefinition>>(
-                ActionConstants.ActionsKey, impersonated: true, cancellationToken);
-            return actions?.Where(a => a is not null && !string.IsNullOrEmpty(a.Name)).ToList() ?? [];
+            var actions = await _keyValueStore.GetByPrefixAsync<ActionDefinition>(
+                ActionConstants.ActionKeyPrefix, impersonated: true, cancellationToken);
+            return actions.Where(a => a is not null && !string.IsNullOrEmpty(a.Name)).ToList();
         }
 
         public async Task<ActionDefinition?> FindAsync(string name, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
-            var actions = await GetAllAsync(cancellationToken);
-            return actions.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.Ordinal));
+            var action = await _keyValueStore.GetAsync<ActionDefinition>(
+                ActionConstants.ActionKey(name), impersonated: true, cancellationToken);
+            return action is not null && string.Equals(action.Name, name, StringComparison.Ordinal) ? action : null;
         }
     }
 }
