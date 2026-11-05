@@ -89,6 +89,25 @@ describe("Action trigger node", () => {
     expect(text).toContain('"data"');
   });
 
+  it("H1/H2: no Notes callout; the OS link sits right after the Action select, before the status line", () => {
+    const ids = NodeSchemaTriggerBlocksEventV2.schema.parameters.map((p) => p.id);
+    expect(ids).toEqual(["event", "configure-actions-link", "eventStatus", "output"]);
+    expect(NodeSchemaTriggerBlocksEventV2.schema.parameters.some((p) => p.key === "executionNotes")).toBe(false);
+  });
+
+  it("H3/H5: the link opens the project's open-in-os/actions page and says it opens in a new tab", () => {
+    const link = param("configure-actions-link");
+    expect(link.type).toBe("link");
+    expect(link.linkPath).toBe("open-in-os/actions");
+    expect(link.label).toBe("Configure actions in Blocks OS");
+    expect(link.ariaLabel).toBe("Configure actions in Blocks OS (opens in a new tab)");
+  });
+
+  it("C1: the link is display only, so only eventName is saved", () => {
+    expect(param("configure-actions-link").transient).toBe(true);
+    expect(NodeSchemaTriggerBlocksEventV2.defaults.parameters).toEqual({ eventName: "" });
+  });
+
   it("the select and the status line share one request", async () => {
     const spy = vi.spyOn(actionsService, "getForWorkflow").mockResolvedValue(ACTIONS);
     const options = param("event").options as (d: Record<string, unknown>) => Promise<unknown>;
