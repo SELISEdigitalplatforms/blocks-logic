@@ -183,10 +183,9 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         displayValue: () => "POST",
       },
       {
-        // Only legacy webhooks show Body Mode: one saved before this setting existed has no `bodyMode` and runs
-        // (and shows) as JSON (legacy). Its author can switch it to Any content once; the field then hides, so
-        // the switch is one-way. New nodes start on Any content and never show it (SPEC10 D7, N8). `hidden`
-        // rather than `dependsOn`, because a field depending on its own key would be reset when it changes.
+        // Every webhook shows Body Mode and can switch either way (SPEC10 D7, N8 as amended). New nodes start on
+        // Any content; a node saved before this setting existed has no `bodyMode` and runs (and shows) as
+        // JSON (legacy).
         id: "body-mode",
         type: "select-with-description",
         get label() {
@@ -200,7 +199,6 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         },
         key: "bodyMode",
         defaultValue: BODY_MODE_JSON,
-        hidden: (data: Record<string, unknown>) => data.bodyMode === BODY_MODE_ANY_CONTENT,
         options: [
           {
             value: BODY_MODE_JSON,

@@ -47,11 +47,11 @@ describe("webhook trigger v1 body settings", () => {
     ]);
   });
 
-  it("shows Body Mode only on legacy nodes, so switching to Any content is one-way", () => {
+  it("shows Body Mode on every node, so new and legacy webhooks can switch either way", () => {
     expect(isHidden("bodyMode", {})).toBe(false);
     expect(isHidden("bodyMode", { bodyMode: BODY_MODE_JSON })).toBe(false);
-    expect(isHidden("bodyMode", { bodyMode: BODY_MODE_ANY_CONTENT })).toBe(true);
-    // `hidden`, not a dependency on its own key, which the form builder would reset on every change.
+    expect(isHidden("bodyMode", { bodyMode: BODY_MODE_ANY_CONTENT })).toBe(false);
+    // A dependency on its own key would be reset by the form builder on every change.
     expect(byKey("bodyMode").dependsOn).toBeUndefined();
   });
 
