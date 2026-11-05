@@ -624,18 +624,7 @@ namespace Workflow.DomainService.Services
         {
             var executions = await _executionRepository.GetByWorkflowIdAsync(dto.WorkflowId, tenantId);
 
-            var executionItems = executions.Select(e => new WorkflowExecutionItemDto
-            {
-                Id = e.Id!,
-                WorkflowId = e.WorkflowId,
-                WorkflowName = e.WorkflowName,
-                Status = e.Status,
-                StartedAt = e.StartedAt,
-                FinishedAt = e.FinishedAt,
-                ErrorMessage = e.ErrorMessage,
-                AttemptNumber = e.AttemptNumber,
-                ExecutionMode = e.ExecutionMode,
-            }).ToList();
+            var executionItems = executions.Select(ToItem).ToList();
 
             return new WorkflowExecutionsGetResponseDto
             {

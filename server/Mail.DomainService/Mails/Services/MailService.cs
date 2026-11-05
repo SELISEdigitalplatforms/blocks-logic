@@ -7,6 +7,7 @@ using Mail.DomainService.Utilities;
 using Mail.DomainService.Shared.Enums;
 using Microsoft.Extensions.Logging;
 using Blocks.Genesis.Entities.Logic;
+using EmailTemplate = Blocks.Genesis.Entities.Os.EmailTemplate;
 
 namespace Mail.DomainService.Mails
 {
@@ -47,17 +48,26 @@ namespace Mail.DomainService.Mails
                 };
             }
 
-            var mailToBeSent = await MapAsync(request!, false, request?.IsTestMail ?? false);
+            var isTestMail = request?.IsTestMail ?? false;
+            var mailToBeSent = isTestMail && !string.IsNullOrWhiteSpace(request!.TemplateId)
+                ? await MapTestTemplateAsync(request)
+                : await MapAsync(request!, CallerOrganization(), false, isTestMail);
             return await ProcessMailSent(mailToBeSent);
         }
 
-        public async Task<BaseMutationResponse> ProcessMailAsync(SendMail request)
+        public Task<BaseMutationResponse> ProcessMailAsync(SendMail request) => ProcessSendMailAsync(request, CallerOrganization());
+
+        // Queue producers (IAM invites, password resets, workflows, functions, ...) can set any context, so a queued
+        // mail never picks an organization's template: it always uses the Default organization's.
+        public Task<BaseMutationResponse> ProcessQueuedMailAsync(SendMail request) => ProcessSendMailAsync(request, MailOrganization.Default);
+
+        private async Task<BaseMutationResponse> ProcessSendMailAsync(SendMail request, string organizationId)
         {
             LogRequested("Send", request);
 
             if (!request.SendPhoneNumberAsEmail)
             {
-                return await ProcessMailSent(await MapAsync(request, onlyUser: true));
+                return await ProcessMailSent(await MapAsync(request, organizationId, onlyUser: true));
             }
 
             // Phone-as-email still reaches users only: each address must carry a user's phone number.
@@ -72,8 +82,14 @@ namespace Mail.DomainService.Mails
             request.Cc = cc;
             request.Bcc = bcc;
 
-            return await ProcessMailSent(await MapAsync(request, onlyUser: false));
+            return await ProcessMailSent(await MapAsync(request, organizationId, onlyUser: false));
         }
+
+        /// <summary>
+        /// The organization in the caller's token, or the Default organization when it has none. No request field
+        /// sets the organization.
+        /// </summary>
+        private static string CallerOrganization() => MailOrganization.Normalize(BlocksContext.GetContext()?.OrganizationId);
 
         private async Task<bool> IsOnlyTheCallerAsync(BaseMailRequest request)
         {
@@ -172,18 +188,15 @@ namespace Mail.DomainService.Mails
             };
         }
 
-        public async Task<MailToBeSent> MapAsync(BaseMailRequest request, bool onlyUser = true, bool isTestMail = false)
+        public async Task<MailToBeSent> MapAsync(BaseMailRequest request, string organizationId, bool onlyUser = true, bool isTestMail = false)
         {
-            var bc = BlocksContext.GetContext();
-
-            if (bc is null)
+            if (BlocksContext.GetContext() is null)
             {
                 _logger.LogError(
                     "MAIL MAPPING: no BlocksContext on this thread, so the tenant is unknown and the template lookup cannot run. purpose={Purpose}",
                     request.Purpose);
             }
 
-            var organizationId = bc?.OrganizationId;
             var toUsers = request.To;
             var ccUsers = request.Cc;
             var bccUsers = request.Bcc;
@@ -201,38 +214,91 @@ namespace Mail.DomainService.Mails
                 WarnIfRecipientsDropped("Bcc", request.Bcc, bccUsers);
             }
 
-            var emailTemplate = await _mailRepository.GetEmailTemplateByPurpose(request.Purpose, request.Language, organizationId);
-            var serverConfiguration = await _mailRepository.GetMailServerConfigurationByPurpose(request.Purpose, request.Language, organizationId);
-
-            if (emailTemplate is null)
+            var templateChoice = await _mailRepository.GetEmailTemplateForOrganizationAsync(request.Purpose, request.Language, organizationId);
+            if (templateChoice.TiedTemplateIds.Count > 1)
             {
-                _logger.LogError(
-                    "MAIL MAPPING: no EmailTemplate for purpose={Purpose} language={Language} organizationId={OrganizationId}. Check the EmailTemplates collection.",
-                    request.Purpose, request.Language, organizationId);
+                // Nothing makes Name + Language unique within an organization; the pick is deterministic. Ids and
+                // organizations only: the purpose and language are on the MAIL REQUESTED line.
+                _logger.LogWarning(
+                    "MAIL MAPPING: {Count} templates share the purpose and language in organization {TemplateOrganizationId}; using the lowest ItemId {TemplateId}. templateIds={TemplateIds} organizationId={OrganizationId}",
+                    templateChoice.TiedTemplateIds.Count,
+                    MailLog.SingleLine(MailOrganization.Normalize(templateChoice.Template!.OrganizationId)),
+                    MailLog.SingleLine(templateChoice.Template.ItemId),
+                    MailLog.SingleLine(string.Join(",", templateChoice.TiedTemplateIds)),
+                    MailLog.SingleLine(organizationId));
             }
 
-            if (serverConfiguration is null)
+            return await CompleteMappingAsync(request, new Recipients(toUsers, ccUsers, bccUsers), templateChoice.Template, organizationId,
+                request.Purpose, request.Language, isTestMail);
+        }
+
+        /// <summary>
+        /// A test mail of one exact template: its own organization chooses the configuration, and its Purpose and
+        /// Language are used. An unknown id keeps the request's Purpose (or the id itself) so the validator returns
+        /// the existing "does not exist" message.
+        /// </summary>
+        private async Task<MailToBeSent> MapTestTemplateAsync(SendMailToAny request)
+        {
+            var template = await _mailRepository.GetEmailTemplateByIdAsync(request.TemplateId!);
+            var organizationId = MailOrganization.Normalize(template?.OrganizationId);
+            var purpose = template?.Name ?? (string.IsNullOrWhiteSpace(request.Purpose) ? request.TemplateId! : request.Purpose!);
+            var language = template?.Language ?? request.Language;
+
+            return await CompleteMappingAsync(request, new Recipients(request.To, request.Cc, request.Bcc), template, organizationId, purpose, language, isTestMail: true);
+        }
+
+        /// <summary>The resolved To, Cc and Bcc of one mail.</summary>
+        private sealed record Recipients(IEnumerable<string> To, IEnumerable<string> Cc, IEnumerable<string> Bcc);
+
+        private async Task<MailToBeSent> CompleteMappingAsync(BaseMailRequest request, Recipients recipients, EmailTemplate? template,
+            string organizationId, string? purpose, string? language, bool isTestMail)
+        {
+            var configuration = template is null
+                ? MailServerConfigurationChoice.None
+                : await _mailRepository.GetMailServerConfigurationForSendAsync(template.MailConfigurationId, organizationId);
+
+            // H11 fields and ids only, each on one line: no request value (purpose, language and recipients are on the
+            // MAIL REQUESTED and MAIL REJECTED lines, which carry the correlation id and this mailId).
+            var mailId = Guid.NewGuid().ToString();
+            var organizationField = MailLog.SingleLine(organizationId);
+            var templateOrganizationField = template is null ? MailLog.None : MailLog.SingleLine(MailOrganization.Normalize(template.OrganizationId));
+
+            if (template is null)
             {
                 _logger.LogError(
-                    "MAIL MAPPING: no MailServerConfiguration for purpose={Purpose} language={Language} organizationId={OrganizationId}. Check the template's MailConfigurationId and the MailServerConfiguration collection.",
-                    request.Purpose, request.Language, organizationId);
+                    "MAIL MAPPING: no EmailTemplate. mailId={MailId} organizationId={OrganizationId} templateOrganizationId={TemplateOrganizationId} configurationSource={ConfigurationSource}. Check the EmailTemplates collection.",
+                    mailId, organizationField, templateOrganizationField, configuration.SourceName);
+            }
+            else if (configuration.Configuration is null)
+            {
+                _logger.LogError(
+                    "MAIL MAPPING: no MailServerConfiguration. mailId={MailId} organizationId={OrganizationId} templateId={TemplateId} templateOrganizationId={TemplateOrganizationId} configurationSource={ConfigurationSource}. Check the template's MailConfigurationId, the organization default and the project default in the MailServerConfiguration collection; inbound configurations are never used.",
+                    mailId, organizationField, MailLog.SingleLine(template.ItemId), templateOrganizationField, configuration.SourceName);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "MAIL MAPPING: mailId={MailId} organizationId={OrganizationId} templateId={TemplateId} templateOrganizationId={TemplateOrganizationId} configurationId={ConfigurationId} configurationSource={ConfigurationSource}",
+                    mailId, organizationField, MailLog.SingleLine(template.ItemId), templateOrganizationField,
+                    MailLog.SingleLine(configuration.Configuration.ItemId), configuration.SourceName);
             }
 
             return new MailToBeSent
             {
-                ItemId = Guid.NewGuid().ToString(),
-                To = toUsers,
-                Cc = ccUsers,
-                Bcc = bccUsers,
+                ItemId = mailId,
+                To = recipients.To,
+                Cc = recipients.Cc,
+                Bcc = recipients.Bcc,
 
                 BodyDataContext = request.BodyDataContext,
-                Name = request.Purpose,
-                Language = request.Language,
+                // A missing purpose or language stays null, as before, for EmailValidator to report.
+                Name = purpose!,
+                Language = language!,
                 Attachments = request.Attachments ?? Enumerable.Empty<string>(),// new string[] { },
                 ReplyTo = request.ReplyTo,
                 SubjectDataContext = request.SubjectDataContext,
-                EmailTemplate = emailTemplate,
-                MailServerConfiguration = serverConfiguration,
+                EmailTemplate = template!,
+                MailServerConfiguration = configuration.Configuration!,
                 IsTestMail = isTestMail,
                 CorrelationId = request.CorrelationId
             };

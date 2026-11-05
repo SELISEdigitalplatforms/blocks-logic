@@ -5,78 +5,95 @@ import { TriggerEventCard } from "./trigger-event-card";
 
 const getEventSettings = vi.fn();
 const saveEventSettings = vi.fn();
+const getForFunction = vi.fn();
 vi.mock("../../services/function.service", () => ({
   functionService: {
     getEventSettings: (...args: unknown[]) => getEventSettings(...args),
     saveEventSettings: (...args: unknown[]) => saveEventSettings(...args),
   },
 }));
+vi.mock("@/modules/actions/services/actions.service", () => ({
+  actionsService: {
+    getForFunction: (...args: unknown[]) => getForFunction(...args),
+  },
+}));
 
-const CREATED = "order.created";
-const SETTINGS = {
-  functionId: "fn_1",
-  events: [{ type: "SendMail", payload: { to: "a" } }],
-  triggerEvents: [CREATED],
-};
-const EVENT_INPUT = "Event name";
+const CREATED = "iam.user.created";
+const UPDATED = "iam.user.updated";
+const ACTIONS = [
+  { name: CREATED, label: "User created", service: "iam", payload: { userId: "string" } },
+  { name: UPDATED, label: "User updated", service: "iam", payload: { userId: "string", by: "string" } },
+  { name: "localization.files.generated", label: "Files generated", service: "localization", payload: {} },
+];
+const SEARCH = "Search actions";
 
 describe("TriggerEventCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getEventSettings.mockResolvedValue(SETTINGS);
+    getEventSettings.mockResolvedValue({ functionId: "fn_1", triggerEvents: [CREATED] });
     saveEventSettings.mockResolvedValue({ isSuccess: true });
+    getForFunction.mockResolvedValue(ACTIONS);
   });
 
-  it("shows the names and the queue note", async () => {
+  it("shows the picked actions by label and name, and the queue note", async () => {
     renderWithProviders(<TriggerEventCard functionId="fn_1" />);
 
-    expect(await screen.findByText(CREATED)).toBeTruthy();
-    expect(screen.getByText(/1 event per 5 HTTP/)).toBeTruthy();
-    expect(screen.getByText(/5 minutes/)).toBeTruthy();
+    expect(await screen.findByText("User created (iam.user.created)")).toBeTruthy();
+    expect(screen.getByText(/1 action per 5 HTTP/)).toBeTruthy();
   });
 
-  it("adds a name and saves it with the latest events", async () => {
+  it("lists only the actions on for functions that are not picked yet, with their data fields", async () => {
     renderWithProviders(<TriggerEventCard functionId="fn_1" />);
-    await screen.findByText(CREATED);
 
-    fireEvent.change(screen.getByLabelText(EVENT_INPUT), { target: { value: "order.paid" } });
-    fireEvent.click(screen.getByRole("button", { name: /Add/ }));
+    const list = await screen.findByRole("list", { name: "Available actions" });
+    expect(list.textContent).toContain("User updated (iam.user.updated)");
+    expect(list.textContent).toContain("userId (string), by (string)");
+    expect(screen.queryByRole("button", { name: `Add ${CREATED}` })).toBeNull();
+  });
+
+  it("the search narrows the list by label, name or service", async () => {
+    renderWithProviders(<TriggerEventCard functionId="fn_1" />);
+    await screen.findByRole("list", { name: "Available actions" });
+
+    fireEvent.change(screen.getByLabelText(SEARCH), { target: { value: "locali" } });
+
+    expect(screen.getByRole("button", { name: "Add localization.files.generated" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: `Add ${UPDATED}` })).toBeNull();
+  });
+
+  it("adds a picked action and saves the list", async () => {
+    renderWithProviders(<TriggerEventCard functionId="fn_1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: `Add ${UPDATED}` }));
 
     await waitFor(() =>
-      expect(saveEventSettings).toHaveBeenCalledWith({
-        functionId: "fn_1",
-        events: SETTINGS.events,
-        triggerEvents: [CREATED, "order.paid"],
-      }),
+      expect(saveEventSettings).toHaveBeenCalledWith({ functionId: "fn_1", triggerEvents: [CREATED, UPDATED] }),
     );
   });
 
-  it("refuses an invalid name and a duplicate without saving", async () => {
+  it("removes an action", async () => {
     renderWithProviders(<TriggerEventCard functionId="fn_1" />);
-    await screen.findByText(CREATED);
+    await screen.findByText("User created (iam.user.created)");
 
-    fireEvent.change(screen.getByLabelText(EVENT_INPUT), { target: { value: "Bad Name" } });
-    fireEvent.click(screen.getByRole("button", { name: /Add/ }));
-    expect((await screen.findByRole("alert")).textContent).toContain("Not a valid event name");
+    fireEvent.click(screen.getByRole("button", { name: `Remove ${CREATED}` }));
 
-    fireEvent.change(screen.getByLabelText(EVENT_INPUT), { target: { value: CREATED } });
-    fireEvent.click(screen.getByRole("button", { name: /Add/ }));
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("already"));
-    expect(saveEventSettings).not.toHaveBeenCalled();
+    await waitFor(() => expect(saveEventSettings).toHaveBeenCalledWith({ functionId: "fn_1", triggerEvents: [] }));
   });
 
-  it("removes a name", async () => {
+  it("a saved action that is no longer on for functions stays and says so", async () => {
+    getEventSettings.mockResolvedValue({ functionId: "fn_1", triggerEvents: ["iam.user.deactivated"] });
+
     renderWithProviders(<TriggerEventCard functionId="fn_1" />);
-    await screen.findByText(CREATED);
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove order.created" }));
+    expect(await screen.findByText("iam.user.deactivated (not on for functions)")).toBeTruthy();
+  });
 
-    await waitFor(() =>
-      expect(saveEventSettings).toHaveBeenCalledWith({
-        functionId: "fn_1",
-        events: SETTINGS.events,
-        triggerEvents: [],
-      }),
-    );
+  it("with no action on for functions it says where an admin turns them on", async () => {
+    getForFunction.mockResolvedValue([]);
+
+    renderWithProviders(<TriggerEventCard functionId="fn_1" />);
+
+    expect(await screen.findByText(/No actions are on for functions/)).toBeTruthy();
+    expect(screen.queryByLabelText(SEARCH)).toBeNull();
   });
 });

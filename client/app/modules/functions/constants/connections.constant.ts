@@ -13,6 +13,8 @@ export interface IConnectionVariable {
   key: string;
   /** A credential: bind it to a configuration variable rather than typing it in plain. */
   secret: boolean;
+  /** The snippet works without it, so a missing binding must not fail the run. */
+  optional?: boolean;
   hint: string;
   /** Filled in from the project when the connection is added, instead of left empty. */
   prefill?: ConnectionPrefill;
@@ -64,6 +66,7 @@ export const CONNECTION_PRESETS: IConnectionPreset[] = [
       {
         key: "BLOCKS_CLIENT_ID",
         secret: true,
+        optional: true,
         get hint() {
           return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.OPTIONAL_AN_IAM_CLIENT");
         },
@@ -71,6 +74,7 @@ export const CONNECTION_PRESETS: IConnectionPreset[] = [
       {
         key: "BLOCKS_CLIENT_SECRET",
         secret: true,
+        optional: true,
         get hint() {
           return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.OPTIONAL_THAT_CLIENT_S");
         },

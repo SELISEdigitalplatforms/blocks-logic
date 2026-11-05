@@ -13,7 +13,7 @@ using MongoDB.Bson;
 using Newtonsoft.Json;
 using Scheduler.DomainService.Dtos.Requests;
 using Scheduler.DomainService.Services;
-using Workflow.DomainService.BlocksEvents;
+using Workflow.DomainService.Actions;
 using Blocks.Genesis.Entities.Logic;
 
 namespace Workflow.DomainService.Services
@@ -30,15 +30,15 @@ namespace Workflow.DomainService.Services
         private readonly IWorkflowVersionRepository _workflowVersionRepository;
         private readonly IScheduleService _scheduleService;
         private readonly ILogger<WorkflowService> _logger;
-        private readonly IBlocksEventCatalogService _blocksEventCatalog;
+        private readonly IActionsRepository _actions;
         private readonly IValidator<WorkflowUpdateSettingsRequestDto> _updateSettingsValidator;
 
 
 
-        public WorkflowService(IWorkflowRepository workflowRepository, IWorkflowVersionRepository workflowVersionRepository, IScheduleService scheduleService, ILogger<WorkflowService> logger, IBlocksEventCatalogService blocksEventCatalog, IValidator<WorkflowUpdateSettingsRequestDto> updateSettingsValidator)
+        public WorkflowService(IWorkflowRepository workflowRepository, IWorkflowVersionRepository workflowVersionRepository, IScheduleService scheduleService, ILogger<WorkflowService> logger, IActionsRepository actions, IValidator<WorkflowUpdateSettingsRequestDto> updateSettingsValidator)
         {
             _updateSettingsValidator = updateSettingsValidator;
-            _blocksEventCatalog = blocksEventCatalog;
+            _actions = actions;
             _workflowRepository = workflowRepository;
             _workflowVersionRepository = workflowVersionRepository;
             _scheduleService = scheduleService;
@@ -220,33 +220,32 @@ namespace Workflow.DomainService.Services
         /// never aliases (or mutates) the live workflow nodes.
         /// </summary>
         /// <summary>
-        /// A Blocks Event trigger may only be published for an event enabled for workflows in the tenant's
-        /// catalog; otherwise the published workflow would silently never run. Null when every one is fine.
+        /// An Action trigger may only be published for an action in the tenant's <c>actions</c> list; otherwise the
+        /// published workflow could never run. A listed action whose Workflow switch is off is allowed: the switch is
+        /// the admin's to turn on, and the workflow runs from then on. Null when every one is fine.
         /// </summary>
-        private async Task<BaseMutationResponse?> ValidateBlocksEventTriggersAsync(string tenantId, IEnumerable<NodeEntity> nodes)
+        private async Task<BaseMutationResponse?> ValidateActionTriggersAsync(string tenantId, IEnumerable<NodeEntity> nodes)
         {
-            var eventNames = nodes
-                .Where(n => n.Category == LogicConstants.TriggerCategory && n.Type == LogicConstants.BlocksEventNodeType)
-                .Select(n => n.Parameters != null && n.Parameters.TryGetValue("eventName", out var value) && value.IsString
+            var actionNames = nodes
+                .Where(n => n.Category == LogicConstants.TriggerCategory && n.Type == LogicConstants.ActionTriggerNodeType)
+                .Select(n => n.Parameters != null && n.Parameters.TryGetValue(ActionWorkflowTriggerService.ActionNameParameter, out var value) && value.IsString
                     ? value.AsString.Trim()
                     : string.Empty)
-                .Distinct();
+                .Distinct()
+                .ToList();
+            if (actionNames.Count == 0) return null;
 
-            foreach (var eventName in eventNames)
+            var known = (await _actions.GetAllAsync()).Select(a => a.Name).ToHashSet(StringComparer.Ordinal);
+            var unknown = actionNames.FirstOrDefault(name => !known.Contains(name));
+            if (unknown is null) return null;
+
+            _logger.LogWarning("Publish rejected in tenant {TenantId}: action '{Action}' is not in the project's actions", tenantId, unknown);
+            return new BaseMutationResponse
             {
-                if (eventName.Length > 0 && await _blocksEventCatalog.IsEnabledForWorkflowAsync(tenantId, eventName))
-                    continue;
-
-                _logger.LogWarning("Publish rejected: Blocks Event '{EventName}' is not enabled for workflows", eventName);
-                return new BaseMutationResponse
-                {
-                    IsSuccess = false,
-                    ItemId = null,
-                    Errors = new Dictionary<string, string> { { MessageKey, $"Event '{eventName}' is not enabled for workflows" } }
-                };
-            }
-
-            return null;
+                IsSuccess = false,
+                ItemId = null,
+                Errors = new Dictionary<string, string> { { MessageKey, $"Action '{unknown}' is not in this project's actions" } }
+            };
         }
 
         private static List<NodeEntity> CloneTriggerNodes(IEnumerable<NodeEntity> nodes)
@@ -679,10 +678,10 @@ namespace Workflow.DomainService.Services
             };
 
             // Before anything changes: a rejected publish leaves the workflow and its schedules untouched.
-            var blocksEventError = await ValidateBlocksEventTriggersAsync(tenantId, workflow.Nodes);
-            if (blocksEventError != null)
+            var actionError = await ValidateActionTriggersAsync(tenantId, workflow.Nodes);
+            if (actionError != null)
             {
-                return blocksEventError;
+                return actionError;
             }
 
             // Scheduler orchestration: delete schedules from the previous publish (if any)
@@ -797,10 +796,10 @@ namespace Workflow.DomainService.Services
             }
 
             // Before anything changes: a rejected publish leaves the workflow and its schedules untouched.
-            var blocksEventError = await ValidateBlocksEventTriggersAsync(tenantId, version.Snapshot.Nodes);
-            if (blocksEventError != null)
+            var actionError = await ValidateActionTriggersAsync(tenantId, version.Snapshot.Nodes);
+            if (actionError != null)
             {
-                return blocksEventError;
+                return actionError;
             }
 
             // Scheduler orchestration: delete schedules from the previous publish (if any)

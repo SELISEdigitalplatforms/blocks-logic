@@ -18,6 +18,12 @@ namespace Mail.DomainService.Entities
         public SmtpClient SmtpClient { get; set; } = SmtpClient.Default;
         public bool IsDefault { get; set; }
         public bool IsInbound { get; set; }
+
+        /// <summary>
+        /// The configuration its organization (<see cref="BaseEntity.OrganizationId"/>) sends through when the
+        /// template names none. Written by blocks-os; a document without the element reads as <c>false</c>.
+        /// </summary>
+        public bool IsOrganizationDefault { get; set; }
         public MailServiceProvider Provider { get; set; }
 
         /// <summary>

@@ -39,5 +39,11 @@ namespace Mail.DomainService.Utilities
         }
 
         public static int Count(IEnumerable<string>? values) => values?.Count() ?? 0;
+
+        /// <summary>
+        /// A value for a log field with its line breaks removed, so it cannot start a forged log entry.
+        /// </summary>
+        public static string SingleLine(string? value) =>
+            value is null ? None : value.Replace("\r", string.Empty, StringComparison.Ordinal).Replace("\n", string.Empty, StringComparison.Ordinal);
     }
 }

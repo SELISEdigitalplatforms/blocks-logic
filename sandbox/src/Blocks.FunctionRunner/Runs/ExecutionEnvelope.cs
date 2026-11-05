@@ -240,34 +240,6 @@ namespace Blocks.FunctionRunner.Runs
             return root.ToJsonString();
         }
 
-        /// <summary>
-        /// The event types the control plane allows this function to add (<c>events.allowed</c>); empty
-        /// when the envelope has none or the field is malformed. Passed through to the sandbox
-        /// unchanged — the runner only reads it, to check the events that come back.
-        /// </summary>
-        public static IReadOnlyList<string> AllowedEventTypes(string envelopeJson)
-        {
-            try
-            {
-                if (JsonNode.Parse(envelopeJson) is not JsonObject root
-                    || root["events"] is not JsonObject events
-                    || events["allowed"] is not JsonArray allowed)
-                {
-                    return [];
-                }
-
-                return [.. allowed
-                    .Select(item => item is JsonValue v && v.TryGetValue<string>(out var s) ? s : null)
-                    .Where(s => !string.IsNullOrEmpty(s))
-                    .Cast<string>()
-                    .Distinct(StringComparer.Ordinal)];
-            }
-            catch (JsonException)
-            {
-                return [];
-            }
-        }
-
         private static JsonObject ParseRoot(string envelopeJson)
         {
             try

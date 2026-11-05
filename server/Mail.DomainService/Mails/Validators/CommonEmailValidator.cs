@@ -79,6 +79,12 @@ namespace Mail.DomainService.Mails
                 return false;
             }
 
+            // No body: the TemplateBody rule reports it (Regex.Matches would throw on null).
+            if (string.IsNullOrWhiteSpace(template.TemplateBody))
+            {
+                return true;
+            }
+
             var matches = Regex.Matches(template.TemplateBody, @"\{{(?:.:)?(.*?)\}}", RegexOptions.None, TimeSpan.FromMilliseconds(500));
 
             var templatePlaceHolders = (from Match m in matches select m.Groups[1].Value).Distinct().ToList();
@@ -157,6 +163,12 @@ namespace Mail.DomainService.Mails
             if (template == null)
             {
                 return false;
+            }
+
+            // No subject: the TemplateSubject rule reports it (Regex.Matches would throw on null).
+            if (string.IsNullOrWhiteSpace(template.TemplateSubject))
+            {
+                return true;
             }
 
             var matches = Regex.Matches(template.TemplateSubject, @"\{{(?:.:)?(.*?)\}}", RegexOptions.None, TimeSpan.FromMilliseconds(500));

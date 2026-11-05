@@ -74,12 +74,13 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 	{
 		id: "trigger-blocksEvent-v2",
 		icon: <Zap className="h-5 w-5 text-amber-500" />,
-		get title() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.BLOCKS_EVENT"); },
-		get description() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.STARTS_THE_WORKFLOW_WHEN_2"); },
+		get title() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.ACTION"); },
+		get description() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.STARTS_THE_WORKFLOW_ON_ACTION"); },
+		// The Action trigger. The type keeps the old Blocks Event id so saved workflows still load.
 		type: "blocksEvent",
 		category: "trigger",
 		version: "v2",
-		get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.BLOCKS_EVENT"); },
+		get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.ACTION"); },
 		handle: {
 			sources: [{ key: "source", label: "" }],
 			targets: [],

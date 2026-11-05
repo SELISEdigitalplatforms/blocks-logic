@@ -23,7 +23,7 @@ using StackExchange.Redis;
 namespace XUnitTest.Functions
 {
     /// <summary>
-    /// The events a function may send: validation on save, the draft row, the copy a deploy takes for its version, the
+    /// The event settings of a function (its trigger events): validation on save, the draft row, the copy a deploy takes for its version, the
     /// cleanup when versions or the function go, and the endpoints on top — scoped to the caller's tenant.
     /// </summary>
     public class FunctionEventSettingsTests
@@ -33,26 +33,29 @@ namespace XUnitTest.Functions
         private readonly Mock<IFunctionRepository> _functions = new();
         private readonly Mock<IFunctionRunRepository> _runs = new();
         private readonly Mock<IFunctionEventSettingsRepository> _settings = new();
-        private readonly Mock<IFunctionRunEventsRepository> _runEvents = new();
         private readonly Mock<IFunctionAuditService> _audit = new();
         private readonly IValidator<SaveEventSettingsRequestDto> _validator = new SaveEventSettingsRequestValidator();
+        private readonly Mock<global::Workflow.DomainService.Actions.IActionsRepository> _actions = new();
 
         public FunctionEventSettingsTests()
         {
+            // The tenant's actions: every name the tests save, one with its Function switch off.
+            _actions.Setup(a => a.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+            [
+                .. new[] { "order.created", "iam.user.created" }.Concat(Enumerable.Range(0, 21).Select(i => $"event.n{i:00}"))
+                    .Select(name => new ActionDefinition { Name = name, Function = true }),
+                new ActionDefinition { Name = "iam.user.deactivated", Function = false },
+            ]);
             _functions.Setup(f => f.GetByIdAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new FunctionEntity { ItemId = "fn-1" });
         }
 
         private FunctionEventSettingsService Service() =>
-            new(_functions.Object, _runs.Object, _settings.Object, _runEvents.Object, _audit.Object, _validator);
+            new(_functions.Object, _runs.Object, _settings.Object, _audit.Object, _validator, _actions.Object);
 
-        private static JsonElement Json(string json) => JsonSerializer.Deserialize<JsonElement>(json);
-
-        private static SaveEventSettingsRequestDto Request(
-            string[]? triggers = null, params (string Type, string Payload)[] events) => new()
+        private static SaveEventSettingsRequestDto Request(string[]? triggers = null) => new()
         {
             FunctionId = "fn-1",
-            Events = [.. events.Select(e => new FunctionEventSettingDto { Type = e.Type, Payload = Json(e.Payload) })],
             TriggerEvents = [.. triggers ?? []],
         };
 
@@ -67,56 +70,14 @@ namespace XUnitTest.Functions
         [Fact]
         public async Task A_valid_save_writes_the_draft_and_an_audit_entry()
         {
-            var template = FunctionEventCatalog.Find("SendMail")!.PayloadTemplateJson;
-
-            await Service().SaveAsync(Tenant, Request(["order.created"], ("SendMail", template), ("FunctionEvent", """{"name":"order.created","data":{}}""")), "user-1", "u@x");
+            await Service().SaveAsync(Tenant, Request(["order.created"]), "user-1", "u@x");
 
             _settings.Verify(s => s.SaveDraftAsync(
                 Tenant, "fn-1",
-                It.Is<List<FunctionEventSetting>>(e => e.Select(x => x.Type).SequenceEqual(new[] { "SendMail", "FunctionEvent" })),
                 It.Is<List<string>>(t => t.SequenceEqual(new[] { "order.created" })),
                 "user-1", It.IsAny<CancellationToken>()), Times.Once);
             _audit.Verify(a => a.RecordAsync(
                 Tenant, "fn-1", FunctionsConstants.AuditActions.EventsUpdated, "user-1", "u@x", It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Once);
-        }
-
-        [Fact]
-        public async Task An_event_type_outside_the_catalog_is_refused_with_its_field()
-        {
-            var message = await SaveErrorAsync(Service(), Request(null, ("DeleteEverything", "{}")));
-
-            message.Should().Contain("events[0].type").And.Contain("not an event this platform offers");
-            _settings.Verify(s => s.SaveDraftAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<FunctionEventSetting>>(), It.IsAny<List<string>>(),
-                It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task The_same_type_twice_is_refused()
-        {
-            var message = await SaveErrorAsync(Service(), Request(null, ("FunctionEvent", """{"name":"abc"}"""), ("FunctionEvent", """{"name":"abd"}""")));
-
-            message.Should().Contain("events[1].type").And.Contain("listed twice");
-        }
-
-        [Fact]
-        public async Task A_payload_with_an_unknown_field_or_a_bad_name_is_refused()
-        {
-            (await SaveErrorAsync(Service(), Request(null, ("SendMail", """{"sendPhoneNumberAsEmail":true}""")))).Should().Contain("events[0].payload").And.Contain("unknown field");
-            (await SaveErrorAsync(Service(), Request(null, ("FunctionEvent", """{"name":"NO"}""")))).Should().Contain("events[0].payload");
-            (await SaveErrorAsync(Service(), Request(null, ("SendMail", "[]")))).Should().Contain("JSON object");
-        }
-
-        [Fact]
-        public async Task A_payload_that_is_missing_is_refused_without_a_crash()
-        {
-            var request = new SaveEventSettingsRequestDto
-            {
-                FunctionId = "fn-1",
-                Events = [new FunctionEventSettingDto { Type = "SendMail" }],
-            };
-
-            (await SaveErrorAsync(Service(), request)).Should().Contain("JSON object");
         }
 
         [Fact]
@@ -133,9 +94,29 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public async Task A_name_that_is_not_an_action_of_the_tenant_is_refused_with_ACTION_NOT_FOUND_and_nothing_is_saved()
+        {
+            var message = await SaveErrorAsync(Service(), Request(["order.created", "order.paid"]));
+
+            message.Should().Be("triggerEvents[1]: ACTION_NOT_FOUND: 'order.paid' is not an action of this project");
+            _settings.Verify(s => s.SaveDraftAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task An_action_whose_Function_switch_is_off_can_still_be_kept()
+        {
+            // The switch is the admin's in OS; turning it off must not block other edits of the list.
+            await Service().SaveAsync(Tenant, Request(["iam.user.deactivated"]), "user-1", "u@x");
+
+            _settings.Verify(s => s.SaveDraftAsync(
+                Tenant, "fn-1", It.IsAny<List<string>>(), "user-1", It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
         public async Task Missing_lists_and_an_empty_function_id_are_refused()
         {
-            var request = new SaveEventSettingsRequestDto { FunctionId = "", Events = null!, TriggerEvents = null! };
+            var request = new SaveEventSettingsRequestDto { FunctionId = "", TriggerEvents = null! };
 
             await Service().Invoking(s => s.SaveAsync(Tenant, request, null, null)).Should().ThrowAsync<FunctionValidationException>();
         }
@@ -159,81 +140,27 @@ namespace XUnitTest.Functions
             var dto = await Service().GetAsync(Tenant, "fn-1");
 
             dto.FunctionId.Should().Be("fn-1");
-            dto.Events.Should().BeEmpty();
             dto.TriggerEvents.Should().BeEmpty();
         }
 
         [Fact]
-        public async Task Reading_gives_the_draft_row_with_payloads_as_json_objects()
+        public async Task Reading_gives_the_draft_rows_trigger_events_and_ignores_an_old_events_list()
         {
             _settings.Setup(s => s.GetAsync(Tenant, "fn-1", null, It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionEventSettingsEntity
             {
                 FunctionId = "fn-1",
-                Events = [new FunctionEventSetting { Type = "FunctionEvent", PayloadTemplateJson = """{"name":"order.created","data":{}}""" }],
                 TriggerEvents = ["order.created"],
             });
 
             var dto = await Service().GetAsync(Tenant, "fn-1");
 
-            dto.Events.Should().ContainSingle().Which.Type.Should().Be("FunctionEvent");
-            dto.Events[0].Payload.GetProperty("name").GetString().Should().Be("order.created");
             dto.TriggerEvents.Should().Equal("order.created");
-        }
-
-        [Fact]
-        public void The_catalog_lists_both_events_with_templates_as_objects()
-        {
-            var catalog = Service().GetCatalog();
-
-            catalog.Items.Select(i => i.Type).Should().Equal("SendMail", "FunctionEvent");
-            catalog.Items.Should().OnlyContain(i => i.PayloadTemplate.ValueKind == JsonValueKind.Object && i.Title.Length > 0);
-            catalog.Items.Single(i => i.Type == "SendMail").PublicAllowed.Should().BeTrue();
-            catalog.Items.Single(i => i.Type == "FunctionEvent").PublicAllowed.Should().BeFalse();
-        }
-
-        // ---- a run's events -------------------------------------------------------------
-
-        [Fact]
-        public async Task A_runs_events_come_from_its_newest_attempt_with_the_rejection_reason()
-        {
-            _runs.Setup(r => r.GetByIdAsync(Tenant, "run-1", It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionRunEntity { ItemId = "run-1" });
-            _runEvents.Setup(r => r.GetLatestAsync(Tenant, "run-1", It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionRunEventsEntity
-            {
-                RunId = "run-1",
-                Rejected = "EVENTS_REJECTED: 51 events",
-                Events = [new FunctionRunEventEntry { Id = "run-1-1-1", Type = "SendMail", Status = FunctionEventStatus.Sent, Attempts = 1, SentAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) }],
-            });
-
-            var dto = await Service().GetRunEventsAsync(Tenant, "run-1");
-
-            dto.Rejected.Should().Be("EVENTS_REJECTED: 51 events");
-            var item = dto.Items.Should().ContainSingle().Subject;
-            item.Status.Should().Be("Sent");
-            item.Id.Should().Be("run-1-1-1");
-        }
-
-        [Fact]
-        public async Task A_run_without_an_events_document_has_no_items()
-        {
-            _runs.Setup(r => r.GetByIdAsync(Tenant, "run-1", It.IsAny<CancellationToken>())).ReturnsAsync(new FunctionRunEntity { ItemId = "run-1" });
-
-            var dto = await Service().GetRunEventsAsync(Tenant, "run-1");
-
-            dto.Items.Should().BeEmpty();
-            dto.Rejected.Should().BeNull();
-        }
-
-        [Fact]
-        public async Task A_run_of_another_tenant_is_not_found()
-        {
-            await Service().Invoking(s => s.GetRunEventsAsync(Tenant, "run-elsewhere")).Should().ThrowAsync<FunctionNotFoundException>();
-            _runEvents.Verify(r => r.GetLatestAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         // ---- deploy copies the draft -----------------------------------------------------
 
         [Fact]
-        public async Task Deploy_copies_the_draft_events_to_the_new_version_before_the_pointer_moves()
+        public async Task Deploy_copies_the_draft_trigger_events_to_the_new_version_before_the_pointer_moves()
         {
             var functions = new Mock<IFunctionRepository>();
             var versions = new Mock<IFunctionVersionRepository>();
@@ -271,7 +198,7 @@ namespace XUnitTest.Functions
         // ---- cleanup -----------------------------------------------------------------------
 
         [Fact]
-        public async Task Pruned_versions_lose_their_events_rows()
+        public async Task Pruned_versions_lose_their_event_settings_rows()
         {
             var versions = new Mock<IFunctionVersionRepository>();
             versions.Setup(v => v.GetAllForFunctionAsync(Tenant, "fn-1", It.IsAny<CancellationToken>())).ReturnsAsync(
@@ -296,7 +223,7 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task Pruning_still_succeeds_when_the_events_rows_cannot_be_deleted()
+        public async Task Pruning_still_succeeds_when_the_event_settings_rows_cannot_be_deleted()
         {
             var versions = new Mock<IFunctionVersionRepository>();
             versions.Setup(v => v.GetAllForFunctionAsync(Tenant, "fn-1", It.IsAny<CancellationToken>())).ReturnsAsync(
@@ -318,7 +245,7 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task Purging_a_function_removes_its_events_rows_and_run_events()
+        public async Task Purging_a_function_removes_its_event_settings_rows()
         {
             var versions = new Mock<IFunctionVersionRepository>();
             var builds = new Mock<IFunctionBuildRepository>();
@@ -333,12 +260,11 @@ namespace XUnitTest.Functions
             cache.Setup(c => c.CacheDatabase()).Returns(database);
             var service = new FunctionPurgeService(
                 versions.Object, builds.Object, _runs.Object, logs.Object, pins.Object, cache.Object,
-                NullLogger<FunctionPurgeService>.Instance, _settings.Object, _runEvents.Object);
+                NullLogger<FunctionPurgeService>.Instance, _settings.Object);
 
             await service.PurgeAsync(Tenant, "fn-1");
 
             _settings.Verify(s => s.DeleteAllForFunctionAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()), Times.Once);
-            _runEvents.Verify(r => r.DeleteAllForFunctionAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()), Times.Once);
         }
 
         // ---- the endpoints --------------------------------------------------------------
@@ -370,15 +296,13 @@ namespace XUnitTest.Functions
             var service = Service();
             try
             {
-                var catalog = controller.GetEventCatalog(service);
                 var settings = await controller.GetEventSettings("fn-1", service);
                 var saved = await controller.SaveEventSettings(Request(["order.created"]), service);
 
-                catalog.Items.Should().HaveCount(2);
                 settings.FunctionId.Should().Be("fn-1");
                 saved.IsSuccess.Should().BeTrue();
                 _functions.Verify(f => f.GetByIdAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
-                _settings.Verify(s => s.SaveDraftAsync(Tenant, "fn-1", It.IsAny<List<FunctionEventSetting>>(), It.IsAny<List<string>>(), "user-1", It.IsAny<CancellationToken>()), Times.Once);
+                _settings.Verify(s => s.SaveDraftAsync(Tenant, "fn-1", It.IsAny<List<string>>(), "user-1", It.IsAny<CancellationToken>()), Times.Once);
             }
             finally
             {
@@ -387,14 +311,13 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
-        public async Task A_function_or_run_of_another_tenant_is_a_not_found_through_the_endpoints()
+        public async Task A_function_of_another_tenant_is_a_not_found_through_the_endpoints()
         {
             var controller = Controller();
             var service = Service();
             try
             {
                 await controller.Invoking(c => c.GetEventSettings("fn-9", service)).Should().ThrowAsync<FunctionNotFoundException>();
-                await controller.Invoking(c => c.GetRunEvents("run-9", service)).Should().ThrowAsync<FunctionNotFoundException>();
                 await controller.Invoking(c => c.SaveEventSettings(new SaveEventSettingsRequestDto { FunctionId = "fn-9" }, service))
                     .Should().ThrowAsync<FunctionNotFoundException>();
             }
@@ -461,9 +384,7 @@ namespace XUnitTest.Functions
         }
 
         [Theory]
-        [InlineData("GetEventCatalog", "blocks-logic::function::read")]
         [InlineData("GetEventSettings", "blocks-logic::function::read")]
-        [InlineData("GetRunEvents", "blocks-logic::function::read")]
         [InlineData("GetQueueStatus", "blocks-logic::function::read")]
         [InlineData("SaveEventSettings", "blocks-logic::function::manage")]
         public void Each_endpoint_is_protected_with_the_read_or_manage_permission(string action, string permission)
