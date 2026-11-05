@@ -12,6 +12,8 @@ import ProxiesPage from "./routes/private/proxy/proxies-page";
 import ProxyCreatePage from "./routes/private/proxy/proxy-create-page";
 import ProxyEditPage from "./routes/private/proxy/proxy-edit-page";
 import ProxyDetailsPage from "./routes/private/proxy/proxy-details-page";
+import OpenInOsActionsPage from "./routes/private/open-in-os/open-in-os-actions-page";
+import { OPEN_IN_OS_ACTIONS_PATH } from "./modules/open-in-os/constants";
 import {
   AuthResolver,
   PublicGuard,
@@ -109,6 +111,7 @@ export const router = createBrowserRouter([
               { path: "proxy/new", element: <ProxyCreatePage /> },
               { path: "proxy/:proxyId/edit", element: <ProxyEditPage /> },
               { path: "proxy/:proxyId", element: <ProxyDetailsPage /> },
+              { path: OPEN_IN_OS_ACTIONS_PATH, element: <OpenInOsActionsPage /> },
               { path: "profile", element: <ProfilePage /> },
 
 
