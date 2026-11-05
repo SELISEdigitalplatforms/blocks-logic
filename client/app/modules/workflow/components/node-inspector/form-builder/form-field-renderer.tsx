@@ -12,6 +12,7 @@ import { useT } from "@seliseblocks/genesis-os";
 const UNLABELLED_TYPES: ReadonlySet<FormFieldType> = new Set<FormFieldType>([
   "tab-with-text",
   "readonly-details",
+  "link",
 ]);
 
 interface FormFieldRendererProps {

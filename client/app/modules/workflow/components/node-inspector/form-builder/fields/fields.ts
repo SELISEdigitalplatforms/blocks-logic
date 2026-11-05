@@ -28,6 +28,7 @@ import { CalloutAccordionDisplayField } from "./callout-accordion-display-field"
 import { SplitOutFieldsField } from "./split-out-fields-field";
 import { CommaListField } from "./comma-list-field";
 import { ReadonlyDetailsField } from "./readonly-details-field";
+import { LinkField } from "./link-field";
 import { SwitchRulesField } from "./switch-rules-field";
 import { FilterConditionsField } from "./filter-conditions-field";
 
@@ -71,6 +72,7 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   "split-out-fields": SplitOutFieldsField,
   "comma-list": CommaListField,
   "readonly-details": ReadonlyDetailsField,
+  link: LinkField,
 };
 
 // DEADCODE 2026-07-29: extension hook with no callers in client, e2e or tests; commented pending review

@@ -1,12 +1,11 @@
-import React from "react";
 import { NodeGuideTriggerBlocksEventV2 } from "../node-guides";
+import { OPEN_IN_OS_ACTIONS_PATH } from "@/modules/open-in-os/constants";
 import { actionsService } from "@/modules/actions/services/actions.service";
 import { IActionOption } from "@/modules/actions/types/actions.type";
 import { actionOptionLabel, payloadHint } from "@/modules/actions/utils/action-options";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { ReadonlyDetails, SelectOption } from "../node-inspector/form-builder/form-field.types";
 import { tStatic } from "@seliseblocks/genesis-os";
-import { renderRichText } from "@/lib/rich-text";
 
 const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
 
@@ -63,8 +62,6 @@ export const buildActionStatus = (actions: IActionOption[], savedActionName: str
 export const actionNameOf = (data: Record<string, unknown>): string =>
   typeof data.eventName === "string" ? data.eventName : "";
 
-const codeClass = "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold";
-
 /** The Action trigger. The type and the `eventName` key are the old Blocks Event node's, so saved workflows still load. */
 export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
   guide: NodeGuideTriggerBlocksEventV2,
@@ -73,19 +70,6 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
     category: "trigger",
     version: "v2",
     parameters: [
-      {
-        id: "execution-notes",
-        type: "callout-accordion-display",
-        key: "executionNotes",
-        displayValue: () => ({
-          title: t("NOTES"),
-          description: React.createElement(
-            "span",
-            null,
-            ...renderRichText(t("RUNS_THE"), [(text: string) => React.createElement("code", { className: codeClass }, text)]),
-          ),
-        }),
-      },
       {
         id: "event",
         type: "select",
@@ -98,6 +82,17 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
         // An admin may turn actions on in Blocks OS meanwhile; returning here picks the change up.
         refetchOnWindowFocus: true,
         options: (data) => loadWorkflowActions().then((actions) => buildActionOptions(actions, actionNameOf(data))),
+      },
+      {
+        // Opens this project's Actions page in Blocks OS in a new tab (through a Logic page that signs in via IAM).
+        // Shown in every state, even when the actions cannot be loaded. Display only: nothing is saved on the node.
+        id: "configure-actions-link",
+        type: "link",
+        key: "configureActionsLink",
+        transient: true,
+        linkPath: OPEN_IN_OS_ACTIONS_PATH,
+        get label() { return t("CONFIGURE_ACTIONS_IN_OS"); },
+        get ariaLabel() { return t("CONFIGURE_ACTIONS_IN_OS_NEW_TAB"); },
       },
       {
         id: "eventStatus",
