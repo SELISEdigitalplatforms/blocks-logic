@@ -82,8 +82,8 @@ export const TriggerEventCard = ({ functionId }: Readonly<TriggerEventCardProps>
   const saveNames = async (next: string[]) => {
     try {
       await save({ triggerEvents: next });
-    } catch (failure) {
-      const mapped = isErrorWithErrors(failure) ? mapSaveErrors(failure.errors) : { trigger: [], general: [] };
+    } catch (error_) {
+      const mapped = isErrorWithErrors(error_) ? mapSaveErrors(error_.errors) : { trigger: [], general: [] };
       const messages = [...mapped.trigger, ...mapped.general];
       showErrorToast({ errors: messages.length > 0 ? messages : t("TRIGGER_EVENT_CARD.FAILED_TO_SAVE_EVENTS") });
     }

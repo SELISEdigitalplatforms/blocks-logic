@@ -131,7 +131,7 @@ describe("SelectField refetchOnWindowFocus", () => {
 
   const focus = async () => {
     await act(async () => {
-      window.dispatchEvent(new Event("focus"));
+      globalThis.dispatchEvent(new Event("focus"));
     });
   };
 
@@ -190,7 +190,7 @@ describe("SelectField refetchOnWindowFocus", () => {
   });
 
   it("C18: a select without the flag never reloads on focus", async () => {
-    const { load } = renderSelect(undefined);
+    const { load } = renderSelect();
     await act(async () => {});
 
     await focus();
