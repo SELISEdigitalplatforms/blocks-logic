@@ -224,13 +224,13 @@ namespace Workflow.DomainService.Repositories
 
         /// <summary>
         /// Published only, matched on the published trigger nodes (<c>PublishedMeta.TriggerNodes</c>), never on
-        /// the draft graph: a draft change to the event does not take effect until it is published.
+        /// the draft graph: a draft change to the action does not take effect until it is published.
         /// </summary>
-        public static FilterDefinition<WorkflowEntity> PublishedBlocksEventFilter(string eventName)
+        public static FilterDefinition<WorkflowEntity> PublishedActionFilter(string actionName)
         {
             var nodeFilter = Builders<NodeEntity>.Filter.And(
-                Builders<NodeEntity>.Filter.Eq("Parameters.eventName", eventName),
-                Builders<NodeEntity>.Filter.Eq("Type", LogicConstants.BlocksEventNodeType),
+                Builders<NodeEntity>.Filter.Eq("Parameters.eventName", actionName),
+                Builders<NodeEntity>.Filter.Eq("Type", LogicConstants.ActionTriggerNodeType),
                 Builders<NodeEntity>.Filter.Eq(nameof(NodeEntity.Category), LogicConstants.TriggerCategory)
             );
 
@@ -240,18 +240,11 @@ namespace Workflow.DomainService.Repositories
             );
         }
 
-        public async Task<List<WorkflowEntity>> GetPublishWorkflowsByBlocksEventAsync(string tenantId, string eventName)
+        public async Task<List<WorkflowEntity>> GetPublishedWorkflowsByActionAsync(string tenantId, string actionName)
         {
             var collection = GetCollection(tenantId);
-            var scope = await ReadAsync(tenantId, PublishedBlocksEventFilter(eventName), "GetPublishWorkflowsByBlocksEvent", useProjection: false);
+            var scope = await ReadAsync(tenantId, PublishedActionFilter(actionName), "GetPublishedWorkflowsByAction", useProjection: false);
             return scope.Granted ? await scope.Apply(collection).ToListAsync() : [];
-        }
-
-        public async Task<long> CountPublishWorkflowsByBlocksEventAsync(string tenantId, string eventName)
-        {
-            var collection = GetCollection(tenantId);
-            var scope = await ReadAsync(tenantId, PublishedBlocksEventFilter(eventName), "CountPublishWorkflowsByBlocksEvent");
-            return scope.Granted ? await collection.CountDocumentsAsync(scope.Filter) : 0;
         }
 
         public async Task UpdateWorkflowAsync(WorkflowEntity workflow)

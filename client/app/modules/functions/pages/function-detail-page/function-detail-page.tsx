@@ -33,7 +33,6 @@ import { NeedsSecretBanner } from "../../components/needs-secret-banner";
 import { downloadExportFile, importErrorOf } from "../../utils/transfer";
 import { BuildProgress } from "../../components/build-progress";
 import { useGetRuns } from "../../hooks/use-runs";
-import { useGetEventSettings } from "../../hooks/use-events";
 import { useGetVersions } from "../../hooks/use-versions";
 import { useFunctionEditorStore } from "../../store/function-editor-store";
 import { TERMINAL_RUN_STATUSES } from "../../types/run.types";
@@ -53,9 +52,7 @@ import { TriggerHttpCard } from "../../components/trigger-http-card";
 import { RateLimitCard } from "../../components/rate-limit-card";
 import { TriggerWorkflowCard } from "../../components/trigger-workflow-card";
 import { TriggerEventCard } from "../../components/trigger-event-card";
-import { EventsCard } from "../../components/events-card";
 import { QueueStatusCard } from "../../components/queue-status-card";
-import { isPublicHttpTrigger } from "../../utils/events";
 import { SandboxReuseCard } from "../../components/sandbox-reuse-card";
 import { SandboxRulesCard } from "../../components/sandbox-rules-card";
 import { FunctionGuide } from "../../components/function-guide";
@@ -174,7 +171,6 @@ const TAB_ORDER = [
   "code",
   "trigger",
   "output",
-  "events",
   "configuration",
   "runs",
   "versions",
@@ -183,7 +179,6 @@ const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
   code: "Code",
   trigger: "Trigger",
   output: "Output",
-  events: "Events",
   configuration: "Configuration",
   runs: "Runs",
   versions: "Versions",
@@ -339,7 +334,6 @@ export const FunctionDetailPage = () => {
     // panel's last run, which a test refreshes itself when it starts and when its run settles.
     { autoRefresh: isRunsAutoRefresh && queryParams.tab === "runs", enabled: !!runsFromUtc },
   );
-  const { data: eventSettings } = useGetEventSettings(functionId);
   const { data: versionsData, isLoading: isVersionsLoading } = useGetVersions(functionId);
 
   useEffect(() => {
@@ -412,12 +406,10 @@ export const FunctionDetailPage = () => {
   const hasActiveRun = runs.some((run) => !TERMINAL_RUN_STATUSES.includes(run.status));
   const hasRunFilters = [queryParams.runStatus, queryParams.runTrigger, queryParams.runSearch].some(Boolean);
 
-  const eventCount = eventSettings?.events.length ?? 0;
   const tabBadges: Record<(typeof TAB_ORDER)[number], string> = {
     code: "",
     trigger: "",
     output: countBadge(outputActions.length),
-    events: countBadge(eventCount),
     configuration: countBadge(variables.length),
     runs: countBadge(runsData?.totalCount),
     versions: versionBadge(fn.activeVersionNumber),
@@ -814,10 +806,6 @@ export const FunctionDetailPage = () => {
                 <OutputActionsEditor value={outputActions} onChange={setOutputActions} />
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="events" className="flex flex-col gap-4">
-            <EventsCard functionId={fn.id} isPublic={isPublicHttpTrigger(trigger)} />
           </TabsContent>
 
           <TabsContent value="configuration" className="flex flex-col gap-4">

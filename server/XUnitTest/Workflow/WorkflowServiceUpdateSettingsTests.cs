@@ -29,7 +29,7 @@ namespace XUnitTest.Workflow
             // Published without an Error Trigger; one was added to the draft afterwards.
             _workflows.Setup(r => r.GetWorkflowAsync(Tenant, "wf-e")).ReturnsAsync(Target("wf-e", published: true, "webhook", draftTriggerType: LogicConstants.ErrorTriggerNodeType));
             _service = new WorkflowService(_workflows.Object, Mock.Of<IWorkflowVersionRepository>(), Mock.Of<IScheduleService>(),
-                Mock.Of<ILogger<WorkflowService>>(), Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>(),
+                Mock.Of<ILogger<WorkflowService>>(), Mock.Of<global::Workflow.DomainService.Actions.IActionsRepository>(),
                 new WorkflowUpdateSettingsValidator(_workflows.Object));
         }
 

@@ -1,7 +1,7 @@
 using Workflow.DomainService.Validators;
 using Workflow.DomainService.Dtos;
 using FluentValidation;
-using Workflow.DomainService.BlocksEvents;
+using Workflow.DomainService.Actions;
 using Workflow.DomainService.Nodes.TriggerBlocksEventV2;
 using Workflow.DomainService.Nodes.TriggerErrorTriggerV2;
 using Workflow.DomainService.Repositories;
@@ -69,9 +69,11 @@ namespace Workflow.DomainService
             services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
             services.AddSingleton<IWorkflowVersionRepository, WorkflowVersionRepository>();
             services.AddSingleton<IWorkflowExecutionRepository, WorkflowExecutionRepository>();
-            services.AddSingleton<IBlocksEventCatalogRepository, BlocksEventCatalogRepository>();
-            services.AddSingleton<IBlocksEventCatalogService, BlocksEventCatalogService>();
-            services.AddSingleton<IBlocksEventTriggerService, BlocksEventTriggerService>();
+            // Actions (blocks-os owns the tenant list): the editors' pickers and the Action trigger.
+            services.AddSingleton<IActionsRepository, ActionsRepository>();
+            services.AddSingleton<IActionsService, ActionsService>();
+            services.AddSingleton<IActionStartGuard, ActionStartGuard>();
+            services.AddSingleton<IActionWorkflowTriggerService, ActionWorkflowTriggerService>();
 
             //  rigister node executors
 

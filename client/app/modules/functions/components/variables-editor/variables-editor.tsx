@@ -1,6 +1,7 @@
 import { KeyRound, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { Input } from "@/components/ui-kits/input/input";
 import { Button } from "@/components/ui-kits/button/button";
+import { Checkbox } from "@/components/ui-kits/checkbox/checkbox";
 import { VariableRefField, secretIdRef, soleRefKey } from "@/components/variable-picker";
 import { IVariableBinding } from "../../types/function.types";
 import { isTypedCredential } from "../../utils/secret-literals";
@@ -185,6 +186,7 @@ export const VariablesEditor = ({
                       // eslint-disable-next-line no-restricted-syntax -- example secret id, not prose
                       placeholder="acct_1P9…"
                       hint={t("VARIABLES_EDITOR.STORED_AS_A_REFERENCE")}
+                      optional={Boolean(variable.optional)}
                     />
                   )}
 
@@ -203,6 +205,17 @@ export const VariablesEditor = ({
                   </Button>
                 </div>
 
+                {/* Only a bound row can go missing at run time; a typed value is always there. */}
+                {(bound || variable.optional) && (
+                  <label className="mt-1.5 flex w-fit cursor-pointer items-center gap-2 text-xs text-medium-emphasis">
+                    <Checkbox
+                      aria-label={t("VARIABLES_EDITOR.OPTIONAL_VARIABLE", { value: index + 1 })}
+                      checked={Boolean(variable.optional)}
+                      onCheckedChange={(checked) => update(index, { optional: checked === true })}
+                    />
+                    {t("VARIABLES_EDITOR.OPTIONAL_RUNS_WITHOUT_IT")}
+                  </label>
+                )}
                 {(keyMessage || valueMessage) && (
                   <p className="mt-1.5 text-xs text-error">{keyMessage ?? valueMessage}</p>
                 )}

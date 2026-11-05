@@ -56,24 +56,32 @@ namespace Functions.DomainService.Repositories
         }
 
         public async Task<IReadOnlyList<FunctionEventSubscription>> FindSubscriptionsAsync(
-            string tenantId, string eventName, int limit, CancellationToken cancellationToken = default)
+            string tenantId, string eventName, FunctionEventSubscription? after, int limit, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(eventName) || limit <= 0) return [];
 
             await EnsureIndexesAsync(tenantId, cancellationToken);
             var f = Builders<FunctionEventSettingsEntity>.Filter;
+            var filter = f.AnyEq(s => s.TriggerEvents, eventName) & f.Ne(s => s.VersionId, null);
+            if (after is not null)
+            {
+                // Keyset paging on (FunctionId, VersionId), the sort order: memory stays flat however many subscribe.
+                filter &= f.Gt(s => s.FunctionId, after.FunctionId)
+                    | (f.Eq(s => s.FunctionId, after.FunctionId) & f.Gt(s => s.VersionId, after.VersionId));
+            }
+
             var rows = await Collection(tenantId)
-                .Find(f.AnyEq(s => s.TriggerEvents, eventName) & f.Ne(s => s.VersionId, null))
-                .Sort(Builders<FunctionEventSettingsEntity>.Sort.Ascending(s => s.FunctionId))
+                .Find(filter)
+                .Sort(Builders<FunctionEventSettingsEntity>.Sort.Ascending(s => s.FunctionId).Ascending(s => s.VersionId))
                 .Project(s => new { s.FunctionId, s.VersionId })
                 .Limit(limit)
                 .ToListAsync(cancellationToken);
-            return [.. rows.Where(r => !string.IsNullOrEmpty(r.VersionId)).Select(r => new FunctionEventSubscription(r.FunctionId, r.VersionId!))];
+            // Every row is returned (a page shorter than the limit means the last page); an empty version id never matches an active version.
+            return [.. rows.Select(r => new FunctionEventSubscription(r.FunctionId, r.VersionId ?? string.Empty))];
         }
 
         public async Task SaveDraftAsync(
-            string tenantId, string functionId, List<FunctionEventSetting> events, List<string> triggerEvents,
-            string? actorId, CancellationToken cancellationToken = default)
+            string tenantId, string functionId, List<string> triggerEvents, string? actorId, CancellationToken cancellationToken = default)
         {
             await EnsureIndexesAsync(tenantId, cancellationToken);
 
@@ -82,7 +90,6 @@ namespace Functions.DomainService.Repositories
             var update = Builders<FunctionEventSettingsEntity>.Update
                 .Set(s => s.FunctionId, functionId)
                 .Set(s => s.VersionId, null)
-                .Set(s => s.Events, events)
                 .Set(s => s.TriggerEvents, triggerEvents)
                 .Set(s => s.LastUpdatedDate, now)
                 .Set(s => s.LastUpdatedBy, actorId)
@@ -103,7 +110,6 @@ namespace Functions.DomainService.Repositories
             var update = Builders<FunctionEventSettingsEntity>.Update
                 .Set(s => s.FunctionId, functionId)
                 .Set(s => s.VersionId, versionId)
-                .Set(s => s.Events, draft.Events)
                 .Set(s => s.TriggerEvents, draft.TriggerEvents)
                 .Set(s => s.LastUpdatedDate, now)
                 .Set(s => s.LastUpdatedBy, draft.LastUpdatedBy)

@@ -235,10 +235,10 @@ namespace Functions.DomainService.Repositories
             var events = scope.Filter & f.Eq(r => r.InvokedBy, InvokedByType.Event);
             var others = scope.Filter & f.Ne(r => r.InvokedBy, InvokedByType.Event);
 
-            var eventCount = await collection.CountDocumentsAsync(events, cancellationToken: cancellationToken);
+            var eventRunCount = await collection.CountDocumentsAsync(events, cancellationToken: cancellationToken);
             var otherCount = await collection.CountDocumentsAsync(others, cancellationToken: cancellationToken);
             DateTime? oldest = null;
-            if (eventCount > 0)
+            if (eventRunCount > 0)
             {
                 var first = await collection.Find(events)
                     .Sort(Builders<FunctionRunEntity>.Sort.Ascending(r => r.CreatedDate))
@@ -246,7 +246,7 @@ namespace Functions.DomainService.Repositories
                     .FirstOrDefaultAsync(cancellationToken);
                 oldest = first?.CreatedDate;
             }
-            return new FunctionQueueCounts(otherCount, eventCount, oldest);
+            return new FunctionQueueCounts(otherCount, eventRunCount, oldest);
         }
 
         public async Task<FunctionRunEntity?> GetByIdAsync(string tenantId, string runId, CancellationToken cancellationToken = default)

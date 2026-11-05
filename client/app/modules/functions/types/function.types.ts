@@ -74,6 +74,8 @@ export interface IOutputAction {
 export interface IVariableBinding {
   key: string;
   value: string;
+  /** The function runs without it: a bound configuration variable that is gone leaves `ctx.env.KEY` undefined. */
+  optional?: boolean;
 }
 
 export interface IFunctionSource {

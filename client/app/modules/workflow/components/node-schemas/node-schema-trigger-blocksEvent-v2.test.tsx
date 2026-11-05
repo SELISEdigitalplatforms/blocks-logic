@@ -1,109 +1,100 @@
 import { act } from "react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
-import { eventTriggersService } from "@/modules/event-triggers/services/event-triggers.service";
-import { IBlocksEventWorkflowOption } from "@/modules/event-triggers/types/event-triggers.type";
+import { actionsService } from "@/modules/actions/services/actions.service";
+import { IActionOption } from "@/modules/actions/types/actions.type";
 import { NodeDefinitions } from "../node-library-panel/node-definitions";
 import { SelectField, REFETCH_ON_FOCUS_THROTTLE_MS } from "../node-inspector/form-builder/fields/select-field";
 import { NodeSchemasDefinition } from "./node-schemas";
 import {
-  DISABLED_EVENT_WARNING,
-  NO_ENABLED_EVENTS_MESSAGE,
   NodeSchemaTriggerBlocksEventV2,
-  buildEventOptions,
-  buildEventStatus,
-  eventNameOf,
-  resetWorkflowEventsCache,
+  actionNameOf,
+  buildActionOptions,
+  buildActionStatus,
+  resetWorkflowActionsCache,
 } from "./node-schema-trigger-blocksEvent-v2";
 
-vi.mock("@seliseblocks/genesis-os", async () => {
-  const actual = await vi.importActual("@seliseblocks/genesis-os");
-  return { ...actual, useScopedPath: () => (path: string) => `/app/item-123/${path}` };
-});
-
-const EVENTS: IBlocksEventWorkflowOption[] = [
-  { eventName: "UserMutationEvent", label: "User changed", serviceKey: "iam", description: "A user was created or updated." },
-  { eventName: "SmsStatusEvent", label: "SMS status", serviceKey: "utilities", description: "An SMS delivery status changed." },
+const USER_CREATED = "iam.user.created";
+const USER_DEACTIVATED = "iam.user.deactivated";
+const USER_UPDATED = "iam.user.updated";
+const ACTIONS: IActionOption[] = [
+  { name: USER_CREATED, label: "User created", service: "iam", payload: { userId: "string", roles: "string[]" } },
+  { name: USER_DEACTIVATED, label: "User deactivated", service: "iam", payload: {} },
 ];
 
 const param = (id: string) => NodeSchemaTriggerBlocksEventV2.schema.parameters.find((p) => p.id === id)!;
 
-describe("Blocks Event node", () => {
+describe("Action trigger node", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    resetWorkflowEventsCache();
+    resetWorkflowActionsCache();
   });
 
-  it("H1: the node library lists a Blocks Event trigger with the Zap card", () => {
+  it("the node library lists an Action trigger; the type stays blocksEvent so saved workflows load", () => {
     const definition = NodeDefinitions.find((d) => d.type === "blocksEvent")!;
-    expect(definition).toBeTruthy();
     expect(definition.category).toBe("trigger");
-    expect(definition.title).toBe("Blocks Event");
-    expect(definition.description).toBe("Starts the workflow when a Blocks service sends the selected event.");
+    expect(definition.title).toBe("Action");
     expect(definition.handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [] });
   });
 
-  it("the schema is registered as v2 only, like the other new types", () => {
+  it("the schema is registered as v2 only and still saves the action in eventName", () => {
     expect(NodeSchemasDefinition.triggerblocksEventv2).toBe(NodeSchemaTriggerBlocksEventV2);
     expect(NodeSchemasDefinition.triggerblocksEventv1).toBeUndefined();
     expect(NodeSchemaTriggerBlocksEventV2.defaults).toEqual({ parameters: { eventName: "" }, settings: {} });
   });
 
-  it("H2: options are the enabled events, labelled '{Label} ({EventName})' with the name as value", async () => {
-    vi.spyOn(eventTriggersService, "getWorkflowEvents").mockResolvedValue({ items: EVENTS });
-    const options = param("event").options as (d: Record<string, unknown>) => Promise<{ value: unknown; label: string }[]>;
+  it("the picker lists only the actions on for workflows, as '{label} ({name})', searchable, with the data fields", async () => {
+    const spy = vi.spyOn(actionsService, "getForWorkflow").mockResolvedValue(ACTIONS);
+    const options = param("event").options as (d: Record<string, unknown>) => Promise<{ value: unknown; label: string; description?: string }[]>;
 
     const result = await options({ eventName: "" });
 
+    expect(spy).toHaveBeenCalledTimes(1);
     expect(result.map((o) => [o.value, o.label])).toEqual([
-      ["UserMutationEvent", "User changed (UserMutationEvent)"],
-      ["SmsStatusEvent", "SMS status (SmsStatusEvent)"],
+      [USER_CREATED, "User created (iam.user.created)"],
+      [USER_DEACTIVATED, "User deactivated (iam.user.deactivated)"],
     ]);
-    expect(param("event").refetchOnWindowFocus).toBe(true);
+    expect(result[0].description).toBe("userId (string), roles (string[])");
+    expect(param("event").searchable).toBe(true);
     expect(param("event").required).toBe(true);
   });
 
-  it("C13: a saved event that is no longer enabled stays selectable and shows the warning", () => {
-    const options = buildEventOptions(EVENTS, "PaymentLifecycleEvent");
-    expect(options[0]).toEqual({ value: "PaymentLifecycleEvent", label: "PaymentLifecycleEvent (disabled for workflows)" });
-    expect(buildEventStatus(EVENTS, "PaymentLifecycleEvent").message).toBe(DISABLED_EVENT_WARNING);
-    expect(buildEventStatus(EVENTS, "UserMutationEvent").message).toBeUndefined();
+  it("a saved action that is no longer on stays selectable and shows the warning", () => {
+    const options = buildActionOptions(ACTIONS, USER_UPDATED);
+    expect(options[0]).toEqual({ value: USER_UPDATED, label: "iam.user.updated (not on for workflows)" });
+    expect(buildActionStatus(ACTIONS, USER_UPDATED).message).toContain("not on for workflows");
   });
 
-  it("C12: with nothing enabled the node says how to enable one", () => {
-    expect(buildEventOptions([], "")).toEqual([]);
-    expect(buildEventStatus([], "").message).toBe(NO_ENABLED_EVENTS_MESSAGE);
+  it("the status line shows the selected action's data fields", () => {
+    expect(buildActionStatus(ACTIONS, USER_CREATED).message).toBe("Data fields: userId (string), roles (string[])");
+    expect(buildActionStatus(ACTIONS, USER_DEACTIVATED).message).toBeUndefined();
   });
 
-  it("reads the saved event name only when it is a string", () => {
-    expect(eventNameOf({ eventName: "UserMutationEvent" })).toBe("UserMutationEvent");
-    expect(eventNameOf({ eventName: { nested: true } })).toBe("");
-    expect(eventNameOf({ eventName: 42 })).toBe("");
-    expect(eventNameOf({})).toBe("");
+  it("with nothing on the node says where an admin turns actions on", () => {
+    expect(buildActionOptions([], "")).toEqual([]);
+    expect(buildActionStatus([], "").message).toContain("Blocks OS");
   });
 
-  it("the output preview names the selected event, or a placeholder", () => {
+  it("reads the saved action name only when it is a string", () => {
+    expect(actionNameOf({ eventName: USER_CREATED })).toBe(USER_CREATED);
+    expect(actionNameOf({ eventName: { nested: true } })).toBe("");
+    expect(actionNameOf({})).toBe("");
+  });
+
+  it("the output preview is the simple action json", () => {
     const display = param("output").displayValue!;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(display({ eventName: "SmsStatusEvent" }, {} as any)).toContain('"EventName": "SmsStatusEvent"');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(display({}, {} as any)).toContain('"EventName": "EventName"');
-  });
-
-  it("the status line is display-only and follows the selected event", () => {
-    const status = param("eventStatus");
-    expect(status.type).toBe("readonly-details");
-    expect(status.transient).toBe(true);
-    expect(status.detailsDependencies).toEqual(["eventName"]);
+    const text = display({ eventName: USER_CREATED }, {} as Parameters<typeof display>[1]) as string;
+    expect(text).toContain('"action": "iam.user.created"');
+    expect(text).toContain('"organizationId"');
+    expect(text).toContain('"data"');
   });
 
   it("the select and the status line share one request", async () => {
-    const spy = vi.spyOn(eventTriggersService, "getWorkflowEvents").mockResolvedValue({ items: EVENTS });
+    const spy = vi.spyOn(actionsService, "getForWorkflow").mockResolvedValue(ACTIONS);
     const options = param("event").options as (d: Record<string, unknown>) => Promise<unknown>;
     const details = param("eventStatus").details!;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await Promise.all([options({ eventName: "" }), details({ eventName: "" }, {} as any)]);
+    await Promise.all([options({ eventName: "" }), details({ eventName: "" }, {} as Parameters<typeof details>[1])]);
 
     expect(spy).toHaveBeenCalledTimes(1);
   });
@@ -140,7 +131,7 @@ describe("SelectField refetchOnWindowFocus", () => {
 
   const focus = async () => {
     await act(async () => {
-      window.dispatchEvent(new Event("focus"));
+      globalThis.dispatchEvent(new Event("focus"));
     });
   };
 
@@ -199,7 +190,7 @@ describe("SelectField refetchOnWindowFocus", () => {
   });
 
   it("C18: a select without the flag never reloads on focus", async () => {
-    const { load } = renderSelect(undefined);
+    const { load } = renderSelect();
     await act(async () => {});
 
     await focus();

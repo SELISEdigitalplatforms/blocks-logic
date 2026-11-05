@@ -15,6 +15,8 @@ namespace Mail.DomainService.Services
     {
         private const string LastAccumulator = "$last";
         private const string EmailField = "Email";
+        private const string OrganizationIdField = "OrganizationId";
+        private const string TemplateRankField = "_organizationRank";
         private readonly IDbContextProvider _dbContextProvider;
 
         private readonly ILogicDataAccess _dataAccess;
@@ -147,56 +149,106 @@ namespace Mail.DomainService.Services
             using var cursor = await collection.FindAsync(FilterDefinition<MailServerConfiguration>.Empty, options);
             return await cursor.ToListAsync();
         }
-        public Task<EmailTemplate> GetEmailTemplateByPurpose(string purpose, string language, string organizationId)
+        public async Task<EmailTemplateChoice> GetEmailTemplateForOrganizationAsync(string? purpose, string? language, string organizationId)
         {
-            return GetEmailTemplate(purpose, language, organizationId);
+            var organization = MailOrganization.Normalize(organizationId);
+            var filter =
+                Builders<EmailTemplate>.Filter.Eq(t => t.Name, purpose) &
+                Builders<EmailTemplate>.Filter.Eq(t => t.Language, language) &
+                OrganizationFilter<EmailTemplate>(organization, includeDefault: true);
+
+            // The organization's own templates rank before the Default organization's, so Default duplicates with
+            // lower ids can never push the organization's template out of the limit. For the Default organization
+            // every match is its own. The id is a $literal so a value starting with "$" is never read as a field path.
+            BsonValue rank = organization == MailOrganization.Default
+                ? 0
+                : new BsonDocument("$cond", new BsonArray { new BsonDocument("$eq", new BsonArray { "$" + OrganizationIdField, new BsonDocument("$literal", organization) }), 0, 1 });
+
+            var templates = await GetCollection<EmailTemplate>().Aggregate()
+                .Match(filter)
+                .AppendStage<EmailTemplate>(new BsonDocument("$addFields", new BsonDocument(TemplateRankField, rank)))
+                .Sort(new BsonDocument { { TemplateRankField, 1 }, { "_id", 1 } })
+                .Limit(3)
+                .ToListAsync();
+
+            if (templates.Count == 0)
+            {
+                return EmailTemplateChoice.None;
+            }
+
+            var chosen = templates[0];
+            var chosenIsOwn = MailOrganization.Owns(organization, chosen.OrganizationId);
+            var tied = templates
+                .FindAll(t => MailOrganization.Owns(organization, t.OrganizationId) == chosenIsOwn)
+                .ConvertAll(t => t.ItemId);
+
+            return new EmailTemplateChoice(chosen, tied.Count > 1 ? tied : []);
         }
 
-        private async Task<EmailTemplate> GetEmailTemplate(string purpose, string language, string organizationId)
+        public async Task<EmailTemplate?> GetEmailTemplateByIdAsync(string templateId)
         {
-            var emailTemplateCollection = GetCollection<EmailTemplate>();
-            EmailTemplate emailTemplate = null;
+            return await GetCollection<EmailTemplate>().Find(t => t.ItemId == templateId).FirstOrDefaultAsync();
+        }
 
-            if (!string.IsNullOrWhiteSpace(organizationId))
+        public async Task<MailServerConfigurationChoice> GetMailServerConfigurationForSendAsync(string? templateConfigurationId, string organizationId)
+        {
+            var organization = MailOrganization.Normalize(organizationId);
+            var builder = Builders<MailServerConfiguration>.Filter;
+            var hasTemplateConfiguration = !string.IsNullOrWhiteSpace(templateConfigurationId);
+
+            var candidates = new List<FilterDefinition<MailServerConfiguration>>();
+            if (hasTemplateConfiguration)
             {
-                var nameLanguageOrganizationFilter =
-                    Builders<EmailTemplate>.Filter.Eq(t => t.Name, purpose) &
-                    Builders<EmailTemplate>.Filter.Eq(t => t.Language, language) &
-                    Builders<EmailTemplate>.Filter.In("OrganizationIds", new[] { organizationId });
+                candidates.Add(builder.Eq(c => c.ItemId, templateConfigurationId));
+            }
+            candidates.Add(builder.Eq(c => c.IsOrganizationDefault, true) & OrganizationFilter<MailServerConfiguration>(organization, includeDefault: false));
+            candidates.Add(builder.Eq(c => c.IsDefault, true));
 
-                emailTemplate = await emailTemplateCollection.Find(nameLanguageOrganizationFilter).FirstOrDefaultAsync();
+            // One read for the whole chain; inbound configurations never qualify.
+            var found = await GetCollection<MailServerConfiguration>()
+                .Find(builder.Ne(c => c.IsInbound, true) & builder.Or(candidates))
+                .Sort(Builders<MailServerConfiguration>.Sort.Ascending(c => c.ItemId))
+                .ToListAsync();
 
-                if (emailTemplate != null)
+            var fromTemplate = hasTemplateConfiguration ? found.Find(c => c.ItemId == templateConfigurationId) : null;
+            if (fromTemplate is not null)
+            {
+                return new MailServerConfigurationChoice(fromTemplate, MailConfigurationSource.Template);
+            }
+
+            var organizationDefault = found.Find(c => c.IsOrganizationDefault && MailOrganization.Owns(organization, c.OrganizationId));
+            if (organizationDefault is not null)
+            {
+                return new MailServerConfigurationChoice(organizationDefault, MailConfigurationSource.OrganizationDefault);
+            }
+
+            var projectDefault = found.Find(c => c.IsDefault);
+            return projectDefault is null
+                ? MailServerConfigurationChoice.None
+                : new MailServerConfigurationChoice(projectDefault, MailConfigurationSource.ProjectDefault);
+        }
+
+        /// <summary>
+        /// Documents of <paramref name="organization"/>; with <paramref name="includeDefault"/>, also the Default
+        /// organization's. The Default organization's documents are those with OrganizationId "default", empty,
+        /// null or missing (an Eq/In on null matches a missing element too).
+        /// </summary>
+        private static FilterDefinition<T> OrganizationFilter<T>(string organization, bool includeDefault)
+        {
+            // Raw BSON: a typed In on the string member would serialize the null through the string serializer.
+            var values = new BsonArray { MailOrganization.Default, "", BsonNull.Value };
+
+            if (organization != MailOrganization.Default)
+            {
+                if (!includeDefault)
                 {
-                    return emailTemplate;
+                    return new BsonDocument(OrganizationIdField, organization);
                 }
+
+                values.Insert(0, organization);
             }
 
-            var nameLanguageFilter =
-               Builders<EmailTemplate>.Filter.Eq(t => t.Name, purpose) &
-               Builders<EmailTemplate>.Filter.Eq(t => t.Language, language);
-
-            emailTemplate = await emailTemplateCollection.Find(nameLanguageFilter).FirstOrDefaultAsync();
-
-            return emailTemplate;
-        }
-
-        public async Task<MailServerConfiguration> GetMailServerConfigurationByPurpose(string purpose, string language, string organizationId)
-        {
-            var template = await GetEmailTemplate(purpose, language, organizationId);
-
-            if (template == null)
-            {
-                return null;
-            }
-
-            var mailConfigurationId = template.MailConfigurationId;
-
-            var mailServerConfigurationCollection = GetCollection<MailServerConfiguration>();
-
-            var mailServerConfiguration = await mailServerConfigurationCollection.Find(sc => sc.ItemId == mailConfigurationId).FirstOrDefaultAsync();
-
-            return mailServerConfiguration;
+            return new BsonDocument(OrganizationIdField, new BsonDocument("$in", values));
         }
 
         //deprecated

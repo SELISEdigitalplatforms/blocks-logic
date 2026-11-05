@@ -60,8 +60,8 @@ namespace XUnitTest.Workflow
                 .Setup(r => r.GetByWorkflowIdAsync("wf", "tenant-1"))
                 .ReturnsAsync(
                 [
-                    Execution("e2", "wf"),
-                    Execution("e1", "wf"),
+                    Row("e2"),
+                    Row("e1"),
                 ]);
 
             var result = await _sut.GetExecutionsByWorkflowIdAsync("tenant-1", new WorkflowExecutionsGetRequestDto
@@ -76,6 +76,62 @@ namespace XUnitTest.Workflow
             result.Data!.Select(item => item.Id).Should().Equal("e2", "e1");
             result.Refreshed.Should().BeNull();
             _executions.Verify(r => r.GetPageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task GetExecutions_WithoutPageSize_ReturnsTheNineListFieldsOfEachRow()
+        {
+            var started = new DateTime(2026, 11, 4, 12, 0, 0, DateTimeKind.Utc);
+            _executions
+                .Setup(r => r.GetByWorkflowIdAsync("wf", "tenant-1"))
+                .ReturnsAsync(
+                [
+                    new WorkflowExecutionListRow
+                    {
+                        Id = "e1",
+                        WorkflowId = "wf",
+                        WorkflowName = "Orders",
+                        Status = WorkflowExecutionStatus.Failed,
+                        ExecutionMode = WorkflowExecutionMode.Test,
+                        StartedAt = started,
+                        FinishedAt = started.AddMinutes(1),
+                        ErrorMessage = "boom",
+                        AttemptNumber = 2,
+                    },
+                ]);
+
+            var result = await _sut.GetExecutionsByWorkflowIdAsync("tenant-1", new WorkflowExecutionsGetRequestDto { WorkflowId = "wf" });
+
+            result.HttpStatus.Should().Be(200);
+            result.Errors.Should().BeNull();
+            result.TotalCount.Should().Be(1);
+            result.Data.Should().ContainSingle().Which.Should().BeEquivalentTo(new WorkflowExecutionItemDto
+            {
+                Id = "e1",
+                WorkflowId = "wf",
+                WorkflowName = "Orders",
+                Status = WorkflowExecutionStatus.Failed,
+                ExecutionMode = WorkflowExecutionMode.Test,
+                StartedAt = started,
+                FinishedAt = started.AddMinutes(1),
+                ErrorMessage = "boom",
+                AttemptNumber = 2,
+            });
+            _executions.Verify(r => r.GetByWorkflowIdAsync("wf", "tenant-1"), Times.Once);
+            _executions.Verify(r => r.CountByWorkflowIdAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task GetExecutions_WithoutPageSize_NoExecutions_ReturnsAnEmptyList()
+        {
+            _executions.Setup(r => r.GetByWorkflowIdAsync("wf-empty", "tenant-1")).ReturnsAsync([]);
+
+            var result = await _sut.GetExecutionsByWorkflowIdAsync("tenant-1", new WorkflowExecutionsGetRequestDto { WorkflowId = "wf-empty" });
+
+            result.HttpStatus.Should().Be(200);
+            result.TotalCount.Should().Be(0);
+            result.Data.Should().BeEmpty();
+            result.Errors.Should().BeNull();
         }
 
         [Fact]

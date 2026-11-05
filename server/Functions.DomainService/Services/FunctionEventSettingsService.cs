@@ -1,75 +1,60 @@
-using System.Text.Json;
 using FluentValidation;
 using Functions.DomainService.Dtos.Requests;
 using Functions.DomainService.Dtos.Responses;
-using Functions.DomainService.Events;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Utils;
+using Workflow.DomainService.Actions;
 
 namespace Functions.DomainService.Services
 {
     public interface IFunctionEventSettingsService
     {
-        FunctionEventCatalogDto GetCatalog();
-
-        /// <summary>The draft's events; empty when none were saved. A function of another tenant is not found.</summary>
+        /// <summary>The draft's trigger events; empty when none were saved. A function of another tenant is not found.</summary>
         Task<FunctionEventSettingsDto> GetAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
 
-        /// <summary>Saves the draft's events. Deploy copies them to the new version.</summary>
+        /// <summary>
+        /// Saves the draft's trigger actions. Deploy copies them to the new version. Every name must be in the tenant's
+        /// <c>actions</c> list (<see cref="ActionNotFoundCode"/> otherwise); its Function switch may be off.
+        /// </summary>
         Task SaveAsync(
             string tenantId, SaveEventSettingsRequestDto request, string? actorId, string? actorEmail,
             CancellationToken cancellationToken = default);
 
         /// <summary>Runs of the function still waiting to start, HTTP and event runs apart. A function of another tenant is not found.</summary>
         Task<QueueStatusDto> GetQueueStatusAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
-
-        /// <summary>What happened to a run's events (its newest attempt that has any). A run of another tenant is not found.</summary>
-        Task<RunEventsDto> GetRunEventsAsync(string tenantId, string runId, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
-    /// The events a function may send (see <see cref="FunctionEventCatalog"/>): the editor's side — catalog, the draft's
-    /// settings, and what happened to a run's events. The Worker reads the same data through the repositories.
+    /// Function events, the editor's side: the draft's trigger events and the queue status. The Worker reads the same
+    /// data through the repositories.
     /// </summary>
     public class FunctionEventSettingsService : IFunctionEventSettingsService
     {
+        /// <summary>The error code of a trigger name that is not in the tenant's actions.</summary>
+        public const string ActionNotFoundCode = "ACTION_NOT_FOUND";
+
         private readonly IFunctionRepository _functionRepository;
         private readonly IFunctionRunRepository _runRepository;
         private readonly IFunctionEventSettingsRepository _settings;
-        private readonly IFunctionRunEventsRepository _runEvents;
         private readonly IFunctionAuditService _auditService;
         private readonly IValidator<SaveEventSettingsRequestDto> _validator;
+        private readonly IActionsRepository _actions;
 
         public FunctionEventSettingsService(
             IFunctionRepository functionRepository,
             IFunctionRunRepository runRepository,
             IFunctionEventSettingsRepository settings,
-            IFunctionRunEventsRepository runEvents,
             IFunctionAuditService auditService,
-            IValidator<SaveEventSettingsRequestDto> validator)
+            IValidator<SaveEventSettingsRequestDto> validator,
+            IActionsRepository actions)
         {
+            _actions = actions;
             _functionRepository = functionRepository;
             _runRepository = runRepository;
             _settings = settings;
-            _runEvents = runEvents;
             _auditService = auditService;
             _validator = validator;
         }
-
-        public FunctionEventCatalogDto GetCatalog() => new()
-        {
-            Items =
-            [
-                .. FunctionEventCatalog.All.Select(d => new FunctionEventCatalogItemDto
-                {
-                    Type = d.Type,
-                    Title = d.Title,
-                    Description = d.Description,
-                    PublicAllowed = d.PublicAllowed,
-                    PayloadTemplate = ParseObject(d.PayloadTemplateJson),
-                }),
-            ],
-        };
 
         public async Task<FunctionEventSettingsDto> GetAsync(
             string tenantId, string functionId, CancellationToken cancellationToken = default)
@@ -80,14 +65,6 @@ namespace Functions.DomainService.Services
             return new FunctionEventSettingsDto
             {
                 FunctionId = functionId,
-                Events =
-                [
-                    .. (row?.Events ?? []).Select(e => new FunctionEventSettingDto
-                    {
-                        Type = e.Type,
-                        Payload = ParseObject(e.PayloadTemplateJson),
-                    }),
-                ],
                 TriggerEvents = [.. row?.TriggerEvents ?? []],
             };
         }
@@ -105,16 +82,14 @@ namespace Functions.DomainService.Services
             }
 
             await RequireFunctionAsync(tenantId, request.FunctionId, cancellationToken);
+            await RequireKnownActionsAsync(request.TriggerEvents, cancellationToken);
 
-            var events = request.Events
-                .Select(e => new FunctionEventSetting { Type = e.Type, PayloadTemplateJson = e.Payload.GetRawText() })
-                .ToList();
             await _settings.SaveDraftAsync(
-                tenantId, request.FunctionId, events, [.. request.TriggerEvents], actorId, cancellationToken);
+                tenantId, request.FunctionId, [.. request.TriggerEvents], actorId, cancellationToken);
 
             await _auditService.RecordAsync(
                 tenantId, request.FunctionId, FunctionsConstants.AuditActions.EventsUpdated, actorId, actorEmail,
-                new { Events = events.Select(e => e.Type).ToList(), TriggerEvents = request.TriggerEvents.Count },
+                new { TriggerEvents = request.TriggerEvents.Count },
                 cancellationToken);
         }
 
@@ -134,30 +109,20 @@ namespace Functions.DomainService.Services
             };
         }
 
-        public async Task<RunEventsDto> GetRunEventsAsync(
-            string tenantId, string runId, CancellationToken cancellationToken = default)
+        private async Task RequireKnownActionsAsync(List<string> names, CancellationToken cancellationToken)
         {
-            var run = await _runRepository.GetByIdAsync(tenantId, runId, cancellationToken)
-                ?? throw new FunctionNotFoundException($"run '{runId}' was not found");
+            if (names.Count == 0) return;
 
-            var document = await _runEvents.GetLatestAsync(tenantId, run.ItemId, cancellationToken);
-            return new RunEventsDto
+            var known = (await _actions.GetAllAsync(cancellationToken)).Select(a => a.Name).ToHashSet(StringComparer.Ordinal);
+            var problems = names
+                .Select((name, index) => (name, index))
+                .Where(entry => !known.Contains(entry.name))
+                .Select(entry => $"triggerEvents[{entry.index}]: {ActionNotFoundCode}: '{entry.name}' is not an action of this project")
+                .ToList();
+            if (problems.Count > 0)
             {
-                Rejected = document?.Rejected,
-                Items =
-                [
-                    .. (document?.Events ?? []).Select(e => new RunEventDto
-                    {
-                        Id = e.Id,
-                        Type = e.Type,
-                        Name = e.Name,
-                        Status = e.Status.ToString(),
-                        Error = e.Error,
-                        Attempts = e.Attempts,
-                        SentAt = e.SentAt,
-                    }),
-                ],
-            };
+                throw new FunctionValidationException(string.Join("; ", problems));
+            }
         }
 
         private async Task RequireFunctionAsync(string tenantId, string functionId, CancellationToken cancellationToken)
@@ -166,19 +131,6 @@ namespace Functions.DomainService.Services
                 ? null
                 : await _functionRepository.GetByIdAsync(tenantId, functionId, cancellationToken);
             if (function is null) throw new FunctionNotFoundException($"function '{functionId}' was not found");
-        }
-
-        /// <summary>A stored template as a JSON value; a broken one (never written by this service) is an empty object.</summary>
-        private static JsonElement ParseObject(string json)
-        {
-            try
-            {
-                return JsonSerializer.Deserialize<JsonElement>(json);
-            }
-            catch (JsonException)
-            {
-                return JsonSerializer.Deserialize<JsonElement>("{}");
-            }
         }
     }
 }

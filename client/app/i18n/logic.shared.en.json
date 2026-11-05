@@ -65,6 +65,7 @@
   "VARIABLE_PICKER_POPOVER.UNABLE_TO_LOAD_VARIABLES": "Unable to load variables",
   "VARIABLE_REF_FIELD.BIND_TO_A_CONFIGURATION": "Bind {{ariaLabel}} to a configuration variable",
   "VARIABLE_REF_FIELD.LOADING": "Loading…",
+  "VARIABLE_REF_FIELD.OPTIONAL_VARIABLE_GONE": "This configuration variable no longer exists. The function still runs, without this value. Pick another one, or clear it.",
   "VARIABLE_REF_FIELD.THIS_CONFIGURATION_VARIABLE_NO": "This configuration variable no longer exists. Pick another one, or clear it.",
   "VARIABLE_REF_FIELD.UNAVAILABLE_VARIABLE": "Unavailable variable",
   "VARIABLE_REF_FIELD.UNBIND": "Unbind {{ariaLabel}}",

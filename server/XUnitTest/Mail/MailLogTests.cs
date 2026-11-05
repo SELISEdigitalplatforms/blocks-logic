@@ -56,5 +56,15 @@ namespace XUnitTest.Mail
             MailLog.Count(null).Should().Be(0);
             MailLog.Count(["a", "b"]).Should().Be(2);
         }
+
+        [Theory]
+        [InlineData("acme", "acme")]
+        [InlineData("acme\r\nMAIL PERSISTED: forged", "acmeMAIL PERSISTED: forged")]
+        [InlineData("a\nb\rc", "abc")]
+        [InlineData(null, MailLog.None)]
+        public void SingleLine_RemovesLineBreaks_SoAValueCannotForgeALogEntry(string? value, string expected)
+        {
+            MailLog.SingleLine(value).Should().Be(expected);
+        }
     }
 }

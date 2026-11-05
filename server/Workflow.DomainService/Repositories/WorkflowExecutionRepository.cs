@@ -359,15 +359,21 @@ namespace Workflow.DomainService.Repositories
             await collection.UpdateOneAsync(filter, update);
         }
 
-        public async Task<List<WorkflowExecutionEntity>> GetByWorkflowIdAsync(string workflowId, string tenantId)
+        /// <summary>
+        /// Every execution of the workflow, newest first, for the unpaged list (no PageSize, BeforeId or AfterId).
+        /// Reads only the list fields, like the paged list: the full documents (snapshot, context, trigger and node
+        /// data) ran the API out of memory on workflows with many runs. One find and no index check, so the
+        /// database round trips stay what they were.
+        /// </summary>
+        public async Task<List<WorkflowExecutionListRow>> GetByWorkflowIdAsync(string workflowId, string tenantId)
         {
-            var collection = GetCollection(tenantId);
-            var filter = Builders<WorkflowExecutionEntity>.Filter.Eq(e => e.WorkflowId, workflowId);
-            var scope = await ReadAsync(tenantId, filter, "GetByWorkflowId");
+            var scope = await ReadAsync(tenantId, WorkflowFilter(workflowId), "GetByWorkflowId", useProjection: false);
             if (!scope.Granted) return [];
-            return scope.ForView(await scope.Apply(collection)
-                .SortByDescending(e => e.StartedAt)
-                .ToListAsync());
+            return await GetCollection(tenantId)
+                .Find(scope.Filter)
+                .Sort(NewestFirst)
+                .Project<WorkflowExecutionListRow>(ListProjection)
+                .ToListAsync();
         }
 
         public Task<List<WorkflowExecutionListRow>> GetPageAsync(string workflowId, string tenantId, int pageSize)
@@ -403,19 +409,19 @@ namespace Workflow.DomainService.Repositories
             return QueryListAsync(tenantId, WorkflowFilter(workflowId) & newer, OldestFirst, pageSize);
         }
 
-        public static FilterDefinition<WorkflowExecutionEntity> BlocksEventExecutionFilter(string workflowId, string eventId)
+        public static FilterDefinition<WorkflowExecutionEntity> ActionExecutionFilter(string workflowId, string eventId)
         {
             var builder = Builders<WorkflowExecutionEntity>.Filter;
             return builder.Eq(e => e.WorkflowId, workflowId)
-                & builder.Eq("TriggerMetadata.TriggerType", LogicConstants.BlocksEventNodeType)
-                & builder.Eq("TriggerMetadata.TriggerData.0.EventId", eventId);
+                & builder.Eq("TriggerMetadata.TriggerType", LogicConstants.ActionTriggerNodeType)
+                & builder.Eq("TriggerMetadata.TriggerData.0." + Actions.ActionTriggerData.IdField, eventId);
         }
 
-        public async Task<bool> ExistsForBlocksEventAsync(string tenantId, string workflowId, string eventId)
+        public async Task<bool> ExistsForActionAsync(string tenantId, string workflowId, string eventId)
         {
             await EnsureIndexesAsync(tenantId);
             return await GetCollection(tenantId).CountDocumentsAsync(
-                BlocksEventExecutionFilter(workflowId, eventId), new CountOptions { Limit = 1 }) > 0;
+                ActionExecutionFilter(workflowId, eventId), new CountOptions { Limit = 1 }) > 0;
         }
 
         public async Task<long> CountByWorkflowIdAsync(string workflowId, string tenantId)

@@ -12,7 +12,6 @@ namespace Functions.DomainService.Services
     {
         public const string InvalidMessage = "INVALID_MESSAGE";
         public const string NoTenant = "NO_TENANT";
-        public const string DepthLimit = "DEPTH_LIMIT";
         public const string InvokeFailed = "INVOKE_FAILED";
         public const string EventExpired = "EVENT_EXPIRED";
         public const string RunFailed = "RUN_FAILED";
