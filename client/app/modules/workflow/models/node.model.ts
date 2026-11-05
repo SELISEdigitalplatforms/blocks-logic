@@ -15,6 +15,7 @@ export type NodeType =
   | "webhook"
   | "agent"
   | "sendMail"
+  | "storage"
   | "httpRequest"
   | "email"
   | "dataGateway"

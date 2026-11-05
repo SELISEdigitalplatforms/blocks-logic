@@ -20,6 +20,7 @@ import {
 	BetweenHorizontalStart,
 	Zap,
 	TriangleAlert,
+	HardDrive,
 } from "lucide-react";
 import { deriveMergeHandle } from "@blocks-workflow/utils/merge-handles";
 import { deriveSwitchHandle, switchHandleLabel } from "@blocks-workflow/utils/switch-handles";
@@ -136,6 +137,20 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		type: "sendMail",
 		version: "v2",
 		get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.SEND_MAIL"); },
+		handle: {
+			sources: [{ key: "source", label: "" }],
+			targets: [{ key: "target", label: "" }],
+		},
+	},
+	{
+		id: "action-storage-v2",
+		icon: <HardDrive className="h-5 w-5 text-sky-500" />,
+		get title() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.STORAGE"); },
+		get description() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.GETS_DELETES_OR_RENAMES"); },
+		category: "action",
+		type: "storage",
+		version: "v2",
+		get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.STORAGE"); },
 		handle: {
 			sources: [{ key: "source", label: "" }],
 			targets: [{ key: "target", label: "" }],

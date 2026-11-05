@@ -29,6 +29,8 @@ namespace BlocksTemplate.Api.Controllers
         /// </remarks>
         [HttpPost]
         [ProtectedEndPoint("blocks-os::project::mutate-token-validation-params")]
+        // The global multipart limit was raised to 50 MiB for webhooks; certificates keep their former 15 MB.
+        [RequestFormLimits(MultipartBodyLengthLimit = 15 * 1024 * 1024)]
         public Task<UploadCertificateResponse> UploadCertificate(
             IFormFile? certificate,
             [FromQuery] bool isThirdParty)

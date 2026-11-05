@@ -13,6 +13,7 @@ using Workflow.DomainService.Nodes.ActionAIAgentV1;
 using Workflow.DomainService.Nodes.ActionSendMailV1;
 using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 using Workflow.DomainService.Nodes.ActionDataV1;
+using Workflow.DomainService.Nodes.ActionStorageV2;
 using Workflow.DomainService.Nodes.ActionProxy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -49,7 +50,14 @@ namespace Workflow.DomainService
             services.AddSingleton<IWorkflowService, WorkflowService>();
             services.TryAddSingleton<IWorkflowImportTenantSlugResolver, NullWorkflowImportTenantSlugResolver>();
             services.AddSingleton<IWorkflowImportService, WorkflowImportService>();
+            services.AddSingleton<WorkflowExecutionStores>();
+            services.AddSingleton<WorkflowTriggerAccess>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
+            // Webhook "Any content" intake: request → JSON items, files stored through the storage driver.
+            services.AddOptions<WebhookUploadOptions>().BindConfiguration(WebhookUploadOptions.SectionName);
+            services.AddSingleton<IWebhookFileStore, StorageWebhookFileStore>();
+            services.AddSingleton<IWebhookIntake, WebhookIntake>();
+            services.AddHttpClient(StorageWebhookFileStore.HttpClientName);
             services.AddSingleton<IInProcessGrantReleaser, InProcessGrantReleaser>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
             services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();
@@ -96,6 +104,7 @@ namespace Workflow.DomainService
             services.AddSingleton<INodeExecutor, ActionSendMailV1Node>();
             services.AddSingleton<INodeExecutor, ActionHttpRequestV1Node>();
             services.AddSingleton<INodeExecutor, ActionDataV1Node>();
+            services.AddSingleton<INodeExecutor, ActionStorageV2Node>();
             services.AddSingleton<INodeExecutor, ActionProxyNode>();
 
 
