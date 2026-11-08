@@ -18,7 +18,7 @@ import {
 	Merge,
 	Filter,
 	BetweenHorizontalStart,
-	Zap,
+	// Zap, // Blocks Event trigger is commented out below.
 	TriangleAlert,
 } from "lucide-react";
 import { deriveMergeHandle } from "@blocks-workflow/utils/merge-handles";
@@ -70,21 +70,22 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 			targets: [],
 		},
 	},
-	{
-		id: "trigger-blocksEvent-v2",
-		icon: <Zap className="h-5 w-5 text-amber-500" />,
-		get title() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.ACTION"); },
-		get description() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.STARTS_THE_WORKFLOW_ON_ACTION"); },
-		// The Action trigger. The type keeps the old Blocks Event id so saved workflows still load.
-		type: "blocksEvent",
-		category: "trigger",
-		version: "v2",
-		get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.ACTION"); },
-		handle: {
-			sources: [{ key: "source", label: "" }],
-			targets: [],
-		},
-	},
+	// Hotfix: Blocks Event trigger hidden from workflows for now.
+	// {
+	// 	id: "trigger-blocksEvent-v2",
+	// 	icon: <Zap className="h-5 w-5 text-amber-500" />,
+	// 	get title() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.ACTION"); },
+	// 	get description() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.STARTS_THE_WORKFLOW_ON_ACTION"); },
+	// 	// The Action trigger. The type keeps the old Blocks Event id so saved workflows still load.
+	// 	type: "blocksEvent",
+	// 	category: "trigger",
+	// 	version: "v2",
+	// 	get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.ACTION"); },
+	// 	handle: {
+	// 		sources: [{ key: "source", label: "" }],
+	// 		targets: [],
+	// 	},
+	// },
 	{
 		id: "trigger-errorTrigger-v2",
 		icon: <TriangleAlert className="h-5 w-5 text-error" />,
