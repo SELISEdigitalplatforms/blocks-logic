@@ -13,7 +13,7 @@ namespace Functions.DomainService.Services
         Task<FunctionEventSettingsDto> GetAsync(string tenantId, string functionId, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Saves the draft's trigger actions. Deploy copies them to the new version. Every name must be in the tenant's
+        /// Saves the draft's trigger action (at most one) and the Actions switch. Deploy copies them to the new version. Every name must be in the tenant's
         /// <c>actions</c> list (<see cref="ActionNotFoundCode"/> otherwise); its Function switch may be off.
         /// </summary>
         Task SaveAsync(
@@ -65,7 +65,9 @@ namespace Functions.DomainService.Services
             return new FunctionEventSettingsDto
             {
                 FunctionId = functionId,
-                TriggerEvents = [.. row?.TriggerEvents ?? []],
+                // One action per function: an older row with several shows (and keeps working with) only the first.
+                TriggerEvents = row?.TriggerEvents is { Count: > 0 } names ? [names[0]] : [],
+                ActionsEnabled = row?.ActionsEnabled != false,
             };
         }
 
@@ -85,11 +87,11 @@ namespace Functions.DomainService.Services
             await RequireKnownActionsAsync(request.TriggerEvents, cancellationToken);
 
             await _settings.SaveDraftAsync(
-                tenantId, request.FunctionId, [.. request.TriggerEvents], actorId, cancellationToken);
+                tenantId, request.FunctionId, [.. request.TriggerEvents], request.ActionsEnabled, actorId, cancellationToken);
 
             await _auditService.RecordAsync(
                 tenantId, request.FunctionId, FunctionsConstants.AuditActions.EventsUpdated, actorId, actorEmail,
-                new { TriggerEvents = request.TriggerEvents.Count },
+                new { TriggerEvents = request.TriggerEvents.Count, request.ActionsEnabled },
                 cancellationToken);
         }
 

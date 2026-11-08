@@ -7,8 +7,8 @@ namespace Functions.DomainService.Events
     /// </summary>
     public static class FunctionEventCatalog
     {
-        /// <summary>The most actions one function can subscribe to.</summary>
-        public const int MaxTriggerEvents = 20;
+        /// <summary>The most actions one function can subscribe to: one (2026-11-05).</summary>
+        public const int MaxTriggerEvents = 1;
 
         /// <summary>The most a received action's data may hold, in UTF-8 bytes.</summary>
         public const int MaxPayloadBytes = 64 * 1024;

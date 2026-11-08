@@ -75,32 +75,64 @@ namespace XUnitTest.Functions
             _settings.Verify(s => s.SaveDraftAsync(
                 Tenant, "fn-1",
                 It.Is<List<string>>(t => t.SequenceEqual(new[] { "order.created" })),
-                "user-1", It.IsAny<CancellationToken>()), Times.Once);
+                true, "user-1", It.IsAny<CancellationToken>()), Times.Once);
             _audit.Verify(a => a.RecordAsync(
                 Tenant, "fn-1", FunctionsConstants.AuditActions.EventsUpdated, "user-1", "u@x", It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
-        public async Task Trigger_events_are_limited_to_20_valid_names_without_duplicates()
+        public async Task Trigger_events_are_limited_to_one_valid_name()
         {
-            var tooMany = Enumerable.Range(0, 21).Select(i => $"event.n{i:00}").ToArray();
+            (await SaveErrorAsync(Service(), Request(["order.created", "order.paid"]))).Should().Contain("at most 1 action");
+            (await SaveErrorAsync(Service(), Request(["Bad Name"]))).Should().Contain("triggerEvents[0]");
 
-            (await SaveErrorAsync(Service(), Request(tooMany))).Should().Contain("at most 20");
-            (await SaveErrorAsync(Service(), Request(["order.created", "Bad Name"]))).Should().Contain("triggerEvents[1]");
-            (await SaveErrorAsync(Service(), Request(["order.created", "order.created"]))).Should().Contain("triggerEvents[1]").And.Contain("twice");
+            await Service().SaveAsync(Tenant, Request(["order.created"]), "user-1", "u@x");
+            await Service().SaveAsync(Tenant, Request([]), "user-1", "u@x");
+        }
 
-            var twenty = Enumerable.Range(0, 20).Select(i => $"event.n{i:00}").ToArray();
-            await Service().SaveAsync(Tenant, Request(twenty), "user-1", "u@x");
+        [Fact]
+        public async Task The_Actions_switch_is_saved_with_the_action()
+        {
+            var request = Request(["order.created"]);
+            request.ActionsEnabled = false;
+
+            await Service().SaveAsync(Tenant, request, "user-1", "u@x");
+
+            _settings.Verify(s => s.SaveDraftAsync(
+                Tenant, "fn-1", It.Is<List<string>>(t => t.SequenceEqual(new[] { "order.created" })), false, "user-1",
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task Get_shows_only_the_first_stored_action_and_the_switch_on_when_never_saved()
+        {
+            _settings.Setup(s => s.GetAsync(Tenant, "fn-1", null, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionEventSettingsEntity { FunctionId = "fn-1", TriggerEvents = ["order.created", "order.paid"] });
+
+            var dto = await Service().GetAsync(Tenant, "fn-1");
+
+            dto.TriggerEvents.Should().Equal("order.created");
+            dto.ActionsEnabled.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task Get_returns_the_Actions_switch_off_when_it_was_turned_off()
+        {
+            _settings.Setup(s => s.GetAsync(Tenant, "fn-1", null, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new FunctionEventSettingsEntity { FunctionId = "fn-1", TriggerEvents = ["order.created"], ActionsEnabled = false });
+
+            (await Service().GetAsync(Tenant, "fn-1")).ActionsEnabled.Should().BeFalse();
         }
 
         [Fact]
         public async Task A_name_that_is_not_an_action_of_the_tenant_is_refused_with_ACTION_NOT_FOUND_and_nothing_is_saved()
         {
-            var message = await SaveErrorAsync(Service(), Request(["order.created", "order.paid"]));
+            var message = await SaveErrorAsync(Service(), Request(["order.paid"]));
 
-            message.Should().Be("triggerEvents[1]: ACTION_NOT_FOUND: 'order.paid' is not an action of this project");
+            message.Should().Be("triggerEvents[0]: ACTION_NOT_FOUND: 'order.paid' is not an action of this project");
             _settings.Verify(s => s.SaveDraftAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<bool>(), It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]
@@ -110,7 +142,7 @@ namespace XUnitTest.Functions
             await Service().SaveAsync(Tenant, Request(["iam.user.deactivated"]), "user-1", "u@x");
 
             _settings.Verify(s => s.SaveDraftAsync(
-                Tenant, "fn-1", It.IsAny<List<string>>(), "user-1", It.IsAny<CancellationToken>()), Times.Once);
+                Tenant, "fn-1", It.IsAny<List<string>>(), It.IsAny<bool>(), "user-1", It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
@@ -302,7 +334,7 @@ namespace XUnitTest.Functions
                 settings.FunctionId.Should().Be("fn-1");
                 saved.IsSuccess.Should().BeTrue();
                 _functions.Verify(f => f.GetByIdAsync(Tenant, "fn-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
-                _settings.Verify(s => s.SaveDraftAsync(Tenant, "fn-1", It.IsAny<List<string>>(), "user-1", It.IsAny<CancellationToken>()), Times.Once);
+                _settings.Verify(s => s.SaveDraftAsync(Tenant, "fn-1", It.IsAny<List<string>>(), It.IsAny<bool>(), "user-1", It.IsAny<CancellationToken>()), Times.Once);
             }
             finally
             {

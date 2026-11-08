@@ -1,26 +1,9 @@
-import { tStatic } from "@seliseblocks/genesis-os";
+/** A function starts from one action at most. */
+export const MAX_TRIGGER_EVENTS = 1;
 
-const LOGIC_FUNCTIONS_MODULE = "logic.functions";
-
-/** What a trigger event name must look like. */
-export const EVENT_NAME_PATTERN = /^[a-z][a-z0-9_.-]{2,63}$/;
-export const eventNameHint = () => tStatic(LOGIC_FUNCTIONS_MODULE, "EVENTS.EVENT_NAME_HINT");
-export const MAX_TRIGGER_EVENTS = 20;
-
-export const isValidEventName = (name: string): boolean => EVENT_NAME_PATTERN.test(name);
-
-export type TriggerEventCheck = { ok: true; list: string[] } | { ok: false; error: string };
-
-/** Adds a trigger event name: valid, not a duplicate, at most {@link MAX_TRIGGER_EVENTS}. */
-export const addTriggerEvent = (list: string[], raw: string): TriggerEventCheck => {
-  const name = raw.trim();
-  if (!isValidEventName(name)) return { ok: false, error: tStatic(LOGIC_FUNCTIONS_MODULE, "EVENTS.NOT_A_VALID_EVENT_NAME", { hint: eventNameHint() }) };
-  if (list.includes(name)) return { ok: false, error: tStatic(LOGIC_FUNCTIONS_MODULE, "EVENTS.THIS_EVENT_IS_ALREADY") };
-  if (list.length >= MAX_TRIGGER_EVENTS) {
-    return { ok: false, error: tStatic(LOGIC_FUNCTIONS_MODULE, "EVENTS.AT_MOST_EVENTS", { maxTriggerEvents: MAX_TRIGGER_EVENTS }) };
-  }
-  return { ok: true, list: [...list, name] };
-};
+/** The list to save for a picked action name: empty for none, else just that name. */
+export const triggerEventsFor = (name: string | null | undefined): string[] =>
+  name ? [name].slice(0, MAX_TRIGGER_EVENTS) : [];
 
 export interface IMappedSaveErrors {
   /** Messages for `triggerEvents[...]`. */

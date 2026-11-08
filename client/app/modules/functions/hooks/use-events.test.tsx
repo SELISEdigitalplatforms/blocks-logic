@@ -16,6 +16,7 @@ vi.mock("../services/function.service", () => ({
 
 import { useGetEventSettings, useGetQueueStatus, useSaveEventSettings } from "./use-events";
 
+const SHIPPED = "order.shipped";
 const SETTINGS = {
   functionId: "fn_1",
   triggerEvents: ["order.paid"],
@@ -45,6 +46,58 @@ describe("useSaveEventSettings", () => {
     await expect(act(() => save.result.current.mutateAsync({ triggerEvents: [] }))).rejects.toBeTruthy();
 
     expect(client.getQueryData(["functions", "events", "settings", "fn_1"])).toEqual(SETTINGS);
+  });
+
+  it("changing the action keeps the actions switch, and flipping the switch keeps the action", async () => {
+    getEventSettings.mockResolvedValue({ ...SETTINGS, actionsEnabled: false });
+    saveEventSettings.mockResolvedValue({ isSuccess: true });
+    const { wrapper } = setup();
+    const settings = renderHook(() => useGetEventSettings("fn_1"), { wrapper });
+    await waitFor(() => expect(settings.result.current.data).toBeTruthy());
+    const save = renderHook(() => useSaveEventSettings("fn_1"), { wrapper });
+    // The reload after a save returns what the server now holds.
+    getEventSettings.mockResolvedValue({ functionId: "fn_1", triggerEvents: [SHIPPED], actionsEnabled: false });
+
+    await act(() => save.result.current.mutateAsync({ triggerEvents: [SHIPPED] }));
+    expect(saveEventSettings).toHaveBeenLastCalledWith({
+      functionId: "fn_1",
+      triggerEvents: [SHIPPED],
+      actionsEnabled: false,
+    });
+
+    await act(() => save.result.current.mutateAsync({ actionsEnabled: true }));
+    expect(saveEventSettings).toHaveBeenLastCalledWith({
+      functionId: "fn_1",
+      triggerEvents: [SHIPPED],
+      actionsEnabled: true,
+    });
+  });
+
+  it("a save reloads the function, whose deploy state may have changed", async () => {
+    saveEventSettings.mockResolvedValue({ isSuccess: true });
+    const { wrapper, client } = setup();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const save = renderHook(() => useSaveEventSettings("fn_1"), { wrapper });
+
+    await act(() => save.result.current.mutateAsync({ actionsEnabled: false }));
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["functions", "detail", "fn_1"] });
+  });
+
+  it("settings saved before the switch existed count as on", async () => {
+    saveEventSettings.mockResolvedValue({ isSuccess: true });
+    const { wrapper } = setup();
+    const settings = renderHook(() => useGetEventSettings("fn_1"), { wrapper });
+    await waitFor(() => expect(settings.result.current.data).toBeTruthy());
+    const save = renderHook(() => useSaveEventSettings("fn_1"), { wrapper });
+
+    await act(() => save.result.current.mutateAsync({ triggerEvents: [] }));
+
+    expect(saveEventSettings).toHaveBeenLastCalledWith({
+      functionId: "fn_1",
+      triggerEvents: [],
+      actionsEnabled: true,
+    });
   });
 });
 

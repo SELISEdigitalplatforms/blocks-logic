@@ -20,21 +20,27 @@ const INPUT_JSON_PLACEHOLDER = `{
   "source": "workflow"
 }`;
 
+/** The function id the node already uses; anything that is not a string counts as none. */
+const selectedFunctionId = (data: Record<string, unknown>): string =>
+  typeof data.functionId === "string" ? data.functionId : "";
+
 /**
  * The deployed functions this step can actually call.
  *
- * A function whose workflow trigger is off is still listed, disabled and labelled with the
- * reason, rather than hidden: the server rejects it with "this function cannot be invoked from
- * a workflow", and a function that silently never appears in the list is the harder version of
- * that message to act on. Keeping it in the list also matters for a node that already points at
- * it — `SelectField` clears any stored value it cannot find among the options, so filtering it
- * out would wipe the selection just by opening the node.
+ * A function whose workflow trigger is off is hidden: the server rejects it with "this function
+ * cannot be invoked from a workflow", so picking it could only ever fail at run time.
+ *
+ * The one exception is the function the node already uses. `SelectField` clears any stored value
+ * it cannot find among the options, so hiding it would wipe the selection just by opening the
+ * node. It stays in the list, disabled and labelled with the reason, so the user can see why the
+ * step will fail and can pick another function.
  *
  * A failed fetch yields an empty list rather than a rejected promise: the field would otherwise
  * leave an unhandled rejection behind, and `SelectField` treats an empty list as "nothing to
  * reconcile" and leaves the saved selection alone.
  */
-const loadFunctionOptions = async (): Promise<SelectOption[]> => {
+const loadFunctionOptions = async (data: Record<string, unknown> = {}): Promise<SelectOption[]> => {
+  const selectedId = selectedFunctionId(data);
   try {
     const response = await functionService.getFunctions({
       status: "Live",
@@ -43,11 +49,13 @@ const loadFunctionOptions = async (): Promise<SelectOption[]> => {
       pageSize: FUNCTION_PICKER_PAGE_SIZE,
     });
 
-    return (response.data ?? []).map((fn) => ({
-      value: fn.id,
-      label: fn.workflowEnabled ? fn.name : tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.WORKFLOW_TRIGGER_OFF", { name: fn.name }),
-      disabled: !fn.workflowEnabled,
-    }));
+    return (response.data ?? [])
+      .filter((fn) => fn.workflowEnabled || fn.id === selectedId)
+      .map((fn) => ({
+        value: fn.id,
+        label: fn.workflowEnabled ? fn.name : tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.WORKFLOW_TRIGGER_OFF", { name: fn.name }),
+        disabled: !fn.workflowEnabled,
+      }));
   } catch {
     return [];
   }

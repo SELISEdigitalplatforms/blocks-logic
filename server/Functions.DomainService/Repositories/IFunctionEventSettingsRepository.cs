@@ -13,7 +13,7 @@ namespace Functions.DomainService.Repositories
     {
         /// <summary>
         /// One page of the deployed versions (rows with a version id — never a draft) whose <c>TriggerEvents</c> hold
-        /// <paramref name="eventName"/>, ordered by function id then version id, starting after <paramref name="after"/>
+        /// <paramref name="eventName"/> and whose Actions switch is not off, ordered by function id then version id, starting after <paramref name="after"/>
         /// (null = from the start), at most <paramref name="limit"/>. Several versions of one function can be listed; the
         /// caller keeps the one that is the function's active version. A page shorter than the limit is the last one.
         /// </summary>
@@ -24,9 +24,17 @@ namespace Functions.DomainService.Repositories
         Task<FunctionEventSettingsEntity?> GetAsync(
             string tenantId, string functionId, string? versionId, CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// The draft row and the row of <c>versionId</c> of each function, in one read: (functionId, versionId) pairs, a null
+        /// version id meaning the draft. Rows that do not exist are left out.
+        /// </summary>
+        Task<IReadOnlyList<FunctionEventSettingsEntity>> GetManyAsync(
+            string tenantId, IReadOnlyCollection<(string FunctionId, string? VersionId)> rows, CancellationToken cancellationToken = default);
+
         /// <summary>Writes the draft row (replacing the whole row; there is one per function).</summary>
         Task SaveDraftAsync(
-            string tenantId, string functionId, List<string> triggerEvents, string? actorId, CancellationToken cancellationToken = default);
+            string tenantId, string functionId, List<string> triggerEvents, bool actionsEnabled, string? actorId,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Deploy: copies the draft row to one for the new version. With no draft row there is nothing to copy and

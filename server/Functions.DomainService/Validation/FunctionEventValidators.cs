@@ -20,7 +20,7 @@ namespace Functions.DomainService.Validation
                 {
                     if (names.Count > FunctionEventCatalog.MaxTriggerEvents)
                     {
-                        context.AddFailure($"triggerEvents: at most {FunctionEventCatalog.MaxTriggerEvents} actions");
+                        context.AddFailure($"triggerEvents: at most {FunctionEventCatalog.MaxTriggerEvents} action");
                     }
 
                     var seen = new HashSet<string>(StringComparer.Ordinal);
