@@ -547,15 +547,21 @@ describe("webhook trigger v1", () => {
     expect(await opts({}, { tenantId: "pk" })).toEqual([{ value: "", label: "None" }]);
   });
 
-  it.skip("roles options call getRoles with the selected organization", async () => {
-    getRoles.mockResolvedValue([{ itemId: "r1", name: "clouduser" }]);
-    const opts = field(NodeSchemaTriggerWebhookV1, "authorization.roles").options as (
+  it("roles options call getRoles with the selected organization", async () => {
+    getRoles.mockResolvedValue({ data: [{ itemId: "r1", name: "Cloud User", slug: "clouduser" }] });
+    const opts = field(NodeSchemaTriggerWebhookV1, "roles").options as (
       data: AnyRec,
       config: AnyRec,
     ) => Promise<{ value: string; label: string }[]>;
-    const result = await opts({ authorization: { organizationId: "acme" } }, { tenantId: "pk" });
+    const result = await opts({ organizationId: "acme" }, { tenantId: "pk" });
     expect(getRoles).toHaveBeenCalledWith({ organizationId: "acme" });
-    expect(result).toEqual([{ value: "clouduser", label: "clouduser" }]);
+    expect(result).toEqual([{ value: "clouduser", label: "Cloud User" }]);
+  });
+
+  it("roles reload when the organization changes", () => {
+    expect(field(NodeSchemaTriggerWebhookV1, "roles").optionsDependencies).toEqual([
+      "organizationId",
+    ]);
   });
 
   it.skip("permissions options call getPermissions with selected roles", async () => {

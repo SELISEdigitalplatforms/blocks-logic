@@ -61,16 +61,55 @@ export const ConditionalMultiselectField = ({
   const [open, setOpen] = useState(false);
   const hasCalledRef = useRef(false);
 
+  // Serialised values of the declared dependency keys (see select-field). Undefined when the field
+  // declares none, which keeps the fetch-once behaviour.
+  const depString = useMemo(
+    () =>
+      field.optionsDependencies
+        ? JSON.stringify(field.optionsDependencies.map((key) => data[key]))
+        : undefined,
+    [data, field.optionsDependencies],
+  );
+  const lastDepRef = useRef<string | undefined>(undefined);
+  const requestIdRef = useRef(0);
+  // Read when a reload lands, so the pruning starts from the value as it is then.
+  const latestValue = useRef(currentValue);
   useEffect(() => {
-    if (typeof field.options === "function" && !hasCalledRef.current) {
-      hasCalledRef.current = true;
-      setIsLoading(true);
-      field
-        .options(data, config)
-        .then(setAsyncOptions)
-        .finally(() => setIsLoading(false));
-    }
-  }, [config, data, field]);
+    latestValue.current = currentValue;
+  });
+
+  useEffect(() => {
+    if (typeof field.options !== "function") return;
+
+    const isFirstCall = !hasCalledRef.current;
+    const depsChanged = depString !== undefined && lastDepRef.current !== depString;
+    if (!isFirstCall && !depsChanged) return;
+
+    hasCalledRef.current = true;
+    lastDepRef.current = depString;
+    // Only the latest request may apply: a slow answer for a previous organization is ignored.
+    const requestId = ++requestIdRef.current;
+    const isStale = () => requestId !== requestIdRef.current;
+    setIsLoading(true);
+    field
+      .options(data, config)
+      .then((opts) => {
+        if (isStale()) return;
+        setAsyncOptions(opts);
+        // A dependency changed (e.g. another organization): drop picks the new list doesn't have.
+        // Never on the first load, so a saved node keeps its values even if they no longer resolve.
+        if (isFirstCall || readOnly) return;
+        const available = new Set(opts.map((o) => String(o.value)));
+        const current = latestValue.current;
+        const kept = current.values.filter((v) => available.has(v));
+        if (kept.length !== current.values.length) {
+          onChange({ ...current, values: kept });
+        }
+      })
+      .finally(() => {
+        if (!isStale()) setIsLoading(false);
+      });
+  }, [config, data, depString, field, onChange, readOnly]);
 
   const options = isStaticOptions ? staticOptions : asyncOptions;
   const disabled = (field.disabled as boolean) || readOnly;
