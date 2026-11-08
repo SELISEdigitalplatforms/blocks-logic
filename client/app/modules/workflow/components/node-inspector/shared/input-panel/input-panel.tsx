@@ -44,19 +44,17 @@ export const InputPanel = ({
     executedItems,
     edgesMap,
     nodesMap,
-    editorMode,
     lastSuccessfulExecutionData,
   } = useWorkflow();
 
   const hasStepExecutionData = executedNodes && executedNodes.length > 0;
   const hasLastExecutionData = !!lastSuccessfulExecutionData;
 
-  const isExecutionMode = editorMode === "execution";
-  const isStepExecutionEditor = editorMode === "editor" && hasStepExecutionData;
-  const isLastExecutionEditor =
-    editorMode === "editor" && !hasStepExecutionData && hasLastExecutionData;
+  // Editor only: LayoutWithIO renders ReadonlyInputPanel in every other editorMode.
+  const isStepExecutionEditor = hasStepExecutionData;
+  const isLastExecutionEditor = !hasStepExecutionData && hasLastExecutionData;
 
-  const shouldUseCurrentExecution = isStepExecutionEditor || isExecutionMode;
+  const shouldUseCurrentExecution = isStepExecutionEditor;
   const sourceExecutedNodes: ExecutedNode[] = shouldUseCurrentExecution
     ? executedNodes
     : getLastExecutionNodes(isLastExecutionEditor, lastSuccessfulExecutionData);
@@ -76,32 +74,25 @@ export const InputPanel = ({
       .map((e) => e.source);
   }, [selectedNode, edgesMap]);
 
-  const displayPredecessors = useMemo(() => {
-    if (editorMode !== "editor") {
-      return predecessors.filter((p) => immediateParentIds.includes(p.id));
-    }
-    return predecessors;
-  }, [predecessors, immediateParentIds, editorMode]);
-
   const [selectedPredecessorId, setSelectedPredecessorId] = useState<string | null>(null);
   const resolvedPredecessorId =
-    displayPredecessors.find((p) => p.id === selectedPredecessorId)?.id ??
-    displayPredecessors[0]?.id ??
+    predecessors.find((p) => p.id === selectedPredecessorId)?.id ??
+    predecessors[0]?.id ??
     null;
 
   const activePredecessor = useMemo(() => {
-    return displayPredecessors.find((p) => p.id === resolvedPredecessorId);
-  }, [displayPredecessors, resolvedPredecessorId]);
+    return predecessors.find((p) => p.id === resolvedPredecessorId);
+  }, [predecessors, resolvedPredecessorId]);
 
   const runtimeInputRows = useMemo(() => {
-    if (displayPredecessors.length > 0 && resolvedPredecessorId) {
+    if (predecessors.length > 0 && resolvedPredecessorId) {
       return sourceExecutedNodes?.find((en) => en.nodeId === resolvedPredecessorId)?.output || [];
     }
     if (selectedNode) {
       return sourceExecutedNodes?.find((en) => en.nodeId === selectedNode.id)?.input || [];
     }
     return [];
-  }, [sourceExecutedNodes, selectedNode, displayPredecessors, resolvedPredecessorId]);
+  }, [sourceExecutedNodes, selectedNode, predecessors, resolvedPredecessorId]);
 
   if (!selectedNode) return null;
 
@@ -120,13 +111,13 @@ export const InputPanel = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="font-medium text-high-emphasis">{t("INPUT_PANEL.INPUT")}</h3>
-          {displayPredecessors.length > 1 && (
+          {predecessors.length > 1 && (
             <Select value={resolvedPredecessorId || ""} onValueChange={setSelectedPredecessorId}>
               <SelectTrigger className="h-7 w-[160px] text-xs">
                 <SelectValue placeholder={t("INPUT_PANEL.SELECT_NODE")} />
               </SelectTrigger>
               <SelectContent>
-                {displayPredecessors.map((p) => (
+                {predecessors.map((p) => (
                   <SelectItem key={p.id} value={p.id} className="text-xs">
                     {p.name}
                   </SelectItem>
@@ -165,7 +156,6 @@ export const InputPanel = ({
             nodeName={nodeName}
             isDirectParent={isDirectParent}
             target={target}
-            isExecutionMode={isExecutionMode}
           />
         </div>
       )}
@@ -183,7 +173,6 @@ export const InputPanel = ({
               nodeName={nodeName}
               isDirectParent={isDirectParent}
               target={target}
-              isDraggable={!isExecutionMode}
             />
           )}
         </div>
@@ -202,7 +191,6 @@ export const InputPanel = ({
               nodeName={nodeName}
               isDirectParent={isDirectParent}
               target={target}
-              isDraggable={!isExecutionMode}
             />
           )}
         </div>

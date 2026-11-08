@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
@@ -247,5 +247,110 @@ describe("LayoutWithIO", () => {
     expect(screen.getByText("Field A")).toBeTruthy();
     await user.click(screen.getByRole("tab", { name: "Settings" }));
     await waitFor(() => expect(screen.getByText("Setting S")).toBeTruthy());
+  });
+
+  describe("Input panel by editor mode (#415)", () => {
+    const schema = {
+      type: "action",
+      category: "action",
+      version: "v1",
+      parameters: [{ id: "a", key: "a", type: "text", label: "Field A" }],
+      settings: [],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    // Parent p output [{ name }]; the selected node n1 recorded its own input [{ city }].
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seedRun = (editorMode: string) => (store: any) => {
+      const parent = node("p");
+      const sel = node("n1");
+      store.getState().addNode(parent);
+      store.getState().addNode(sel);
+      store.getState().createEdge({ source: "p", sourceHandle: "s" }, { target: "n1", targetHandle: "t" });
+      store.setState({
+        selectedNode: sel,
+        editorMode,
+        executedNodes: [
+          { id: "ne-p", nodeId: "p", runIndex: 0, status: 4, input: [], output: [{ name: "Ada" }] },
+          { id: "ne-n1", nodeId: "n1", runIndex: 1, status: 4, input: [{ city: "Paris" }], output: [] },
+        ],
+      });
+    };
+
+    it("renders the draggable InputPanel in the editor, not the read-only panel (H3, H10)", () => {
+      const { container } = renderWithProviders(inSheet(<LayoutWithIO schema={schema} />), {
+        seedWorkflow: seedRun("editor"),
+      });
+      const field = screen.getByTitle(/^Drag to use: .*name/);
+      expect(field.getAttribute("draggable")).toBe("true");
+      expect(container.querySelector('[draggable="true"]')).toBeTruthy();
+      // None of the read-only panel's rows: not the node's own input, no per-field copy buttons.
+      expect(screen.queryByText("city:")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Copy value of name" })).toBeNull();
+    });
+
+    it.each([
+      ["execution", "H1"],
+      ["version", "H2"],
+      ["run", "C11: any other value"],
+    ])("renders the read-only Input panel in %s mode (%s)", (editorMode) => {
+      const { container } = renderWithProviders(inSheet(<LayoutWithIO schema={schema} />), {
+        seedWorkflow: seedRun(editorMode),
+      });
+      expect(screen.getByRole("heading", { name: "Input" })).toBeTruthy();
+      expect(screen.getByText("city:")).toBeTruthy();
+      expect(screen.getByText("Paris")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Copy value of city" })).toBeTruthy();
+      // Not InputPanel: no parent output, nothing draggable, no predecessor selector.
+      expect(screen.queryByText("name")).toBeNull();
+      expect(container.querySelector('[draggable="true"]')).toBeNull();
+      expect(screen.queryByTitle(/Drag to use/)).toBeNull();
+      expect(screen.queryByRole("combobox")).toBeNull();
+      // The Output panel still renders below it.
+      expect(screen.getByRole("heading", { name: "Output" })).toBeTruthy();
+    });
+
+    it("keeps the Input/Output collapse pairing for the read-only panel (H8)", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(inSheet(<LayoutWithIO schema={schema} />), { seedWorkflow: seedRun("execution") });
+
+      await user.click(screen.getByRole("button", { name: "Collapse input" }));
+      expect(screen.queryByText("city:")).toBeNull();
+      expect(screen.getByRole("button", { name: "Collapse output" })).toBeTruthy();
+
+      // Collapsing the output while the input is collapsed expands the input again.
+      await user.click(screen.getByRole("button", { name: "Collapse output" }));
+      expect(screen.getByRole("button", { name: "Expand output" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Collapse input" })).toBeTruthy();
+      expect(screen.getByText("city:")).toBeTruthy();
+    });
+
+    it("switches panels with editorMode while the inspector stays open, without console errors (C15)", () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let store: any;
+      const { container } = renderWithProviders(inSheet(<LayoutWithIO schema={schema} />), {
+        seedWorkflow: (s) => {
+          store = s;
+          seedRun("editor")(s);
+        },
+      });
+      expect(container.querySelector('[draggable="true"]')).toBeTruthy();
+
+      act(() => store.getState().setEditorMode("execution"));
+      expect(container.querySelector('[draggable="true"]')).toBeNull();
+      expect(screen.getByText("city:")).toBeTruthy();
+
+      act(() => store.getState().setEditorMode("version"));
+      expect(container.querySelector('[draggable="true"]')).toBeNull();
+      expect(screen.getByText("city:")).toBeTruthy();
+
+      act(() => store.getState().setEditorMode("editor"));
+      expect(container.querySelector('[draggable="true"]')).toBeTruthy();
+      expect(screen.queryByText("city:")).toBeNull();
+
+      expect(consoleError).not.toHaveBeenCalled();
+      consoleError.mockRestore();
+    });
   });
 });

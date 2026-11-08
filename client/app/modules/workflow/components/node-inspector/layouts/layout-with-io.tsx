@@ -7,6 +7,7 @@ import { FormBuilder } from "../form-builder/form-builder";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import { InputPanel } from "../shared/input-panel/input-panel";
 import { OutputPanel } from "../shared/output-panel/output-panel";
+import { ReadonlyInputPanel } from "../shared/readonly-input-panel/readonly-input-panel";
 import { NodeGuidePanel } from "../shared";
 import { useT } from "@seliseblocks/genesis-os";
 
@@ -17,7 +18,7 @@ type LayoutWithIOProps = {
 
 export const LayoutWithIO = ({ schema, guide }: LayoutWithIOProps) => {
   const { t } = useT("logic.workflow.nodes.inspector");
-  const { selectedNode, updateNode, updateNodeParameters } = useWorkflow();
+  const { selectedNode, updateNode, updateNodeParameters, editorMode } = useWorkflow();
   const [activeTab, setActiveTab] = useState<"parameters" | "settings">("parameters");
   const [isInputCollapsed, setIsInputCollapsed] = useState(false);
   const [isOutputCollapsed, setIsOutputCollapsed] = useState(false);
@@ -89,7 +90,12 @@ export const LayoutWithIO = ({ schema, guide }: LayoutWithIOProps) => {
             <NodeGuidePanel guide={guide} onClose={() => setIsGuideOpen(false)} />
           ) : (
             <div className="flex h-full flex-col gap-4 overflow-hidden rounded border p-3">
-              <InputPanel isCollapsed={isInputCollapsed} onToggleCollapse={toggleInput} />
+              {/* Only the workflow editor builds expressions from the input; every other mode reads it. */}
+              {editorMode === "editor" ? (
+                <InputPanel isCollapsed={isInputCollapsed} onToggleCollapse={toggleInput} />
+              ) : (
+                <ReadonlyInputPanel isCollapsed={isInputCollapsed} onToggleCollapse={toggleInput} />
+              )}
               <OutputPanel isCollapsed={isOutputCollapsed} onToggleCollapse={toggleOutput} />
             </div>
           )}

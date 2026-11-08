@@ -9,7 +9,6 @@ const renderSchemaTab = (props: Partial<Parameters<typeof SchemaTab>[0]> = {}) =
       isLastExecutionEditor={false}
       nodeName="HTTP Request"
       isDirectParent={true}
-      isExecutionMode={false}
       {...props}
     />,
   );
