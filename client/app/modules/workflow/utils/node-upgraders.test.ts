@@ -59,8 +59,7 @@ describe("upgradeNode", () => {
     expect(upgraded.position).toEqual({ x: 1, y: 2 });
   });
 
-  // Hotfix: skipped while the Blocks Event trigger is commented out of NodeDefinitions.
-  it.skip("H1: every one of the 13 types upgrades to v2 with keys identical to its old handle ids", () => {
+  it("H1: every one of the 13 types upgrades to v2 with keys identical to its old handle ids", () => {
     // The 13 types that existed before SPEC6, plus Switch and Merge (which derive their handles), Split Out,
     // Filter, Blocks Event, Limit and Error Trigger (new types: created as v2, nothing to upgrade).
     expect(NodeDefinitions.map((d) => d.type).sort()).toEqual([...Object.keys(OLD_HANDLE_IDS), "switch", "splitOut", "merge", "filter", "blocksEvent", "limit", "errorTrigger"].sort());
