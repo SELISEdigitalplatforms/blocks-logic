@@ -32,10 +32,10 @@ export const ReadonlyInputPanel = ({
   const executedNodes = useWorkflowStore((s) => s.executedNodes);
 
   // Only these two inputs: other store changes (nodesMap edits, items) do not recompute the rows or schema.
-  const { rows, schema } = useMemo(() => {
+  const { rows, rowKeys, schema } = useMemo(() => {
     const run = selectedNode ? latestRun(executedNodes, selectedNode.id) : null;
     const input: unknown[] = Array.isArray(run?.input) ? run.input : [];
-    return { rows: input, schema: inferSchemaFromRuntimeRows(input) };
+    return { rows: input, rowKeys: positionKeys(input), schema: inferSchemaFromRuntimeRows(input) };
   }, [executedNodes, selectedNode]);
 
   if (!selectedNode) return null;
@@ -74,7 +74,7 @@ export const ReadonlyInputPanel = ({
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-2">
                 {rows.map((row, index) => (
-                  <div key={`input-${index}`} className="rounded border border-border/60 p-2">
+                  <div key={rowKeys[index]} className="rounded border border-border/60 p-2">
                     <p className="mb-1 text-xs font-semibold text-medium-emphasis">
                       {t("SCHEMA_TAB.ITEM", { value: index + 1 })}
                     </p>
@@ -82,7 +82,7 @@ export const ReadonlyInputPanel = ({
                       <div className="flex flex-col gap-1">
                         {schema.map((field) => (
                           <div
-                            key={`input-${index}-${field.key}`}
+                            key={`${rowKeys[index]}-${field.key}`}
                             className="hover:bg-surface-hover group flex min-w-0 items-start gap-2 rounded px-2 py-1 text-xs"
                           >
                             <span className="shrink-0 py-0.5 font-mono text-high-emphasis">{field.key}:</span>
@@ -113,7 +113,7 @@ export const ReadonlyInputPanel = ({
 
       {!isCollapsed && tab === "table" && (
         <div className="mt-2 flex-1 overflow-y-auto rounded bg-surface-app p-2">
-          <RuntimeInputTable rows={rows} />
+          <RuntimeInputTable rows={rows} rowKeys={rowKeys} />
         </div>
       )}
 
@@ -126,7 +126,7 @@ export const ReadonlyInputPanel = ({
   );
 };
 
-function RuntimeInputTable({ rows }: Readonly<{ rows: unknown[] }>) {
+function RuntimeInputTable({ rows, rowKeys }: Readonly<{ rows: unknown[]; rowKeys: string[] }>) {
   const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   if (rows.length === 0) {
     return <p className="text-xs text-low-emphasis">{t("TABLE_TAB.NO_RUNTIME_INPUT_DATA")}</p>;
@@ -161,7 +161,7 @@ function RuntimeInputTable({ rows }: Readonly<{ rows: unknown[] }>) {
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={`input-row-${index}`}>
+            <tr key={rowKeys[index]}>
               {columns.map((column) => (
                 <td
                   key={column}
@@ -204,6 +204,14 @@ function RuntimeInputJson({ rows }: Readonly<{ rows: unknown[] }>) {
 function tableCellText(row: unknown, column: string | null): string {
   if (column === null) return isRecord(row) ? "" : formatCellValue(row);
   return isRecord(row) ? formatCellValue(row[column]) : "";
+}
+
+/**
+ * React keys for the recorded input rows. The rows are a fixed snapshot of one run that is never reordered,
+ * edited or filtered, and carry no id of their own, so the position identifies a row.
+ */
+function positionKeys(rows: unknown[]): string[] {
+  return rows.map((_, position) => `input-${position}`);
 }
 
 /** The node's run with the highest runIndex; on a tie the later entry wins (as in OutputPanel). */
