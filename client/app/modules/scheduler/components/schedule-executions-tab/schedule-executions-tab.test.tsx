@@ -66,7 +66,7 @@ describe("ScheduleExecutionsTab", () => {
     const { unmount } = renderTab();
     expect(await screen.findAllByText("HTTP 200")).toHaveLength(10);
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
     expect(spy).toHaveBeenCalledTimes(2);
     expect(screen.getAllByText("HTTP 200")).toHaveLength(10);
     expect(screen.getByText("Page 1 of 3")).toBeTruthy();
