@@ -115,16 +115,18 @@ export const ImportDropZone = ({ disabled, onBrowse, onDropFiles }: DropZoneProp
   );
 };
 
-export const formatFileSize = (bytes: number) =>
-  bytes < 1024
-    ? tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.B", { value: bytes })
-    : bytes < 1024 * 1024
-      ? tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.KB", {
-          value: (bytes / 1024).toFixed(1),
-        })
-      : tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.MB", {
-          value: (bytes / (1024 * 1024)).toFixed(1),
-        });
+export const formatFileSize = (bytes: number) => {
+  if (bytes < 1024)
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.B", { value: bytes });
+  if (bytes < 1024 * 1024) {
+    return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.KB", {
+      value: (bytes / 1024).toFixed(1),
+    });
+  }
+  return tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.MB", {
+    value: (bytes / (1024 * 1024)).toFixed(1),
+  });
+};
 
 type FileCardProps = {
   name: string;
