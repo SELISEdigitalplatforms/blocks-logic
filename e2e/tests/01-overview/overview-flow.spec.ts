@@ -30,11 +30,16 @@ test.describe("flow: Overview menu", () => {
       await topbar.expectThemeApplied("light");
     });
 
-    await test.step("Topbar: language selector lists EN/German/French with non-English disabled", async () => {
+    await test.step("Topbar: language selector lists English and the project's other configured languages, all selectable", async () => {
       await topbar.openLanguageMenu();
       await expect(topbar.menuItem("English")).toBeVisible();
-      await topbar.expectMenuItemDisabled("German");
-      await topbar.expectMenuItemDisabled("French");
+      // Drift (e53ea02a, genesis-os 4.4.7): the list is the project's configured languages from
+      // localization, and each of them can be selected; none is shown disabled any more.
+      await expect(topbar.otherLanguageMenuItems.first()).toBeVisible();
+      for (const item of await topbar.otherLanguageMenuItems.all()) {
+        await expect(item).toBeVisible();
+        await expect(item).not.toHaveAttribute("aria-disabled", "true");
+      }
       // The dropdown stays open after asserting menu items -- we
       // deliberately do NOT close it here. The next step opens the
       // notification popover, which Radix will handle independently.

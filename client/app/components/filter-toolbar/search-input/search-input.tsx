@@ -3,6 +3,7 @@ import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { Input } from "@/components/ui-kits/input/input";
 import { cn, debounce } from "@/lib/utils";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface SearchInputProps {
   onChange: (value: string) => void;
@@ -15,11 +16,12 @@ interface SearchInputProps {
 
 export const SearchInput: React.FC<SearchInputProps> = ({
   onChange,
-  placeholder = "Search...",
+  placeholder,
   value,
   className = "",
   "aria-label": ariaLabel,
 }) => {
+  const { t } = useT("logic.shared");
   const [state, setState] = useState(value);
   const [prevValue, setPrevValue] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +65,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
       <Input
         ref={inputRef}
         aria-label={ariaLabel}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("SEARCH_INPUT.SEARCH")}
         value={state}
         onChange={handleChange}
         className={cn(

@@ -1,21 +1,25 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideTriggerBlocksEventV2 = () => (
-  <GuideContent
-    title="Blocks Event trigger"
-    description="Use this trigger to start a workflow when a Blocks service sends a platform event, such as a user change in IAM or a payment status in Utilities."
-    steps={[
-      "Select the Event to listen to. Only events enabled for workflows in this project are listed.",
-      "To enable more events, use Manage events in the node notes; it opens the Event Triggers page in a new tab.",
-      "Review the output preview so later nodes can use the event's fields.",
-      "Publish the workflow: only the published workflow runs when the event happens.",
-    ]}
-    notes={[
-      "Each event starts every published workflow that uses it, once per workflow.",
-      "The output holds EventId, EventName, SourceService, ConsumerName, IsMassConsumer, Timestamp and the event's Payload.",
-      "A payload that is not a JSON object is passed on as text.",
-      "Publishing fails while the selected event is disabled for workflows. Disabling an event later stops its published workflows until it is enabled again.",
-      "There is no editor test run for this trigger yet.",
-    ]}
-  />
-);
+/** The Action trigger's guide (node type `blocksEvent`, kept so saved workflows still load). */
+export const NodeGuideTriggerBlocksEventV2 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_TRIGGER_ACTION_V2.ACTION_TRIGGER")}
+      description={t("NODE_GUIDE_TRIGGER_ACTION_V2.USE_THIS_TRIGGER_TO")}
+      steps={[
+        t("NODE_GUIDE_TRIGGER_ACTION_V2.SELECT_THE_ACTION_TO"),
+        t("NODE_GUIDE_TRIGGER_ACTION_V2.TO_TURN_ON_MORE"),
+        t("NODE_GUIDE_TRIGGER_ACTION_V2.REVIEW_THE_OUTPUT_PREVIEW"),
+        t("NODE_GUIDE_TRIGGER_ACTION_V2.PUBLISH_THE_WORKFLOW_ONLY"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_TRIGGER_ACTION_V2.EACH_ACTION_STARTS_EVERY"),
+        t("NODE_GUIDE_TRIGGER_ACTION_V2.THE_OUTPUT_HOLDS"),
+        t("NODE_GUIDE_TRIGGER_ACTION_V2.PUBLISHING_FAILS_FOR_UNKNOWN"),
+        t("NODE_GUIDE_TRIGGER_ACTION_V2.THERE_IS_NO_EDITOR"),
+      ]}
+    />
+  );
+};

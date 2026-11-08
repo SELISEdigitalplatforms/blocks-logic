@@ -40,6 +40,9 @@ import {
   ProxyImportResultDto,
   ProxyImportStatus,
 } from "../types";
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_PROXY_MODULE = "logic.proxy";
 
 const VALID_METHODS: ProxyMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
@@ -55,27 +58,31 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
   200: "OK",
   201: "Created",
   202: "Accepted",
-  204: "No Content",
-  301: "Moved Permanently",
+  get 204() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.NO_CONTENT"); },
+  get 301() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.MOVED_PERMANENTLY"); },
   302: "Found",
-  304: "Not Modified",
-  400: "Bad Request",
+  get 304() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.NOT_MODIFIED"); },
+  get 400() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.BAD_REQUEST"); },
   401: "Unauthorized",
   403: "Forbidden",
-  404: "Not Found",
-  405: "Method Not Allowed",
+  get 404() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.NOT_FOUND"); },
+  get 405() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.METHOD_NOT_ALLOWED"); },
   409: "Conflict",
-  413: "Payload Too Large",
-  429: "Too Many Requests",
-  500: "Internal Server Error",
-  502: "Bad Gateway",
-  503: "Service Unavailable",
-  504: "Gateway Timeout",
+  get 413() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.PAYLOAD_TOO_LARGE"); },
+  get 429() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.TOO_MANY_REQUESTS"); },
+  get 500() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.INTERNAL_SERVER_ERROR"); },
+  get 502() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.BAD_GATEWAY"); },
+  get 503() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.SERVICE_UNAVAILABLE"); },
+  get 504() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.GATEWAY_TIMEOUT"); },
 };
 
-const statusText = (status: number) =>
-  HTTP_STATUS_TEXT[status] ??
-  (status >= 500 ? "Server Error" : status >= 400 ? "Request Error" : "OK");
+const fallbackStatusText = (status: number): string => {
+  if (status >= 500) return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.SERVER_ERROR");
+  if (status >= 400) return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.REQUEST_ERROR");
+  return "OK";
+};
+
+const statusText = (status: number) => HTTP_STATUS_TEXT[status] ?? fallbackStatusText(status);
 
 // ---------------------------------------------------------------------------
 // Filters
@@ -528,7 +535,7 @@ export const mapProxyVersionDtoToHistory = (
 ): ProxyVersionHistory => ({
   id: dto.itemId,
   proxyId,
-  versionLabel: dto.versionLabel || `v${dto.versionNumber}`,
+  versionLabel: dto.versionLabel || tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.V", { versionNumber: dto.versionNumber }),
   versionNumber: Number(dto.versionNumber ?? 0),
   kind: VERSION_KIND[dto.kind] ?? "edit",
   summary: dto.changeSummary ?? "",

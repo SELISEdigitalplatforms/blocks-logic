@@ -6,6 +6,7 @@ import { getNodeDefinition } from "../node-library-panel";
 import { useState } from "react";
 import { showErrorToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@radix-ui/react-tooltip";
+import { useT } from "@seliseblocks/genesis-os";
 
 type NodeInspectorHeaderProps = {
   hasGuide?: boolean;
@@ -18,6 +19,7 @@ export const NodeInspectorHeader = ({
   isGuideOpen = false,
   onToggleGuide,
 }: NodeInspectorHeaderProps) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const { selectedNode, updateNode, isNodeNameUnique, closeConfigModal, editorMode } =
     useWorkflow();
 
@@ -50,8 +52,8 @@ export const NodeInspectorHeader = ({
     if (newName && newName !== selectedNode?.name) {
       if (!isNodeNameUnique(newName, selectedNode?.id)) {
         showErrorToast({
-          title: "Validation Error",
-          errors: "A node with this name already exists.",
+          title: t("NODE_INSPECTOR_HEADER.VALIDATION_ERROR"),
+          errors: t("NODE_INSPECTOR_HEADER.A_NODE_WITH_THIS"),
         });
         return;
       }
@@ -107,7 +109,7 @@ export const NodeInspectorHeader = ({
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="border border-border rounded-md px-2 py-1 font-normal">
-                    Rename Node
+                    {t("NODE_INSPECTOR_HEADER.RENAME_NODE")}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -127,7 +129,7 @@ export const NodeInspectorHeader = ({
               onClick={onToggleGuide}
             >
               <BookOpen className="h-4 w-4" />
-              Guide
+              {t("NODE_INSPECTOR_HEADER.GUIDE")}
             </Button>
           )}
           {editorMode === "editor" && (
@@ -137,7 +139,7 @@ export const NodeInspectorHeader = ({
               onClick={() => handleExecuteStep(selectedNode?.id)}
             >
               <Rocket className="h-4 w-4" />
-              Execute Step
+              {t("NODE_INSPECTOR_HEADER.EXECUTE_STEP")}
             </Button>
           )}
           

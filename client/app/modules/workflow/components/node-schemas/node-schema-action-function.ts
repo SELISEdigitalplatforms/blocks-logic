@@ -3,6 +3,10 @@ import { functionService } from "@blocks-functions/services/function.service";
 import { NodeGuideActionFunction } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { SelectOption } from "../node-inspector/form-builder/form-field.types";
+import { tStatic } from "@seliseblocks/genesis-os";
+import { renderRichText } from "@/lib/rich-text";
+
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
 
 /** One page is enough for a picker; the list is sorted by name so it is scannable. */
 const FUNCTION_PICKER_PAGE_SIZE = 200;
@@ -16,21 +20,27 @@ const INPUT_JSON_PLACEHOLDER = `{
   "source": "workflow"
 }`;
 
+/** The function id the node already uses; anything that is not a string counts as none. */
+const selectedFunctionId = (data: Record<string, unknown>): string =>
+  typeof data.functionId === "string" ? data.functionId : "";
+
 /**
  * The deployed functions this step can actually call.
  *
- * A function whose workflow trigger is off is still listed, disabled and labelled with the
- * reason, rather than hidden: the server rejects it with "this function cannot be invoked from
- * a workflow", and a function that silently never appears in the list is the harder version of
- * that message to act on. Keeping it in the list also matters for a node that already points at
- * it — `SelectField` clears any stored value it cannot find among the options, so filtering it
- * out would wipe the selection just by opening the node.
+ * A function whose workflow trigger is off is hidden: the server rejects it with "this function
+ * cannot be invoked from a workflow", so picking it could only ever fail at run time.
+ *
+ * The one exception is the function the node already uses. `SelectField` clears any stored value
+ * it cannot find among the options, so hiding it would wipe the selection just by opening the
+ * node. It stays in the list, disabled and labelled with the reason, so the user can see why the
+ * step will fail and can pick another function.
  *
  * A failed fetch yields an empty list rather than a rejected promise: the field would otherwise
  * leave an unhandled rejection behind, and `SelectField` treats an empty list as "nothing to
  * reconcile" and leaves the saved selection alone.
  */
-const loadFunctionOptions = async (): Promise<SelectOption[]> => {
+const loadFunctionOptions = async (data: Record<string, unknown> = {}): Promise<SelectOption[]> => {
+  const selectedId = selectedFunctionId(data);
   try {
     const response = await functionService.getFunctions({
       status: "Live",
@@ -39,11 +49,13 @@ const loadFunctionOptions = async (): Promise<SelectOption[]> => {
       pageSize: FUNCTION_PICKER_PAGE_SIZE,
     });
 
-    return (response.data ?? []).map((fn) => ({
-      value: fn.id,
-      label: fn.workflowEnabled ? fn.name : `${fn.name} — workflow trigger off`,
-      disabled: !fn.workflowEnabled,
-    }));
+    return (response.data ?? [])
+      .filter((fn) => fn.workflowEnabled || fn.id === selectedId)
+      .map((fn) => ({
+        value: fn.id,
+        label: fn.workflowEnabled ? fn.name : tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.WORKFLOW_TRIGGER_OFF", { name: fn.name }),
+        disabled: !fn.workflowEnabled,
+      }));
   } catch {
     return [];
   }
@@ -59,11 +71,10 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
       {
         id: "functionId",
         type: "select",
-        label: "Function",
-        info:
-          "The deployed function this step runs. Only Live functions are listed, and not always all of them. One whose workflow trigger is turned off is shown greyed out until that trigger is enabled in the function's settings.",
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.FUNCTION"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.THE_DEPLOYED_FUNCTION_THIS"); },
         key: "functionId",
-        placeholder: "Select a deployed function",
+        get placeholder() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.SELECT_A_DEPLOYED_FUNCTION"); },
         required: true,
         searchable: true,
         options: loadFunctionOptions,
@@ -71,13 +82,12 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
       {
         id: "inputMode",
         type: "select",
-        label: "Input",
-        info:
-          "What the function receives as its input. \"Previous step's output\" forwards the incoming item as-is; \"Custom JSON\" lets you compose the payload, pulling values from earlier steps.",
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.INPUT"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.WHAT_THE_FUNCTION_RECEIVES"); },
         key: "inputMode",
         options: [
-          { label: "Previous step's output", value: "item" },
-          { label: "Custom JSON", value: "expression" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.PREVIOUS_STEP_S_OUTPUT"); }, value: "item" },
+          { get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.CUSTOM_JSON"); }, value: "expression" },
         ],
       },
       {
@@ -89,29 +99,15 @@ export const NodeSchemaActionFunction: NodeSchemaDefinition = {
         transient: true,
         dependsOn: { key: "inputMode", value: "expression" },
         displayValue: () => ({
-          title: "How to build the input",
-          description: React.createElement(
-            "span",
-            null,
-            "Write the JSON the function should receive. Insert values from earlier steps with ",
-            code("{{$json.field}}"),
-            " for a field of the incoming item (same as ",
-            code("{{$json.output.field}}"),
-            "), ",
-            code('{{$node["Step name"].json.output.field}}'),
-            " for any earlier step, or ",
-            code("{{$context.Input}}"),
-            " for the trigger data. Without quotes a value keeps its type: text, number, true/false or object. Inside quotes (",
-            code('"Hi {{$json.name}}"'),
-            ") it becomes part of the text and is escaped automatically. If the input is not valid JSON after the values are filled in, the step fails. When testing this step on its own with nothing connected, the incoming item is empty.",
-          ),
+          title: tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.HOW_TO_BUILD_THE"),
+          description: React.createElement("span", null, ...renderRichText(tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.WRITE_THE_JSON_THE"), [code, code, code, code, code])),
         }),
       },
       {
         id: "inputExpression",
         type: "json-code-editor",
-        label: "Input JSON",
-        info: "The payload handed to the function as its input. Placeholders in {{ }} are resolved when the step runs; values inside quotes are escaped automatically. Must be valid JSON after that, or the step fails.",
+        get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.INPUT_JSON"); },
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_FUNCTION.THE_PAYLOAD_HANDED_TO"); },
         key: "inputExpression",
         placeholder: INPUT_JSON_PLACEHOLDER,
         height: 168,

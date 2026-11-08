@@ -33,7 +33,7 @@ namespace XUnitTest.Workflow
                 _workflowVersionRepository.Object,
                 _scheduleService.Object,
                 Mock.Of<ILogger<WorkflowService>>(),
-                Mock.Of<global::Workflow.DomainService.BlocksEvents.IBlocksEventCatalogService>(),
+                Mock.Of<global::Workflow.DomainService.Actions.IActionsRepository>(),
                 Mock.Of<FluentValidation.IValidator<global::Workflow.DomainService.Dtos.WorkflowUpdateSettingsRequestDto>>());
         }
 

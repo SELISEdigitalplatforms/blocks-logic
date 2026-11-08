@@ -1,4 +1,6 @@
 import { GuideCode, GuideContent, GuideInlineCode as C } from "./node-guide-content";
+import { renderRichText } from "@/lib/rich-text";
+import { useT } from "@seliseblocks/genesis-os";
 
 const EACH_RESHAPE = `return {
   fullName: $json.firstName + " " + $json.lastName,
@@ -56,181 +58,120 @@ const ALL_SHAPE = `// $items and $node["Name"].all() return a list like this:
   { json: { name: "Bob",   age: 25, __id: "..." } },
 ]`;
 
-export const NodeGuideTransformCodeV1 = () => (
-  <GuideContent
-    title="Code transform"
-    description="Use this node to reshape, filter, combine, split, or calculate workflow data with JavaScript. Whatever the script returns becomes this node's output items."
-    steps={[
-      <>
-        Choose a <strong>Mode</strong>. <strong>Run Once for Each Item</strong> runs the script
-        separately for every input item and is the simplest choice for per-item changes.{" "}
-        <strong>Run Once for All Items</strong> runs the script a single time with the whole input
-        list, for filtering, totals, grouping, or lookups across items.
-      </>,
-      "Leave Language set to JavaScript.",
-      <>
-        Read input data with the variables for your mode (see <strong>Variables by mode</strong>{" "}
-        below). Write JavaScript directly. Expression syntax such as{" "}
-        <C>{"{{$json.name}}"}</C> does not work inside the script.
-      </>,
-      <>
-        End the script with <C>return</C>. Return an object to produce one item or an array of
-        objects to produce several items. Return <C>[]</C> to produce no items.
-      </>,
-      "Run the node with real upstream data and check the output before connecting later nodes.",
-    ]}
-    sections={[
-      {
-        title: "Variables by mode",
-        content: (
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <p className="font-medium text-foreground">Run Once for Each Item</p>
+const code = (text: string) => <C>{text}</C>;
+const strong = (text: string) => <strong>{text}</strong>;
+const em = (text: string) => <em>{text}</em>;
+
+export const NodeGuideTransformCodeV1 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_TRANSFORM_CODE_V1.CODE_TRANSFORM")}
+      description={t("NODE_GUIDE_TRANSFORM_CODE_V1.USE_THIS_NODE_TO")}
+      steps={[
+        <>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.STEP_MODE"), [strong, strong, strong])}</>,
+        t("NODE_GUIDE_TRANSFORM_CODE_V1.LEAVE_LANGUAGE_SET_TO"),
+        <>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.STEP_READ"), [strong, code])}</>,
+        <>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.STEP_RETURN"), [code, code])}</>,
+        t("NODE_GUIDE_TRANSFORM_CODE_V1.RUN_THE_NODE_WITH"),
+      ]}
+      sections={[
+        {
+          title: t("NODE_GUIDE_TRANSFORM_CODE_V1.VARIABLES_BY_MODE"),
+          content: (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">{t("NODE_GUIDE_TRANSFORM_CODE_V1.RUN_ONCE_FOR_EACH")}</p>
+                <ul className="list-disc space-y-1 pl-5">
+                  <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.EACH_JSON"), [code, code, code])}</li>
+                  <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.EACH_NODE"), [code, em, code])}</li>
+                </ul>
+              </div>
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">{t("NODE_GUIDE_TRANSFORM_CODE_V1.RUN_ONCE_FOR_ALL")}</p>
+                <ul className="list-disc space-y-1 pl-5">
+                  <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.ALL_ITEMS"), [code, code, code, code, code, code])}</li>
+                  <li>
+                    {renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.ALL_NODE"), [code])}
+                    <ul className="mt-1 list-[circle] space-y-1 pl-5">
+                      <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.ALL_FN_ALL"), [code])}</li>
+                      <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.ALL_FN_FIRST_LAST"), [code, code])}</li>
+                      <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.ALL_FN_ITEM"), [code, code])}</li>
+                    </ul>
+                  </li>
+                  <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.ALL_WRAPPED"), [code, code])}</li>
+                </ul>
+                <GuideCode>{ALL_SHAPE}</GuideCode>
+              </div>
+              <p>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.EXISTS_ONLY"), [code, code, code])}</p>
+            </div>
+          ),
+        },
+        {
+          title: t("NODE_GUIDE_TRANSFORM_CODE_V1.READING_EARLIER_NODES"),
+          content: (
+            <div className="space-y-2">
+              <p>{t("NODE_GUIDE_TRANSFORM_CODE_V1.YOU_CAN_READ_ANY")}</p>
+              <p>{t("NODE_GUIDE_TRANSFORM_CODE_V1.THE_SAME_FIELD_IS")}</p>
               <ul className="list-disc space-y-1 pl-5">
-                <li>
-                  <C>$json</C> is the current item&apos;s data. Read fields directly:{" "}
-                  <C>$json.name</C>. <C>$item</C> is the same value.
-                </li>
-                <li>
-                  <C>{'$node["Node name"].json'}</C> is the item from an earlier node that{" "}
-                  <em>this</em> item came from, for example <C>{'$node["Webhook"].json.email'}</C>.
-                </li>
+                <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.EXPRESSION_FIELD_IN_OTHER"), [code])}</li>
+                <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.CODE_EACH_ITEM_MODE"), [code])}</li>
+                <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.CODE_ALL_ITEMS_MODE"), [code])}</li>
+              </ul>
+              <p>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.MISSING_NODE"), [code, code, code])}</p>
+            </div>
+          ),
+        },
+        {
+          title: t("NODE_GUIDE_TRANSFORM_CODE_V1.ITEM_LINKS_ID"),
+          content: (
+            <div className="space-y-2">
+              <p>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.LINKS_INTRO"), [code])}</p>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.N_0_EACH_ITEM_MODE"), [strong])}</li>
+                <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.LINKS_ALL_ITEMS"), [strong, code, code, code, code, code])}</li>
+                <li>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.A_NEW_OBJECT_WITHOUT"), [code, em, code])}</li>
               </ul>
             </div>
-            <div className="space-y-1">
-              <p className="font-medium text-foreground">Run Once for All Items</p>
-              <ul className="list-disc space-y-1 pl-5">
-                <li>
-                  <C>$items</C> is the list of input items. Each entry wraps its data in <C>json</C>
-                  , so read fields as <C>$items[0].json.name</C> or <C>item.json.name</C> inside{" "}
-                  <C>map</C>/<C>filter</C>.
-                </li>
-                <li>
-                  <C>{'$node["Node name"]'}</C> gives access to all items of any earlier node:
-                  <ul className="mt-1 list-[circle] space-y-1 pl-5">
-                    <li>
-                      <C>.all()</C>: every item, as a list
-                    </li>
-                    <li>
-                      <C>.first()</C> / <C>.last()</C>: the first or last item
-                    </li>
-                    <li>
-                      <C>.item(i)</C>: the item at position <C>i</C> (starting at 0)
-                    </li>
-                  </ul>
-                </li>
-                <li>
-                  Items returned by these functions are wrapped in <C>json</C> too:{" "}
-                  <C>{'$node["Webhook"].first().json.email'}</C>.
-                </li>
-              </ul>
-              <GuideCode>{ALL_SHAPE}</GuideCode>
+          ),
+        },
+        {
+          title: t("NODE_GUIDE_TRANSFORM_CODE_V1.EXAMPLES_EACH_ITEM_MODE"),
+          content: (
+            <div className="space-y-2">
+              <p>{t("NODE_GUIDE_TRANSFORM_CODE_V1.BUILD_A_NEW_OBJECT")}</p>
+              <GuideCode>{EACH_RESHAPE}</GuideCode>
+              <p>{t("NODE_GUIDE_TRANSFORM_CODE_V1.SPLIT_ONE_ITEM_INTO")}</p>
+              <GuideCode>{EACH_SPLIT}</GuideCode>
+              <p>{t("NODE_GUIDE_TRANSFORM_CODE_V1.ADD_A_VALUE_FROM")}</p>
+              <GuideCode>{EACH_EARLIER_NODE}</GuideCode>
             </div>
-            <p>
-              <C>$json</C> exists only in each-item mode. <C>$items</C> and the <C>.all()</C>{" "}
-              functions exist only in all-items mode.
-            </p>
-          </div>
-        ),
-      },
-      {
-        title: "Reading earlier nodes",
-        content: (
-          <div className="space-y-2">
-            <p>
-              You can read any node that runs before this one, not just the node directly connected
-              to it. Use the node&apos;s name exactly as it appears on the canvas (names are
-              case-sensitive).
-            </p>
-            <p>The same field is written differently in expression fields and in code:</p>
-            <ul className="list-disc space-y-1 pl-5">
-              <li>
-                Expression field in other nodes: <C>{'{{$node["Webhook"].json.output.email}}'}</C>
-              </li>
-              <li>
-                Code, each-item mode: <C>{'$node["Webhook"].json.email'}</C>
-              </li>
-              <li>
-                Code, all-items mode: <C>{'$node["Webhook"].first().json.email'}</C>
-              </li>
-            </ul>
-            <p>
-              A node that produced no items, or that is not part of the current item&apos;s path, is
-              missing from <C>$node</C>. Use <C>?.</C> when unsure:{" "}
-              <C>{'$node["Webhook"]?.json?.email'}</C>.
-            </p>
-          </div>
-        ),
-      },
-      {
-        title: "Item links (__id)",
-        content: (
-          <div className="space-y-2">
-            <p>
-              Every output item remembers which input item it came from. Later nodes use that link
-              to resolve expressions such as <C>{'{{$node["Webhook"].json.output.email}}'}</C> for
-              the right item.
-            </p>
-            <ul className="list-disc space-y-1 pl-5">
-              <li>
-                <strong>Each-item mode</strong> links every output to its input automatically.
-              </li>
-              <li>
-                <strong>All-items mode</strong> links by the hidden <C>__id</C> field that every
-                input item carries in <C>item.json.__id</C>. Returning <C>item</C>, <C>item.json</C>
-                , or <C>{"{ ...item.json, ... }"}</C> keeps it. The field is removed from the saved
-                output.
-              </li>
-              <li>
-                A new object without <C>__id</C> (a total, for example) is linked to <em>all</em>{" "}
-                input items. It still works, but when those inputs came from different earlier
-                items, later nodes read values from those earlier nodes as empty. Add{" "}
-                <C>__id: $items[0].json.__id</C> (or the id of the item it belongs to) to pick one.
-              </li>
-            </ul>
-          </div>
-        ),
-      },
-      {
-        title: "Examples: each-item mode",
-        content: (
-          <div className="space-y-2">
-            <p>Build a new object from the current item:</p>
-            <GuideCode>{EACH_RESHAPE}</GuideCode>
-            <p>Split one item into several:</p>
-            <GuideCode>{EACH_SPLIT}</GuideCode>
-            <p>Add a value from an earlier node:</p>
-            <GuideCode>{EACH_EARLIER_NODE}</GuideCode>
-          </div>
-        ),
-      },
-      {
-        title: "Examples: all-items mode",
-        content: (
-          <div className="space-y-2">
-            <p>Add a field to every item (keeps item links):</p>
-            <GuideCode>{ALL_MAP}</GuideCode>
-            <p>Keep only matching items:</p>
-            <GuideCode>{ALL_FILTER}</GuideCode>
-            <p>Combine all items into one:</p>
-            <GuideCode>{ALL_AGGREGATE}</GuideCode>
-            <p>Use a value from an earlier node on every item:</p>
-            <GuideCode>{ALL_EARLIER_NODE}</GuideCode>
-            <p>Match items against another node&apos;s list:</p>
-            <GuideCode>{ALL_LOOKUP}</GuideCode>
-          </div>
-        ),
-      },
-    ]}
-    notes={[
-      "Only JavaScript is supported.",
-      "Code runs in a sandbox for data transformation, so external API calls, file access, package imports, and system commands are not available.",
-      "If the script returns nothing or an empty array, the node produces no output items.",
-      <>
-        In each-item mode, an error in one item does not stop the node. That item&apos;s output
-        becomes <C>{"{ error: true, message }"}</C> and the remaining items still run. In all-items
-        mode, an error fails the node.
-      </>,
-    ]}
-  />
-);
+          ),
+        },
+        {
+          title: t("NODE_GUIDE_TRANSFORM_CODE_V1.EXAMPLES_ALL_ITEMS_MODE"),
+          content: (
+            <div className="space-y-2">
+              <p>{t("NODE_GUIDE_TRANSFORM_CODE_V1.ADD_A_FIELD_TO")}</p>
+              <GuideCode>{ALL_MAP}</GuideCode>
+              <p>{t("NODE_GUIDE_TRANSFORM_CODE_V1.KEEP_ONLY_MATCHING_ITEMS")}</p>
+              <GuideCode>{ALL_FILTER}</GuideCode>
+              <p>{t("NODE_GUIDE_TRANSFORM_CODE_V1.COMBINE_ALL_ITEMS_INTO")}</p>
+              <GuideCode>{ALL_AGGREGATE}</GuideCode>
+              <p>{t("NODE_GUIDE_TRANSFORM_CODE_V1.USE_A_VALUE_FROM")}</p>
+              <GuideCode>{ALL_EARLIER_NODE}</GuideCode>
+              <p>{t("NODE_GUIDE_TRANSFORM_CODE_V1.MATCH_ITEMS_AGAINST_ANOTHER")}</p>
+              <GuideCode>{ALL_LOOKUP}</GuideCode>
+            </div>
+          ),
+        },
+      ]}
+      notes={[
+        t("NODE_GUIDE_TRANSFORM_CODE_V1.ONLY_JAVASCRIPT_IS_SUPPORTED"),
+        t("NODE_GUIDE_TRANSFORM_CODE_V1.CODE_RUNS_IN_A"),
+        t("NODE_GUIDE_TRANSFORM_CODE_V1.IF_THE_SCRIPT_RETURNS"),
+        <>{renderRichText(t("NODE_GUIDE_TRANSFORM_CODE_V1.NOTE_EACH_ITEM_ERROR"), [code])}</>,
+      ]}
+    />
+  );
+};

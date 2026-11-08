@@ -34,7 +34,7 @@ namespace Workflow.DomainService.Repositories
         Task<bool> TryReopenFailedExecutionAsync(string executionId, string tenantId);
         Task AtomicUpdateNodeExecutionCompletedAsync(string executionId, string tenantId, string nodeExecutionId, int outputItemCount, Dictionary<string, int> outputCountsByBranch, BsonDocument? contextUpdates);
         Task AtomicUpdateNodeExecutionFailedAsync(string executionId, string tenantId, string nodeExecutionId, string error, int outputItemCount, Dictionary<string, int> outputCountsByBranch);
-        Task<List<WorkflowExecutionEntity>> GetByWorkflowIdAsync(string workflowId, string tenantId);
+        Task<List<WorkflowExecutionListRow>> GetByWorkflowIdAsync(string workflowId, string tenantId);
 
         Task<List<WorkflowExecutionListRow>> GetPageAsync(string workflowId, string tenantId, int pageSize);
 
@@ -44,10 +44,10 @@ namespace Workflow.DomainService.Repositories
 
         Task<long> CountByWorkflowIdAsync(string workflowId, string tenantId);
         /// <summary>
-        /// Whether the workflow already has an execution started by the Blocks Event with this <paramref name="eventId"/>
+        /// Whether the workflow already has an execution started by the action event with this <paramref name="eventId"/>
         /// (a redelivered message). A system check: it is not narrowed by the caller's data access.
         /// </summary>
-        Task<bool> ExistsForBlocksEventAsync(string tenantId, string workflowId, string eventId);
+        Task<bool> ExistsForActionAsync(string tenantId, string workflowId, string eventId);
 
         Task<List<WorkflowExecutionListRow>> GetListItemsByIdsAsync(string workflowId, string tenantId, IReadOnlyCollection<string> ids);
 

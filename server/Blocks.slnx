@@ -4,6 +4,7 @@
   <Project Path="DataAccess.InternalService/DataAccess.InternalService.csproj" />
   <Project Path="Common.InternalService/Common.InternalService.csproj" Id="f97f15e9-9068-4f6a-aee7-11665eebfccc" />
   <Project Path="Workflow.DomainService/Workflow.DomainService.csproj" />
+  <Project Path="Functions.DomainService/Functions.DomainService.csproj" />
   <Project Path="Identifier.DomainService/Identifier.DomainService.csproj" />
   <Project Path="Mail.DomainService/Mail.DomainService.csproj" />
   <Project Path="MailBoxSyncService/MailBoxSyncService.csproj" />

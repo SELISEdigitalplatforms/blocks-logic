@@ -22,9 +22,9 @@
     <PackageVersion Include="SixLabors.ImageSharp.Drawing" Version="2.1.5" />
     <PackageVersion Include="System.Drawing.Common" Version="8.0.13" />
     <PackageVersion Include="MongoDB.Driver" Version="3.10.0" />
-    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.5.8" />
+    <PackageVersion Include="SeliseBlocks.Genesis.OS" Version="4.6.3" />
     <!-- Secret domain (DECISIONS D6) for Functions and Proxy, plus an HttpClient factory for output actions. -->
-    <PackageVersion Include="SeliseBlocks.Secrets.OS" Version="4.0.3" />
+    <PackageVersion Include="SeliseBlocks.Secrets.OS" Version="4.1.0" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.13" />
     <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.24" />

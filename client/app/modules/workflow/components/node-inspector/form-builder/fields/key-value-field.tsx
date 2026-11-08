@@ -2,6 +2,7 @@
 
 import { Textarea } from "@/components/ui-kits/textarea/textarea";
 import { FieldProps } from "../form-field.types";
+import { useT } from "@seliseblocks/genesis-os";
 
 export const KeyValueField = ({
   field,
@@ -9,9 +10,10 @@ export const KeyValueField = ({
   onChange,
   readOnly,
 }: FieldProps<Record<string, unknown>>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   return (
     <div className="space-y-2 rounded-md border p-4">
-      <p className="text-sm text-muted-foreground">Key-Value pairs editor</p>
+      <p className="text-sm text-muted-foreground">{t("KEY_VALUE_FIELD.KEY_VALUE_PAIRS_EDITOR")}</p>
       <Textarea
         id={field.id}
         value={JSON.stringify(value || {}, null, 2)}
@@ -27,6 +29,7 @@ export const KeyValueField = ({
                 }
               }
         }
+        // eslint-disable-next-line no-restricted-syntax -- example JSON, not prose
         placeholder='{"key": "value"}'
         readOnly={readOnly}
         className="font-mono text-sm"

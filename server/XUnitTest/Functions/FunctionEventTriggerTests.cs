@@ -18,7 +18,7 @@ namespace XUnitTest.Functions
 {
     /// <summary>
     /// The event trigger's start of a run (<see cref="FunctionInvocationService.InvokeFromEventAsync"/>): what the run
-    /// records and the function sees, the event queue, authorization by subscription, admission, the depth it stores, and
+    /// records and the function sees, the event queue, authorization by subscription, admission, the event info it stores, and
     /// "one run per event and function".
     /// </summary>
     public class FunctionEventTriggerTests
@@ -83,8 +83,8 @@ namespace XUnitTest.Functions
         private static BlocksContext MessageContext() => BlocksContext.Create(
             Tenant, [], string.Empty, false, string.Empty, string.Empty, DateTime.MinValue, string.Empty, [], string.Empty, string.Empty, string.Empty, string.Empty, Tenant);
 
-        private static FunctionEventInvocation Event(string id = "run-0-1-1", string name = "order.created", int depth = 0) =>
-            new(id, name, Data, depth);
+        private static FunctionEventInvocation Event(string id = "run-0-1-1", string name = "order.created") =>
+            new(id, name, Data);
 
         private NameValueEntry[] EntryOn(string stream) =>
             (NameValueEntry[])_redis.Fake.Calls("StreamAddAsync").Single(c => (string)(RedisKey)c[0]! == stream)[1]!;
@@ -227,6 +227,22 @@ namespace XUnitTest.Functions
         }
 
         [Fact]
+        public void Authorization_by_event_is_refused_when_the_Actions_switch_is_off_and_counts_only_the_first_name()
+        {
+            var auth = new FunctionAuthorizationService();
+
+            var off = new FunctionEventSettingsEntity { TriggerEvents = ["order.created"], ActionsEnabled = false };
+            auth.AuthorizeForEvent(off, "order.created").Allowed.Should().BeFalse();
+
+            var on = new FunctionEventSettingsEntity { TriggerEvents = ["order.created"], ActionsEnabled = true };
+            auth.AuthorizeForEvent(on, "order.created").Allowed.Should().BeTrue();
+
+            var older = new FunctionEventSettingsEntity { TriggerEvents = ["order.created", "order.paid"] };
+            auth.AuthorizeForEvent(older, "order.created").Allowed.Should().BeTrue();
+            auth.AuthorizeForEvent(older, "order.paid").Allowed.Should().BeFalse("one action per function: only the first counts");
+        }
+
+        [Fact]
         public async Task A_function_that_is_not_deployed_or_not_live_cannot_be_started()
         {
             _function.Status = FunctionStatus.Paused;
@@ -261,10 +277,10 @@ namespace XUnitTest.Functions
             _eventRuns.Verify(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<FunctionEventRunInfo>()), Times.Never);
         }
 
-        // ---------------------------------------------------------------------- depth ----
+        // --------------------------------------------------------------- event info ----
 
         [Fact]
-        public async Task The_events_depth_and_name_are_stored_for_the_run_before_it_is_recorded()
+        public async Task The_events_id_and_name_are_stored_for_the_run_before_it_is_recorded()
         {
             var order = new List<string>();
             _eventRuns.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<FunctionEventRunInfo>()))
@@ -273,14 +289,14 @@ namespace XUnitTest.Functions
                 .Callback((string _, FunctionRunEntity run, CancellationToken _) => { _created = run; order.Add("insert"); })
                 .Returns(Task.CompletedTask);
 
-            await Service().InvokeFromEventAsync(Tenant, "fn-1", Event(depth: 3), MessageContext());
+            await Service().InvokeFromEventAsync(Tenant, "fn-1", Event(), MessageContext());
 
-            _eventRuns.Verify(s => s.SaveAsync(_created!.ItemId, new FunctionEventRunInfo("run-0-1-1", "order.created", 3)), Times.Once);
+            _eventRuns.Verify(s => s.SaveAsync(_created!.ItemId, new FunctionEventRunInfo("run-0-1-1", "order.created")), Times.Once);
             order.Should().Equal("store", "insert");
         }
 
         [Fact]
-        public async Task When_the_depth_cannot_be_stored_no_run_is_created()
+        public async Task When_the_event_info_cannot_be_stored_no_run_is_created()
         {
             _eventRuns.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<FunctionEventRunInfo>())).ThrowsAsync(new RedisConnectionException(ConnectionFailureType.UnableToConnect, "down"));
 
@@ -288,17 +304,6 @@ namespace XUnitTest.Functions
 
             await act.Should().ThrowAsync<RedisConnectionException>();
             _created.Should().BeNull();
-        }
-
-        [Fact]
-        public void A_run_started_by_an_event_sends_events_one_deeper_than_the_event_that_started_it()
-        {
-            var eventRun = new FunctionRunEntity { InvokedBy = InvokedByType.Event };
-
-            FunctionEventDepth.ForRun(eventRun, 0).Should().Be(1);
-            FunctionEventDepth.ForRun(eventRun, 3).Should().Be(4);
-            FunctionEventDepth.ForRun(eventRun, null).Should().Be(FunctionEventDepth.EventStartedRunDepth, "unknown: one hop");
-            FunctionEventDepth.ForRun(new FunctionRunEntity { InvokedBy = InvokedByType.Http }, 4).Should().Be(0, "not an event run");
         }
 
         // ------------------------------------------------------ one run per event ----

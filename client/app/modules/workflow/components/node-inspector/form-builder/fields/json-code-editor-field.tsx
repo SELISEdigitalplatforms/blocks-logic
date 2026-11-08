@@ -14,22 +14,40 @@ import {
   withoutLockedKeys,
 } from "../utils/json-locked-keys";
 import { cn } from "@/lib/utils";
+import { useT, tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
 
 const friendlyJsonError = (message: string): string => {
   if (message.includes("Unexpected end of JSON input")) {
-    return "Incomplete JSON — check for missing brackets, braces, or quotes.";
+    return tStatic(
+      LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE,
+      "JSON_CODE_EDITOR_FIELD.INCOMPLETE_JSON_CHECK_FOR",
+    );
   }
   if (
     message.includes("Expected property name") ||
     message.includes("Expected double-quoted property name")
   ) {
-    return "Property names must be wrapped in double quotes.";
+    return tStatic(
+      LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE,
+      "JSON_CODE_EDITOR_FIELD.PROPERTY_NAMES_MUST_BE",
+    );
   }
-  const tokenMatch = message.match(/Unexpected token '?([^' ]+)'?/);
+  const tokenMatch = /Unexpected token '?([^' ]+)'?/.exec(message);
   if (tokenMatch) {
-    return `Invalid syntax near "${tokenMatch[1]}" — check for missing commas, colons, or quotes.`;
+    return tStatic(
+      LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE,
+      "JSON_CODE_EDITOR_FIELD.INVALID_SYNTAX_NEAR_CHECK",
+      {
+        value: tokenMatch[1],
+      },
+    );
   }
-  return "Invalid JSON — please check the format.";
+  return tStatic(
+    LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE,
+    "JSON_CODE_EDITOR_FIELD.INVALID_JSON_PLEASE_CHECK",
+  );
 };
 
 const validateJson = (value: string): string | null => {
@@ -54,6 +72,7 @@ export const JsonCodeEditor = ({
   data,
   config,
 }: FieldProps<string>) => {
+  const { t } = useT(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE);
   const [touched, setTouched] = useState(false);
   const { locked, lockedKey } = useLockedValue<LockedKeys>(field, data, config);
   const lockedKeys = locked && Object.keys(locked).length ? locked : null;
@@ -118,7 +137,9 @@ export const JsonCodeEditor = ({
       {lockedKeys && (
         <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
           <Lock aria-hidden="true" className="h-3 w-3" />
-          Locked, can&apos;t be changed: {Object.keys(lockedKeys).join(", ")}
+          {t("JSON_CODE_EDITOR_FIELD.LOCKED_CAN_T_BE", {
+            value: Object.keys(lockedKeys).join(", "),
+          })}
         </p>
       )}
     </div>

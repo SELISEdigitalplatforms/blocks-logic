@@ -46,7 +46,7 @@ export const useDeleteSchedule = () => {
   });
 };
 
-/** One page of a schedule's executions; React Query defaults, like `useGetWorkflows`. */
+/** Poll even empty pages: the scheduler may not have fired between list refreshes. */
 export const useGetScheduleExecutions = (
   payload: IGetScheduleExecutionsPayload,
   { enabled = true }: { enabled?: boolean } = {},
@@ -55,6 +55,8 @@ export const useGetScheduleExecutions = (
     queryKey: ["schedules", "executions", payload],
     queryFn: () => scheduleService.getScheduleExecutions(payload),
     enabled,
+    refetchOnWindowFocus: false,
+    refetchInterval: 60_000,
   });
 };
 

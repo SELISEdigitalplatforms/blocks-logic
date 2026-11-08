@@ -6,11 +6,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/to
 import { FieldSchema, FormFieldType } from "./form-field.types";
 import { FIELD_COMPONENTS_REGISTRY } from "./fields";
 import { FormBuilderConfig } from "./use-form-builder";
+import { useT } from "@seliseblocks/genesis-os";
 
 /** Types that render their own labels, or none. */
 const UNLABELLED_TYPES: ReadonlySet<FormFieldType> = new Set<FormFieldType>([
   "tab-with-text",
   "readonly-details",
+  "link",
 ]);
 
 interface FormFieldRendererProps {
@@ -34,12 +36,15 @@ export const FormFieldRenderer = ({
   data,
   onFieldChange,
 }: FormFieldRendererProps) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const FieldComponent = FIELD_COMPONENTS_REGISTRY[field.type as FormFieldType];
 
   if (!FieldComponent) {
     return (
       <div>
-        <p className="text-sm text-muted-foreground">Unknown field type: {field.type}</p>
+        <p className="text-sm text-muted-foreground">
+          {t("FORM_FIELD_RENDERER.UNKNOWN_FIELD_TYPE", { type: field.type })}
+        </p>
       </div>
     );
   }

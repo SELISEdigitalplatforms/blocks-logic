@@ -8,6 +8,7 @@ import {
 import { FieldProps, SelectOption } from "../form-field.types";
 import { useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { useT } from "@seliseblocks/genesis-os";
 
 export const SelectWithDescriptionField = ({
   field,
@@ -17,6 +18,7 @@ export const SelectWithDescriptionField = ({
   data,
   config,
 }: FieldProps<string>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const [options, setOptions] = useState<SelectOption[]>(() => {
     return Array.isArray(field.options) ? field.options : [];
   });
@@ -49,7 +51,7 @@ export const SelectWithDescriptionField = ({
       disabled={field.disabled as boolean}
     >
       <SelectTrigger id={field.id} className="h-10">
-        <SelectValue placeholder={field.placeholder || "Select an option"}>
+        <SelectValue placeholder={field.placeholder || t("SELECT_WITH_DESCRIPTION_FIELD.SELECT_AN_OPTION")}>
           {selectedOption ? selectedOption.label : undefined}
         </SelectValue>
       </SelectTrigger>

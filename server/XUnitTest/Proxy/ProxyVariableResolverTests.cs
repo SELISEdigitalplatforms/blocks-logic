@@ -284,6 +284,9 @@ namespace XUnitTest.Proxy
             public Task RestoreAsync(string secretId, CancellationToken cancellationToken = default) =>
                 throw new NotSupportedException();
 
+            public Task PurgeAsync(string secretId, CancellationToken cancellationToken = default) =>
+                throw new NotSupportedException();
+
             public Task UpdateAccessAsync(string secretId, SecretAccess access, CancellationToken cancellationToken = default) =>
                 throw new NotSupportedException();
 

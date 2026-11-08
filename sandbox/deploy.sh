@@ -261,49 +261,62 @@ phase 2 "Runtime image"
 # one thing a base image must not do. Nothing else writes this line, so without it the runner
 # falls back to the tag in RunnerOptions and the "pinned by digest in production" the docs
 # promise was never true of any host.
-step "Base image pin"
 load_facts   # re-read: build.sh appended RUNTIME_IMAGE_DIGEST to .facts just now
-if [ ! -f "$ENV_FILE" ]; then
-  warn "$ENV_FILE does not exist yet — phase 3 will say so; not pinning the base image"
-elif [ -z "${RUNTIME_IMAGE_DIGEST:-}" ]; then
-  # Only --no-push skips the digest, and deploy.sh never passes it. Refuse rather than leave
-  # the runner on a mutable tag without saying so.
-  die "runtime-image/build.sh recorded no RUNTIME_IMAGE_DIGEST — cannot pin the base image"
-else
-  CURRENT_BASE="$(env_val RUNNER__BaseImage)"
-  # Only ever re-pin a reference that already names this runtime's repository. An operator who
-  # has pointed the host at a shared registry owns that line, and silently rewriting it to a
-  # loopback address would break every build on the host.
-  if [ -z "$CURRENT_BASE" ] || [ "$(image_repo "$CURRENT_BASE")" = "$(image_repo "$RUNTIME_IMAGE_DIGEST")" ]; then
-    if set_env_val RUNNER__BaseImage "$RUNTIME_IMAGE_DIGEST" \
-         "Written by deploy.sh from the runtime image it published."; then
-      ENV_CHANGED=yes
-      ok "base image pinned to $RUNTIME_IMAGE_DIGEST"
-    else
-      ok "base image already pinned to $RUNTIME_IMAGE_DIGEST"
-    fi
-  else
-    warn "RUNNER__BaseImage is '$CURRENT_BASE', which is not this host's runtime repository — leaving it alone"
-    warn "this host just published $RUNTIME_IMAGE_DIGEST; pin it by hand if that is what builds should use"
-  fi
-fi
+# Only --no-push skips the digest, and deploy.sh never passes it. Fail now, not after the tests.
+[ -n "${RUNTIME_IMAGE_DIGEST:-}" ] || die "runtime-image/build.sh recorded no RUNTIME_IMAGE_DIGEST — cannot pin the base image"
 
-# Same rule for the dependency-install image (sandbox/REUSE.md, "Any JS"). Without it the runner
-# installs dependencies FROM the base image, which has no toolchain, so add-ons that compile fail.
-if [ -f "$ENV_FILE" ] && [ -n "${BUILD_IMAGE_DIGEST:-}" ]; then
-  CURRENT_BUILD="$(env_val RUNNER__BuildImage)"
-  if [ -z "$CURRENT_BUILD" ] || [ "$(image_repo "$CURRENT_BUILD")" = "$(image_repo "$BUILD_IMAGE_DIGEST")" ]; then
-    if set_env_val RUNNER__BuildImage "$BUILD_IMAGE_DIGEST" \
-         "Written by deploy.sh from the build image it published."; then
-      ENV_CHANGED=yes
-      ok "build image pinned to $BUILD_IMAGE_DIGEST"
-    else
-      ok "build image already pinned to $BUILD_IMAGE_DIGEST"
-    fi
+# pin_images — write the digests build.sh just published into runner.env.
+#
+# Called in phase 5, right before the install restarts the runner, never earlier: written in
+# phase 2, a failed test (phase 4) left runner.env naming the new images while the running
+# runner kept the old ones, which this host then cleaned up — every build failed "No such
+# image" until someone restarted by hand (dev, 2026-11-04). Images and runner now change
+# together or not at all.
+pin_images() {
+  step "Base image pin"
+  if [ ! -f "$ENV_FILE" ]; then
+    warn "$ENV_FILE does not exist yet — phase 3 will say so; not pinning the base image"
+  elif [ -z "${RUNTIME_IMAGE_DIGEST:-}" ]; then
+    # Only --no-push skips the digest, and deploy.sh never passes it. Refuse rather than leave
+    # the runner on a mutable tag without saying so.
+    die "runtime-image/build.sh recorded no RUNTIME_IMAGE_DIGEST — cannot pin the base image"
   else
-    warn "RUNNER__BuildImage is '$CURRENT_BUILD', which is not this host's runtime repository — leaving it alone"
+    CURRENT_BASE="$(env_val RUNNER__BaseImage)"
+    # Only ever re-pin a reference that already names this runtime's repository. An operator who
+    # has pointed the host at a shared registry owns that line, and silently rewriting it to a
+    # loopback address would break every build on the host.
+    if [ -z "$CURRENT_BASE" ] || [ "$(image_repo "$CURRENT_BASE")" = "$(image_repo "$RUNTIME_IMAGE_DIGEST")" ]; then
+      if set_env_val RUNNER__BaseImage "$RUNTIME_IMAGE_DIGEST" \
+           "Written by deploy.sh from the runtime image it published."; then
+        ENV_CHANGED=yes
+        ok "base image pinned to $RUNTIME_IMAGE_DIGEST"
+      else
+        ok "base image already pinned to $RUNTIME_IMAGE_DIGEST"
+      fi
+    else
+      warn "RUNNER__BaseImage is '$CURRENT_BASE', which is not this host's runtime repository — leaving it alone"
+      warn "this host just published $RUNTIME_IMAGE_DIGEST; pin it by hand if that is what builds should use"
+    fi
   fi
-fi
+
+  # Same rule for the dependency-install image (sandbox/REUSE.md, "Any JS"). Without it the runner
+  # installs dependencies FROM the base image, which has no toolchain, so add-ons that compile fail.
+  if [ -f "$ENV_FILE" ] && [ -n "${BUILD_IMAGE_DIGEST:-}" ]; then
+    CURRENT_BUILD="$(env_val RUNNER__BuildImage)"
+    if [ -z "$CURRENT_BUILD" ] || [ "$(image_repo "$CURRENT_BUILD")" = "$(image_repo "$BUILD_IMAGE_DIGEST")" ]; then
+      if set_env_val RUNNER__BuildImage "$BUILD_IMAGE_DIGEST" \
+           "Written by deploy.sh from the build image it published."; then
+        ENV_CHANGED=yes
+        ok "build image pinned to $BUILD_IMAGE_DIGEST"
+      else
+        ok "build image already pinned to $BUILD_IMAGE_DIGEST"
+      fi
+    else
+      warn "RUNNER__BuildImage is '$CURRENT_BUILD', which is not this host's runtime repository — leaving it alone"
+    fi
+  fi
+}
+
 
 # -------------------------------------------------------------- 3. config ----
 # The one thing this repo cannot supply. A runner that starts without real credentials
@@ -364,9 +377,9 @@ ok "runner id: $(env_val RUNNER__RunnerId)"
 
 
 # Secret-bound variables are resolved on this host at run start, through the same value store the
-# control plane writes to. Without a vault URL the secrets SDK falls back to its Database store,
-# which holds none of those values — the runner starts fine and every secret-bound run fails.
-[ -n "$(env_val KeyVault__KeyVaultUrl)" ] || [ "$(env_val Secrets__ValueStore)" = "Database" ] \
+# control plane writes to (Key Vault only). Without a vault URL the runner starts fine and every
+# secret-bound run fails.
+[ -n "$(env_val KeyVault__KeyVaultUrl)" ] \
   || warn "KeyVault__KeyVaultUrl is unset — runs whose variables are bound to secrets will fail as SECRET_UNRESOLVED"
 
 # A base image that is not digest-pinned is not an error — a shared-registry host may legitimately
@@ -374,7 +387,7 @@ ok "runner id: $(env_val RUNNER__RunnerId)"
 # image built today and one built last month being FROM the same thing.
 CONFIGURED_BASE="$(env_val RUNNER__BaseImage)"
 case "$CONFIGURED_BASE" in
-  "")         warn "RUNNER__BaseImage is unset — the runner will use its built-in default tag" ;;
+  "")         info "RUNNER__BaseImage is unset — phase 5 pins it to $RUNTIME_IMAGE_DIGEST" ;;
   *@sha256:*) ok "base image: $CONFIGURED_BASE" ;;
   *)          warn "RUNNER__BaseImage '$CONFIGURED_BASE' is a tag, not a digest — what tenant builds are FROM can change under them" ;;
 esac
@@ -404,6 +417,7 @@ fi
 
 # ------------------------------------------------------------- 5. install ----
 phase 5 "Install"
+pin_images
 WAS_ACTIVE=no
 PID_BEFORE=
 if systemctl is-active --quiet blocks-function-runner.service; then

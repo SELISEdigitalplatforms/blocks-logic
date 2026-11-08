@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT, tStatic } from "@seliseblocks/genesis-os";
 import PageBreadcrumb from "@/components/breadcrumb/breadcrumb";
 import { showErrorToast } from "@/hooks/use-toast";
 import { useGetScheduleById } from "../../hooks/use-schedule-api";
@@ -13,6 +13,7 @@ export type ScheduleFormPageProps = {
 };
 
 export const ScheduleFormPage = ({ mode }: ScheduleFormPageProps) => {
+  const { t } = useT("logic.scheduler");
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { pathname } = useLocation();
@@ -32,7 +33,7 @@ export const ScheduleFormPage = ({ mode }: ScheduleFormPageProps) => {
 
   useEffect(() => {
     if (isEdit && scheduleId && isFetched && !isLoading && !schedule) {
-      showErrorToast({ errors: "Schedule not found" });
+      showErrorToast({ errors: tStatic("logic.scheduler", "SCHEDULE_FORM_PAGE.SCHEDULE_NOT_FOUND") });
       navigate(scoped("/app/schedule"));
     }
   }, [isEdit, scheduleId, isFetched, isLoading, schedule, navigate, scoped]);
@@ -40,7 +41,7 @@ export const ScheduleFormPage = ({ mode }: ScheduleFormPageProps) => {
   // Edit: the id crumb shows the schedule name and the last crumb reads "Edit".
   const breadcrumbTitles = isEdit
     ? { [pathname.replace(/\/edit$/, "")]: schedule?.name || null, [pathname]: "Edit" }
-    : { [pathname]: "New Schedule" };
+    : { [pathname]: t("SCHEDULE_FORM_PAGE.NEW_SCHEDULE") };
 
   const handleSuccess = (savedScheduleId?: string) => {
     const targetId = savedScheduleId || scheduleId;

@@ -1,20 +1,24 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideTriggerDataGatewayV1 = () => (
-  <GuideContent
-    title="Data Gateway trigger"
-    description="Use this trigger to start a workflow when records in a Data Gateway collection are inserted, updated, or deleted."
-    steps={[
-      "Select the Collection to monitor.",
-      "Choose the Operation that should start the workflow: Inserted, Updated, or Deleted.",
-      "Review the output preview so later nodes can use the fields this trigger provides.",
-      "In editor test mode, use data marked for test execution as described in the node notes.",
-    ]}
-    notes={[
-      "The x-blocks-key is captured from the selected project.",
-      "Insert and delete payloads include operation details, document id when available, timestamp, and document fields.",
-      "Update payloads include UpdatedFields with field name, old value, and new value instead of the full document fields.",
-      "A change runs matching draft workflows in test mode only when every record in it has a Tags array containing mock-data (Inserted and Deleted only; Updated changes carry no Tags). Other changes use published workflows.",
-    ]}
-  />
-);
+export const NodeGuideTriggerDataGatewayV1 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_TRIGGER_DATA_GATEWAY_V1.DATA_GATEWAY_TRIGGER")}
+      description={t("NODE_GUIDE_TRIGGER_DATA_GATEWAY_V1.USE_THIS_TRIGGER_TO")}
+      steps={[
+        t("NODE_GUIDE_TRIGGER_DATA_GATEWAY_V1.SELECT_THE_COLLECTION_TO"),
+        t("NODE_GUIDE_TRIGGER_DATA_GATEWAY_V1.CHOOSE_THE_OPERATION_THAT"),
+        t("NODE_GUIDE_TRIGGER_DATA_GATEWAY_V1.REVIEW_THE_OUTPUT_PREVIEW"),
+        t("NODE_GUIDE_TRIGGER_DATA_GATEWAY_V1.IN_EDITOR_TEST_MODE"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_TRIGGER_DATA_GATEWAY_V1.THE_X_BLOCKS_KEY"),
+        t("NODE_GUIDE_TRIGGER_DATA_GATEWAY_V1.INSERT_AND_DELETE_PAYLOADS"),
+        t("NODE_GUIDE_TRIGGER_DATA_GATEWAY_V1.UPDATE_PAYLOADS_INCLUDE_UPDATEDFIELDS"),
+        t("NODE_GUIDE_TRIGGER_DATA_GATEWAY_V1.A_CHANGE_RUNS_MATCHING"),
+      ]}
+    />
+  );
+};

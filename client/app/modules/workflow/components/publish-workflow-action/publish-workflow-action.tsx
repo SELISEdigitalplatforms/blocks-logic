@@ -14,6 +14,7 @@ import {
   UnpublishConfirmationModal,
 } from "../workflow-confirmation-modals";
 import { PublishWorkflowModal } from "../publish-workflow-modal/publish-workflow-modal";
+import { useT } from "@seliseblocks/genesis-os";
 
 interface PublishWorkflowActionProps {
   isDirty?: boolean;
@@ -28,6 +29,7 @@ export const PublishWorkflowAction = ({
   isPublished,
   onActionComplete,
 }: PublishWorkflowActionProps) => {
+  const { t } = useT("logic.workflow");
   const { id: workflowId } = useParams<{ id: string }>();
 
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
@@ -98,13 +100,15 @@ export const PublishWorkflowAction = ({
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {isPublishedAndClean && <span className="h-2.5 w-2.5 rounded-full bg-green-500" />}
-            {isPublishedAndClean ? "Published" : "Publish"}
+            {isPublishedAndClean
+              ? t("PUBLISH_WORKFLOW_ACTION.PUBLISHED")
+              : t("PUBLISH_WORKFLOW_ACTION.PUBLISH")}
           </Button>
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
               size="sm"
-              aria-label="Open publish actions"
+              aria-label={t("PUBLISH_WORKFLOW_ACTION.OPEN_PUBLISH_ACTIONS")}
               className="rounded-none border-0 px-3 hover:bg-accent"
               disabled={isDropdownDisabled}
             >
@@ -123,7 +127,7 @@ export const PublishWorkflowAction = ({
             }}
             disabled={hasUnsavedChanges || isPublishedAndClean}
           >
-            Publish
+            {t("PUBLISH_WORKFLOW_ACTION.PUBLISH")}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={(e) => {
@@ -135,7 +139,7 @@ export const PublishWorkflowAction = ({
             }}
             disabled={!isPublished}
           >
-            Unpublish
+            {t("PUBLISH_WORKFLOW_ACTION.UNPUBLISH")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

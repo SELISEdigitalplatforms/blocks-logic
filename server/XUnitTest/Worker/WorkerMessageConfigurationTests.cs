@@ -21,15 +21,14 @@ namespace XUnitTest.Worker
         [
             ("blocks_workflow_email_trigger_listener", 5, false),
             ("blocks_logic_workflow_data_trigger_listener", 10, false),
-            // Platform events Genesis forwards for the Blocks Event trigger (blocks-genesis-net#167); same prefetch as the data trigger.
-            ("blocks_logic_workflow_blocks_event_trigger_listener", 10, false),
+            // Genesis actions with the Workflow and the Function switch on; one BlocksActionConsumer takes both.
+            ("blocks_logic_action_workflow_listener", 10, false),
+            ("blocks_logic_action_function_listener", 10, false),
             ("blocks_logic_workflow_scheduler_trigger_listener", 10, false),
             // Failed production runs whose workflow has an alert (blocks-logic#380); same prefetch as the other triggers.
             ("blocks_logic_workflow_error_trigger_listener", 10, false),
             ("blocks_logic_workflow_import_listener", 5, false),
             ("blocks_email_listener", 5, false),
-            // Consumed by the event trigger (FunctionEventConsumer); also declares the queue, so a function event sent to it is not dropped.
-            ("blocks_logic_function_event_listener", 5, false),
             ("blocks_mail_status_listener", 5, false),
             ("blocks_migration_topic1", 5, false),
             // Mobile push requests from every Blocks service (genesis); the Worker consumes them.
@@ -55,21 +54,22 @@ namespace XUnitTest.Worker
         {
             var azure = LogicConstants.GetMessageConfiguration(Azure).AzureServiceBusConfiguration!;
 
-            azure.Queues.Should().Equal(
+            string[] expected =
             [
                 .. LogicConstants.AllNodeQueues,
                 "blocks_workflow_email_trigger_listener",
                 "blocks_logic_workflow_data_trigger_listener",
-                "blocks_logic_workflow_blocks_event_trigger_listener",
+                "blocks_logic_action_workflow_listener",
+                "blocks_logic_action_function_listener",
                 "blocks_logic_workflow_scheduler_trigger_listener",
                 "blocks_logic_workflow_error_trigger_listener",
                 "blocks_logic_workflow_import_listener",
                 "blocks_email_listener",
-                "blocks_logic_function_event_listener",
                 "blocks_mail_status_listener",
                 "blocks_notification_push_listener",
                 Registry,
-            ]);
+            ];
+            azure.Queues.Should().Equal(expected);
             azure.Queues.Should().HaveCount(28);
             azure.Topics.Should().Equal("blocks_migration_topic1");
             azure.QueuePrefetchCount.Should().Be(40);

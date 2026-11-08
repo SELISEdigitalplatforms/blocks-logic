@@ -16,6 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui-kits/popover/popover";
+import { useT } from "@seliseblocks/genesis-os";
 
 const TYPE_COLORS: Record<string, string> = {
   string: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
@@ -193,6 +194,7 @@ export const SchemaFieldPickerField = ({
   onChange,
   data,
 }: FieldProps<string[]>) => {
+  const { t: tr } = useT("logic.workflow.nodes.inspector");
   const schemaFields = useMemo(
     () => (data.schemaFields ?? []) as ResolvedSchemaField[],
     [data.schemaFields],
@@ -285,7 +287,7 @@ export const SchemaFieldPickerField = ({
     return (
       <div className="flex h-32 w-full items-center justify-center rounded border border-dashed">
         <p className="text-sm text-muted-foreground">
-          Select a collection to auto-populate fields
+          {tr("SCHEMA_FIELD_PICKER_FIELD.SELECT_A_COLLECTION_TO")}
         </p>
       </div>
     );
@@ -315,7 +317,7 @@ export const SchemaFieldPickerField = ({
               className="h-9 w-full rounded border border-dashed text-primary"
             >
               <Plus className="mr-1 h-4 w-4" />
-              Add Field
+              {tr("SCHEMA_FIELD_PICKER_FIELD.ADD_FIELD")}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="max-h-60 w-64 overflow-y-auto p-1" align="start">

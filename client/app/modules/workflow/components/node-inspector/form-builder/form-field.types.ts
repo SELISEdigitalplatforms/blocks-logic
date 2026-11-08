@@ -31,13 +31,27 @@ export type FormFieldType =
   | "comma-list"
   | "callout-accordion-display"
   | "tab-with-text"
-  | "readonly-details";
+  | "readonly-details"
+  | "link";
 
 export interface SelectOption {
   value: string | number | boolean;
   label: string;
   description?: string;
   disabled?: boolean;
+}
+
+/** One page request for a field's `searchOptions` loader. `page` is zero-based. */
+export interface SearchOptionsRequest {
+  search: string;
+  page: number;
+  pageSize: number;
+}
+
+/** One page of results; `totalCount` is the server total for the current search. */
+export interface SearchOptionsPage {
+  options: SelectOption[];
+  totalCount: number;
 }
 
 /** One locked field of a `readonly-details` field: an ordinary field schema and the value it shows. */
@@ -102,6 +116,20 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
           executionMode?: number;
         },
       ) => Promise<SelectOption[]>);
+  /**
+   * `conditional-multiselect` only: server-side search + paging. When set it replaces `options`: the
+   * field sends the typed text (debounced) and loads the next page as the list is scrolled.
+   */
+  searchOptions?: (
+    request: SearchOptionsRequest,
+    data: Whole,
+    config: {
+      tenantId: string;
+      workflowId: string;
+      store: WorkflowStore;
+      executionMode?: number;
+    },
+  ) => Promise<SearchOptionsPage>;
   fixedKeys?:
     | string[]
     | ((
@@ -188,6 +216,13 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
     operator?: "equals" | "notEquals" | "in";
   };
   transient?: boolean;
+  /**
+   * `link` only: the page the link opens in a new tab, relative to the current app scope
+   * (e.g. `open-in-os/actions` → `/app/<projectId>/open-in-os/actions`). `label` is the link text.
+   */
+  linkPath?: string;
+  /** `link` only: the accessible name, when it should say more than `label` (e.g. "opens in a new tab"). */
+  ariaLabel?: string;
   /**
    * Show the in-field `{{$VAR.name}}` key button on this field's expression-highlighted inputs.
    * Default true; set false to hide it. Always hidden while the field is read-only or disabled.

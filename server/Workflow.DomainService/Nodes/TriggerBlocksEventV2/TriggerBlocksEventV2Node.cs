@@ -7,15 +7,15 @@ using Blocks.Genesis.Entities.Logic;
 namespace Workflow.DomainService.Nodes.TriggerBlocksEventV2
 {
     /// <summary>
-    /// Trigger node executor for Blocks platform events.
-    /// Fires when Genesis forwards an enabled catalog event (BlocksEventTriggerMessage) for the tenant;
-    /// outputs the one event item the trigger consumer put in the execution's Input.
+    /// The Action trigger node (type <c>blocksEvent</c>, kept from the old Blocks Event node so saved workflows load).
+    /// Fires when the tenant's action named in <c>eventName</c> arrives (<see cref="Actions.ActionWorkflowTriggerService"/>);
+    /// outputs the one action item <c>{ id, action, time, organizationId, data }</c> the trigger put in the execution's Input.
     /// </summary>
     public class TriggerBlocksEventV2Node : NodeExecutorBase<TriggerBlocksEventV2Parameters>, INodeExecutor
     {
         private static readonly IReadOnlyCollection<string> SupportedVersions = new[] { "v2" };
 
-        public override string NodeType => LogicConstants.BlocksEventNodeType;
+        public override string NodeType => LogicConstants.ActionTriggerNodeType;
         public override string Version => "v2";
 
         /// <summary>A new type: it exists only as v2 (it owns its handle from the start); there is no v1.</summary>

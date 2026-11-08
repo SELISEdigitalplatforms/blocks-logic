@@ -1,23 +1,26 @@
-import React from "react";
 import { NodeGuideTriggerBlocksEventV2 } from "../node-guides";
-import { eventTriggersService } from "@/modules/event-triggers/services/event-triggers.service";
-import { IBlocksEventWorkflowOption } from "@/modules/event-triggers/types/event-triggers.type";
-import { ManageBlocksEventsLink } from "@/modules/event-triggers/components/manage-blocks-events-link/manage-blocks-events-link";
+import { OPEN_IN_OS_ACTIONS_PATH } from "@/modules/open-in-os/constants";
+import { actionsService } from "@/modules/actions/services/actions.service";
+import { IActionOption } from "@/modules/actions/types/actions.type";
+import { actionOptionLabel, payloadHint } from "@/modules/actions/utils/action-options";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import { ReadonlyDetails, SelectOption } from "../node-inspector/form-builder/form-field.types";
+import { tStatic } from "@seliseblocks/genesis-os";
 
-export const DISABLED_EVENT_WARNING =
-  "This event is disabled for workflows. Enable it with Manage events. The published workflow will not run until then.";
-export const NO_ENABLED_EVENTS_MESSAGE = "No events are enabled for workflows. Use Manage events to enable one.";
+const LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE = "logic.workflow.nodes.schemas";
 
-/** The Event select and the status line ask at the same moment; one request serves both. */
+const t = (key: string, options?: Readonly<Record<string, string | number>>) =>
+  tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, `NODE_SCHEMA_TRIGGER_ACTION_V2.${key}`, options);
+
+/** The Action select and the status line ask at the same moment; one request serves both. */
 const SHARED_FETCH_MS = 1500;
-let sharedFetch: { at: number; promise: Promise<IBlocksEventWorkflowOption[]> } | null = null;
+let sharedFetch: { at: number; promise: Promise<IActionOption[]> } | null = null;
 
-export const loadWorkflowEvents = (): Promise<IBlocksEventWorkflowOption[]> => {
+/** The actions turned on for workflows (`Actions/GetForWorkflow`). */
+export const loadWorkflowActions = (): Promise<IActionOption[]> => {
   const now = Date.now();
   if (sharedFetch && now - sharedFetch.at < SHARED_FETCH_MS) return sharedFetch.promise;
-  const promise = eventTriggersService.getWorkflowEvents().then((res) => res?.items ?? []);
+  const promise = actionsService.getForWorkflow().then((res) => res ?? []);
   sharedFetch = { at: now, promise };
   promise.catch(() => {
     sharedFetch = null;
@@ -26,44 +29,40 @@ export const loadWorkflowEvents = (): Promise<IBlocksEventWorkflowOption[]> => {
 };
 
 /** Test hook: forget the shared request. */
-export const resetWorkflowEventsCache = () => {
+export const resetWorkflowActionsCache = () => {
   sharedFetch = null;
 };
 
 /**
- * The enabled events as `{Label} ({EventName})`. A saved event that is no longer enabled stays selectable as
- * its own option, so the select keeps the value instead of resetting it (the status line explains why).
+ * The actions on for workflows as `{Label} ({name})`, with the data fields as the description. A saved action that is no
+ * longer on stays selectable as its own option, so the select keeps the value instead of resetting it.
  */
-export const buildEventOptions = (
-  events: IBlocksEventWorkflowOption[],
-  savedEventName: string,
-): SelectOption[] => {
-  const options: SelectOption[] = events.map((event) => ({
-    value: event.eventName,
-    label: `${event.label} (${event.eventName})`,
-    description: event.description,
+export const buildActionOptions = (actions: IActionOption[], savedActionName: string): SelectOption[] => {
+  const options: SelectOption[] = actions.map((action) => ({
+    value: action.name,
+    label: actionOptionLabel(action),
+    description: payloadHint(action),
   }));
-  if (savedEventName && !events.some((event) => event.eventName === savedEventName)) {
-    options.unshift({ value: savedEventName, label: `${savedEventName} (disabled for workflows)` });
+  if (savedActionName && !actions.some((action) => action.name === savedActionName)) {
+    options.unshift({ value: savedActionName, label: t("NOT_ON_FOR_WORKFLOWS", { savedActionName }) });
   }
   return options;
 };
 
-/** The status line under the select: a warning for a disabled saved event, a hint when nothing is enabled. */
-export const buildEventStatus = (events: IBlocksEventWorkflowOption[], savedEventName: string): ReadonlyDetails => {
-  if (savedEventName && !events.some((event) => event.eventName === savedEventName)) {
-    return { fields: [], message: DISABLED_EVENT_WARNING };
-  }
-  if (events.length === 0) return { fields: [], message: NO_ENABLED_EVENTS_MESSAGE };
-  return { fields: [] };
+/** The status line under the select: the selected action's data fields, a warning when it is off, a hint when none is on. */
+export const buildActionStatus = (actions: IActionOption[], savedActionName: string): ReadonlyDetails => {
+  const selected = actions.find((action) => action.name === savedActionName);
+  if (savedActionName && !selected) return { fields: [], message: t("OFF_WARNING") };
+  if (actions.length === 0) return { fields: [], message: t("NO_ACTIONS_ON") };
+  const fields = payloadHint(selected);
+  return fields ? { fields: [], message: t("DATA_FIELDS", { fields }) } : { fields: [] };
 };
 
-/** The node's saved event name; anything that is not a string counts as none. */
-export const eventNameOf = (data: Record<string, unknown>): string =>
+/** The node's saved action name (kept in `eventName`); anything that is not a string counts as none. */
+export const actionNameOf = (data: Record<string, unknown>): string =>
   typeof data.eventName === "string" ? data.eventName : "";
 
-const codeClass = "bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono text-primary font-semibold";
-
+/** The Action trigger. The type and the `eventName` key are the old Blocks Event node's, so saved workflows still load. */
 export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
   guide: NodeGuideTriggerBlocksEventV2,
   schema: {
@@ -72,33 +71,28 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
     version: "v2",
     parameters: [
       {
-        id: "execution-notes",
-        type: "callout-accordion-display",
-        key: "executionNotes",
-        displayValue: () => ({
-          title: "Notes",
-          description: React.createElement(
-            "span",
-            null,
-            "Runs the ",
-            React.createElement("code", { className: codeClass }, "published"),
-            " workflow only. Events are delivered once per published workflow that uses them. ",
-            React.createElement(ManageBlocksEventsLink),
-          ),
-        }),
-      },
-      {
         id: "event",
         type: "select",
-        label: "Event",
-        info: "The platform event that starts this workflow. Only events enabled for workflows are listed.",
+        get label() { return t("ACTION"); },
+        get info() { return t("THE_ACTION_THAT"); },
         key: "eventName",
         required: true,
         searchable: true,
-        placeholder: "Select an event",
-        // The list can change in the Event Triggers tab; returning here picks the change up.
+        get placeholder() { return t("SELECT_AN_ACTION"); },
+        // An admin may turn actions on in Blocks OS meanwhile; returning here picks the change up.
         refetchOnWindowFocus: true,
-        options: (data) => loadWorkflowEvents().then((events) => buildEventOptions(events, eventNameOf(data))),
+        options: (data) => loadWorkflowActions().then((actions) => buildActionOptions(actions, actionNameOf(data))),
+      },
+      {
+        // Opens this project's Actions page in Blocks OS in a new tab (through a Logic page that signs in via IAM).
+        // Shown in every state, even when the actions cannot be loaded. Display only: nothing is saved on the node.
+        id: "configure-actions-link",
+        type: "link",
+        key: "configureActionsLink",
+        transient: true,
+        linkPath: OPEN_IN_OS_ACTIONS_PATH,
+        get label() { return t("CONFIGURE_ACTIONS_IN_OS"); },
+        get ariaLabel() { return t("CONFIGURE_ACTIONS_IN_OS_NEW_TAB"); },
       },
       {
         id: "eventStatus",
@@ -107,26 +101,24 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
         // Display only: nothing is saved on the node.
         transient: true,
         detailsDependencies: ["eventName"],
-        details: (data) => loadWorkflowEvents().then((events) => buildEventStatus(events, eventNameOf(data))),
+        details: (data) => loadWorkflowActions().then((actions) => buildActionStatus(actions, actionNameOf(data))),
       },
       {
         id: "output",
         type: "display",
-        label: "Output",
-        info: "Structure of the trigger output data",
+        get label() { return t("OUTPUT"); },
+        get info() { return t("STRUCTURE_OF_THE_TRIGGER"); },
         key: "output",
         displayValue: (data) => `\`\`\`json
 {
-  "EventId": String,
-  "EventName": "${eventNameOf(data) || "EventName"}",
-  "SourceService": String,
-  "ConsumerName": String,
-  "IsMassConsumer": Boolean,
-  "Timestamp": String,
-  "Payload": { ...the event's own fields }
+  "id": String,
+  "action": "${actionNameOf(data) || "action.name"}",
+  "time": String,
+  "organizationId": String | null,
+  "data": { ...the action's own fields }
 }
 \`\`\`
-\`Payload\` is the event as the sending service published it. A payload that is not a JSON object is passed on as text.`,
+In the next node read a field with \`{{$json.data.userId}}\` or \`{{$json.organizationId}}\`.`,
       },
     ],
     settings: [],

@@ -24,6 +24,14 @@ export default defineConfig({
         __dirname,
         "./app/test-utils/stubs/blocks-kit.tsx",
       ),
+      "@seliseblocks/genesis-os/i18n": path.resolve(
+        __dirname,
+        "./app/test-utils/stubs/blocks-kit.tsx",
+      ),
+      "@seliseblocks/genesis-os/store": path.resolve(
+        __dirname,
+        "./app/test-utils/stubs/blocks-kit.tsx",
+      ),
       "@seliseblocks/genesis-os/providers": path.resolve(
         __dirname,
         "./app/test-utils/stubs/blocks-kit.tsx",
