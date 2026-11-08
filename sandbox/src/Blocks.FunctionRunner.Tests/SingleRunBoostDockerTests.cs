@@ -138,15 +138,34 @@ namespace Blocks.FunctionRunner.Tests
             lock (updatesAt) return (result, startAt, [.. updatesAt]);
         }
 
+        /// <summary>
+        /// No result line at all means the sandbox died or started too slowly on a busy host
+        /// (dev deploy 2026-11-04; 1 in 5 full local suites). That is the host, not the boost,
+        /// so it gets one fresh try. A wrong result is never retried.
+        /// </summary>
+        private async Task<(SandboxResult Result, long? StartAt, List<long> UpdatesAt)> RunOnceMoreIfSilentAsync(int capMs)
+        {
+            var first = await RunAsync(capMs);
+            return first.Result.Output.Ok is null && first.Result.HostFailure is null
+                ? await RunAsync(capMs)
+                : first;
+        }
+
+        /// <summary>What the sandbox did, so a failure on a deploy host says why.</summary>
+        private static string Describe(SandboxResult r) =>
+            $"exit {r.ExitCode}, timedOut {r.TimedOut}, oom {r.OomKilled}, error {r.Output.ErrorCode} "
+            + $"{r.Output.ErrorMessage}, logs [{string.Join(" | ", r.Output.Logs.TakeLast(5))}], "
+            + $"malformed [{string.Join(" | ", r.Output.Malformed.TakeLast(5))}]";
+
         [SkippableFact]
         public async Task A_module_busy_at_load_is_dropped_by_the_cap_before_its_handler_starts()
         {
             Skip.If(_skip is not null, _skip);
 
-            var (result, startAt, updates) = await RunAsync(capMs: 500);
+            var (result, startAt, updates) = await RunOnceMoreIfSilentAsync(capMs: 500);
 
             result.HostFailure.Should().BeNull();
-            result.Output.Ok.Should().BeTrue();
+            result.Output.Ok.Should().BeTrue(Describe(result));
             startAt.Should().NotBeNull();
             updates.Should().ContainSingle("one drop");
             (updates[0] - startAt!.Value).Should().BeLessThan(1500, "the cap, not the 2 s of load work, ended the boost");
@@ -158,9 +177,9 @@ namespace Blocks.FunctionRunner.Tests
         {
             Skip.If(_skip is not null, _skip);
 
-            var (result, startAt, updates) = await RunAsync(capMs: 0);
+            var (result, startAt, updates) = await RunOnceMoreIfSilentAsync(capMs: 0);
 
-            result.Output.Ok.Should().BeTrue();
+            result.Output.Ok.Should().BeTrue(Describe(result));
             updates.Should().ContainSingle();
             (updates[0] - startAt!.Value).Should().BeGreaterThan(1900, "dropped once the handler was about to run");
 
