@@ -24,8 +24,12 @@ import type { Locator, Page } from "@playwright/test";
  * Fixture (§10 "RO-Input-E2E"), imported through the workflow list's Import control:
  *   Webhook → Code "Shape" (returns [{ name: "Ada", age: 36, tags: ["x"] }]) → Code "Echo" (returns
  *   its input unchanged), plus Code "Unused", not connected, so it never runs (C3: no recorded run).
- * The failed-node case (§10 step 5) imports a second copy whose Echo throws, instead of editing and
- * reverting Echo's script in the code editor. Both workflows are deleted in the `finally` block.
+ * The failed-node case (§10 step 5) imports a second copy whose "Echo" fails, instead of editing and
+ * reverting Echo's script. That Echo is a Filter node whose condition the server cannot evaluate
+ * (`starts_with`, as in the Filter spec), because a failing Filter keeps each item's link to its
+ * parent: the server builds a node's recorded input from those links. A Code node in "Run once for
+ * all items" mode that throws records no parent link, so its input would be empty (server
+ * TransformCodeV1Node / NodeExecutorBase). Both workflows are deleted in the `finally` block.
  *
  * §10 steps 7 (network, C9) and 8 (screenshots, H9) are captured outside the suite (D6).
  *
@@ -89,9 +93,27 @@ const edge = (source: string, target: string): ImportEdge => ({
 });
 
 const ECHO_SCRIPT = "return $items.map((item) => item.json);";
-const FAILING_ECHO_SCRIPT = 'throw new Error("boom");';
 
-function roInputWorkflowFile(name: string, echoScript: string): WorkflowImportFile {
+/** logic / filter / v2 with a condition the server cannot evaluate: every item fails. */
+const failingFilterNode = (id: string, name: string, x: number): ImportNode => ({
+  id,
+  name,
+  category: "logic",
+  type: "filter",
+  version: "v2",
+  position: { x, y: 0 },
+  handle: singleHandle(),
+  parameters: {
+    conditionType: "and",
+    conditions: [{ left: "{{ $json.name }}", operator: "starts_with", right: "A", type: "string" }],
+  },
+  settings: {},
+  pinData: null,
+});
+
+const FAILED_ECHO_ERROR = "Condition could not be evaluated for 1 item(s).";
+
+function roInputWorkflowFile(name: string, echo: "code" | "failing"): WorkflowImportFile {
   const ids = {
     webhook: "e2eroinputwebhook00000000000001",
     shape: "e2eroinputshape0000000000000001",
@@ -104,7 +126,7 @@ function roInputWorkflowFile(name: string, echoScript: string): WorkflowImportFi
     nodes: [
       webhookNode(ids.webhook),
       codeNode(ids.shape, NAMES.shape, 300, 0, `return ${JSON.stringify(SHAPE_ROWS)};`),
-      codeNode(ids.echo, NAMES.echo, 600, 0, echoScript),
+      echo === "code" ? codeNode(ids.echo, NAMES.echo, 600, 0, ECHO_SCRIPT) : failingFilterNode(ids.echo, NAMES.echo, 600),
       codeNode(ids.unused, NAMES.unused, 300, 250, "return [];"),
     ],
     edges: [edge(ids.webhook, ids.shape), edge(ids.shape, ids.echo)],
@@ -203,7 +225,7 @@ test.describe("workflow — read-only Input panel", () => {
 
     try {
       const main = await test.step("[Setup] Import RO-Input-E2E: Webhook → Shape → Echo, and Unused", async () => {
-        const imported = await importTracked(roInputWorkflowFile(`RO-Input-E2E ${stamp}`, ECHO_SCRIPT));
+        const imported = await importTracked(roInputWorkflowFile(`RO-Input-E2E ${stamp}`, "code"));
         for (const name of Object.values(NAMES)) await expect(editor.canvasNode(name)).toBeVisible();
         return imported;
       });
@@ -350,7 +372,7 @@ test.describe("workflow — read-only Input panel", () => {
       // ---- §10 step 5: failed node -------------------------------------------------------
 
       await test.step("[C5] Failed Echo: the Input panel shows Echo's input; the error alert is only in the Output panel", async () => {
-        await importTracked(roInputWorkflowFile(`RO-Input-E2E fail ${stamp}`, FAILING_ECHO_SCRIPT));
+        await importTracked(roInputWorkflowFile(`RO-Input-E2E fail ${stamp}`, "failing"));
         const failUrl = await readWebhookTestUrl();
         await inspector.closeIfOpen();
         await editor.startTestListener();
@@ -368,7 +390,7 @@ test.describe("workflow — read-only Input panel", () => {
         const output = ioPanel(inspector, "Output");
         await expect(schemaRow(input, "name")).toContainText("Ada");
         await expect(input.getByRole("alert")).toHaveCount(0);
-        await expect(output.getByRole("alert")).toContainText("boom");
+        await expect(output.getByRole("alert")).toContainText(FAILED_ECHO_ERROR);
         await inspector.close();
       });
     } catch (error) {
