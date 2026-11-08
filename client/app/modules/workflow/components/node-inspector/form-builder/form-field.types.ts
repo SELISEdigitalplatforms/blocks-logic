@@ -41,6 +41,19 @@ export interface SelectOption {
   disabled?: boolean;
 }
 
+/** One page request for a field's `searchOptions` loader. `page` is zero-based. */
+export interface SearchOptionsRequest {
+  search: string;
+  page: number;
+  pageSize: number;
+}
+
+/** One page of results; `totalCount` is the server total for the current search. */
+export interface SearchOptionsPage {
+  options: SelectOption[];
+  totalCount: number;
+}
+
 /** One locked field of a `readonly-details` field: an ordinary field schema and the value it shows. */
 export interface ReadonlyDetailField {
   field: FieldSchema;
@@ -103,6 +116,20 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
           executionMode?: number;
         },
       ) => Promise<SelectOption[]>);
+  /**
+   * `conditional-multiselect` only: server-side search + paging. When set it replaces `options`: the
+   * field sends the typed text (debounced) and loads the next page as the list is scrolled.
+   */
+  searchOptions?: (
+    request: SearchOptionsRequest,
+    data: Whole,
+    config: {
+      tenantId: string;
+      workflowId: string;
+      store: WorkflowStore;
+      executionMode?: number;
+    },
+  ) => Promise<SearchOptionsPage>;
   fixedKeys?:
     | string[]
     | ((
