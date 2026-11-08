@@ -23,7 +23,7 @@ export const ProxyFormPage = ({ mode }: { mode: "create" | "edit" }) => {
     } else if (isEdit && proxy?.name) {
       // 2nd breadcrumb position: show the proxy name instead of the raw id.
       BREADCRUMB_CUSTOM_TITLES[pathname.replace(/\/edit$/, "")] = proxy.name;
-      BREADCRUMB_CUSTOM_TITLES[pathname] = "Edit";
+      BREADCRUMB_CUSTOM_TITLES[pathname] = tStatic("logic.proxy", "PROXY_FORM_PAGE.EDIT");
     } else if (!isEdit) {
       BREADCRUMB_CUSTOM_TITLES[pathname] = tStatic("logic.proxy", "PROXY_FORM_PAGE.NEW_PROXY");
     }

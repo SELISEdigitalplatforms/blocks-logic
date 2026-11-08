@@ -136,7 +136,7 @@ export const ConditionalMultiselectField = ({
   };
 
   const MatchIcon = currentValue.mode === "and" ? Sigma : CircleSlash;
-  const matchLabel = currentValue.mode === "and" ? "All" : "Any";
+  const matchLabel = currentValue.mode === "and" ? t("CONDITIONAL_MULTISELECT_FIELD.ALL") : t("CONDITIONAL_MULTISELECT_FIELD.ANY");
 
   const labelFor = (optionValue: string): string =>
     options.find((o) => String(o.value) === optionValue)?.label ?? optionValue;

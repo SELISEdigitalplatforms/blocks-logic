@@ -117,10 +117,14 @@ export const ImportDropZone = ({ disabled, onBrowse, onDropFiles }: DropZoneProp
 
 export const formatFileSize = (bytes: number) =>
   bytes < 1024
-    ? `${bytes} B`
+    ? tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.B", { value: bytes })
     : bytes < 1024 * 1024
-      ? `${(bytes / 1024).toFixed(1)} KB`
-      : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      ? tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.KB", {
+          value: (bytes / 1024).toFixed(1),
+        })
+      : tStatic(LOGIC_PROXY_COMPONENTS_MODULE, "PROXY_IMPORT_PARTS.MB", {
+          value: (bytes / (1024 * 1024)).toFixed(1),
+        });
 
 type FileCardProps = {
   name: string;

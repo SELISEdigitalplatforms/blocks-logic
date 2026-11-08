@@ -314,7 +314,9 @@ export default async function (input, ctx) {
       {
         key: "SQS_QUEUE_URL",
         secret: true,
-        hint: "https://sqs.<region>.amazonaws.com/<account id>/<queue name>",
+        get hint() {
+          return tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS_CONSTANT.HTTPS_SQS_REGION_AMAZONAWS");
+        },
       },
       {
         key: "AWS_ACCESS_KEY_ID",

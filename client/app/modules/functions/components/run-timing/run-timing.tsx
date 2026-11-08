@@ -92,7 +92,7 @@ export const RunTiming = ({ run }: Readonly<{ run: IRunDetail }>) => {
           </div>
           {row.steps.length > 0 && (
             <span className="break-words text-[10px] text-low-emphasis">
-              {row.steps.map((s) => `${s.step} ${s.ms} ms`).join(" · ")}
+              {row.steps.map((s) => tr("RUN_TIMING.MS", { value: s.step, value2: s.ms })).join(" · ")}
             </span>
           )}
         </div>

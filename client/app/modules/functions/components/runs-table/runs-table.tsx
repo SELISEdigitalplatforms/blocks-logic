@@ -197,7 +197,7 @@ export const RunsTable = ({
                 </span>
 
                 <code className="font-mono text-xs text-primary" role="gridcell">
-                  v{run.versionNumber}
+                  {t("RUNS_TABLE.V", { value: run.versionNumber })}
                 </code>
 
                 <div

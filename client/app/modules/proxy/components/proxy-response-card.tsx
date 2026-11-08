@@ -46,16 +46,19 @@ type Props = {
   seedKey?: string;
 };
 
-const prettyBytes = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+type Translate = ReturnType<typeof useT>["t"];
+
+const prettyBytes = (t: Translate, bytes: number) => {
+  if (bytes < 1024) return t("PROXY_RESPONSE_CARD.B", { value: bytes });
+  if (bytes < 1024 * 1024)
+    return t("PROXY_RESPONSE_CARD.KB", { value: (bytes / 1024).toFixed(1) });
+  return t("PROXY_RESPONSE_CARD.MB", { value: (bytes / (1024 * 1024)).toFixed(1) });
 };
 
 /** How many fields a "select" response forwards; none selected forwards an empty object. */
-const selectionSummary = (selecting: boolean, selectedCount: number) => {
-  if (selecting && selectedCount === 0) return "Nothing selected — clients receive {}";
-  return `${selectedCount} field${selectedCount === 1 ? "" : "s"} selected`;
+const selectionSummary = (t: Translate, selecting: boolean, selectedCount: number) => {
+  if (selecting && selectedCount === 0) return t("PROXY_RESPONSE_CARD.NOTHING_SELECTED_CLIENTS_RECEIVE");
+  return t("PROXY_RESPONSE_CARD.FIELDS_SELECTED", { count: selectedCount });
 };
 
 /**
@@ -157,7 +160,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
       const tooDeep = encodedPaths.find(
         (path) => path.split(".").length > MAX_RESPONSE_PATH_SEGMENTS,
       );
-      if (tooDeep) problems.push(`"${tooDeep}" is nested too deep.`);
+      if (tooDeep) problems.push(t("PROXY_RESPONSE_CARD.IS_NESTED_TOO_DEEP", { value: tooDeep }));
 
       const tooLong = encodedPaths.find((path) => path.length > MAX_RESPONSE_PATH_LENGTH);
       if (tooLong)
@@ -189,7 +192,7 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
   const selectedCount = encodedPaths.length;
   const summary = wholeResponse
     ? t("PROXY_RESPONSE_CARD.WHOLE_RESPONSE_FORWARDED")
-    : selectionSummary(modeField.value === "select", selectedCount);
+    : selectionSummary(t, modeField.value === "select", selectedCount);
   const summaryAmber = modeField.value === "select" && !wholeResponse && selectedCount === 0;
 
   // ---- tree mutations -------------------------------------------------------
@@ -327,12 +330,12 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
     }
 
     if (!result.ok && result.error) {
-      setSampleNote(`Couldn't reach the endpoint — ${result.error}`);
+      setSampleNote(t("PROXY_RESPONSE_CARD.COULDN_T_REACH_THE", { value: result.error }));
       return;
     }
     if (result.bytes > MAX_PROJECTABLE_BYTES) {
       setSampleNote(
-        t("PROXY_RESPONSE_CARD.RESPONSE_IS_OVER_THE", { value: prettyBytes(result.bytes) }),
+        t("PROXY_RESPONSE_CARD.RESPONSE_IS_OVER_THE", { value: prettyBytes(t, result.bytes) }),
       );
       return;
     }
@@ -392,7 +395,10 @@ export const ProxyResponseCard = ({ control, runSample, seedKey }: Props) => {
     const bad = paths.find((path) => !isResponsePath(path));
     if (bad) {
       setSkeletonError(
-        `"${bad}" isn’t a usable field path — keys can’t contain "." "[" or "]", and nesting can’t exceed ${MAX_RESPONSE_PATH_SEGMENTS} levels.`,
+        t("PROXY_RESPONSE_CARD.ISN_T_A_USABLE", {
+          bad,
+          maxResponsePathSegments: MAX_RESPONSE_PATH_SEGMENTS,
+        }),
       );
       return;
     }

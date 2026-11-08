@@ -129,7 +129,7 @@ export const formatLogTime = (timestamp: string) => {
 };
 
 export const logEntryNodeLabel = (entry: ExecutionLogEntry) =>
-  entry.nodeId ? entry.nodeName || entry.nodeId : "Workflow";
+  entry.nodeId ? entry.nodeName || entry.nodeId : tStatic(LOGIC_WORKFLOW_MODULE, "EXECUTION_LOGS_UTIL.WORKFLOW");
 
 /** One line per entry: `HH:mm:ss.SSS LEVEL [NodeName#run] message`. */
 export const formatLogsForCopy = (logs: ExecutionLogEntry[]) =>
