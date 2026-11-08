@@ -257,28 +257,6 @@ describe("iamService", () => {
     );
   });
 
-  it("sends organizationId in the roles body when one is given", async () => {
-    await iamService.getRoles({ organizationId: "a13d9b24-b560-4b68-bd8b-08abf5997619" });
-    expect(http.iamService.post).toHaveBeenLastCalledWith(
-      expect.stringContaining("/api/iam/roles"),
-      {
-        page: 0,
-        pageSize: 100,
-        sort: { property: "Name", isDescending: false },
-        organizationId: "a13d9b24-b560-4b68-bd8b-08abf5997619",
-        filter: { search: "" },
-      },
-      undefined,
-      { absoluteUrl: true },
-    );
-  });
-
-  it("omits organizationId from the roles body when it is blank", async () => {
-    await iamService.getRoles({ organizationId: "" });
-    const body = vi.mocked(http.iamService.post).mock.lastCall?.[1] as Record<string, unknown>;
-    expect(body).not.toHaveProperty("organizationId");
-  });
-
   it("lists permissions via POST, honouring caller paging but not filtering", async () => {
     await iamService.getPermissions({ pageSize: 200 });
     expect(http.iamService.post).toHaveBeenCalledWith(

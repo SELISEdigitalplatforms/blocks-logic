@@ -41,18 +41,12 @@ export class IamService {
       );
   }
 
-  /**
-   * Lists roles. Roles are org-scoped in IAM, so `organizationId` narrows the list to that
-   * organization; omitted or blank, IAM answers for the caller's own organization.
-   */
-  getRoles(payload: { organizationId?: string } = {}): Promise<IGetRolesResponse> {
-    const organizationId = payload.organizationId?.trim();
+  getRoles(): Promise<IGetRolesResponse> {
     const body = {
       page: 0,
       pageSize: 100,
-      sort: { property: "Name", isDescending: false },
-      ...(organizationId ? { organizationId } : {}),
       filter: { search: "" },
+      sort: { property: "Name", isDescending: false }
     };
     return this.IamHttpClient
       .post(

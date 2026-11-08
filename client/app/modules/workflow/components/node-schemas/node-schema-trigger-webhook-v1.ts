@@ -356,14 +356,9 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           operator: "in",
         },
         defaultValue: (data: Record<string, unknown>) => rolesAsFieldValue(data),
-        // Roles are org-scoped in IAM: list the selected organization's roles, and reload them
-        // (dropping picks that don't exist there) when the organization changes.
-        optionsDependencies: ["organizationId"],
-        options: (data: Record<string, unknown>) => {
-          const organizationId =
-            typeof data.organizationId === "string" ? data.organizationId : undefined;
+        options: () => {
           return iamService
-            .getRoles({ organizationId })
+            .getRoles()
             .then((res) => res.data.map((role) => ({ label: role.name, value: role.slug })));
         },
       },
