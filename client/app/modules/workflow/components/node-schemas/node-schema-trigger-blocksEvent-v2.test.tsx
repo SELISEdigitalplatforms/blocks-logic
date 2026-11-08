@@ -30,8 +30,7 @@ describe("Action trigger node", () => {
     resetWorkflowActionsCache();
   });
 
-  // Hotfix: skipped while the Blocks Event trigger is commented out of NodeDefinitions.
-  it.skip("the node library lists an Action trigger; the type stays blocksEvent so saved workflows load", () => {
+  it("the node library lists an Action trigger; the type stays blocksEvent so saved workflows load", () => {
     const definition = NodeDefinitions.find((d) => d.type === "blocksEvent")!;
     expect(definition.category).toBe("trigger");
     expect(definition.title).toBe("Action");

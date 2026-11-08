@@ -78,7 +78,7 @@ export interface IGetRolesPayload extends IListPagePayload {
 }
 
 export interface IGetPermissionsPayload extends IListPagePayload {
-
+  search?: string;
 }
 
 export interface IPagedResponse<T> {
