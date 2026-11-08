@@ -1,4 +1,4 @@
-import { HttpError } from "@seliseblocks/genesis-os";
+import { HttpError, tStatic } from "@seliseblocks/genesis-os";
 import { serviceInstances } from "@/lib/http-client";
 import { PROXY_ENDPOINTS, PROXY_LOG_PAGE_SIZE } from "../constants";
 import {
@@ -49,6 +49,8 @@ import {
   ProxyImportResultDto,
 } from "../types";
 
+const LOGIC_PROXY_MODULE = "logic.proxy";
+
 /** Turn a thrown {@link HttpError} into the `{ isSuccess: false, ... }` shape callers already branch on. */
 const toMutationFailure = (error: unknown): ProxyMutationResponse => {
   if (error instanceof HttpError) {
@@ -62,13 +64,18 @@ const toMutationFailure = (error: unknown): ProxyMutationResponse => {
 
     return {
       isSuccess: false,
-      errors: message ?? fieldErrors ?? "The request could not be completed.",
+      errors:
+        message ?? fieldErrors ?? tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_REQUEST_COULD_NOT"),
       code,
       message: message ?? null,
     };
   }
 
-  return { isSuccess: false, errors: "The request could not be completed.", code: null };
+  return {
+    isSuccess: false,
+    errors: tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_REQUEST_COULD_NOT"),
+    code: null,
+  };
 };
 
 /**
@@ -97,7 +104,10 @@ const toPreviewFailure = (error: unknown): { errors: string[]; warnings: string[
     if (message) return { errors: [message], warnings: list(body.warnings) };
   }
 
-  return { errors: ["The specification could not be read."], warnings: [] };
+  return {
+    errors: [tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_SPECIFICATION_COULD_NOT")],
+    warnings: [],
+  };
 };
 
 /**
@@ -122,7 +132,7 @@ const toImportFailure = (error: unknown): ProxyImportOutcome => {
       message:
         typeof body.message === "string"
           ? body.message
-          : (fieldErrors[0] ?? "The file could not be imported."),
+          : (fieldErrors[0] ?? tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_FILE_COULD_NOT")),
       errors: fieldErrors,
       result: data ? mapImportResultDtoToResult(data) : null,
     };
@@ -132,7 +142,7 @@ const toImportFailure = (error: unknown): ProxyImportOutcome => {
     ok: false,
     status: 0,
     code: null,
-    message: "The file could not be imported.",
+    message: tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_FILE_COULD_NOT"),
     errors: [],
     result: null,
   };
@@ -147,7 +157,7 @@ const flattenErrors = (error: unknown): string => {
     );
     if (values.length) return values.join(" ");
   }
-  return "The proxy test request could not be completed.";
+  return tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.THE_PROXY_TEST_REQUEST");
 };
 
 const buildQuery = (params: Record<string, string | number | boolean | undefined>) => {
@@ -399,7 +409,10 @@ export class ProxyService {
       return {
         ok: false,
         status,
-        statusText: status === 400 ? "Bad Request" : "Request Failed",
+        statusText:
+          status === 400
+            ? tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.BAD_REQUEST")
+            : tStatic(LOGIC_PROXY_MODULE, "PROXY_SERVICE.REQUEST_FAILED"),
         latencyMs: 0,
         meta: flattenErrors(error),
         responseBody: "",

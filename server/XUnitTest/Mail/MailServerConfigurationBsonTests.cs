@@ -54,6 +54,26 @@ namespace XUnitTest.Mail
         }
 
         [Fact]
+        public void Deserialize_WithoutIsOrganizationDefault_ReadsFalse()
+        {
+            // SPEC10 C11: configurations written before organizations existed.
+            BsonSerializer.Deserialize<MailServerConfiguration>(Document()).IsOrganizationDefault.Should().BeFalse();
+        }
+
+        [Fact]
+        public void Deserialize_WithIsOrganizationDefault_ReadsTheExactElementName()
+        {
+            // SPEC10 6.4: blocks-os writes the element under this name.
+            var document = Document();
+            document.Add("IsOrganizationDefault", true);
+
+            BsonSerializer.Deserialize<MailServerConfiguration>(document).IsOrganizationDefault.Should().BeTrue();
+            BsonClassMap.LookupClassMap(typeof(MailServerConfiguration))
+                .GetMemberMap(nameof(MailServerConfiguration.IsOrganizationDefault))
+                .ElementName.Should().Be("IsOrganizationDefault");
+        }
+
+        [Fact]
         public void TheGenesisEntity_CarriesTheSameField()
         {
             // H1, H12: the Genesis release in use is the one with blocks-genesis-net 1cb776f, whose

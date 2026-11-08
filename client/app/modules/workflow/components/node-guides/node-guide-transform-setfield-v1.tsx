@@ -1,22 +1,26 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideTransformSetFieldV1 = () => (
-  <GuideContent
-    title="Set Field transform"
-    description="Use this node to shape the output item by setting new field values manually or by providing JSON. It can also carry selected fields from the input item into the output."
-    steps={[
-      "Choose Manual Mapping to add fields one by one, or JSON to enter an output object directly.",
-      "In Manual Mapping, choose the value type for each field so numbers and booleans are written as those types.",
-      "In JSON mode, enter a valid JSON object. Expressions inside the JSON are resolved for each input item: {{$json.field}} reads a field of the current item (same as {{$json.output.field}}).",
-      "Turn on Include Other Input Fields if the output should keep data from the incoming item.",
-      "When including input fields, choose All Fields, Specific Fields, or Exclude Fields.",
-    ]}
-    notes={[
-      "The node runs once for each input item.",
-      "In JSON mode, values inside quotes are escaped automatically and values without quotes keep their type. JSON that is not valid after the values are filled in fails the step.",
-      "Fields you set are merged on top of the included input fields, so a new value can replace an included field with the same name.",
-      "By default, other input fields are not included.",
-      "Specific include or exclude lists are comma-separated, so keep field names aligned with the incoming data.",
-    ]}
-  />
-);
+export const NodeGuideTransformSetFieldV1 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.SET_FIELD_TRANSFORM")}
+      description={t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.USE_THIS_NODE_TO")}
+      steps={[
+        t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.CHOOSE_MANUAL_MAPPING_TO"),
+        t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.IN_MANUAL_MAPPING_CHOOSE"),
+        t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.IN_JSON_MODE_ENTER"),
+        t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.TURN_ON_INCLUDE_OTHER"),
+        t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.WHEN_INCLUDING_INPUT_FIELDS"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.THE_NODE_RUNS_ONCE"),
+        t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.IN_JSON_MODE_VALUES"),
+        t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.FIELDS_YOU_SET_ARE"),
+        t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.BY_DEFAULT_OTHER_INPUT"),
+        t("NODE_GUIDE_TRANSFORM_SETFIELD_V1.SPECIFIC_INCLUDE_OR_EXCLUDE"),
+      ]}
+    />
+  );
+};

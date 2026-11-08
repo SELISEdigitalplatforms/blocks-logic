@@ -6,6 +6,7 @@ import { SecretListItem } from "@/models/secret";
 import { useVariableCatalog } from "@/hooks/use-variable-catalog";
 import { VariablePickerPopover } from "./variable-picker-popover";
 import { VariableRefCodec, soleRefKey } from "./variable-ref";
+import { useT } from "@seliseblocks/genesis-os";
 
 export type VariableRefFieldProps = {
   value: string;
@@ -22,6 +23,11 @@ export type VariableRefFieldProps = {
   isError?: boolean;
   placeholder?: string;
   hint?: string;
+  /**
+   * The value can be missing: an unresolvable binding is a warning, not an error, and says what
+   * happens instead (the key is left out at run time).
+   */
+  optional?: boolean;
 };
 
 /**
@@ -45,7 +51,9 @@ export const VariableRefField = ({
   isError: isErrorProp,
   placeholder,
   hint,
+  optional = false,
 }: VariableRefFieldProps) => {
+  const { t } = useT("logic.shared");
   // Skipped entirely when the caller supplies the rows, so a form that already has them does
   // not fetch the same list once per field.
   const query = useVariableCatalog({}, { enabled: !variables });
@@ -58,6 +66,9 @@ export const VariableRefField = ({
   // Until the catalog lands, a bound row is neither confirmed nor broken — it must not flash
   // "no longer exists" on every mount.
   const unresolved = Boolean(boundKey) && !bound && !isLoading;
+  const brokenTone = optional
+    ? { box: "border-warning-200 bg-warning-50", text: "text-warning-800" }
+    : { box: "border-error/40 bg-error/5", text: "text-error" };
 
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -66,19 +77,22 @@ export const VariableRefField = ({
           <div
             data-testid="variable-binding"
             className={`flex h-9 min-w-0 flex-1 items-center gap-1.5 rounded-md border px-2 ${
-              unresolved ? "border-error/40 bg-error/5" : "border-primary/30 bg-primary/5"
+              unresolved ? brokenTone.box : "border-primary/30 bg-primary/5"
             }`}
           >
             <KeyRound
-              className={`h-3.5 w-3.5 shrink-0 ${unresolved ? "text-error" : "text-primary"}`}
+              className={`h-3.5 w-3.5 shrink-0 ${unresolved ? brokenTone.text : "text-primary"}`}
             />
             <span
               className={`min-w-0 flex-1 truncate text-xs ${
-                unresolved ? "italic text-error" : "font-mono"
+                unresolved ? `italic ${brokenTone.text}` : "font-mono"
               }`}
             >
               {/* Never the key. There is no name to show, so say that, in words. */}
-              {bound?.name ?? (isLoading ? "Loading…" : "Unavailable variable")}
+              {bound?.name ??
+                (isLoading
+                  ? t("VARIABLE_REF_FIELD.LOADING")
+                  : t("VARIABLE_REF_FIELD.UNAVAILABLE_VARIABLE"))}
             </span>
             {bound?.tags.slice(0, 1).map((tag) => (
               <Badge key={tag} variant="secondary" className="shrink-0 px-1.5 py-0 font-normal">
@@ -89,7 +103,7 @@ export const VariableRefField = ({
               type="button"
               variant="ghost"
               size="icon"
-              aria-label={`Unbind ${ariaLabel}`}
+              aria-label={t("VARIABLE_REF_FIELD.UNBIND", { ariaLabel })}
               className="h-6 w-6 shrink-0 text-medium-emphasis hover:text-error"
               onClick={() => onChange("")}
             >
@@ -111,7 +125,7 @@ export const VariableRefField = ({
           isLoading={isLoading}
           isError={isError}
           selectedId={bound?.id}
-          ariaLabel={`Bind ${ariaLabel} to a configuration variable`}
+          ariaLabel={t("VARIABLE_REF_FIELD.BIND_TO_A_CONFIGURATION", { ariaLabel })}
           hint={hint}
           // Replaces rather than appends: the field holds a single binding, and half typed text
           // plus half reference could not be shown as a chip.
@@ -120,8 +134,10 @@ export const VariableRefField = ({
       </div>
 
       {unresolved && (
-        <p className="text-xs text-error">
-          This configuration variable no longer exists. Pick another one, or clear it.
+        <p className={`text-xs ${brokenTone.text}`}>
+          {optional
+            ? t("VARIABLE_REF_FIELD.OPTIONAL_VARIABLE_GONE")
+            : t("VARIABLE_REF_FIELD.THIS_CONFIGURATION_VARIABLE_NO")}
         </p>
       )}
     </div>

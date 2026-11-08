@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NuqsTestingAdapter, type UrlUpdateEvent } from "nuqs/adapters/testing";
@@ -47,6 +47,7 @@ const page = (count: number, totalCount: number) => ({
 const listSpy = () => vi.spyOn(scheduleService, "getScheduleExecutions");
 
 describe("ScheduleExecutionsTab", () => {
+  afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     vi.restoreAllMocks();
     onUrlUpdate.mockClear();
@@ -56,6 +57,20 @@ describe("ScheduleExecutionsTab", () => {
     const spy = listSpy();
     renderTab({ active: false });
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("keeps existing rows and pagination visible during a polling request", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const spy = listSpy().mockResolvedValueOnce(page(10, 25))
+      .mockReturnValue(new Promise(() => undefined));
+    const { unmount } = renderTab();
+    expect(await screen.findAllByText("HTTP 200")).toHaveLength(10);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByText("HTTP 200")).toHaveLength(10);
+    expect(screen.getByText("Page 1 of 3")).toBeTruthy();
+    unmount();
   });
 
   it("loads the first page with one request and shows rows, toolbar and pagination", async () => {

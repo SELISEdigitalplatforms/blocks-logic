@@ -1,23 +1,27 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideActionDataActionV1 = () => (
-  <GuideContent
-    title="Data Action action"
-    description="Use this node to read or change records through Data Gateway. New configurations should use Raw Query mode, while the guided collection fields remain available for existing flows."
-    steps={[
-      "Keep Raw Query Mode on for a direct GraphQL request, then enter the query or mutation in Raw Query.",
-      "If authentication is needed, choose Client Credential and select an active credential, or Blocks Authentication to use the run's delegated token (or the caller's own token if there is none; if neither exists, no token is sent).",
-      "For guided mode, turn Raw Query Mode off, select a Collection, then choose Get, Insert, Update, or Delete.",
-      "For Get, Update, or Delete, add filters that narrow the records. For Insert or Update, fill the field mapping values.",
-      "For Get, review the selected Fields and remove fields you do not need.",
-    ]}
-    notes={[
-      "Raw Query runs once for each input item, and expressions in the query are resolved before it is sent. {{$json.field}} reads a field of the current item (same as {{$json.output.field}}); values inside \"…\" strings are escaped automatically.",
-      "Guided Get returns one output item per returned record when the response contains an items array.",
-      "Guided Insert, Update, and Delete return an action result with status and item information.",
-      "Guided field mappings are converted using the selected collection schema where possible.",
-      "Raw Query is recommended for new nodes.",
-      "Selecting a collection can auto-populate schema fields and reset filters, field mappings, and selected get fields.",
-    ]}
-  />
-);
+export const NodeGuideActionDataActionV1 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_ACTION_DATA_ACTION_V1.DATA_ACTION_ACTION")}
+      description={t("NODE_GUIDE_ACTION_DATA_ACTION_V1.USE_THIS_NODE_TO")}
+      steps={[
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.KEEP_RAW_QUERY_MODE"),
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.IF_AUTHENTICATION_IS_NEEDED"),
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.FOR_GUIDED_MODE_TURN"),
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.FOR_GET_UPDATE_OR"),
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.FOR_GET_REVIEW_THE"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.RAW_QUERY_RUNS_ONCE"),
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.GUIDED_GET_RETURNS_ONE"),
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.GUIDED_INSERT_UPDATE_AND"),
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.GUIDED_FIELD_MAPPINGS_ARE"),
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.RAW_QUERY_IS_RECOMMENDED"),
+        t("NODE_GUIDE_ACTION_DATA_ACTION_V1.SELECTING_A_COLLECTION_CAN"),
+      ]}
+    />
+  );
+};

@@ -520,8 +520,7 @@ namespace Blocks.FunctionRunner.Runs
                     result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                     WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                     result.Output.Truncated,
-                    startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, timings: timings,
-                    events: CheckEvents(job, fields, status, result.Output))
+                    startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, timings: timings)
                     .ConfigureAwait(false);
 
                 return Disposition.Complete;
@@ -629,8 +628,7 @@ namespace Blocks.FunctionRunner.Runs
                 }
 
                 // Set by the runner, after the screen and never from the queue: the run span's trace id
-                // and the hosts that get it on fetch(). `events` (what the function may add with
-                // ctx.events) travels in the queued envelope and is left exactly as the control plane wrote it.
+                // and the hosts that get it on fetch().
                 envelope = ExecutionEnvelope.WithTrace(envelope, Tracing.RunTracing.CurrentTraceParent(), _options.EffectiveTraceHosts);
 
                 return new PreparedRun(envelope, resolvedValues, accessToken is not null, null);
@@ -845,8 +843,7 @@ namespace Blocks.FunctionRunner.Runs
                 result.PeakMemoryBytes, result.CpuUsageMs, result.Output.ResultJson,
                 WithFailureLine(result.Output, errorCode, errorMessage, resolvedValues),
                 result.Output.Truncated,
-                startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, warm: report, timings: timings,
-                events: CheckEvents(job, fields, status, result.Output))
+                startupMs: result.StartupMs, executionMs: result.ExecutionMs, cpuWindowMs: result.CpuWindowMs, warm: report, timings: timings)
                 .ConfigureAwait(false);
 
             return Disposition.Complete;
@@ -1051,6 +1048,13 @@ namespace Blocks.FunctionRunner.Runs
             // (never cached), and must match exactly one secret. The bound ids then join the same single value read.
             var idsByName = new Dictionary<string, string>(StringComparer.Ordinal);
             var broken = new List<string>();
+            // Optional keys whose secret is simply not there: left out of ctx.env, the run goes on.
+            var dropped = new HashSet<string>(StringComparer.Ordinal);
+            void Miss(string key, string reason, string text)
+            {
+                if (plan.OptionalKeys.Contains(key) && EnvSecretReferences.IsAbsence(reason)) dropped.Add(key);
+                else broken.Add(text);
+            }
             SecretLookup lookup;
             try
             {
@@ -1071,7 +1075,7 @@ namespace Blocks.FunctionRunner.Runs
                             var reason = matches.Count == 0
                                 ? SecretUnresolvedReasons.NoSuchName
                                 : SecretUnresolvedReasons.DuplicateName;
-                            broken.Add($"variable {key} references the secret named '{name}', but {reason}");
+                            Miss(key, reason, $"variable {key} references the secret named '{name}', but {reason}");
                         }
                     }
                 }
@@ -1100,10 +1104,11 @@ namespace Blocks.FunctionRunner.Runs
                 if (refusedForName) break;
                 foreach (var name in names.Distinct(StringComparer.Ordinal))
                 {
-                    var id = idsByName[name];
+                    // A name an optional key could not bind was dropped above; it has no id to read.
+                    if (!idsByName.TryGetValue(name, out var id)) continue;
                     if (lookup.Values.ContainsKey(id)) continue;
                     var reason = lookup.Unresolved.TryGetValue(id, out var r) ? r : SecretUnresolvedReasons.NotFound;
-                    broken.Add($"variable {key} references the secret named '{name}', but {reason}");
+                    Miss(key, reason, $"variable {key} references the secret named '{name}', but {reason}");
                 }
             }
 
@@ -1114,7 +1119,7 @@ namespace Blocks.FunctionRunner.Runs
                     if (lookup.Values.ContainsKey(id)) continue;
                     if (refusedForName) break;
                     var reason = lookup.Unresolved.TryGetValue(id, out var r) ? r : SecretUnresolvedReasons.NotFound;
-                    broken.Add($"variable {key} references secret '{id}', but {reason}");
+                    Miss(key, reason, $"variable {key} references secret '{id}', but {reason}");
                 }
             }
 
@@ -1125,7 +1130,19 @@ namespace Blocks.FunctionRunner.Runs
                 return new Prepared(null, (ErrorCodes.SecretUnresolved, message), []);
             }
 
-            var values = plan.Ids.Concat(idsByName.Values).Distinct(StringComparer.Ordinal)
+            if (dropped.Count > 0)
+            {
+                // Keys only, never ids or values.
+                _logger.LogInformation(
+                    "Run {RunId}: optional variables {Keys} left out, their configuration variable is gone",
+                    job.RunId, string.Join(", ", dropped.Order(StringComparer.Ordinal)));
+                envelope = EnvSecretReferences.Without(envelope, dropped);
+                plan = EnvSecretReferences.Collect(envelope);
+                if (plan.IsEmpty) return new Prepared(envelope, null, []);
+            }
+
+            var boundIds = plan.Names.Select(n => idsByName[n]);
+            var values = plan.Ids.Concat(boundIds).Distinct(StringComparer.Ordinal)
                 .Select(id => lookup.Values[id]).Distinct(StringComparer.Ordinal).ToArray();
             return new Prepared(EnvSecretReferences.Apply(envelope, plan, lookup.Values, idsByName), null, values);
         }
@@ -1177,28 +1194,6 @@ namespace Blocks.FunctionRunner.Runs
         }
 
         /// <summary>
-        /// The events of a finished run, checked again out of process (<see cref="SandboxOutputParser.ValidateEvents"/>):
-        /// only a succeeded run sends any, so a failure, timeout or cancel drops them. A violation drops
-        /// all of them and is logged — the run id, the count and the rule, never a payload — while the
-        /// result and status stand. Allowed types come from the queued envelope, never from the sandbox.
-        /// </summary>
-        private EventsCheck CheckEvents(RunJob job, Dictionary<string, string> fields, string status, SandboxOutput output)
-        {
-            if (status != RunStatuses.Succeeded || output.EventsJson is null) return EventsCheck.None;
-
-            var envelope = fields.TryGetValue("envelope", out var queued) ? queued : "{}";
-            var check = SandboxOutputParser.ValidateEvents(
-                output.EventsJson, ExecutionEnvelope.AllowedEventTypes(envelope), $"{job.RunId}-{job.Attempt}-");
-            if (check.Rejected is not null)
-            {
-                _logger.LogWarning(
-                    "Run {RunId} sent events that were dropped ({Bytes} bytes on the line): {Reason}",
-                    job.RunId, output.EventsJson.Length, check.Rejected);
-            }
-            return check;
-        }
-
-        /// <summary>
         /// Persists the outcome and publishes it. The result and logs are written to Redis
         /// <b>before</b> the stream entry, so a crash between the two replays the run rather
         /// than losing it.
@@ -1246,13 +1241,11 @@ namespace Blocks.FunctionRunner.Runs
             string status, string? errorCode, string? errorMessage,
             int? exitCode, long durationMs, long? peakMemory, long? cpuUsageMs,
             string? resultJson, List<string>? logs, bool truncated,
-            long? startupMs = null, long? executionMs = null, long? cpuWindowMs = null, WarmReport? warm = null, HandoverTimings? timings = null,
-            EventsCheck? events = null)
+            long? startupMs = null, long? executionMs = null, long? cpuWindowMs = null, WarmReport? warm = null, HandoverTimings? timings = null)
         {
             var completedAt = DateTimeOffset.UtcNow;
             string? resultKey = null;
             string? logsKey = null;
-            string? eventsKey = null;
 
             // The result, the logs and the status are written together — sent back to back on the
             // one connection, so Redis applies them in this order, and waited for as one round
@@ -1264,14 +1257,6 @@ namespace Blocks.FunctionRunner.Runs
             {
                 resultKey = RedisKeys.Result(job.RunId);
                 writes.Add(_db.StringSetAsync(resultKey, resultJson, RedisKeys.ResultTtl));
-            }
-
-            // The run's events, already checked, as one array. Same TTL as the result; written before
-            // the stream entry like everything else the entry points at.
-            if (events?.Json is not null)
-            {
-                eventsKey = RedisKeys.Events(job.RunId);
-                writes.Add(_db.StringSetAsync(eventsKey, events.Json, RedisKeys.ResultTtl));
             }
 
             if (logs is { Count: > 0 })
@@ -1316,22 +1301,6 @@ namespace Blocks.FunctionRunner.Runs
                 new("attempt", job.Attempt.ToString(CultureInfo.InvariantCulture)),
                 new("protocol", RedisKeys.ProtocolVersion.ToString(CultureInfo.InvariantCulture)),
             };
-
-            // The events fields are appended only when there is something to say, so a run without
-            // events writes exactly the entry it always did.
-            if (eventsKey is not null)
-            {
-                entry =
-                [
-                    .. entry,
-                    new(RedisKeys.ResultEventsKeyField, eventsKey),
-                    new(RedisKeys.ResultEventCountField, events!.Count.ToString(CultureInfo.InvariantCulture)),
-                ];
-            }
-            else if (events?.Rejected is { } rejected)
-            {
-                entry = [.. entry, new(RedisKeys.ResultEventsRejectedField, Truncate(rejected, 512) ?? string.Empty)];
-            }
 
             // A warm run's three extra fields (sandbox/REUSE.md), appended after everything above
             // so the existing fields stay exactly as they were. A single run carries none of them,

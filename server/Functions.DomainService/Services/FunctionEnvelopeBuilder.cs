@@ -80,13 +80,8 @@ namespace Functions.DomainService.Services
         /// notably <c>OAuthToken</c> is not, and must never be.
         /// </param>
         /// <param name="inputJson">The caller's input as raw JSON, or null.</param>
-        /// <param name="allowedEvents">
-        /// The event types this run may add with <c>ctx.events.add</c>, already narrowed by the version's list and a
-        /// Public trigger (<see cref="Events.FunctionEventPolicy.AllowedTypes"/>). Null or empty: the envelope has no
-        /// <c>events</c> key and the function can add none.
-        /// </param>
         /// <param name="eventName">
-        /// The name of the <c>FunctionEvent</c> that started the run (<c>run.invokedBy.name</c>); null for any other run.
+        /// The name of the action that started the run (<c>run.invokedBy.name</c>); null for any other run.
         /// </param>
         public static string Build(
             FunctionRunEntity run,
@@ -94,7 +89,6 @@ namespace Functions.DomainService.Services
             FunctionEntity function,
             BlocksContext? context,
             string? inputJson,
-            IReadOnlyCollection<string>? allowedEvents = null,
             string? eventName = null)
         {
             ArgumentNullException.ThrowIfNull(run);
@@ -124,20 +118,15 @@ namespace Functions.DomainService.Services
                 // name contains "secret", and it is right to, so the marker is named for what it
                 // does instead.
                 ["maskedEnv"] = new JsonArray(maskedEnvKeys.Select(k => (JsonNode?)JsonValue.Create(k)).ToArray()),
+                // The keys the function can run without: when a reference in one of them is gone (not found,
+                // deleted, no value), the runner leaves the key out of ctx.env instead of failing the run.
+                ["optionalEnv"] = new JsonArray(OptionalKeys(variables).Select(k => (JsonNode?)JsonValue.Create(k)).ToArray()),
                 ["input"] = ParseInput(inputJson),
                 ["limits"] = new JsonObject
                 {
                     ["timeoutMs"] = limits.TimeoutSeconds * 1000,
                 },
             };
-
-            if (allowedEvents is { Count: > 0 })
-            {
-                envelope["events"] = new JsonObject
-                {
-                    ["allowed"] = new JsonArray(allowedEvents.Select(t => (JsonNode?)JsonValue.Create(t)).ToArray()),
-                };
-            }
 
             var json = envelope.ToJsonString(SerializerOptions);
 
@@ -223,7 +212,8 @@ namespace Functions.DomainService.Services
         /// <para>
         /// A reference whose secret was deleted or can no longer be read is not caught here: the
         /// runner fails that run as <c>SECRET_UNRESOLVED</c> before the sandbox starts, naming
-        /// the variable. Checking here as well would mean reading the secret's value into this
+        /// the variable (an optional variable whose secret is gone is only left out). Checking here
+        /// as well would mean reading the secret's value into this
         /// process just to throw it away — the SDK's only lookups either return the value or
         /// return metadata under a different authorisation rule — and would still not settle it,
         /// because a secret can be deleted between the invoke and the run.
@@ -250,6 +240,12 @@ namespace Functions.DomainService.Services
             }
             return env;
         }
+
+        private static IEnumerable<string> OptionalKeys(IEnumerable<VariableBinding>? variables) =>
+            (variables ?? [])
+                .Where(v => v is { Optional: true } && !string.IsNullOrWhiteSpace(v.Key))
+                .Select(v => v.Key)
+                .Distinct(StringComparer.Ordinal);
 
         private static JsonNode? ParseInput(string? inputJson)
         {

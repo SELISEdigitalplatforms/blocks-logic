@@ -2,7 +2,6 @@ import { createBrowserRouter, Navigate, Outlet } from "react-router";
 
 import WorkflowsPage from "./routes/private/workflows/workflows-page";
 import SchedulesPage from "./routes/private/schedules/schedules-page";
-import EventTriggersPage from "./routes/private/event-triggers/event-triggers-page";
 import ScheduleCreatePage from "./routes/private/schedules/schedule-create-page";
 import ScheduleEditPage from "./routes/private/schedules/schedule-edit-page";
 import ScheduleDetailsPage from "./routes/private/schedules/schedule-details-page";
@@ -13,7 +12,8 @@ import ProxiesPage from "./routes/private/proxy/proxies-page";
 import ProxyCreatePage from "./routes/private/proxy/proxy-create-page";
 import ProxyEditPage from "./routes/private/proxy/proxy-edit-page";
 import ProxyDetailsPage from "./routes/private/proxy/proxy-details-page";
-
+import OpenInOsActionsPage from "./routes/private/open-in-os/open-in-os-actions-page";
+import { OPEN_IN_OS_ACTIONS_PATH } from "./modules/open-in-os/constants";
 import {
   AuthResolver,
   PublicGuard,
@@ -26,7 +26,8 @@ import {
   DashboardOverview,
   DashboardRoute,
 } from "@seliseblocks/genesis-os";
-import { navigationMenus } from "./constants/navigation-menus";
+
+import { useNavigationMenus } from "./constants/navigation-menus";
 
 const redirectPaths: Record<string, string> = {
   "/workflow/*": "/app/workflow",
@@ -36,7 +37,10 @@ const redirectPaths: Record<string, string> = {
   "/proxy/*": "/app/proxy",
 };
 
-
+const LocalizedDashboardRoute = () => {
+  const navigationMenus = useNavigationMenus();
+  return <DashboardRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />;
+};
 
 export const router = createBrowserRouter([
   {
@@ -92,14 +96,12 @@ export const router = createBrowserRouter([
           {
             // impersonate
             path: ":itemId",
-            element: <DashboardRoute redirectPaths={redirectPaths} navigationMenus={navigationMenus} />,
+            element: <LocalizedDashboardRoute />,
             children: [
               { path: "dashboard", element: <DashboardOverview /> },
               { path: "workflow/:id", element: <WorkflowDetailsPage /> },
               { path: "workflow", element: <WorkflowsPage /> },
               { path: "schedule", element: <SchedulesPage /> },
-              // No menu item: the Blocks Event node opens it in a new tab ("Manage events").
-              { path: "event-triggers", element: <EventTriggersPage /> },
               { path: "schedule/new", element: <ScheduleCreatePage /> },
               { path: "schedule/:scheduleId/edit", element: <ScheduleEditPage /> },
               { path: "schedule/:scheduleId", element: <ScheduleDetailsPage /> },
@@ -109,6 +111,7 @@ export const router = createBrowserRouter([
               { path: "proxy/new", element: <ProxyCreatePage /> },
               { path: "proxy/:proxyId/edit", element: <ProxyEditPage /> },
               { path: "proxy/:proxyId", element: <ProxyDetailsPage /> },
+              { path: OPEN_IN_OS_ACTIONS_PATH, element: <OpenInOsActionsPage /> },
               { path: "profile", element: <ProfilePage /> },
 
 

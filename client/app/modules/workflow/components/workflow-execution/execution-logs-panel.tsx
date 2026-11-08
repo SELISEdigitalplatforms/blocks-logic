@@ -40,6 +40,7 @@ import {
   nodeFilterValue,
   normalizeLevel,
 } from "../../utils/execution-logs.util";
+import { useT } from "@seliseblocks/genesis-os";
 
 const SEARCH_DEBOUNCE_MS = 200;
 const PINNED_TO_BOTTOM_PX = 40;
@@ -101,6 +102,7 @@ export const ExecutionLogsPanel = ({
   open,
   onOpenChange,
 }: ExecutionLogsPanelProps) => {
+  const { t } = useT("logic.workflow");
   const {
     data: response,
     isLoading,
@@ -201,14 +203,17 @@ export const ExecutionLogsPanel = ({
       : EXECUTION_LOG_RETENTION_DAYS;
   const retry = (
     <Button variant="outline" size="sm" onClick={() => refetch()}>
-      Retry
+      {t("common:RETRY")}
     </Button>
   );
 
   const renderBody = () => {
     if (isLoading) {
       return (
-        <output className="block space-y-2 p-4" aria-label="Loading execution logs">
+        <output
+          className="block space-y-2 p-4"
+          aria-label={t("EXECUTION_LOGS_PANEL.LOADING_EXECUTION_LOGS")}
+        >
           {logSkeletonKeys.map((key) => (
             <Skeleton key={key} className={cn("h-6 w-full", logSkeletonClass)} />
           ))}
@@ -216,34 +221,38 @@ export const ExecutionLogsPanel = ({
       );
     }
     if (isError || !data) {
-      return <PanelMessage action={retry}>Couldn&apos;t load logs.</PanelMessage>;
+      return (
+        <PanelMessage action={retry}>{t("EXECUTION_LOGS_PANEL.COULDN_T_LOAD_LOGS")}</PanelMessage>
+      );
     }
     if (data.availability === ExecutionLogsAvailability.NotRecorded) {
-      return <PanelMessage>Logs aren&apos;t available for this execution.</PanelMessage>;
+      return <PanelMessage>{t("EXECUTION_LOGS_PANEL.LOGS_AREN_T_AVAILABLE")}</PanelMessage>;
     }
     if (data.availability === ExecutionLogsAvailability.Expired) {
       return (
         <PanelMessage>
-          <p className="font-medium text-foreground">Logs expire after {retentionDays} days.</p>
-          <p>This execution ran on {new Date(execution.startedAt).toLocaleString()}.</p>
+          <p className="font-medium text-foreground">
+            {t("EXECUTION_LOGS_PANEL.LOGS_EXPIRE_AFTER_DAYS", { retentionDays })}
+          </p>
+          <p>
+            {t("EXECUTION_LOGS_PANEL.THIS_EXECUTION_RAN_ON", {
+              value: new Date(execution.startedAt).toLocaleString(),
+            })}
+          </p>
         </PanelMessage>
       );
     }
     if (data.availability === ExecutionLogsAvailability.SourceUnavailable) {
-      return (
-        <PanelMessage action={retry}>
-          Logs can&apos;t be loaded right now. Try again later.
-        </PanelMessage>
-      );
+      return <PanelMessage action={retry}>{t("EXECUTION_LOGS_PANEL.LOGS_CAN_T_BE")}</PanelMessage>;
     }
     if (logs.length === 0) {
       return live ? (
         <PanelMessage>
           <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden />
-          <p>Waiting for logs... They can take a while to appear.</p>
+          <p>{t("EXECUTION_LOGS_PANEL.WAITING_FOR_LOGS_THEY")}</p>
         </PanelMessage>
       ) : (
-        <PanelMessage>No logs were recorded for this execution.</PanelMessage>
+        <PanelMessage>{t("EXECUTION_LOGS_PANEL.NO_LOGS_WERE_RECORDED")}</PanelMessage>
       );
     }
     if (filtered.length === 0) {
@@ -251,11 +260,11 @@ export const ExecutionLogsPanel = ({
         <PanelMessage
           action={
             <Button variant="outline" size="sm" onClick={clearFilters}>
-              Clear filters
+              {t("EXECUTION_LOGS_PANEL.CLEAR_FILTERS")}
             </Button>
           }
         >
-          No logs match these filters.
+          {t("EXECUTION_LOGS_PANEL.NO_LOGS_MATCH_THESE")}
         </PanelMessage>
       );
     }
@@ -279,7 +288,7 @@ export const ExecutionLogsPanel = ({
             className="absolute bottom-3 left-1/2 h-7 -translate-x-1/2 gap-1 rounded-full px-3 text-xs shadow"
             onClick={scrollToBottom}
           >
-            New logs <ArrowDown className="h-3 w-3" />
+            {t("EXECUTION_LOGS_PANEL.NEW_LOGS")} <ArrowDown className="h-3 w-3" />
           </Button>
         )}
       </div>
@@ -304,7 +313,9 @@ export const ExecutionLogsPanel = ({
       >
         <SheetHeader className="flex-row items-center justify-between space-y-0 border-b px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
-            <SheetTitle className="text-base">Execution logs</SheetTitle>
+            <SheetTitle className="text-base">
+              {t("EXECUTION_LOGS_PANEL.EXECUTION_LOGS")}
+            </SheetTitle>
             <div className="flex items-center gap-1.5">
               <div className={cn("h-2 w-2 rounded-full", status.color)} />
               <span className={cn("text-xs font-medium", status.textClass)}>{status.label}</span>
@@ -312,7 +323,7 @@ export const ExecutionLogsPanel = ({
             {live && (
               <span className="flex items-center gap-1.5 text-xs font-medium text-success">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-success" />
-                <span>Live</span>
+                <span>{t("EXECUTION_LOGS_PANEL.LIVE")}</span>
               </span>
             )}
           </div>
@@ -321,7 +332,7 @@ export const ExecutionLogsPanel = ({
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              aria-label="Refresh logs"
+              aria-label={t("EXECUTION_LOGS_PANEL.REFRESH_LOGS")}
               onClick={() => refetch()}
             >
               <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
@@ -330,7 +341,7 @@ export const ExecutionLogsPanel = ({
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              aria-label="Close execution logs"
+              aria-label={t("EXECUTION_LOGS_PANEL.CLOSE_EXECUTION_LOGS")}
               onClick={() => onOpenChange(false)}
             >
               <X className="h-4 w-4" />
@@ -366,15 +377,18 @@ export const ExecutionLogsPanel = ({
                   className="ml-auto text-xs font-medium text-primary hover:underline"
                   onClick={clearFilters}
                 >
-                  Clear filters
+                  {t("EXECUTION_LOGS_PANEL.CLEAR_FILTERS")}
                 </button>
               )}
             </div>
             <div className="flex gap-2">
               <div className="w-48 shrink-0">
                 <Select value={node} onValueChange={setNode}>
-                  <SelectTrigger className="h-9" aria-label="Filter by node">
-                    <SelectValue placeholder="All nodes" />
+                  <SelectTrigger
+                    className="h-9"
+                    aria-label={t("EXECUTION_LOGS_PANEL.FILTER_BY_NODE")}
+                  >
+                    <SelectValue placeholder={t("EXECUTION_LOGS_PANEL.ALL_NODES")} />
                   </SelectTrigger>
                   <SelectContent>
                     {nodeOptions.map((option) => (
@@ -389,7 +403,7 @@ export const ExecutionLogsPanel = ({
                 <SearchInput
                   value={searchInput}
                   onSearch={setSearchInput}
-                  placeholder="Search logs"
+                  placeholder={t("EXECUTION_LOGS_PANEL.SEARCH_LOGS")}
                   className="h-9"
                   isVisible
                   setIsVisible={() => undefined}
@@ -406,20 +420,25 @@ export const ExecutionLogsPanel = ({
             <div className="flex flex-col gap-0.5">
               {data.availability === ExecutionLogsAvailability.Available && (
                 <span>
-                  Showing {filtered.length} of {logs.length} lines
+                  {t("EXECUTION_LOGS_PANEL.SHOWING_OF_LINES", {
+                    length: filtered.length,
+                    length2: logs.length,
+                  })}
                 </span>
               )}
-              {data.isTruncated && <span>Not all lines are shown.</span>}
+              {data.isTruncated && <span>{t("EXECUTION_LOGS_PANEL.NOT_ALL_LINES_ARE")}</span>}
               {data.traceId && (
                 <CopyToClipboardButton textToCopy={data.traceId}>
-                  <span className="font-mono">Trace {data.traceId}</span>
+                  <span className="font-mono">
+                    {t("EXECUTION_LOGS_PANEL.TRACE", { traceId: data.traceId })}
+                  </span>
                 </CopyToClipboardButton>
               )}
             </div>
             {filtered.length > 0 && (
               <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={copyLogs}>
                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                {copied ? "Copied" : "Copy logs"}
+                {copied ? t("common:COPIED") : t("EXECUTION_LOGS_PANEL.COPY_LOGS")}
               </Button>
             )}
           </div>
@@ -438,6 +457,7 @@ const LogRow = ({
   // eslint-disable-next-line no-unused-vars
   onNodeClick: (value: string) => void;
 }) => {
+  const { t } = useT("logic.workflow");
   const level = normalizeLevel(entry.level);
   const nodeFilter = entry.nodeId ? nodeFilterValue(entry.nodeId) : null;
   return (
@@ -476,7 +496,7 @@ const LogRow = ({
         <button
           type="button"
           className="max-w-[140px] shrink-0 truncate rounded bg-muted px-1.5 font-medium hover:bg-muted/70"
-          title={`Show only ${logEntryNodeLabel(entry)}`}
+          title={t("EXECUTION_LOGS_PANEL.SHOW_ONLY", { value: logEntryNodeLabel(entry) })}
           onClick={() => onNodeClick(nodeFilter)}
         >
           {logEntryNodeLabel(entry)}
@@ -485,7 +505,9 @@ const LogRow = ({
           )}
         </button>
       ) : (
-        <span className="shrink-0 rounded bg-muted px-1.5 font-medium">Workflow</span>
+        <span className="shrink-0 rounded bg-muted px-1.5 font-medium">
+          {t("EXECUTION_LOGS_PANEL.WORKFLOW")}
+        </span>
       )}
       <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{entry.message}</span>
     </div>

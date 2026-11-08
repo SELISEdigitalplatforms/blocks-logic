@@ -14,8 +14,10 @@ import { Button } from "@/components/ui-kits/button/button";
 import { ChevronDown } from "lucide-react";
 import { WorkflowVersionActionDropdown } from "./workflow-version-action-dropdown";
 import { WorkflowVersion } from "../../models/workflow.model";
+import { useT } from "@seliseblocks/genesis-os";
 
 export const WorkflowVersionEditor = ({ version }: { version: WorkflowVersion | null }) => {
+  const { t } = useT("logic.workflow");
   const { id: workflowId } = useParams<{ id: string }>();
   const versionId = version?.itemId || version?.id || "";
   const { setWorkflow, onNodeClick, selectedNode, setEditorMode } = useWorkflow();
@@ -49,7 +51,7 @@ export const WorkflowVersionEditor = ({ version }: { version: WorkflowVersion | 
   if (!versionId) {
     return (
       <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-        Select a version to view details
+        {t("WORKFLOW_VERSION_EDITOR.SELECT_A_VERSION_TO")}
       </div>
     );
   }
@@ -86,15 +88,15 @@ export const WorkflowVersionEditor = ({ version }: { version: WorkflowVersion | 
       {version && (
         <div className="absolute px-4 left-4 top-6 z-50 flex w-[calc(100%-2rem)] justify-between">
           <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
-            <span className="text-sm font-medium">Version:</span>
+            <span className="text-sm font-medium">{t("WORKFLOW_VERSION_EDITOR.VERSION")}</span>
             <span className="text-sm text-muted-foreground">
-              {version?.name || "Unnamed Version"}
+              {version?.name || t("WORKFLOW_VERSION_EDITOR.UNNAMED_VERSION")}
             </span>
           </div>
 
           <WorkflowVersionActionDropdown version={version}>
             <Button variant="outline" size="sm" className="bg-background/95 shadow-sm backdrop-blur-sm">
-              Action
+              {t("WORKFLOW_VERSION_EDITOR.ACTION")}
               <ChevronDown className="ml-2 h-4 w-4" />
             </Button>
           </WorkflowVersionActionDropdown>

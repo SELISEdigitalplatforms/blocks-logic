@@ -1,3 +1,6 @@
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
 /** Presentation helpers shared by the list, the runs table, a run's detail and the test panel. */
 
 const MINUTE = 60_000;
@@ -143,15 +146,15 @@ export const describeRunCpu = (
   if (cpuUsageMs == null || cpuUsageMs <= 0) return { value: "—" };
   const millicores = formatMillicoresAgainstLimit(cpuUsageMs, cpuWindowMs, limitMillicores);
   if (millicores !== "—") {
-    return { value: millicores, hint: `${formatDuration(cpuUsageMs)} CPU time in ${formatDuration(cpuWindowMs)}` };
+    return { value: millicores, hint: tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.CPU_TIME_IN", { value: formatDuration(cpuUsageMs), value2: formatDuration(cpuWindowMs) }) };
   }
   if (cpuWindowMs != null) {
     return {
       value: `${formatDuration(cpuUsageMs)} CPU time`,
-      hint: `Handler ran ${formatDuration(cpuWindowMs)}: too short to compare with the limit`,
+      hint: tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.HANDLER_RAN_TOO_SHORT", { value: formatDuration(cpuWindowMs) }),
     };
   }
-  return { value: `${formatDuration(cpuUsageMs)} CPU time`, hint: "Includes sandbox start-up" };
+  return { value: `${formatDuration(cpuUsageMs)} CPU time`, hint: tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.INCLUDES_SANDBOX_START_UP") };
 };
 
 export const formatRunCount = (count?: number | null): string =>

@@ -300,6 +300,28 @@ namespace XUnitTest.Notifications
             result.Notifications.Single(n => n.Id == "n1").IsRead.Should().BeFalse();
         }
 
+        [Theory]
+        [InlineData(0, 10, 0)]     // #402 H5
+        [InlineData(2, 10, 20)]    // #402 H6
+        [InlineData(0, 100, 0)]    // #402 H7
+        [InlineData(21474836, 100, 2147483600)] // the largest valid skip for PageSize 100
+        public async Task GetNotificationsAsync_ReadsThePageWithSkipPageTimesPageSize_AndLimitPageSize(int page, int pageSize, int skip)
+        {
+            SetContext();
+            var col = Collection<OfflineNotification>(NotificationCollection, [Notification("n1")]);
+            var finds = new List<FindOptions<OfflineNotification, OfflineNotification>>();
+            col.Setup(c => c.FindAsync(It.IsAny<FilterDefinition<OfflineNotification>>(), It.IsAny<FindOptions<OfflineNotification, OfflineNotification>>(), It.IsAny<CancellationToken>()))
+               .Callback<FilterDefinition<OfflineNotification>, FindOptions<OfflineNotification, OfflineNotification>, CancellationToken>((_, o, _) => finds.Add(o))
+               .ReturnsAsync(() => Cursor(new List<OfflineNotification> { Notification("n1") }));
+
+            var result = await Build().GetNotificationsAsync(new GetNotificationsRequest { Page = page, PageSize = pageSize }, Viewer());
+
+            var options = finds.Should().ContainSingle().Subject;
+            options.Skip.Should().Be(skip);
+            options.Limit.Should().Be(pageSize);
+            result.Notifications.Should().ContainSingle();
+        }
+
         [Fact]
         public async Task GetNotificationsAsync_HandlesAnEmptyPage()
         {

@@ -1,23 +1,27 @@
 import { GuideContent } from "./node-guide-content";
+import { useT } from "@seliseblocks/genesis-os";
 
-export const NodeGuideActionHttpRequestV1 = () => (
-  <GuideContent
-    title="HTTP Request action"
-    description="Use this node to call an external HTTP endpoint from the workflow. It can send query parameters, headers, and a JSON body when those sections are enabled."
-    steps={[
-      "Choose the request Method and enter the target URL. Expressions in the URL are resolved for each input item.",
-      "Turn on Send Query Parameters if the endpoint expects URL query values, then add the key-value pairs. Keys and values can use expressions.",
-      "Turn on Send Headers for authentication, content negotiation, or other request headers. Header names and values can use expressions. A manually set Authorization header is not overwritten.",
-      "Optionally pick Authentication: Blocks Authentication uses the run's delegated token, or the caller's own token if there is none (if neither exists, no token is sent). Client Credential exchanges an IAM credential.",
-      "Turn on Send Body for methods that need a JSON payload, choose JSON, and enter a valid body.",
-      "Test the request and confirm the response shape before mapping it into later nodes.",
-    ]}
-    notes={[
-      "The node sends one request for each input item.",
-      "The response body must be valid JSON. A JSON array response becomes multiple workflow output items.",
-      "Body editing is only shown after Send Body is enabled and the body content type is JSON.",
-      "In the JSON body, {{$json.field}} reads a field of the current item (same as {{$json.output.field}}). Values inside quotes are escaped automatically; without quotes a value keeps its type. A body that is not valid JSON after the values are filled in fails the step.",
-      "Headers and query parameters are omitted unless their switches are enabled.",
-    ]}
-  />
-);
+export const NodeGuideActionHttpRequestV1 = () => {
+  const { t } = useT("logic.workflow.nodes.guides");
+  return (
+    <GuideContent
+      title={t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.HTTP_REQUEST_ACTION")}
+      description={t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.USE_THIS_NODE_TO")}
+      steps={[
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.CHOOSE_THE_REQUEST_METHOD"),
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.TURN_ON_SEND_QUERY"),
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.TURN_ON_SEND_HEADERS"),
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.OPTIONALLY_PICK_AUTHENTICATION_BLOCKS"),
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.TURN_ON_SEND_BODY"),
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.TEST_THE_REQUEST_AND"),
+      ]}
+      notes={[
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.THE_NODE_SENDS_ONE"),
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.THE_RESPONSE_BODY_MUST"),
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.BODY_EDITING_IS_ONLY"),
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.IN_THE_JSON_BODY"),
+        t("NODE_GUIDE_ACTION_HTTP_REQUEST_V1.HEADERS_AND_QUERY_PARAMETERS"),
+      ]}
+    />
+  );
+};

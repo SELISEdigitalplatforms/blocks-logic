@@ -1,6 +1,7 @@
 import { DraggableArrayIndex, DraggableProperty } from "./draggable-property";
 import { formatCellValue } from "../utils/format.util";
 import type { FieldReferenceTarget, PathSegment } from "../utils/field-reference.util";
+import { useT } from "@seliseblocks/genesis-os";
 
 type RecursiveSchemaViewerProps = Readonly<{
   data: unknown;
@@ -29,6 +30,7 @@ export function RecursiveSchemaViewer({
   isDraggable = true,
   showColon = true,
 }: RecursiveSchemaViewerProps) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const referenceProps = { nodeName, isDirectParent, itemIndex, itemIsObject, target };
 
   if (typeof data !== "object" || data === null) {
@@ -38,7 +40,7 @@ export function RecursiveSchemaViewer({
           <DraggableProperty
             segments={[]}
             {...referenceProps}
-            label="(value)"
+            label={t("RECURSIVE_SCHEMA_VIEWER.VALUE")}
             isDraggable={isDraggable}
             showColon={showColon}
           />

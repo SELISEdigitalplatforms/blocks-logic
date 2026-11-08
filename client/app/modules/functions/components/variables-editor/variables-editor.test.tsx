@@ -18,6 +18,25 @@ describe("VariablesEditor", () => {
     vi.clearAllMocks();
   });
 
+  it("marks a bound row optional, and shows no checkbox on a typed row", async () => {
+    const onChange = vi.fn();
+    const bound = { key: "BLOCKS_CLIENT_SECRET", value: ["{{secret", "s1}}"].join(".") };
+    renderWithProviders(
+      <VariablesEditor
+        value={[bound, { key: "MODE", value: "live" }]}
+        onChange={onChange}
+      />,
+    );
+
+    expect(screen.queryByRole("checkbox", { name: /variable 2 is optional/i })).toBeNull();
+    await userEvent.click(screen.getByRole("checkbox", { name: /variable 1 is optional/i }));
+
+    expect(onChange).toHaveBeenCalledWith([
+      { ...bound, optional: true },
+      { key: "MODE", value: "live" },
+    ]);
+  });
+
   it("binds a row to a configuration variable by id, never by name", async () => {
     // The id is what FunctionEnvelopeBuilder resolves against, and it survives a rename.
     const onChange = vi.fn();

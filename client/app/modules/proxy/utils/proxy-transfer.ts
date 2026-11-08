@@ -1,5 +1,8 @@
 import { PROXY_IMPORT_MAX_FILE_BYTES } from "../constants";
 import { ProxyExportFile } from "../types";
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_PROXY_MODULE = "logic.proxy";
 
 /** The file name an export is saved under: `proxy-{slug}.json`, the same name the server suggests. */
 export const exportFileName = (slug: string) => `proxy-${slug || "proxy"}.json`;
@@ -28,10 +31,11 @@ export const PROXY_EXPORT_SCHEMA_VERSION = 1;
  * Returns the message to show, or null when the file may go on.
  */
 export const checkImportFile = (file: File): string | null => {
-  if (!file.name.toLowerCase().endsWith(".json")) return "Only .json export files can be imported.";
-  if (file.size === 0) return "This file is empty.";
+  if (!file.name.toLowerCase().endsWith(".json"))
+    return tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.ONLY_JSON_EXPORT_FILES");
+  if (file.size === 0) return tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.THIS_FILE_IS_EMPTY");
   if (file.size > PROXY_IMPORT_MAX_FILE_BYTES) {
-    return "This file is larger than 1 MB, so it cannot be a proxy export.";
+    return tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.THIS_FILE_IS_LARGER");
   }
   return null;
 };
@@ -51,7 +55,7 @@ export const readImportFile = async (
   try {
     parsed = JSON.parse(await file.text());
   } catch {
-    return { ok: false, error: "This file is not valid JSON." };
+    return { ok: false, error: tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.THIS_FILE_IS_NOT") };
   }
 
   const head =
@@ -59,15 +63,18 @@ export const readImportFile = async (
       ? (parsed as ProxyExportFile)
       : null;
   if (head?.format === "blocks.function.export") {
-    return { ok: false, error: "This is a function export, not a proxy export." };
+    return { ok: false, error: tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.THIS_IS_A_FUNCTION") };
   }
   if (head?.format !== "blocks.proxy.export") {
-    return { ok: false, error: "This is not a Blocks proxy export file." };
+    return { ok: false, error: tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.THIS_IS_NOT_A") };
   }
   if (head.schemaVersion !== PROXY_EXPORT_SCHEMA_VERSION) {
     return {
       ok: false,
-      error: `This export uses schema version ${String(head.schemaVersion ?? "(none)")}, but this environment reads version ${PROXY_EXPORT_SCHEMA_VERSION}. Export the proxy again and import the new file.`,
+      error: tStatic(LOGIC_PROXY_MODULE, "PROXY_TRANSFER.SCHEMA_VERSION_MISMATCH", {
+        found: String(head.schemaVersion ?? "(none)"),
+        expected: PROXY_EXPORT_SCHEMA_VERSION,
+      }),
     };
   }
 

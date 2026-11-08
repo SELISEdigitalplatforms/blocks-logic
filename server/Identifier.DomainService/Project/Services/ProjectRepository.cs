@@ -54,10 +54,18 @@ namespace DomainService.Projects
 
             var sharedProjects = await GetSharedProjectsAsync(request.TenantGroupId);
 
+            // One read for every shared tenant rather than one per group.
+            var sharedPolicies = await GetAccessPoliciesByTenantAsync(
+                BlocksContext.GetContext()?.UserId, [.. sharedProjects.Select(p => p.TenantId)]);
+
             var sharedGroupProjects = sharedProjects.GroupBy(p => p.TenantGroupId ?? string.Empty)
                                                .Select(async g => new GroupedProjectsDto
                                                {
                                                    TenantGroupId = g.Key,
+                                                   AccessPolicies = [.. g.SelectMany(p =>
+                                                           sharedPolicies.TryGetValue(p.TenantId, out var policies) ? policies : [])
+                                                       .Distinct(StringComparer.Ordinal)
+                                                       .OrderBy(policy => policy, StringComparer.Ordinal)],
                                                    Projects = g.OrderByDescending(p => p.LastUpdatedBy).ToList(),
                                                    IsShared = true,
                                                    NonSharedProject = await GetNosharedProjectsAsync(sharedProjects, g.Key)
@@ -80,6 +88,23 @@ namespace DomainService.Projects
             });
 
             return await projectCursor.ToListAsync();
+        }
+
+        /// <summary>The caller's grants per tenant, for the tenants given.</summary>
+        private async Task<Dictionary<string, List<string>>> GetAccessPoliciesByTenantAsync(string? userId, List<string> tenantIds)
+        {
+            if (string.IsNullOrWhiteSpace(userId) || tenantIds.Count == 0) return [];
+
+            var filter = Builders<ProjectPeople>.Filter.Eq(p => p.UserId, userId) &
+                         Builders<ProjectPeople>.Filter.In(p => p.TenantId, tenantIds);
+
+            using var cursor = await _clientDb.GetCollection<ProjectPeople>(IdentifierConstants.ProjectPeopleCollectionName)
+                .FindAsync(filter);
+            var rows = await cursor.ToListAsync();
+
+            return rows
+                .GroupBy(row => row.TenantId)
+                .ToDictionary(g => g.Key, g => g.SelectMany(row => row.AccessPolicies ?? []).ToList());
         }
 
         private async Task<List<Project>> GetSharedProjectsAsync(string? tenantGroupId = null)

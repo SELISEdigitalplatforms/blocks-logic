@@ -1,4 +1,5 @@
 import { ScheduleTriggerType } from "../../types/schedule.service.type";
+import { tStatic } from "@seliseblocks/genesis-os";
 
 const EMPTY = "—";
 
@@ -12,7 +13,8 @@ export function sheetStatusLabel(
   status: number | null | undefined,
   triggerType: number | null | undefined,
 ): string {
-  if (triggerType === ScheduleTriggerType.Queue && status === 202) return "Queued";
+  if (triggerType === ScheduleTriggerType.Queue && status === 202)
+    return tStatic("logic.scheduler", "STATUS_LABEL.QUEUED");
   return statusLabel(status);
 }
 

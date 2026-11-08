@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactNode } from "react";
 import { scheduleService } from "../services/schedule.service";
@@ -17,6 +17,41 @@ const payload = { scheduleId: "s1", outcome: null, startDate: null, endDate: nul
 
 describe("execution hooks", () => {
   beforeEach(() => vi.restoreAllMocks());
+  afterEach(() => vi.useRealTimers());
+
+  it("keeps polling across empty scheduler ticks until an execution appears", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const empty = { isSuccess: true, data: [], totalCount: 0 };
+    const populated = { isSuccess: true, data: [{ id: "e1", outcome: "Succeeded" as const }], totalCount: 1 };
+    const spy = vi.spyOn(scheduleService, "getScheduleExecutions")
+      .mockResolvedValueOnce(empty)
+      .mockResolvedValueOnce(empty)
+      .mockResolvedValue(populated);
+    const { result, unmount } = renderHook(() => useGetScheduleExecutions(payload), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(result.current.data?.data).toEqual([]);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    await waitFor(() => expect(result.current.data).toEqual(populated));
+    expect(spy).toHaveBeenCalledTimes(3);
+    unmount();
+  });
+
+  it("stops polling when the executions tab becomes inactive", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const spy = vi.spyOn(scheduleService, "getScheduleExecutions").mockResolvedValue({ isSuccess: true, data: [], totalCount: 0 });
+    const { result, rerender, unmount } = renderHook(
+      ({ enabled }) => useGetScheduleExecutions(payload, { enabled }),
+      { wrapper: makeWrapper(), initialProps: { enabled: true } },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    rerender({ enabled: false });
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); });
+    expect(spy).toHaveBeenCalledTimes(1);
+    unmount();
+  });
 
   it("lists executions when enabled", async () => {
     const spy = vi.spyOn(scheduleService, "getScheduleExecutions").mockResolvedValue({ isSuccess: true, data: [], totalCount: 0 });

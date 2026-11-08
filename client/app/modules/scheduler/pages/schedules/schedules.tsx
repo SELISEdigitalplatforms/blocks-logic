@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router";
-import { useScopedPath } from "@seliseblocks/genesis-os";
+import { useScopedPath, useT } from "@seliseblocks/genesis-os";
 import { Card, CardContent, CardHeader } from "@/components/ui-kits/card/card";
 import { PAGE_SIZE_OPTIONS, Pagination } from "@/components/ui-kits/pagination/pagination";
 import { Button } from "@/components/ui-kits/button/button";
@@ -9,6 +9,7 @@ import { ScheduleFilterToolBar } from "../../components/schedule-filter-toolbar"
 import { useGetSchedules, useScheduleFilterQueryParams } from "../../hooks";
 
 export const Schedules = () => {
+  const { t } = useT("logic.scheduler");
   const navigate = useNavigate();
   const scoped = useScopedPath();
   const { queryParams, setQueryParams } = useScheduleFilterQueryParams();
@@ -31,7 +32,7 @@ export const Schedules = () => {
     <section className="flex flex-col gap-6 p-4">
       <div className="flex min-h-10 items-center justify-between">
         <div className="flex items-center gap-3">
-          <h3 className="flex items-center gap-2 text-2xl font-bold tracking-tight">Schedules</h3>
+          <h3 className="flex items-center gap-2 text-2xl font-bold tracking-tight">{t("SCHEDULES.SCHEDULES")}</h3>
         </div>
       </div>
       <Card>
@@ -45,7 +46,7 @@ export const Schedules = () => {
               onClick={handleCreateSchedule}
             >
               <Plus className="h-4 w-4" />
-              <span className="sr-only sm:not-sr-only sm:ml-2.5">Add Schedule</span>
+              <span className="sr-only sm:not-sr-only sm:ml-2.5">{t("SCHEDULES.ADD_SCHEDULE")}</span>
             </Button>
           </CardHeader>
         )}

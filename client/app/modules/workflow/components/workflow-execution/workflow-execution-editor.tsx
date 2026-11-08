@@ -25,12 +25,14 @@ import { WorkflowExecutionMode } from "../../models/workflow.model";
 import { WorkflowExecution } from "@blocks-workflow/types/workflow.service.type";
 import { cn } from "@/lib/utils";
 import { upgradeNode } from "../../utils/node-upgraders";
+import { useT } from "@seliseblocks/genesis-os";
 
 export const WorkflowExecutionEditor = ({
   execution,
 }: {
   execution?: WorkflowExecution;
 }) => {
+  const { t } = useT("logic.workflow");
   const id = execution?.id || "";
   const { setWorkflow, onNodeClick, selectedNode, deselectNode, setEditorMode, setExecutionMode } = useWorkflow();
   const { data: responseData, isFetched, isLoading } = useGetWorkflowExecutionById({
@@ -53,9 +55,9 @@ export const WorkflowExecutionEditor = ({
       { executionId: id },
       {
         onSuccess: (result) => {
-          if (!result?.isSuccess) setResumeError(result?.error ?? "This run cannot be resumed.");
+          if (!result?.isSuccess) setResumeError(result?.error ?? t("WORKFLOW_EXECUTION_EDITOR.THIS_RUN_CANNOT_BE"));
         },
-        onError: () => setResumeError("This run cannot be resumed."),
+        onError: () => setResumeError(t("WORKFLOW_EXECUTION_EDITOR.THIS_RUN_CANNOT_BE")),
       },
     );
   };
@@ -140,7 +142,7 @@ export const WorkflowExecutionEditor = ({
   if (!id) {
     return (
       <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-        Select an execution to view details
+        {t("WORKFLOW_EXECUTION_EDITOR.SELECT_AN_EXECUTION_TO")}
       </div>
     );
   }
@@ -179,7 +181,7 @@ export const WorkflowExecutionEditor = ({
       {execution && (
         <div className="absolute left-4 top-4 z-50 flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
-            <span className="text-sm font-medium">Status:</span>
+            <span className="text-sm font-medium">{t("WORKFLOW_EXECUTION_EDITOR.STATUS")}</span>
             <div className="flex items-center gap-1.5">
               <div
                 className={cn(
@@ -205,7 +207,7 @@ export const WorkflowExecutionEditor = ({
             aria-pressed={logsOpen}
             data-testid="execution-logs-button"
           >
-            <ScrollText className="h-4 w-4" /> Execution Logs
+            <ScrollText className="h-4 w-4" /> {t("WORKFLOW_EXECUTION_EDITOR.EXECUTION_LOGS")}
           </Button>
           {canResume && (
             <Button
@@ -214,10 +216,10 @@ export const WorkflowExecutionEditor = ({
               className="gap-2 bg-background/95"
               onClick={onResume}
               disabled={resume.isPending}
-              title="Continue from the failed step. Finished steps are not run again. Function steps also skip items that already succeeded; other steps run all their items again."
+              title={t("WORKFLOW_EXECUTION_EDITOR.CONTINUE_FROM_THE_FAILED")}
               data-testid="execution-resume-button"
             >
-              {resume.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Resume
+              {resume.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} {t("WORKFLOW_EXECUTION_EDITOR.RESUME")}
             </Button>
           )}
           {resumeError && (

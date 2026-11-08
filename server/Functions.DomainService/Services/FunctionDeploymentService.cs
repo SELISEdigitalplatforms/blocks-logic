@@ -201,7 +201,7 @@ namespace Functions.DomainService.Services
                 throw new FunctionValidationException("could not deploy: too many concurrent deployments of this function");
             }
 
-            // The events this version may send are a copy of the draft's, taken now, so the version's list never changes
+            // The trigger events of this version are a copy of the draft's, taken now, so the version's list never changes
             // at run time. Before the pointer moves: a copy that fails fails the deploy, and no run uses the version.
             if (_eventSettings is not null)
             {

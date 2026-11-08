@@ -38,6 +38,23 @@ describe("VariableRefField", () => {
     expect(screen.getByText(/no longer exists/i)).toBeTruthy();
   });
 
+  it("says an optional binding that is gone only leaves the value out, without the error tone", () => {
+    const { container } = renderWithProviders(
+      <VariableRefField
+        value="{{secret.sec_abc123}}"
+        onChange={vi.fn()}
+        codec={secretIdRef}
+        ariaLabel="value"
+        variables={[]}
+        optional
+      />,
+    );
+
+    expect(container.textContent).not.toContain("sec_abc123");
+    expect(screen.getByText(/still runs, without this value/i)).toBeTruthy();
+    expect(container.querySelector(".text-error")).toBeNull();
+  });
+
   it("does not render the reference token itself either", () => {
     const { container } = renderWithProviders(
       <VariableRefField

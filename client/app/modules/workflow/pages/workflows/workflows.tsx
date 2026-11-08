@@ -7,8 +7,10 @@ import { WorkflowFilterToolBar } from "../../components/workflow-filter-toolbar"
 import { PAGE_SIZE_OPTIONS, Pagination } from "@/components/ui-kits/pagination/pagination";
 import { useGetWorkflows } from "@blocks-workflow/hooks/use-workflow-api";
 import { useWorkflowFilterQueryParams } from "@blocks-workflow/hooks";
+import { useT } from "@seliseblocks/genesis-os";
 
 export const Workflows = () => {
+  const { t } = useT("logic.workflow");
   const { queryParams, setQueryParams } = useWorkflowFilterQueryParams();
   const { data, isLoading, isFetching } = useGetWorkflows({
     pageSize: Number(queryParams.pageSize),
@@ -27,47 +29,47 @@ export const Workflows = () => {
   const isEmpty = !isListLoading && workflows.length === 0 && !isFiltered;
 
   return (
-    <>
-      <section className="flex flex-col gap-6 p-4">
-        <div className="flex min-h-10 items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h3 className="flex items-center gap-2 text-2xl font-bold tracking-tight">Workflow</h3>
-          </div>
+    <section className="flex flex-col gap-6 p-4">
+      <div className="flex min-h-10 items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h3 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+            {t("WORKFLOWS.WORKFLOW")}
+          </h3>
         </div>
-        <Card>
-          {!isEmpty && (
-            <CardHeader className="flex flex-row items-center justify-between mb-0">
-              <WorkflowFilterToolBar />
-              <div className="flex items-center gap-1">
-                <ImportWorkflow />
-                <AddWorkflow />
-              </div>
-            </CardHeader>
-          )}
-          <CardContent>
-            <WorkflowList workflow={workflows} isLoading={isListLoading} isFiltered={isFiltered} />
+      </div>
+      <Card>
+        {!isEmpty && (
+          <CardHeader className="flex flex-row items-center justify-between mb-0">
+            <WorkflowFilterToolBar />
+            <div className="flex items-center gap-1">
+              <ImportWorkflow />
+              <AddWorkflow />
+            </div>
+          </CardHeader>
+        )}
+        <CardContent>
+          <WorkflowList workflow={workflows} isLoading={isListLoading} isFiltered={isFiltered} />
 
-            {!!data?.totalCount && (
-              <div className="mt-5 flex justify-end">
-                <Pagination
-                  totalCount={data?.totalCount || 0}
-                  page={queryParams.page}
-                  pageSize={queryParams.pageSize}
-                  pageSizeOptions={PAGE_SIZE_OPTIONS}
-                  onChange={(page) => setQueryParams((params) => ({ ...params, page }))}
-                  onPageSizeChange={(pageSize) =>
-                    setQueryParams((params) => ({
-                      ...params,
-                      pageSize,
-                      page: 0,
-                    }))
-                  }
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
-    </>
+          {!!data?.totalCount && (
+            <div className="mt-5 flex justify-end">
+              <Pagination
+                totalCount={data?.totalCount || 0}
+                page={queryParams.page}
+                pageSize={queryParams.pageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+                onChange={(page) => setQueryParams((params) => ({ ...params, page }))}
+                onPageSizeChange={(pageSize) =>
+                  setQueryParams((params) => ({
+                    ...params,
+                    pageSize,
+                    page: 0,
+                  }))
+                }
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
   );
 };

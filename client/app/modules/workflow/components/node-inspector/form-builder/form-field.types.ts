@@ -31,7 +31,8 @@ export type FormFieldType =
   | "comma-list"
   | "callout-accordion-display"
   | "tab-with-text"
-  | "readonly-details";
+  | "readonly-details"
+  | "link";
 
 export interface SelectOption {
   value: string | number | boolean;
@@ -188,6 +189,13 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
     operator?: "equals" | "notEquals" | "in";
   };
   transient?: boolean;
+  /**
+   * `link` only: the page the link opens in a new tab, relative to the current app scope
+   * (e.g. `open-in-os/actions` → `/app/<projectId>/open-in-os/actions`). `label` is the link text.
+   */
+  linkPath?: string;
+  /** `link` only: the accessible name, when it should say more than `label` (e.g. "opens in a new tab"). */
+  ariaLabel?: string;
   /**
    * Show the in-field `{{$VAR.name}}` key button on this field's expression-highlighted inputs.
    * Default true; set false to hide it. Always hidden while the field is read-only or disabled.
