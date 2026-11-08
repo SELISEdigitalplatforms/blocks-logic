@@ -5,7 +5,17 @@ import { type Resolver, useFieldArray, useForm, useWatch } from "react-hook-form
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import Editor, { type OnMount } from "@monaco-editor/react";
-import { Braces, CalendarClock, Plus, Settings2, Trash2, Webhook, X, Loader2, Save } from "lucide-react";
+import {
+  Braces,
+  CalendarClock,
+  Plus,
+  Settings2,
+  Trash2,
+  Webhook,
+  X,
+  Loader2,
+  Save,
+} from "lucide-react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
 import {
   Form,
@@ -280,7 +290,9 @@ export const ScheduleForm = ({
                     </FormItem>
                   )}
                 />
-                <span className="text-sm font-medium text-foreground">{t("SCHEDULE_FORM.ACTIVE")}</span>
+                <span className="text-sm font-medium text-foreground">
+                  {t("SCHEDULE_FORM.ACTIVE")}
+                </span>
               </div>
             )}
 
@@ -336,7 +348,11 @@ export const ScheduleForm = ({
                     <FormItem>
                       <FormLabel>{t("common:NAME")}</FormLabel>
                       <FormControl>
-                        <Input placeholder={t("SCHEDULE_FORM.SCHEDULE_NAME")} maxLength={100} {...field} />
+                        <Input
+                          placeholder={t("SCHEDULE_FORM.SCHEDULE_NAME")}
+                          maxLength={100}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -371,7 +387,9 @@ export const ScheduleForm = ({
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <CalendarClock className="h-4 w-4" />
                   </span>
-                  <CardTitle className="text-base">{t("SCHEDULE_FORM.TIMING_RECURRENCE")}</CardTitle>
+                  <CardTitle className="text-base">
+                    {t("SCHEDULE_FORM.TIMING_RECURRENCE")}
+                  </CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -440,7 +458,7 @@ export const ScheduleForm = ({
                         <DatePopoverField
                           value={field.value}
                           onChange={field.onChange}
-                          placeholder="mm/dd/yyyy"
+                          placeholder={t("SCHEDULE_FORM.DATE_PLACEHOLDER")}
                         />
                         <FormMessage />
                       </FormItem>
@@ -455,7 +473,7 @@ export const ScheduleForm = ({
                         <DatePopoverField
                           value={field.value}
                           onChange={field.onChange}
-                          placeholder="mm/dd/yyyy"
+                          placeholder={t("SCHEDULE_FORM.DATE_PLACEHOLDER")}
                         />
                         <FormMessage />
                       </FormItem>
@@ -475,7 +493,9 @@ export const ScheduleForm = ({
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <Webhook className="h-4 w-4" />
                   </span>
-                  <CardTitle className="text-base">{t("SCHEDULE_FORM.WEBHOOK_CONFIGURATION")}</CardTitle>
+                  <CardTitle className="text-base">
+                    {t("SCHEDULE_FORM.WEBHOOK_CONFIGURATION")}
+                  </CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -514,6 +534,7 @@ export const ScheduleForm = ({
                           <FormControl>
                             <Input
                               type="url"
+                              // eslint-disable-next-line no-restricted-syntax -- example URL, not prose
                               placeholder="https://api.example.com/webhook"
                               {...field}
                             />
@@ -533,7 +554,11 @@ export const ScheduleForm = ({
                     <FormItem>
                       <FormLabel>{t("SCHEDULE_FORM.SIGNING_SECRET")}</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder={t("SCHEDULE_FORM.ENTER_SECRET")} {...field} />
+                        <Input
+                          type="password"
+                          placeholder={t("SCHEDULE_FORM.ENTER_SECRET")}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

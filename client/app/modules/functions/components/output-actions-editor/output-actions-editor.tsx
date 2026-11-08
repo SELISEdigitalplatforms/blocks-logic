@@ -196,6 +196,7 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                   </Label>
                   <Input
                     className="h-9 font-mono text-xs"
+                    // eslint-disable-next-line no-restricted-syntax -- example URL, not prose
                     placeholder="https://api.vendor.com/v1/events"
                     value={action.url}
                     onChange={(e) => update(index, { url: e.target.value })}
@@ -345,8 +346,10 @@ export const OutputActionsEditor = ({ value, onChange }: OutputActionsEditorProp
                         className="min-h-[90px] resize-y font-mono text-xs"
                       />
                       <p className="text-xs text-medium-emphasis">
-                        <code className="font-mono">{"{{result}}"}</code> is replaced with the
-                        returned value before the call.
+                        {renderRichText(
+                          t("OUTPUT_ACTIONS_EDITOR.RESULT_IS_REPLACED", { token: "{{result}}" }),
+                          [(children) => <code className="font-mono">{children}</code>],
+                        )}
                       </p>
                     </>
                   )}

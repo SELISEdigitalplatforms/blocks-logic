@@ -71,7 +71,6 @@ namespace XUnitTest.Functions
                 FunctionWorkerQueueKeys.OutputsStream,
                 FunctionQueueKeys.DeadStream,
                 FunctionQueueKeys.DeadResultsStream,
-                FunctionQueueKeys.DeadEventsStream,
                 FunctionQueueKeys.DeadFunctionEventsStream,
             ]);
         }

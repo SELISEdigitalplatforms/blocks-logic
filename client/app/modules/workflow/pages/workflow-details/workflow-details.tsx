@@ -46,6 +46,7 @@ import { DuplicateWorkflow } from "../../components/duplicate-workflow";
 import { RenameWorkflow } from "../../components/rename-workflow/rename-workflow";
 import { WorkflowSettings } from "../../components/workflow-settings/workflow-settings";
 import { useExportWorkflow } from "../../hooks/use-export-workflow";
+import { EXECUTION_ID_PARAM } from "../../constants/workflow-execution.constant";
 
 const WORKFLOW_TABS = ["editor", "executions", "versions"] as const;
 type WorkflowTab = (typeof WORKFLOW_TABS)[number];
@@ -73,6 +74,8 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
         const next = new URLSearchParams(prev);
         if (tab === "editor") next.delete("tab");
         else next.set("tab", tab);
+        // The open run belongs to the executions tab only.
+        if (tab !== "executions") next.delete(EXECUTION_ID_PARAM);
         return next;
       },
       { replace: true },

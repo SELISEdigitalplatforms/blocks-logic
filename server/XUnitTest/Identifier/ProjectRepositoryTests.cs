@@ -160,6 +160,24 @@ namespace XUnitTest.Identifier
         }
 
         [Fact]
+        public async Task GetAllByLastModifiedDateAsync_SharedGroup_CarriesTheUnionOfTheCallersPolicies()
+        {
+            _clientProjects.SetupSequence(c => c.FindAsync(It.IsAny<FilterDefinition<Project>>(),
+                    It.IsAny<FindOptions<Project, Project>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(NewCursor(new List<Project> { new() { TenantId = "DTENANT-1", TenantGroupId = "group-1", CreatedBy = "user-123" } }))
+                .ReturnsAsync(NewCursor(new List<Project> { new() { TenantId = "STENANT-2", TenantGroupId = "group-2" } }))
+                .ReturnsAsync(NewCursor(new List<Project>()));
+            SetupFind(_clientProjectPeoples,
+                new ProjectPeople { ItemId = "pp-1", TenantId = "STENANT-2", UserId = "user-123", AccessPolicies = ["write", "read"] },
+                new ProjectPeople { ItemId = "pp-2", TenantId = "STENANT-2", UserId = "user-123", AccessPolicies = ["read", "deploy"] });
+
+            var result = await CreateRepository().GetAllByLastModifiedDateAsync(new GetProjectsRequest { PageSize = 10 });
+
+            result.Single(g => g.IsShared).AccessPolicies.Should().Equal("deploy", "read", "write");
+            result.Single(g => !g.IsShared).AccessPolicies.Should().BeEmpty();
+        }
+
+        [Fact]
         public async Task GetAllByLastModifiedDateAsync_WithGroupId_NarrowsTheOwnedFilter()
         {
             SetupFind(_clientProjects);

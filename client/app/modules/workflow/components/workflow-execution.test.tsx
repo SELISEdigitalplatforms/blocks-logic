@@ -1,9 +1,10 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
+import { TooltipProvider } from "@/components/ui-kits/tooltip/tooltip";
 import { WorkflowExecutionList } from "./workflow-execution-list";
 import { WorkflowExecutionEditor } from "./workflow-execution/workflow-execution-editor";
 import { WorkflowExecutions } from "./workflow-execution/workflow-execution";
@@ -176,7 +177,87 @@ describe("WorkflowExecutionEditor", () => {
   });
 });
 
+const SELECT_PROMPT = "Select an execution to view details";
+
+const renderExecutions = (url: string) => {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  let currentSearch = "";
+  const SearchSpy = () => {
+    currentSearch = useLocation().search;
+    return null;
+  };
+  render(
+    <QueryClientProvider client={qc}>
+      <TooltipProvider>
+        <MemoryRouter initialEntries={[url]}>
+          <Routes>
+            <Route
+              path="/workflow/:id"
+              element={
+                <>
+                  <WorkflowExecutions />
+                  <SearchSpy />
+                </>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </TooltipProvider>
+    </QueryClientProvider>,
+  );
+  return { search: () => currentSearch };
+};
+
+const linkedDetail = (workflowId: string) => ({
+  data: {
+    id: "old-run",
+    workflowId,
+    status: WorkflowExecutionStatus.Failed,
+    executionMode: 1,
+    startedAt: "2023-01-01T00:00:00Z",
+    workflowSnapshot: { nodes: [], edges: [] },
+    nodeExecutions: [],
+    items: [],
+  },
+});
+
 describe("WorkflowExecutions", () => {
+  it("opens the run in the link even when it is not on the loaded pages", async () => {
+    svc.getWorkflowExecutions.mockResolvedValue({ data: [execution("e1")] });
+    svc.getWorkflowExecutionById.mockResolvedValue(linkedDetail("w1"));
+
+    renderExecutions("/workflow/w1?tab=executions&executionId=old-run");
+
+    await waitFor(() =>
+      expect(svc.getWorkflowExecutionById).toHaveBeenCalledWith({ executionId: "old-run" }),
+    );
+    await waitFor(() => expect(screen.getByText("Status:")).toBeTruthy());
+    expect(screen.queryByText(SELECT_PROMPT)).toBeNull();
+  });
+
+  it("does not open a linked run of another workflow", async () => {
+    svc.getWorkflowExecutions.mockResolvedValue({ data: [execution("e1")] });
+    svc.getWorkflowExecutionById.mockResolvedValue(linkedDetail("other-workflow"));
+
+    renderExecutions("/workflow/w1?executionId=old-run");
+
+    await waitFor(() => expect(svc.getWorkflowExecutionById).toHaveBeenCalled());
+    expect(screen.getByText(SELECT_PROMPT)).toBeTruthy();
+  });
+
+  it("puts the selected run in the URL", async () => {
+    svc.getWorkflowExecutions.mockResolvedValue({ data: [execution("e1")] });
+    svc.getWorkflowExecutionById.mockResolvedValue(linkedDetail("w1"));
+    const { search } = renderExecutions("/workflow/w1?tab=executions");
+
+    fireEvent.click((await screen.findAllByText(/2023/))[0]);
+
+    await waitFor(() => expect(search()).toContain("executionId=e1"));
+    expect(search()).toContain("tab=executions");
+  });
+
   it("lists executions for the routed workflow", async () => {
     svc.getWorkflowExecutions.mockResolvedValue({ data: [execution("e1")] });
     const qc = new QueryClient({
@@ -197,8 +278,6 @@ describe("WorkflowExecutions", () => {
         pageSize: 20,
       }),
     );
-    await waitFor(() =>
-      expect(screen.getByText("Select an execution to view details")).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(SELECT_PROMPT)).toBeTruthy());
   });
 });

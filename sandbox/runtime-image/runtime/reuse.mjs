@@ -37,7 +37,6 @@ import { dirname } from 'node:path';
 import { getCallSites } from 'node:util';
 import { ProtocolWriter, CODE, EXIT, isStream, pumpStream } from './protocol.mjs';
 import { parseEnvelope, ACCESS_TOKEN_REMOVED } from './envelope.mjs';
-import { createEventBuffer } from './events.mjs';
 import { withTraceparent } from './trace.mjs';
 
 // Captured before any tenant code is imported (see protocol.mjs): a function that later replaces
@@ -401,7 +400,6 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
     // unpauses this sandbox for the next call must still make that next call dirty.
     const waits = [];
     let open = true;
-    const outbox = createEventBuffer({ runId: id, attempt: envelope.run.attempt, allowed: envelope.events.allowed });
     current = { tok, id, writer, answered: false };
 
     // The caller's token is fetched only when the function asks for it: most calls never do, and
@@ -448,7 +446,6 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
       env: envelope.env,
       run: envelope.run,
       log,
-      events: outbox.events,
       /** Finish `promise` after the answer is sent; the sandbox is not reused until it settles. */
       waitUntil(promise) {
         if (!open) throw new Error('ctx.waitUntil was called after its call ended');
@@ -491,9 +488,7 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
         value = deadline ? await _race([pump, deadline]) : await pump;
       }
       measureCpu();
-      // The list is closed with the answer: ctx.events.add, also from ctx.waitUntil work, now throws.
-      outbox.close();
-      const problem = writer.result(value, outbox.take());
+      const problem = writer.result(value);
       if (problem === CODE.RESULT_TOO_LARGE) {
         writer.failure(CODE.RESULT_TOO_LARGE, 'the result exceeds the 5242880 byte ceiling');
       } else if (problem === CODE.RESULT_NOT_SERIALIZABLE) {
@@ -502,7 +497,6 @@ export async function runReuse({ functionEntry, describe, patchConsole }) {
       }
     } catch (err) {
       measureCpu();
-      outbox.close(); // a failed call sends nothing
       const d = describe(err);
       writer.failure(err?.__timeout ? CODE.TIMED_OUT : (err?.__code ?? CODE.USER_RUNTIME_ERROR), d.message,
         err?.__timeout || err?.__code ? undefined : d.stack);

@@ -128,6 +128,29 @@ describe("ListenEventPanel", () => {
     fireEvent.click(screen.getByText("Listen For Test Event"));
     expect(screen.getByText(/Receive data from a webhook/)).toBeTruthy();
   });
+
+  it("saves the workflow then step-executes the trigger, like Execute Step", async () => {
+    renderWithProviders(<ListenEventPanel />, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      seedWorkflow: (store: any) => {
+        const sel = node("n1", { category: "trigger", type: "webhook" });
+        store.getState().setWorkflow({ itemId: "w1", name: "Workflow" });
+        store.getState().addNode(sel);
+        store.setState({ selectedNode: sel, editorMode: "editor" });
+      },
+    });
+
+    fireEvent.click(screen.getByText("Listen For Test Event"));
+
+    await waitFor(() => expect(workflowServiceMock.stepExecute).toHaveBeenCalled());
+    expect(workflowServiceMock.updateWorkflow).toHaveBeenCalled();
+    expect(workflowServiceMock.updateWorkflow.mock.invocationCallOrder[0]).toBeLessThan(
+      workflowServiceMock.stepExecute.mock.invocationCallOrder[0],
+    );
+    expect(workflowServiceMock.stepExecute.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ WorkflowId: "w1", NodeId: "n1" }),
+    );
+  });
 });
 
 describe("NodeInspectorHeader", () => {

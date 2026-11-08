@@ -10,6 +10,7 @@ import {
   NodeSchemaActionFunction,
 } from "./node-schema-action-function";
 
+const NIGHTLY = "Nightly rollup";
 const field = (key: string) => NodeSchemaActionFunction.schema.parameters.find((p) => p.key === key)!;
 
 beforeEach(() => {
@@ -82,8 +83,8 @@ describe("NodeSchemaActionFunction", () => {
     ]);
   });
 
-  const loadOptions = () =>
-    (field("functionId").options as (data: unknown, config: unknown) => Promise<unknown>)({}, {});
+  const loadOptions = (data: Record<string, unknown> = {}) =>
+    (field("functionId").options as (data: unknown, config: unknown) => Promise<unknown>)(data, {});
 
   it("loads only Live functions for the function picker, mapped to id/name options", async () => {
     getFunctions.mockResolvedValue({
@@ -105,20 +106,47 @@ describe("NodeSchemaActionFunction", () => {
     ]);
   });
 
-  it("offers a function whose workflow trigger is off as a disabled, labelled option", async () => {
+  it("hides a function whose workflow trigger is off", async () => {
     // The server rejects it with "this function cannot be invoked from a workflow", so picking it
-    // could only ever fail at run time — but hiding it outright would also wipe the selection of a
-    // node already pointing at it, since SelectField drops a value it cannot find in the options.
+    // could only ever fail at run time.
     getFunctions.mockResolvedValue({
-      data: [{ id: "fn_3", name: "Nightly rollup", workflowEnabled: false }],
-      totalCount: 1,
+      data: [
+        { id: "fn_3", name: NIGHTLY, workflowEnabled: false },
+        { id: "fn_4", name: "Send receipt", workflowEnabled: true },
+      ],
+      totalCount: 2,
     });
 
-    const options = await loadOptions();
+    const options = await loadOptions({ functionId: "" });
+
+    expect(options).toEqual([{ value: "fn_4", label: "Send receipt", disabled: false }]);
+  });
+
+  it("keeps the function the node already uses, disabled and labelled, even with its workflow trigger off", async () => {
+    // Hiding it would wipe the node's selection, since SelectField drops a value it cannot find
+    // among the options. Only this one stays; other trigger-off functions are still hidden.
+    getFunctions.mockResolvedValue({
+      data: [
+        { id: "fn_3", name: NIGHTLY, workflowEnabled: false },
+        { id: "fn_5", name: "Old export", workflowEnabled: false },
+      ],
+      totalCount: 2,
+    });
+
+    const options = await loadOptions({ functionId: "fn_3" });
 
     expect(options).toEqual([
       { value: "fn_3", label: "Nightly rollup — workflow trigger off", disabled: true },
     ]);
+  });
+
+  it("treats a node with no saved function id as having none to keep", async () => {
+    getFunctions.mockResolvedValue({
+      data: [{ id: "fn_3", name: NIGHTLY, workflowEnabled: false }],
+      totalCount: 1,
+    });
+
+    await expect(loadOptions({ functionId: 42 })).resolves.toEqual([]);
   });
 
   it("yields an empty list when the functions cannot be loaded, instead of rejecting", async () => {

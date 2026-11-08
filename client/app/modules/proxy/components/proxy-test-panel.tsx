@@ -95,6 +95,7 @@ export const ProxyTestPanel = ({
     <Input
       value={pathSuffix}
       onChange={(event) => onPathSuffixChange(event.target.value)}
+      // eslint-disable-next-line no-restricted-syntax -- example path, not prose
       placeholder="/charges"
       aria-label={t("PROXY_TEST_PANEL.TEST_REQUEST_PATH")}
       className={pathPrefix ? "border-0 focus-visible:ring-0 focus-visible:ring-offset-0" : ""}
@@ -113,24 +114,24 @@ export const ProxyTestPanel = ({
       <CardContent className="space-y-3 p-0">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {canChooseMethod && method && (
-              <Select
-                value={method}
-                onValueChange={(value) => onMethodChange?.(value as ProxyMethod)}
+            <Select
+              value={method}
+              onValueChange={(value) => onMethodChange?.(value as ProxyMethod)}
+            >
+              <SelectTrigger
+                className="h-10 w-full shrink-0 sm:w-[120px]"
+                aria-label={t("PROXY_TEST_PANEL.METHOD")}
               >
-                <SelectTrigger
-                  className="h-10 w-full shrink-0 sm:w-[120px]"
-                  aria-label={t("PROXY_TEST_PANEL.METHOD")}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {methods?.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {methods?.map((item) => (
+                  <SelectItem key={item} value={item}>
+                    {item}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
           {hasMethod && !canChooseMethod && method && (
             <ProxyMethodBadge method={method} className="h-10 shrink-0 px-3 py-0 leading-10" />

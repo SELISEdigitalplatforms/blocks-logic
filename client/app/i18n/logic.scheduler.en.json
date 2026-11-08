@@ -100,6 +100,7 @@
   "SCHEDULE_FORM.CONFIGURE_TRIGGER_TIMING_WEBHOOK": "Configure trigger timing, webhook destination, and payloads.",
   "SCHEDULE_FORM.CREATE_SCHEDULE": "Create Schedule",
   "SCHEDULE_FORM.CRON_EXPRESSION": "Cron Expression",
+  "SCHEDULE_FORM.DATE_PLACEHOLDER": "mm/dd/yyyy",
   "SCHEDULE_FORM.EDIT_SCHEDULE": "Edit Schedule",
   "SCHEDULE_FORM.ENDPOINT": "Endpoint",
   "SCHEDULE_FORM.END_DATE": "End Date",

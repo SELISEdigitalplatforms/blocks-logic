@@ -1,5 +1,4 @@
 import { registerTranslations } from "@seliseblocks/genesis-os";
-import eventTriggers from "./logic.event-triggers.en.json";
 import functions from "./logic.functions.en.json";
 import functionsComponents from "./logic.functions.components.en.json";
 import proxy from "./logic.proxy.en.json";
@@ -11,7 +10,6 @@ import workflowNodesGuides from "./logic.workflow.nodes.guides.en.json";
 import workflowNodesInspector from "./logic.workflow.nodes.inspector.en.json";
 import workflowNodesSchemas from "./logic.workflow.nodes.schemas.en.json";
 
-registerTranslations("logic.event-triggers", eventTriggers);
 registerTranslations("logic.functions", functions);
 registerTranslations("logic.functions.components", functionsComponents);
 registerTranslations("logic.proxy", proxy);

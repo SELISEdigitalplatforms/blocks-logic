@@ -49,8 +49,10 @@ namespace Blocks.FunctionRunner.Runs
             internal Plan(
                 IReadOnlyDictionary<string, IReadOnlyList<string>> idsByKey,
                 Caller caller,
-                IReadOnlyDictionary<string, IReadOnlyList<string>>? namesByKey = null)
+                IReadOnlyDictionary<string, IReadOnlyList<string>>? namesByKey = null,
+                IReadOnlySet<string>? optionalKeys = null)
             {
+                OptionalKeys = optionalKeys ?? new HashSet<string>(StringComparer.Ordinal);
                 IdsByKey = idsByKey;
                 NamesByKey = namesByKey ?? new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
                 Caller = caller;
@@ -71,6 +73,12 @@ namespace Blocks.FunctionRunner.Runs
             public IReadOnlyCollection<string> Ids { get; }
 
             public Caller Caller { get; }
+
+            /// <summary>
+            /// Env keys the function can run without (<c>optionalEnv</c>): a reference in one that is gone
+            /// (see <see cref="IsAbsence"/>) leaves the key out of <c>ctx.env</c> instead of failing the run.
+            /// </summary>
+            public IReadOnlySet<string> OptionalKeys { get; }
 
             public bool IsEmpty => Ids.Count == 0 && Names.Count == 0;
         }
@@ -99,7 +107,44 @@ namespace Blocks.FunctionRunner.Runs
                 }
             }
 
-            return new Plan(idsByKey, ReadCaller(root["context"] as JsonObject), namesByKey);
+            var optional = new HashSet<string>(StringComparer.Ordinal);
+            if (root["optionalEnv"] is JsonArray optionalEnv)
+            {
+                foreach (var item in optionalEnv)
+                {
+                    if (item is JsonValue v && v.TryGetValue<string>(out var k) && !string.IsNullOrEmpty(k)) optional.Add(k);
+                }
+            }
+
+            return new Plan(idsByKey, ReadCaller(root["context"] as JsonObject), namesByKey, optional);
+        }
+
+        /// <summary>
+        /// Whether an unresolved reason means the secret is simply not there (an optional key is then left out).
+        /// Anything else — locked, not readable, a duplicate name, an unknown tenant, a bad id — still fails the
+        /// run even for an optional key: those are faults to fix, not an absence.
+        /// </summary>
+        public static bool IsAbsence(string reason) =>
+            reason is SecretStore.SecretUnresolvedReasons.NotFound
+                or SecretStore.SecretUnresolvedReasons.Deleted
+                or SecretStore.SecretUnresolvedReasons.NoValue
+                or SecretStore.SecretUnresolvedReasons.NoSuchName;
+
+        /// <summary>
+        /// The envelope with <paramref name="keys"/> removed from <c>env</c>, so the function sees them as
+        /// <c>undefined</c>. Collect the plan again afterwards: the removed keys' references are gone with them.
+        /// </summary>
+        public static string Without(string envelopeJson, IReadOnlyCollection<string> keys)
+        {
+            ArgumentNullException.ThrowIfNull(keys);
+            if (keys.Count == 0) return envelopeJson;
+
+            var root = ParseObject(envelopeJson);
+            if (root["env"] is JsonObject env)
+            {
+                foreach (var key in keys) env.Remove(key);
+            }
+            return root.ToJsonString();
         }
 
         /// <summary>

@@ -95,9 +95,9 @@ const OverrideNote = ({ keys, what }: { keys: string[]; what: string }) => {
           <code className="font-mono">{key}</code>
         </span>
       ))}{" "}
-      {one ? "is" : "are"} {t("PROXY_TEST_TAB.SET_BY_THE_PROXY")} {one ? "its" : "their"} configured{" "}
-      {one ? t("PROXY_TEST_TAB.VALUE_IS") : t("PROXY_TEST_TAB.VALUES_ARE")}{" "}
-      {t("PROXY_TEST_TAB.SENT_REGARDLESS_OF_WHAT", { what })}
+      {one
+        ? t("PROXY_TEST_TAB.OVERRIDE_NOTE_ONE", { what })
+        : t("PROXY_TEST_TAB.OVERRIDE_NOTE_MANY", { what })}
     </p>
   );
 };
@@ -168,7 +168,8 @@ const whyBlocked = (
       value: state.missingParams.map((name) => `{${name}}`).join(", "),
     });
   }
-  if (state.bodyTooLarge) return t("PROXY_TEST_TAB.THE_REQUEST_BODY_IS", { value: MAX_REQUEST_BODY_BYTES / MB });
+  if (state.bodyTooLarge)
+    return t("PROXY_TEST_TAB.THE_REQUEST_BODY_IS", { value: MAX_REQUEST_BODY_BYTES / MB });
   return null;
 };
 
@@ -177,16 +178,18 @@ const TestResponseCard = ({
   response,
   isCopying,
   onCopy,
-}: Readonly<{ response: ProxyTestResponse; isCopying: boolean; onCopy: (text: string) => void }>) => {
+}: Readonly<{
+  response: ProxyTestResponse;
+  isCopying: boolean;
+  onCopy: (text: string) => void;
+}>) => {
   const { t } = useT(LOGIC_PROXY_COMPONENTS_MODULE);
   return (
     <Card className="rounded-xl">
       <CardContent className="space-y-3 pt-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={response.ok ? "success" : "error"}>
-            <span className={cn("font-mono", statusClass(response.status))}>
-              {response.status}
-            </span>
+            <span className={cn("font-mono", statusClass(response.status))}>{response.status}</span>
             <span className="ml-1">{response.statusText}</span>
           </Badge>
           {filterBadge(response.responseFilterNote) ? (
@@ -395,6 +398,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
               id="proxy-test-query"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              // eslint-disable-next-line no-restricted-syntax -- example query string, not prose
               placeholder="limit=10&status=open"
               className="font-mono"
             />
