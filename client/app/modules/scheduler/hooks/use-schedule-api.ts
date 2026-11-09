@@ -56,7 +56,7 @@ export const useGetScheduleExecutions = (
     queryFn: () => scheduleService.getScheduleExecutions(payload),
     enabled,
     refetchOnWindowFocus: false,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 };
 

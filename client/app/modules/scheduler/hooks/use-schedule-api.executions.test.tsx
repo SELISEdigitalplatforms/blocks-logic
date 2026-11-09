@@ -30,10 +30,10 @@ describe("execution hooks", () => {
     const { result, unmount } = renderHook(() => useGetScheduleExecutions(payload), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
     expect(spy).toHaveBeenCalledTimes(2);
     expect(result.current.data?.data).toEqual([]);
-    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
     await waitFor(() => expect(result.current.data).toEqual(populated));
     expect(spy).toHaveBeenCalledTimes(3);
     unmount();
@@ -48,7 +48,7 @@ describe("execution hooks", () => {
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     rerender({ enabled: false });
-    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000); });
     expect(spy).toHaveBeenCalledTimes(1);
     unmount();
   });

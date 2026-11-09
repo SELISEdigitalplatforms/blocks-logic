@@ -51,15 +51,23 @@ namespace Blocks.FunctionRunner.Builds
         private readonly IDockerClient _docker;
         private readonly RunnerOptions _options;
         private readonly ILogger<DependencyInstaller> _logger;
+        private readonly IImageResolver? _images;
 
+        /// <summary>
+        /// <paramref name="images"/> pulls the build image when this host no longer has it (a
+        /// redeploy re-tagged it and the old one was cleaned up). Optional so direct construction
+        /// keeps compiling; without it a missing image fails the build as before.
+        /// </summary>
         public DependencyInstaller(
             IDockerClient docker,
             IOptions<RunnerOptions> options,
-            ILogger<DependencyInstaller> logger)
+            ILogger<DependencyInstaller> logger,
+            IImageResolver? images = null)
         {
             _docker = docker;
             _options = options.Value;
             _logger = logger;
+            _images = images;
         }
 
         public async Task<InstallResult> InstallAsync(
@@ -82,10 +90,17 @@ namespace Blocks.FunctionRunner.Builds
 
             try
             {
+                var buildImage = _options.EffectiveBuildImage;
+                if (_images is not null
+                    && await _images.EnsureAsync(buildImage, cancellationToken).ConfigureAwait(false) is null)
+                {
+                    return Failed(log, $"the build image {buildImage} is not on this host and could not be pulled");
+                }
+
                 await RemoveOrphanAsync(containerName).ConfigureAwait(false);
 
                 var parameters = BuildSandboxProfile.Create(
-                    containerName, _options.EffectiveBuildImage, workHostPath, script, _options);
+                    containerName, buildImage, workHostPath, script, _options);
 
                 CreateContainerResponse created;
                 try

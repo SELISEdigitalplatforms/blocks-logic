@@ -8,6 +8,7 @@ import {
   IGetOrganizationsResponse,
   IGetPermissionsPayload,
   IGetPermissionsResponse,
+  IGetRolesPayload,
   IGetRolesResponse,
 } from "../models/iam";
 import { AUTH_CLIENT_ENDPOINTS, IAM_AUTHORIZATION_ENDPOINTS } from "../constants/iam.endpoint.constant";
@@ -41,12 +42,12 @@ export class IamService {
       );
   }
 
-  getRoles(): Promise<IGetRolesResponse> {
+  getRoles(payload: IGetRolesPayload = {}): Promise<IGetRolesResponse> {
     const body = {
-      page: 0,
-      pageSize: 100,
-      filter: { search: "" },
-      sort: { property: "Name", isDescending: false }
+      page: payload.page ?? 0,
+      pageSize: payload.pageSize ?? 100,
+      filter: { search: payload.search ?? "" },
+      sort: payload.sort ?? { property: "Name", isDescending: false },
     };
     return this.IamHttpClient
       .post(
@@ -63,7 +64,7 @@ export class IamService {
       pageSize: payload.pageSize ?? 500,
       sort: payload.sort ?? { property: "Name", isDescending: false },
       filter: {
-        search: "",
+        search: payload.search ?? "",
         isBuiltIn: "",
         resourceGroup: "",
       },
