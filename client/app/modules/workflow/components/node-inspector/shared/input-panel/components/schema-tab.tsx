@@ -8,7 +8,6 @@ type SchemaTabProps = Readonly<{
   nodeName: string;
   isDirectParent: boolean;
   target?: FieldReferenceTarget;
-  isExecutionMode: boolean;
 }>;
 
 const getRowKey = (row: unknown) => {
@@ -25,7 +24,6 @@ export function SchemaTab({
   nodeName,
   isDirectParent,
   target,
-  isExecutionMode,
 }: SchemaTabProps) {
   const { t } = useT("logic.workflow.nodes.inspector");
   if (runtimeInputRows.length === 0) {
@@ -52,7 +50,6 @@ export function SchemaTab({
             itemIsObject={isPlainObject(row)}
             target={target}
             showValues={!isLastExecutionEditor}
-            isDraggable={!isExecutionMode}
             showColon={!isLastExecutionEditor}
           />
         </div>
