@@ -25,6 +25,21 @@ import { useT } from "@seliseblocks/genesis-os";
 
 const DEFAULT_VALUE: ConditionalMultiselectValue = { mode: "and", values: [] };
 
+const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 500;
+const SCROLL_THRESHOLD_PX = 32;
+
+/** One option per value; the first occurrence wins. */
+const dedupe = (opts: SelectOption[]): SelectOption[] => {
+  const seen = new Set<string>();
+  return opts.filter((o) => {
+    const key = String(o.value);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 const normalizeValue = (value: unknown): ConditionalMultiselectValue => {
   if (!value || typeof value !== "object") return { ...DEFAULT_VALUE };
   const v = value as Partial<ConditionalMultiselectValue>;
@@ -54,6 +69,8 @@ export const ConditionalMultiselectField = ({
   const { t } = useT("logic.workflow.nodes.inspector");
   const currentValue = normalizeValue(value);
 
+  const searchOptions = field.searchOptions;
+  const isRemoteSearch = typeof searchOptions === "function";
   const isStaticOptions = Array.isArray(field.options);
   const staticOptions = isStaticOptions ? (field.options as SelectOption[]) : [];
   const [asyncOptions, setAsyncOptions] = useState<SelectOption[]>([]);
@@ -61,57 +78,131 @@ export const ConditionalMultiselectField = ({
   const [open, setOpen] = useState(false);
   const hasCalledRef = useRef(false);
 
-  // Serialised values of the declared dependency keys (see select-field). Undefined when the field
-  // declares none, which keeps the fetch-once behaviour.
-  const depString = useMemo(
-    () =>
-      field.optionsDependencies
-        ? JSON.stringify(field.optionsDependencies.map((key) => data[key]))
-        : undefined,
-    [data, field.optionsDependencies],
-  );
-  const lastDepRef = useRef<string | undefined>(undefined);
-  const requestIdRef = useRef(0);
-  // Read when a reload lands, so the pruning starts from the value as it is then.
-  const latestValue = useRef(currentValue);
   useEffect(() => {
-    latestValue.current = currentValue;
+    if (isRemoteSearch) return;
+    if (typeof field.options === "function" && !hasCalledRef.current) {
+      hasCalledRef.current = true;
+      setIsLoading(true);
+      field
+        .options(data, config)
+        .then(setAsyncOptions)
+        .finally(() => setIsLoading(false));
+    }
+  }, [config, data, field, isRemoteSearch]);
+
+  // ── Remote search + infinite scroll (only when `field.searchOptions` is set) ──
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [remoteOptions, setRemoteOptions] = useState<SelectOption[]>([]);
+  // The search whose page 0 has settled; page 0 is loading while it differs from `search`.
+  const [settledSearch, setSettledSearch] = useState<string | null>(null);
+  const remoteLoading = settledSearch !== search;
+  const [loadingMore, setLoadingMore] = useState(false);
+  const pageRef = useRef(0);
+  const rawCountRef = useRef(0);
+  const totalRef = useRef(0);
+  const hasMoreRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  // Bumped on every new search; a response from an older search is dropped.
+  const generationRef = useRef(0);
+  // Labels of every option seen so far, so selected chips keep their names after the list changes.
+  const [labelCache, setLabelCache] = useState<Record<string, string>>({});
+  // `data` / `config` change identity on every render; read them through refs so they don't refetch.
+  const dataRef = useRef(data);
+  const configRef = useRef(config);
+  useEffect(() => {
+    dataRef.current = data;
+    configRef.current = config;
   });
 
   useEffect(() => {
-    if (typeof field.options !== "function") return;
+    if (!isRemoteSearch) return;
+    const handle = setTimeout(() => setSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [searchInput, isRemoteSearch]);
 
-    const isFirstCall = !hasCalledRef.current;
-    const depsChanged = depString !== undefined && lastDepRef.current !== depString;
-    if (!isFirstCall && !depsChanged) return;
+  const rememberLabels = (opts: SelectOption[]) => {
+    if (opts.length === 0) return;
+    setLabelCache((prev) => {
+      const next = { ...prev };
+      for (const o of opts) next[String(o.value)] = o.label;
+      return next;
+    });
+  };
 
-    hasCalledRef.current = true;
-    lastDepRef.current = depString;
-    // Only the latest request may apply: a slow answer for a previous organization is ignored.
-    const requestId = ++requestIdRef.current;
-    const isStale = () => requestId !== requestIdRef.current;
-    setIsLoading(true);
-    field
-      .options(data, config)
-      .then((opts) => {
-        if (isStale()) return;
-        setAsyncOptions(opts);
-        // A dependency changed (e.g. another organization): drop picks the new list doesn't have.
-        // Never on the first load, so a saved node keeps its values even if they no longer resolve.
-        if (isFirstCall || readOnly) return;
-        const available = new Set(opts.map((o) => String(o.value)));
-        const current = latestValue.current;
-        const kept = current.values.filter((v) => available.has(v));
-        if (kept.length !== current.values.length) {
-          onChange({ ...current, values: kept });
-        }
+  const applyPage = (opts: SelectOption[], totalCount: number, page: number, append: boolean) => {
+    rememberLabels(opts);
+    pageRef.current = page;
+    rawCountRef.current = (append ? rawCountRef.current : 0) + opts.length;
+    totalRef.current = Number.isFinite(totalCount) && totalCount > 0 ? totalCount : 0;
+    // A short page ends paging even if the total says otherwise.
+    hasMoreRef.current = opts.length >= PAGE_SIZE && rawCountRef.current < totalRef.current;
+    setRemoteOptions((prev) => {
+      if (!append) return dedupe(opts);
+      return dedupe([...prev, ...opts]);
+    });
+  };
+
+  // Page 0 whenever the (debounced) search changes, including the initial empty search on mount.
+  useEffect(() => {
+    if (!searchOptions) return;
+    const generation = ++generationRef.current;
+    loadingMoreRef.current = false;
+    searchOptions({ search, page: 0, pageSize: PAGE_SIZE }, dataRef.current, configRef.current)
+      .then((res) => {
+        if (generation !== generationRef.current) return;
+        applyPage(res.options ?? [], res.totalCount, 0, false);
+      })
+      .catch(() => {
+        if (generation !== generationRef.current) return;
+        hasMoreRef.current = false;
+        setRemoteOptions([]);
       })
       .finally(() => {
-        if (!isStale()) setIsLoading(false);
+        if (generation !== generationRef.current) return;
+        setLoadingMore(false);
+        setSettledSearch(search);
       });
-  }, [config, data, depString, field, onChange, readOnly]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, searchOptions]);
 
-  const options = isStaticOptions ? staticOptions : asyncOptions;
+  // Invalidate in-flight requests on unmount.
+  useEffect(() => () => void ++generationRef.current, []);
+
+  const loadNextPage = () => {
+    if (!searchOptions || remoteLoading || loadingMoreRef.current || !hasMoreRef.current) return;
+    const generation = generationRef.current;
+    const nextPage = pageRef.current + 1;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    searchOptions(
+      { search, page: nextPage, pageSize: PAGE_SIZE },
+      dataRef.current,
+      configRef.current,
+    )
+      .then((res) => {
+        if (generation !== generationRef.current) return;
+        applyPage(res.options ?? [], res.totalCount, nextPage, true);
+      })
+      .catch(() => {
+        if (generation !== generationRef.current) return;
+        hasMoreRef.current = false;
+      })
+      .finally(() => {
+        if (generation !== generationRef.current) return;
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      });
+  };
+
+  const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_THRESHOLD_PX) loadNextPage();
+  };
+
+  const options = isRemoteSearch ? remoteOptions : isStaticOptions ? staticOptions : asyncOptions;
+  // Remote search loads inside the open popover; the trigger stays usable.
+  const triggerLoading = isRemoteSearch ? false : isLoading;
   const disabled = (field.disabled as boolean) || readOnly;
 
   const selectedSet = useMemo(() => new Set(currentValue.values), [currentValue.values]);
@@ -139,7 +230,9 @@ export const ConditionalMultiselectField = ({
   const matchLabel = currentValue.mode === "and" ? t("CONDITIONAL_MULTISELECT_FIELD.ALL") : t("CONDITIONAL_MULTISELECT_FIELD.ANY");
 
   const labelFor = (optionValue: string): string =>
-    options.find((o) => String(o.value) === optionValue)?.label ?? optionValue;
+    options.find((o) => String(o.value) === optionValue)?.label ??
+    labelCache[optionValue] ??
+    optionValue;
 
   const previewItems = currentValue.values.slice(0, 2);
   const overflowItems = currentValue.values.slice(previewItems.length);
@@ -162,14 +255,14 @@ export const ConditionalMultiselectField = ({
               type="button"
               role="combobox"
               aria-expanded={open}
-              disabled={disabled || isLoading}
+              disabled={disabled || triggerLoading}
               className="flex flex-1 items-center justify-between gap-2 truncate text-left outline-none disabled:cursor-not-allowed"
             >
               <span className="flex items-center gap-1.5 truncate">
-                {isLoading && (
+                {triggerLoading && (
                   <span className="text-muted-foreground">{t("common:LOADING")}</span>
                 )}
-                {!isLoading && currentValue.values.length > 0 && (
+                {!triggerLoading && currentValue.values.length > 0 && (
                   <>
                     {previewItems.map((v) => (
                       <span
@@ -204,14 +297,14 @@ export const ConditionalMultiselectField = ({
                     )}
                   </>
                 )}
-                {!isLoading && currentValue.values.length === 0 && (
+                {!triggerLoading && currentValue.values.length === 0 && (
                   <span className="text-muted-foreground">
                     {field.placeholder || t("CONDITIONAL_MULTISELECT_FIELD.SELECT")}
                   </span>
                 )}
-                {isLoading && <Loader2 className="h-4 w-4 animate-spin opacity-50" />}
+                {triggerLoading && <Loader2 className="h-4 w-4 animate-spin opacity-50" />}
               </span>
-              {!isLoading && (
+              {!triggerLoading && (
                 <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
               )}
             </button>
@@ -242,10 +335,23 @@ export const ConditionalMultiselectField = ({
         </div>
 
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-          <Command shouldFilter={typeof field.options === "function" ? false : undefined}>
-            <CommandInput placeholder={field.placeholder || t("CONDITIONAL_MULTISELECT_FIELD.SEARCH")} className="h-9" />
-            <CommandList>
-              <CommandEmpty>{t("CONDITIONAL_MULTISELECT_FIELD.NO_RESULTS_FOUND")}</CommandEmpty>
+          <Command
+            shouldFilter={isRemoteSearch || typeof field.options === "function" ? false : undefined}
+          >
+            <CommandInput
+              placeholder={field.placeholder || t("CONDITIONAL_MULTISELECT_FIELD.SEARCH")}
+              className="h-9"
+              {...(isRemoteSearch ? { value: searchInput, onValueChange: setSearchInput } : {})}
+            />
+            <CommandList onScroll={isRemoteSearch ? handleListScroll : undefined}>
+              {isRemoteSearch && remoteLoading ? (
+                <div className="flex justify-center py-6" role="status" aria-live="polite">
+                  <Loader2 className="h-4 w-4 animate-spin opacity-50" />
+                  <span className="sr-only">{t("common:LOADING")}</span>
+                </div>
+              ) : (
+                <CommandEmpty>{t("CONDITIONAL_MULTISELECT_FIELD.NO_RESULTS_FOUND")}</CommandEmpty>
+              )}
               <CommandGroup>
                 {options.map((option) => {
                   const optionValue = String(option.value);
@@ -273,6 +379,12 @@ export const ConditionalMultiselectField = ({
                   );
                 })}
               </CommandGroup>
+              {isRemoteSearch && loadingMore && (
+                <div className="flex justify-center py-2" role="status" aria-live="polite">
+                  <Loader2 className="h-4 w-4 animate-spin opacity-50" />
+                  <span className="sr-only">{t("common:LOADING")}</span>
+                </div>
+              )}
             </CommandList>
           </Command>
         </PopoverContent>

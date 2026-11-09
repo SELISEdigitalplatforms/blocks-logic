@@ -8,6 +8,7 @@ import {
   IGetOrganizationsResponse,
   IGetPermissionsPayload,
   IGetPermissionsResponse,
+  IGetRolesPayload,
   IGetRolesResponse,
 } from "../models/iam";
 import { AUTH_CLIENT_ENDPOINTS, IAM_AUTHORIZATION_ENDPOINTS } from "../constants/iam.endpoint.constant";
@@ -41,18 +42,12 @@ export class IamService {
       );
   }
 
-  /**
-   * Lists roles. Roles are org-scoped in IAM, so `organizationId` narrows the list to that
-   * organization; omitted or blank, IAM answers for the caller's own organization.
-   */
-  getRoles(payload: { organizationId?: string } = {}): Promise<IGetRolesResponse> {
-    const organizationId = payload.organizationId?.trim();
+  getRoles(payload: IGetRolesPayload = {}): Promise<IGetRolesResponse> {
     const body = {
-      page: 0,
-      pageSize: 100,
-      sort: { property: "Name", isDescending: false },
-      ...(organizationId ? { organizationId } : {}),
-      filter: { search: "" },
+      page: payload.page ?? 0,
+      pageSize: payload.pageSize ?? 100,
+      filter: { search: payload.search ?? "" },
+      sort: payload.sort ?? { property: "Name", isDescending: false },
     };
     return this.IamHttpClient
       .post(
@@ -69,7 +64,7 @@ export class IamService {
       pageSize: payload.pageSize ?? 500,
       sort: payload.sort ?? { property: "Name", isDescending: false },
       filter: {
-        search: "",
+        search: payload.search ?? "",
         isBuiltIn: "",
         resourceGroup: "",
       },

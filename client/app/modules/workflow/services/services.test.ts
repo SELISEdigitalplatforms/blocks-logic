@@ -240,8 +240,32 @@ describe("iamService", () => {
     );
   });
 
-  // getRoles/getPermissions take no filter arguments: the webhook RBAC picker loads the full
-  // first page and filters client-side, so the request body is a fixed paging + sort envelope.
+  // With no arguments getRoles/getPermissions keep their old fixed envelope (Proxy relies on it);
+  // the webhook RBAC picker passes the typed search and a 20-item page.
+  it("forwards the role search text and page", async () => {
+    await iamService.getRoles({ search: "admin", page: 2, pageSize: 20 });
+    expect(http.iamService.post).toHaveBeenCalledWith(
+      expect.stringContaining("/api/iam/roles"),
+      expect.objectContaining({ page: 2, pageSize: 20, filter: { search: "admin" } }),
+      undefined,
+      { absoluteUrl: true },
+    );
+  });
+
+  it("forwards the permission search text and page", async () => {
+    await iamService.getPermissions({ search: "user", page: 1, pageSize: 20 });
+    expect(http.iamService.post).toHaveBeenCalledWith(
+      expect.stringContaining("/api/iam/permissions"),
+      expect.objectContaining({
+        page: 1,
+        pageSize: 20,
+        filter: { search: "user", isBuiltIn: "", resourceGroup: "" },
+      }),
+      undefined,
+      { absoluteUrl: true },
+    );
+  });
+
   it("lists roles via POST against the absolute IAM base url", async () => {
     await iamService.getRoles();
     expect(http.iamService.post).toHaveBeenCalledWith(
@@ -255,28 +279,6 @@ describe("iamService", () => {
       undefined,
       { absoluteUrl: true },
     );
-  });
-
-  it("sends organizationId in the roles body when one is given", async () => {
-    await iamService.getRoles({ organizationId: "a13d9b24-b560-4b68-bd8b-08abf5997619" });
-    expect(http.iamService.post).toHaveBeenLastCalledWith(
-      expect.stringContaining("/api/iam/roles"),
-      {
-        page: 0,
-        pageSize: 100,
-        sort: { property: "Name", isDescending: false },
-        organizationId: "a13d9b24-b560-4b68-bd8b-08abf5997619",
-        filter: { search: "" },
-      },
-      undefined,
-      { absoluteUrl: true },
-    );
-  });
-
-  it("omits organizationId from the roles body when it is blank", async () => {
-    await iamService.getRoles({ organizationId: "" });
-    const body = vi.mocked(http.iamService.post).mock.lastCall?.[1] as Record<string, unknown>;
-    expect(body).not.toHaveProperty("organizationId");
   });
 
   it("lists permissions via POST, honouring caller paging but not filtering", async () => {
