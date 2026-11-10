@@ -204,6 +204,38 @@ describe("WorkflowEditorEdgeDefault", () => {
     expect(screen.getByText("5 items")).toBeTruthy();
   });
 
+  it("shows the item count on an edge the execution editor marked traversed", () => {
+    renderWithProviders(
+      <WorkflowEditorEdgeDefault
+        {...edgeProps({ sourceHandleId: "source", data: { isExecutionTraversed: true } })}
+      />,
+      {
+        seedWorkflow: (store) => {
+          store.setState({
+            stepExecutionTraversedEdgeIds: null,
+            executedNodes: [executedNode({ outputItemCount: 4 })],
+          });
+        },
+      },
+    );
+    expect(screen.getByText("4 items")).toBeTruthy();
+  });
+
+  it("shows no count on an executed node's edge the execution editor did not mark traversed", () => {
+    renderWithProviders(
+      <WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId: "source" })} />,
+      {
+        seedWorkflow: (store) => {
+          store.setState({
+            stepExecutionTraversedEdgeIds: null,
+            executedNodes: [executedNode({ outputItemCount: 4 })],
+          });
+        },
+      },
+    );
+    expect(screen.queryByText(/item/)).toBeNull();
+  });
+
   it("shows no count label when a traversed node reports zero items", () => {
     renderWithProviders(
       <WorkflowEditorEdgeDefault {...edgeProps({ sourceHandleId: "source" })} />,
