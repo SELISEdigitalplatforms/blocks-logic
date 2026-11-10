@@ -335,7 +335,7 @@ namespace Functions.DomainService.Services
 
         /// <summary>
         /// Hard ceiling on a request body. The whole envelope — identity, env, limits and this
-        /// body — must fit <see cref="FunctionLimits.Ceiling.InputBytes"/> (1 MB), which the
+        /// body — must fit <see cref="FunctionLimits.Ceiling.InputBytes"/> (2 MB), which the
         /// runtime also enforces, so the body itself is capped a little under that to leave room
         /// for the rest. Over this, the call is refused with 413 before anything is queued.
         /// </summary>

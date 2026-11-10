@@ -14,7 +14,7 @@ namespace Functions.DomainService.Services
         /// <summary>Proceed. The only outcome V1 ever produces for volume.</summary>
         Admitted = 0,
 
-        /// <summary>The input exceeded the 1 MB ceiling.</summary>
+        /// <summary>The input exceeded the 2 MB ceiling.</summary>
         InputTooLarge = 1,
 
         /// <summary>Requests-per-minute exceeded. Only reachable with rate limiting switched on; thrown as <see cref="Utils.FunctionRateLimitedException"/>, never returned.</summary>
@@ -68,7 +68,7 @@ namespace Functions.DomainService.Services
     /// error, which is exactly what the decision forbids.
     /// </para>
     /// <para>
-    /// The one hard refusal is input size, and that is not about volume: a payload over 1 MB
+    /// The one hard refusal is input size, and that is not about volume: a payload over 2 MB
     /// cannot be delivered to a sandbox at all, so accepting it would create a run that could
     /// only fail.
     /// </para>
