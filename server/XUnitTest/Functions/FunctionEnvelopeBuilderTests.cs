@@ -433,7 +433,7 @@ namespace XUnitTest.Functions
         [Fact]
         public void An_oversized_envelope_is_refused_at_the_input_ceiling()
         {
-            var big = "{\"blob\":\"" + new string('x', 2 * 1024 * 1024) + "\"}";
+            var big = "{\"blob\":\"" + new string('x', (int)FunctionLimits.Ceiling.InputBytes + 64 * 1024) + "\"}";
 
             var act = () => FunctionEnvelopeBuilder.Build(Run(), null, Function(), Context(), big);
 

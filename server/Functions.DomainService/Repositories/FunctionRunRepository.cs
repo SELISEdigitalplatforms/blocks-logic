@@ -116,7 +116,7 @@ namespace Functions.DomainService.Repositories
             if (!scope.Granted) return ([], 0);
             query = scope.Filter;
             var totalCount = await collection.CountDocumentsAsync(query, cancellationToken: cancellationToken);
-            // Input (up to 1 MB) and Result (up to 5 MB) are not in RunSummaryDto, so fetching
+            // Input (up to 2 MB) and Result (up to 5 MB) are not in RunSummaryDto, so fetching
             // them to build a 20-row table would move up to ~120 MB per page for nothing. An
             // exclusion projection still deserializes into the entity, with those two left null.
             var items = await collection.Find(query)
