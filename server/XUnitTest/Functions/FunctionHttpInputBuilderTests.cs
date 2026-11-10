@@ -242,8 +242,8 @@ namespace XUnitTest.Functions
         [Fact]
         public void A_body_too_large_to_carry_twice_is_still_accepted_without_its_raw_copy()
         {
-            // 700 KB passes today; adding it again as base64 would cross the 1 MB input ceiling.
-            var big = "{\"x\":\"" + new string('a', 700 * 1024) + "\"}";
+            // 70 % of the input ceiling passes; adding it again as base64 would cross the ceiling.
+            var big = "{\"x\":\"" + new string('a', (int)(FunctionLimits.Ceiling.InputBytes * 7 / 10)) + "\"}";
             var json = FunctionHttpInputBuilder.Build(Request(body: big));
 
             JsonDocument.Parse(json).RootElement.GetProperty("rawBody").ValueKind.Should().Be(JsonValueKind.Null);
