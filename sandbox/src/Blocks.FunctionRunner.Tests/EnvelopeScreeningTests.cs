@@ -163,7 +163,7 @@ namespace Blocks.FunctionRunner.Tests
             var dir = Path.Combine(Path.GetTempPath(), $"fn-envelope-{Guid.NewGuid():N}");
             try
             {
-                var padding = new string('x', 2 * 1024 * 1024);
+                var padding = new string('x', (int)Ceilings.InputBytes + 64 * 1024);
                 var json = $$$"""{"run":{"id":"r"},"input":{"blob":"{{{padding}}}"}}""";
 
                 var act = () => ExecutionEnvelope.Write(dir, json);

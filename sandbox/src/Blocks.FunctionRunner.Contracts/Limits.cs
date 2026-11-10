@@ -56,7 +56,7 @@ namespace Blocks.FunctionRunner.Contracts
         /// pass removes any run container busy longer than this as dead or hung (step 9).
         /// </summary>
         public const int HardLimitSeconds = 90;
-        public const long InputBytes = 1024 * 1024;
+        public const long InputBytes = 2L * 1024 * 1024;
         public const long ResultBytes = 5L * 1024 * 1024;
         public const long LogBytes = 1024 * 1024;
         public const int LogLines = 10_000;
