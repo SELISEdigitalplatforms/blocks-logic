@@ -214,8 +214,20 @@ namespace Workflow.DomainService.Services
                         Status = "Workflow not found",
                     };
                 }
+                // Read every trigger setting before an execution exists: BsonDocument.GetValue throws on a
+                // missing key, and a throw after CreateExecutionAsync left the execution stuck in Queued.
+                var authType = WebhookStringSetting(triggerNode.Parameters, "authType");
+                var responseMode = WebhookStringSetting(triggerNode.Parameters, "httpResponseMode") ?? "immediate";
+                var responseDataMode = (WebhookStringSetting(triggerNode.Parameters, "httpResponseData") ?? "all").ToLower();
 
-                var (caller, isAuthorizationContext) = await AuthorizeWebhookCallerAsync(triggerNode, workflow.TenantId, request);
+                // Fail closed: a trigger saved without an auth setting is refused, never run anonymously.
+                if (authType is null)
+                {
+                    _logger.LogWarning("Webhook trigger {TriggerId} in workflow {WorkflowId} has no authType; refusing the call.", triggerId, workflow.ItemId);
+                    throw new UnauthorizedAccessException();
+                }
+
+                var (caller, isAuthorizationContext) = await AuthorizeWebhookCallerAsync(triggerNode, authType, workflow.TenantId, request);
                 if (isAuthorizationContext)
                 {
                     // Here, not inside the helper: BlocksContext is an AsyncLocal, and a value set inside an
@@ -238,10 +250,9 @@ namespace Workflow.DomainService.Services
                     NodeId = triggerId,
                 };
 
-                var responseMode = triggerNode.Parameters.GetValue("httpResponseMode");
-                if (responseMode != null && responseMode.ToString().ToLower() == "last")
+                if (responseMode.ToLower() == "last")
                 {
-                    return await RespondAfterLastNodeAsync(workflow, triggerNode, execution, payload);
+                    return await RespondAfterLastNodeAsync(workflow, triggerNode, execution, payload, responseDataMode);
                 }
 
                 await _messageClient.SendToConsumerAsync(new ConsumerMessage<AddExcuationNodeEvent>
@@ -264,14 +275,13 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
-        /// Applies the trigger's <c>authType</c> and returns the caller's context (null for an open webhook).
-        /// <c>IsAuthorizationContext</c> tells the caller to install it as the ambient context, as before.
+        /// Applies the trigger's <c>authType</c> (read by the caller, never missing here) and returns the caller's
+        /// context (null for an open webhook). <c>IsAuthorizationContext</c> tells the caller to install it as the
+        /// ambient context, as before.
         /// </summary>
         private async Task<(BlocksContext? Caller, bool IsAuthorizationContext)> AuthorizeWebhookCallerAsync(
-            NodeEntity triggerNode, string tenantId, HttpRequest request)
+            NodeEntity triggerNode, string authType, string tenantId, HttpRequest request)
         {
-            var authType = triggerNode.Parameters.GetValue("authType")?.ToString();
-
             if (string.Equals(authType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
             {
                 if (!await _workflowAuthService.IsAuthenticated(request, tenantId)) throw new UnauthorizedAccessException();
@@ -345,7 +355,8 @@ namespace Workflow.DomainService.Services
 
         /// <summary>The "After Last Node Completion" response mode: runs in-process and answers with the last node's output.</summary>
         private async Task<WorkflowWebhookResponseDto?> RespondAfterLastNodeAsync(
-            WorkflowEntity workflow, NodeEntity triggerNode, WorkflowExecutionEntity execution, AddExcuationNodeEvent payload)
+            WorkflowEntity workflow, NodeEntity triggerNode, WorkflowExecutionEntity execution, AddExcuationNodeEvent payload,
+            string responseDataMode)
         {
             // In-process runs (this mode and the editor's Execute step) never go through a bus send, so
             // Genesis would not attach a grant; mint one for the caller here. Null (no user / missing stamp
@@ -370,31 +381,22 @@ namespace Workflow.DomainService.Services
                 await _inProcessGrants.ReleaseAsync(inProcessGrant);
             }
 
-            return await BuildLastNodeResponseAsync(workflow, triggerNode, execution, response);
+            return await BuildLastNodeResponseAsync(workflow, triggerNode, execution, response, responseDataMode);
         }
 
+        /// <param name="responseDataMode">The trigger's <c>httpResponseData</c>, lower-cased; "all" when it was missing.</param>
         private async Task<WorkflowWebhookResponseDto?> BuildLastNodeResponseAsync(
-            WorkflowEntity workflow, NodeEntity triggerNode, WorkflowExecutionEntity execution, WorkflowExecutionEntity? response)
+            WorkflowEntity workflow, NodeEntity triggerNode, WorkflowExecutionEntity execution, WorkflowExecutionEntity? response,
+            string responseDataMode)
         {
             // The caller waited for the run, so it is told how the run ended. Still HTTP 200, so a
             // caller that only checks the status code behaves as before; the error text is not
             // returned (it can hold internal details) — it is on the execution.
             var finalStatus = WebhookFinalStatus(response);
-            var responseModeData = triggerNode.Parameters.GetValue("httpResponseData");
-            if (responseModeData == null)
+            if (responseDataMode == "none")
             {
-                return new WorkflowWebhookResponseDto
-                {
-                    ExecutionId = execution.Id,
-                    Status = finalStatus,
-                };
-            }
-            if (responseModeData.ToString().ToLower() == "none")
-            {
-
                 return null;
             }
-            var responseDataMode = responseModeData.ToString().ToLower();
             var edges = response?.WorkflowSnapshot?.Edges ?? workflow.Edges;
             var executions = response?.NodeExecutions ?? new List<NodeExecutionEntity>();
             var lastExecutionNode = WebhookLastNodeSelector.Select(triggerNode.Id, executions, edges);
@@ -433,6 +435,10 @@ namespace Workflow.DomainService.Services
             };
         }
 
+
+        /// <summary>A webhook trigger setting, or <c>null</c> when it is missing, BSON null or not a string.</summary>
+        private static string? WebhookStringSetting(BsonDocument? parameters, string key) =>
+            parameters != null && parameters.TryGetValue(key, out var value) && value.IsString ? value.AsString : null;
 
         public async Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent)
         {
