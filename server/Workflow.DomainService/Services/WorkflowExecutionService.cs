@@ -218,7 +218,18 @@ namespace Workflow.DomainService.Services
                         Status = "Workflow not found",
                     };
                 }
-                var authType = triggerNode.Parameters.GetValue("authType")?.ToString();
+                // Read every trigger setting before an execution exists: BsonDocument.GetValue throws on a
+                // missing key, and a throw after CreateExecutionAsync left the execution stuck in Queued.
+                var authType = WebhookStringSetting(triggerNode.Parameters, "authType");
+                var responseMode = WebhookStringSetting(triggerNode.Parameters, "httpResponseMode") ?? "immediate";
+                var responseDataMode = (WebhookStringSetting(triggerNode.Parameters, "httpResponseData") ?? "all").ToLower();
+
+                // Fail closed: a trigger saved without an auth setting is refused, never run anonymously.
+                if (authType is null)
+                {
+                    _logger.LogWarning("Webhook trigger {TriggerId} in workflow {WorkflowId} has no authType; refusing the call.", triggerId, workflow.ItemId);
+                    throw new UnauthorizedAccessException();
+                }
 
                 if (string.Equals(authType, "blocksAuthentication", StringComparison.OrdinalIgnoreCase))
                 {
@@ -261,9 +272,7 @@ namespace Workflow.DomainService.Services
                     NodeId = triggerId,
                 };
 
-                var responseMode = triggerNode.Parameters.GetValue("httpResponseMode");
-
-                if (responseMode != null && responseMode.ToString().ToLower() == "last")
+                if (responseMode.ToLower() == "last")
                 {
                     // In-process runs (this mode and the editor's Execute step) never go through a bus send, so
                     // Genesis would not attach a grant; mint one for the caller here. Null (no user / missing stamp
@@ -290,21 +299,10 @@ namespace Workflow.DomainService.Services
                     // caller that only checks the status code behaves as before; the error text is not
                     // returned (it can hold internal details) — it is on the execution.
                     var finalStatus = WebhookFinalStatus(response);
-                    var responseModeData = triggerNode.Parameters.GetValue("httpResponseData");
-                    if (responseModeData == null)
+                    if (responseDataMode == "none")
                     {
-                        return new WorkflowWebhookResponseDto
-                        {
-                            ExecutionId = execution.Id,
-                            Status = finalStatus,
-                        };
-                    }
-                    if (responseModeData.ToString().ToLower() == "none")
-                    {
-
                         return null;
                     }
-                    var responseDataMode = responseModeData.ToString().ToLower();
                     var edges = response?.WorkflowSnapshot?.Edges ?? workflow.Edges;
                     var executions = response?.NodeExecutions ?? new List<NodeExecutionEntity>();
                     var lastExecutionNode = WebhookLastNodeSelector.Select(triggerId, executions, edges);
@@ -368,6 +366,10 @@ namespace Workflow.DomainService.Services
             }
         }
 
+
+        /// <summary>A webhook trigger setting, or <c>null</c> when it is missing, BSON null or not a string.</summary>
+        private static string? WebhookStringSetting(BsonDocument? parameters, string key) =>
+            parameters != null && parameters.TryGetValue(key, out var value) && value.IsString ? value.AsString : null;
 
         public async Task EmailTriggerStartAsync(EmailTriggerEvent emailEvent)
         {

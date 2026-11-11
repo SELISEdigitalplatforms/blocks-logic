@@ -356,11 +356,11 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           operator: "in",
         },
         defaultValue: (data: Record<string, unknown>) => rolesAsFieldValue(data),
-        options: () => {
-          return iamService
-            .getRoles()
-            .then((res) => res.data.map((role) => ({ label: role.name, value: role.slug })));
-        },
+        searchOptions: ({ search, page, pageSize }) =>
+          iamService.getRoles({ search, page, pageSize }).then((res) => ({
+            options: (res.data ?? []).map((role) => ({ label: role.name, value: role.slug })),
+            totalCount: res.totalCount ?? 0,
+          })),
       },
       {
         id: "permissions",
@@ -391,14 +391,14 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
           operator: "in",
         },
         defaultValue: (data: Record<string, unknown>) => permissionsAsFieldValue(data),
-        options: () => {
-          return iamService.getPermissions({}).then((res) =>
-            res.data.map((permission) => ({
+        searchOptions: ({ search, page, pageSize }) =>
+          iamService.getPermissions({ search, page, pageSize }).then((res) => ({
+            options: (res.data ?? []).map((permission) => ({
               label: permission.name,
               value: permission.resource,
             })),
-          );
-        },
+            totalCount: res.totalCount ?? 0,
+          })),
       },
       {
         id: "http-response-mode",

@@ -20,6 +20,7 @@ export const WorkflowEditorEdgeDefault = ({
   style,
   sourceHandleId,
   selected,
+  data,
 }: EdgeProps) => {
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -31,7 +32,8 @@ export const WorkflowEditorEdgeDefault = ({
   });
 
   const { stepExecutionTraversedEdgeIds, executedNodes } = useWorkflow();
-  const isTraversed = stepExecutionTraversedEdgeIds?.has(id);
+  // Editor: traversed by the last step run. Execution editor: traversed in the viewed execution.
+  const isTraversed = stepExecutionTraversedEdgeIds?.has(id) || data?.isExecutionTraversed === true;
   const executedNode = isTraversed ? executedNodes.find(n => n.nodeId === source) : undefined;
   const sourceNodeStatus = executedNode?.status;
   const executionStyles = sourceNodeStatus ? getStatusStyles(sourceNodeStatus) : undefined;
