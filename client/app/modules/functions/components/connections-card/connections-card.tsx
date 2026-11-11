@@ -160,14 +160,13 @@ export const ConnectionsCard = ({
     const secrets = preset.variables.filter(
       (variable) => variable.secret && result.addedKeys.includes(variable.key),
     );
+    const addedPackageKey =
+      resolved?.source === "fallback"
+        ? "CONNECTIONS_CARD.ADDED_PACKAGE_NPM_UNREACHABLE"
+        : "CONNECTIONS_CARD.ADDED_PACKAGE";
     const parts = [
       result.addedPackage
-        ? t(
-            resolved?.source === "fallback"
-              ? "CONNECTIONS_CARD.ADDED_PACKAGE_NPM_UNREACHABLE"
-              : "CONNECTIONS_CARD.ADDED_PACKAGE",
-            { packageName: preset.packageName, version: result.version },
-          )
+        ? t(addedPackageKey, { packageName: preset.packageName, version: result.version })
         : t("CONNECTIONS_CARD.WAS_ALREADY_LISTED", {
             packageName: preset.packageName,
             version: String(result.existingVersion),
