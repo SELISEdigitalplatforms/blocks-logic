@@ -23,6 +23,7 @@ export type NodeType =
   | "dataAction"
   | "function"
   | "proxy"
+  | "iamUser"
   | "schedule";
 
 export type NodeCategory = "trigger" | "action" | "logic" | "transform";
