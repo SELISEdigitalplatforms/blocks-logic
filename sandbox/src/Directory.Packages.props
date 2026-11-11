@@ -32,6 +32,9 @@
          Central transitive pinning would otherwise downgrade it silently and Genesis
          would fail at runtime rather than at build time. -->
     <PackageVersion Include="StackExchange.Redis" Version="2.12.14" />
+    <!-- Not referenced by the runner: Genesis brings it in transitively (10.0.7, GHSA-wr8v-9x5q-ggcm, high).
+         With transitive pinning on, this lifts it to the first patched version, the same as server's. -->
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.15" />
     <!-- Nothing references this directly; it is here because transitive pinning puts transitive
          versions under this file's control, and Microsoft.Extensions.Hosting.Systemd 10.0.0
          depends on Microsoft.Extensions.Hosting >= 10.0.0. server pins 9.0.2, which would be a

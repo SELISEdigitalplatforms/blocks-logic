@@ -14,6 +14,7 @@ using Workflow.DomainService.Nodes.ActionSendMailV1;
 using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 using Workflow.DomainService.Nodes.ActionDataV1;
 using Workflow.DomainService.Nodes.ActionProxy;
+using Workflow.DomainService.Nodes.ActionIamUserV2;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -104,6 +105,7 @@ namespace Workflow.DomainService
             services.AddSingleton<INodeExecutor, ActionHttpRequestV1Node>();
             services.AddSingleton<INodeExecutor, ActionDataV1Node>();
             services.AddSingleton<INodeExecutor, ActionProxyNode>();
+            services.AddSingleton<INodeExecutor, ActionIamUserV2Node>();
 
 
             // end register node executors
@@ -131,6 +133,13 @@ namespace Workflow.DomainService
                     client.MaxResponseContentBufferSize = WorkflowOutboundGuard.MaxResponseBytes)
                 .ConfigurePrimaryHttpMessageHandler(sp =>
                     WorkflowOutboundGuard.CreatePrimaryHandler(sp.GetRequiredService<IWorkflowOutboundGuard>()));
+
+            // IAM User step: only ever calls the IamBaseUrl setting with a bearer token, so it follows no redirect
+            // and keeps no cookies. The factory's request logging is removed: it would write the IAM URL (base URL
+            // and user id) to the log.
+            services.AddHttpClient(ActionIamUserV2Node.HttpClientName, client => client.Timeout = ActionIamUserV2Node.RequestTimeout)
+                .ConfigurePrimaryHttpMessageHandler(ActionIamUserV2Node.CreatePrimaryHandler)
+                .RemoveAllLoggers();
             return services;
         }
     }

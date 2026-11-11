@@ -14,6 +14,7 @@ const {
   getOrganizations,
   getRoles,
   getPermissions,
+  getOrganizationConfig,
   getProxies,
   getProxy,
 } = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ const {
   getOrganizations: vi.fn(),
   getRoles: vi.fn(),
   getPermissions: vi.fn(),
+  getOrganizationConfig: vi.fn(),
   getProxies: vi.fn(),
   getProxy: vi.fn(),
 }));
@@ -45,7 +47,7 @@ vi.mock("@blocks-workflow/services/data.service", () => ({
 }));
 vi.mock("@blocks-workflow/services/iam.service", () => ({
   authClientService: { clients: { getClientCredentials } },
-  iamService: { getOrganizations, getRoles, getPermissions },
+  iamService: { getOrganizations, getRoles, getPermissions, getOrganizationConfig },
 }));
 vi.mock("@/modules/proxy/services/proxy.service", () => ({
   proxyService: { getAll: getProxies, get: getProxy },
@@ -69,7 +71,16 @@ import { NodeSchemaTransformSetFieldV1 } from "./node-schema-transform-setfield-
 import { NodeSchemaTransformCodeV1 } from "./node-schema-transform-code-v1";
 import { NodeSchemaLogicIfV1 } from "./node-schema-logic-if-v1";
 import { NodeSchemaLogicFilterV2 } from "./node-schema-logic-filter-v2";
-import { NodeGuideLogicFilterV2 } from "../node-guides";
+import { NodeGuideLogicFilterV2, NodeGuideActionIamUserV2 } from "../node-guides";
+import {
+  NodeSchemaActionIamUserV2,
+  iamUserOperationDefaults,
+  iamUserRows,
+  searchIamRoles,
+} from "./node-schema-action-iamUser-v2";
+import { NodeDefinitions } from "../node-library-panel/node-definitions";
+import { createElement, isValidElement } from "react";
+import { render, screen } from "@testing-library/react";
 
 type AnyRec = Record<string, unknown>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,8 +129,11 @@ describe("NodeSchemasDefinition registry", () => {
       expect(NodeSchemasDefinition[v2Key]).toBe(NodeSchemasDefinition[v1Key]);
     }
     // 13 v1 keys, their 13 v2 aliases, logicswitchv2, logicfilterv2, transformsplitOutv2, transformmergev2,
-    // triggerblocksEventv2, transformlimitv2 and triggererrorTriggerv2 (new types start at v2 with no v1).
-    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(33);
+    // triggerblocksEventv2, transformlimitv2, triggererrorTriggerv2 and actioniamUserv2 (new types start at v2
+    // with no v1).
+    expect(Object.keys(NodeSchemasDefinition)).toHaveLength(34);
+    expect(NodeSchemasDefinition.actioniamUserv2).toBe(NodeSchemaActionIamUserV2);
+    expect(NodeSchemasDefinition.actioniamUserv1).toBeUndefined();
     expect(NodeSchemasDefinition.logicfilterv2).toBe(NodeSchemaLogicFilterV2);
     expect(NodeSchemasDefinition.logicfilterv1).toBeUndefined();
     expect(NodeSchemasDefinition.triggerblocksEventv1).toBeUndefined();
@@ -1185,5 +1199,226 @@ describe("logic/filter v2 (SPEC9)", () => {
   it("H5: the field's onChange saves both real keys", () => {
     const conditions = [{ left: "{{ $json.status }}", operator: "equals", right: "paid", type: "string" }];
     expect(schema.schema.parameters[0].onChange!({ conditions, conditionType: "or" }, {}, {} as never)).toEqual({ conditions, conditionType: "or" });
+  });
+});
+
+describe("action/iamUser v2 (logic#424)", () => {
+  const schema = NodeSchemaActionIamUserV2;
+  type Row = { key: string; label?: string; kind: string; required?: boolean; optional?: boolean; info?: string; comment?: AnyRec };
+  type Group = { group: string; rows: Row[] };
+  const param = (key: string) => schema.schema.parameters.find((f) => f.key === key)!;
+  const rowsOf = (operation: string, context: AnyRec = {}, data: AnyRec = {}) =>
+    iamUserRows({ ...iamUserOperationDefaults(), operation, ...data }, context) as Array<Row | Group>;
+  const flat = (items: Array<Row | Group>): Row[] => items.flatMap((item) => ("group" in item ? item.rows : [item]));
+  const rowKeys = (operation: string) => flat(rowsOf(operation)).map((row) => row.key);
+  const row = (operation: string, key: string, context: AnyRec = {}) => flat(rowsOf(operation, context)).find((r) => r.key === key)!;
+
+  const OPERATION_DEFAULTS = {
+    organizationId: "", userId: "", email: "", firstName: "", lastName: "", userName: "", phoneNumber: "", language: "",
+    roles: [], sendActivationMail: true, notifyUser: true, reason: "", searchName: "", searchEmail: "",
+    accountStates: [], filterRoles: [], page: 0, pageSize: 10, roleMode: "add",
+  };
+
+  it("H1/H2: a v2-only action schema with the §6 defaults and no base URL", () => {
+    expect(schema.schema).toMatchObject({ type: "iamUser", category: "action", version: "v2", settings: [] });
+    expect(schema.defaults.parameters).toEqual({
+      authenticationType: "clientCredential", clientId: "", operation: "getUsers", ...OPERATION_DEFAULTS,
+    });
+    expect(schema.defaults.parameters).not.toHaveProperty("apiBaseUrl");
+    expect(schema.guide).toBe(NodeGuideActionIamUserV2);
+    expect(schema.schema.parameters.map((f) => [f.key, f.type])).toEqual([
+      ["authenticationType", "select"],
+      ["clientId", "searchable-select"],
+      ["blocksAuthenticationNotes", "callout-accordion-display"],
+      ["operation", "select"],
+      ["fields", "json-fields"],
+    ]);
+  });
+
+  it("H1: the library card uses UserCog with the primary icon class only", () => {
+    const card = NodeDefinitions.find((d) => d.type === "iamUser")!;
+    expect(card).toMatchObject({ id: "action-iamUser-v2", category: "action", version: "v2", title: "IAM User", defaultName: "IAM User" });
+    expect(card.handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [{ key: "target", label: "" }] });
+    expect(isValidElement(card.icon)).toBe(true);
+    expect((card.icon as { props: { className: string } }).props.className).toBe("h-5 w-5 text-primary");
+    expect(card.description).toBe(
+      "Create, update, activate, deactivate and read your project's IAM users, and manage their roles and access.",
+    );
+  });
+
+  it("H1/D6: transform stamps nothing and gives each new node its own lists", () => {
+    const base = { id: "n", position: { x: 0, y: 0 }, data: {}, parameters: schema.defaults.parameters } as never;
+    const a = schema.transform!(base);
+    const b = schema.transform!(base);
+    expect(a.parameters).toEqual(schema.defaults.parameters);
+    expect((a.parameters as AnyRec).roles).not.toBe((b.parameters as AnyRec).roles);
+    expect((a.parameters as AnyRec).roles).not.toBe(schema.defaults.parameters.roles);
+    expect(schema.transform!({ id: "x" } as never)).toEqual({ id: "x", parameters: {} });
+  });
+
+  it("C1: authentication offers Client Credential and Blocks Authentication only, no None", () => {
+    const field = param("authenticationType");
+    expect(field.defaultValue).toBe("clientCredential");
+    expect((field.options as { value: string; label: string }[]).map((o) => [o.value, o.label])).toEqual([
+      ["clientCredential", "Client Credential"],
+      ["blocksAuthentication", "Blocks Authentication"],
+    ]);
+  });
+
+  it("H3/C17: the credential picker lists active credentials only, keeps an unmatched value and resets to ''", async () => {
+    getClientCredentials.mockResolvedValue([
+      { itemId: "c1", name: "Active one", isActive: true },
+      { itemId: "c2", name: "Old one", isActive: false },
+    ]);
+    const field = param("clientId");
+    expect(field.dependsOn).toEqual({ key: "authenticationType", value: "clientCredential", operator: "equals" });
+    expect(field.defaultValue).toBe("");
+    const options = await (field.options as (d: AnyRec, c: AnyRec) => Promise<unknown>)({}, {});
+    expect(options).toEqual([{ value: "c1", label: "Active one" }]);
+    expect(field.unmatchedLabel!("c9")).toBe("Not found or inactive (c9)");
+  });
+
+  it("H16: the Blocks Authentication callout is transient and shown only for Blocks Authentication", () => {
+    const field = param("blocksAuthenticationNotes");
+    expect(field).toMatchObject({ transient: true, dependsOn: { key: "authenticationType", value: "blocksAuthentication" } });
+    const value = field.displayValue!({}, {} as never) as { title: string; description: string };
+    expect(value.description).toBe(
+      "Blocks Authentication acts as the user or client whose sign-in or action started the run. Runs without one, usually schedule, email and anonymous-webhook runs, fail. Use Client Credential for those.",
+    );
+    expect(value.title).toBeTruthy();
+  });
+
+  it("C21: the operation select lists the 8 operations (Get Users first) and resets every operation field", () => {
+    const field = param("operation");
+    expect(field.defaultValue).toBe("getUsers");
+    expect((field.options as { value: string }[]).map((o) => o.value)).toEqual([
+      "getUsers", "getUser", "createUser", "updateUser", "activateUser", "deactivateUser", "assignRoles", "revokeAccess",
+    ]);
+    const reset = field.onChange!("createUser", { operation: "createUser", userId: "u1", roles: ["a"] }, {} as never) as AnyRec;
+    expect(reset).toEqual(OPERATION_DEFAULTS);
+    expect(Object.values(reset)).not.toContain(null);
+    expect(reset.roles).not.toBe(iamUserOperationDefaults().roles);
+  });
+
+  it("H16: the Fields block is one transient json-fields field", () => {
+    expect(param("fields")).toMatchObject({ type: "json-fields", transient: true, label: "Fields" });
+  });
+
+  it("H16: each operation shows exactly its §4 rows, optional rows and kinds", () => {
+    expect(rowKeys("createUser")).toEqual([
+      "organizationId", "email", "firstName", "lastName", "userName", "phoneNumber", "language", "roles", "sendActivationMail", "notifyUser",
+    ]);
+    expect(flat(rowsOf("createUser")).filter((r) => r.optional).map((r) => r.key)).toEqual(["userName", "phoneNumber", "language"]);
+    expect(rowKeys("updateUser")).toEqual(["userId", "organizationId", "firstName", "lastName", "phoneNumber", "language"]);
+    expect(flat(rowsOf("updateUser")).filter((r) => r.optional).map((r) => r.key)).toEqual(["lastName", "phoneNumber", "language"]);
+    expect(row("updateUser", "firstName").info).toBe("Blank keeps the current value. This node cannot clear a field.");
+    expect(rowKeys("activateUser")).toEqual(["userId", "reason"]);
+    expect(row("activateUser", "reason")).toMatchObject({ required: true, info: "At least 3 characters after trimming." });
+    expect(rowKeys("deactivateUser")).toEqual(["userId"]);
+    expect(rowKeys("getUser")).toEqual(["userId", "organizationId"]);
+    expect(rowKeys("assignRoles")).toEqual(["userId", "organizationId", "roleMode", "roles", "notifyUser"]);
+    expect(rowKeys("revokeAccess")).toEqual(["userId", "organizationId", "notifyUser"]);
+    expect(rowKeys("unknown")).toEqual([]);
+
+    const getUsers = rowsOf("getUsers");
+    expect(getUsers.map((item) => ("group" in item ? item.group : item.key))).toEqual(["organizationId", "filter", "page", "pageSize"]);
+    const filter = getUsers[1] as Group;
+    expect(filter.rows.map((r) => [r.key, r.label, r.kind])).toEqual([
+      ["searchName", "name", "text"],
+      ["searchEmail", "email", "text"],
+      ["accountStates", undefined, "list"],
+      ["filterRoles", "roles", "list"],
+    ]);
+    expect((filter.rows[2] as unknown as { options: { value: string }[] }).options.map((o) => o.value)).toEqual([
+      "Active", "PendingVerification", "Suspended", "Deactivated", "LockedOut",
+    ]);
+    expect(row("getUsers", "page")).toMatchObject({ kind: "int", defaultValue: 0, info: "0-based." });
+    expect(row("getUsers", "pageSize")).toMatchObject({ kind: "int", defaultValue: 10, info: "1 to 100." });
+    for (const operation of ["updateUser", "activateUser", "deactivateUser", "getUser", "assignRoles", "revokeAccess"]) {
+      expect(row(operation, "userId").required).toBe(true);
+    }
+    expect(row("createUser", "sendActivationMail")).toMatchObject({ kind: "bool", defaultValue: true });
+    const notifyInfos = ["createUser", "assignRoles", "revokeAccess"].map((operation) => row(operation, "notifyUser").info);
+    expect(new Set(notifyInfos).size).toBe(3);
+    expect(row("getUser", "organizationId").info).toBe(
+      "Organization ID. Blank = the token's organization (the client credential's or the signed-in user's).",
+    );
+  });
+
+  it("H16: the existing-email, Replace and Add comments show only in their conditions", () => {
+    const email = row("createUser", "email").comment!;
+    expect(email.when).toBeUndefined();
+    expect(email.text).toMatch(/^If the email already has an account/);
+
+    const roleMode = row("assignRoles", "roleMode") as Row & { options: { value: string; label: string }[] };
+    expect(roleMode).toMatchObject({ kind: "enum", required: true, defaultValue: "add" });
+    expect(roleMode.options).toEqual([
+      { value: "add", label: "Add to existing" },
+      { value: "replace", label: "Replace all" },
+    ]);
+    const replace = roleMode.comment as { tone: string; when: (d: AnyRec) => boolean };
+    expect(replace.tone).toBe("warn");
+    expect(replace.when({ roleMode: "replace" })).toBe(true);
+    expect(replace.when({ roleMode: "add" })).toBe(false);
+
+    const add = row("assignRoles", "roles").comment as { text: string; when: (d: AnyRec) => boolean };
+    expect(add.text).toBe("Add first reads the user, so it also needs the `iam::users` permission.");
+    expect(add.when({ roleMode: "add" })).toBe(true);
+    expect(add.when({ roleMode: "replace" })).toBe(false);
+    expect(row("assignRoles", "roles").required).toBe(true);
+    expect(row("createUser", "roles").required).toBe(false);
+  });
+
+  it("H18: Create's organization is required unless the tenant is known to be single-org", () => {
+    expect(row("createUser", "organizationId", { isMultiOrgEnabled: true }).required).toBe(true);
+    expect(row("createUser", "organizationId", {}).required).toBe(true);
+    expect(row("createUser", "organizationId", { isMultiOrgEnabled: false }).required).toBe(false);
+    expect(row("createUser", "organizationId").info).toBe(
+      "Organization the new user joins. Required when multi-org is enabled. Use `default` for the Default organization.",
+    );
+    expect(row("createUser", "organizationId").kind).toBe("text");
+  });
+
+  it("H18: rowsContext reads the organization settings once", async () => {
+    getOrganizationConfig.mockResolvedValue({ isMultiOrgEnabled: false, other: 1 });
+    await expect(param("fields").rowsContext!({} as never)).resolves.toEqual({ isMultiOrgEnabled: false });
+    expect(getOrganizationConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it("H17: role pickers search IAM, sending organizationId only for a non-blank literal", async () => {
+    getRoles.mockResolvedValue({ data: [{ slug: "editor", name: "Editor" }, { slug: "x", name: "" }], totalCount: 21 });
+    const request = { search: "ed", page: 1, pageSize: 20 };
+
+    await expect(searchIamRoles(request, { organizationId: " org1 " })).resolves.toEqual({
+      options: [{ label: "Editor", value: "editor" }, { label: "x", value: "x" }],
+      totalCount: 21,
+    });
+    expect(getRoles).toHaveBeenLastCalledWith({ search: "ed", page: 1, pageSize: 20, organizationId: "org1" });
+
+    for (const organizationId of ["", "  ", "{{ $json.org }}", undefined, 5]) {
+      await searchIamRoles(request, { organizationId });
+      expect(getRoles).toHaveBeenLastCalledWith({ search: "ed", page: 1, pageSize: 20 });
+    }
+
+    getRoles.mockResolvedValue({});
+    await expect(searchIamRoles(request, {})).resolves.toEqual({ options: [], totalCount: 0 });
+
+    for (const [operation, key] of [["createUser", "roles"], ["assignRoles", "roles"], ["getUsers", "filterRoles"]]) {
+      expect(row(operation, key)).toMatchObject({
+        kind: "list",
+        searchOptions: searchIamRoles,
+        optionsDependencies: ["organizationId"],
+        allowCustom: true,
+        info: "Roles are listed for the organization when your account can see it. Pick from the list, type a role slug and press Enter, or use fx for an expression that resolves to a list.",
+      });
+    }
+  });
+
+  it("guide: explains authentication, operations, errors and the action loop", () => {
+    render(createElement(NodeGuideActionIamUserV2));
+    expect(screen.getByRole("heading", { name: "IAM User action" })).toBeTruthy();
+    expect(screen.getByText(/manage your project's IAM users from a workflow/)).toBeTruthy();
+    expect(screen.getByText(/can start itself in a loop/)).toBeTruthy();
+    expect(screen.getByText(/A change someone else makes between the two can be lost/)).toBeTruthy();
   });
 });
