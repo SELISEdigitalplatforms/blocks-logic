@@ -103,19 +103,16 @@ export const useFormBuilder = ({
           ? (value as Record<string, unknown>)
           : {};
       const patchedKeys = Object.keys(patch);
+      // Nothing to write: don't mark the node unsaved.
+      if (patchedKeys.length === 0) return;
       let updated = patchedKeys.reduce(
         (current, key) => setValueByPath(current, key, patch[key]),
         dataRef.current,
       );
 
-      let sideEffectKeys: string[] = [];
-      if (field.onChange) {
-        const result = field.onChange(value, updated, config) || {};
-        if (result) {
-          sideEffectKeys = Object.keys(result);
-          updated = { ...updated, ...result };
-        }
-      }
+      const sideEffects = field.onChange?.(value, updated, config) || {};
+      const sideEffectKeys = Object.keys(sideEffects);
+      updated = { ...updated, ...sideEffects };
 
       for (const key of patchedKeys) {
         updated = cascadeFieldResets(fields, key, updated, sideEffectKeys);

@@ -24,8 +24,10 @@ const SELECT_TRIGGER_CLASSES =
 /** Command item value of the extra first option that stands for an unmatched saved value. */
 const UNMATCHED_ITEM_VALUE = "__unmatched__";
 
-const toStoredString = (value: unknown): string =>
-  value === undefined || value === null ? "" : String(value);
+const toStoredString = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  return typeof value === "number" || typeof value === "boolean" ? `${value}` : "";
+};
 
 /**
  * Single-select with a search box. Unlike `select`, it never writes on load: a saved value that is not
@@ -40,7 +42,7 @@ export const SearchableSelectField = ({
   readOnly,
   data,
   config,
-}: FieldProps<string>) => {
+}: Readonly<FieldProps<string>>) => {
   const { t } = useT("logic.workflow.nodes.inspector");
   const current = toStoredString(value);
   const isStaticOptions = Array.isArray(field.options);
@@ -61,6 +63,10 @@ export const SearchableSelectField = ({
   );
   const lastDepRef = useRef<string | undefined>(undefined);
   const hasLoadedRef = useRef(false);
+  // Bumped per load; only the latest load's result is applied (a dependency change supersedes an older
+  // load). There is no cancel-on-cleanup: StrictMode re-runs the effect without loading again, so a
+  // cleanup would discard the only load. A late result after unmount only sets state, which is a no-op.
+  const loadGenerationRef = useRef(0);
   // `data` and `config` change identity on every render; the loader reads them through refs.
   const latest = useRef({ data, config });
   useEffect(() => {
@@ -75,27 +81,26 @@ export const SearchableSelectField = ({
     hasLoadedRef.current = true;
     lastDepRef.current = depString;
 
-    let active = true;
+    const generation = ++loadGenerationRef.current;
+    const isLatest = () => generation === loadGenerationRef.current;
     setIsLoading(true);
     setLoaded(false);
     field
       .options(latest.current.data, latest.current.config)
       .then((opts) => {
-        if (!active) return;
+        if (!isLatest()) return;
         setAsyncOptions(opts ?? []);
         setLoaded(true);
       })
       .catch(() => {
         // Shown as "No results."; the saved value is kept.
-        if (active) setAsyncOptions([]);
+        if (isLatest()) setAsyncOptions([]);
       })
       .finally(() => {
-        if (active) setIsLoading(false);
+        if (isLatest()) setIsLoading(false);
       });
-    return () => {
-      active = false;
-    };
   }, [depString, field]);
+
 
   const options = useMemo(
     () => (isStaticOptions ? (field.options as SelectOption[]) : asyncOptions),
@@ -112,9 +117,10 @@ export const SearchableSelectField = ({
     : options;
   const showUnmatched = isUnmatched && (!query || unmatchedLabel.toLowerCase().includes(query));
 
+  // Until the options have loaded, a saved value shows as it is: it may still be in the list.
   let triggerText = field.placeholder || t("SEARCHABLE_SELECT_FIELD.SELECT_AN_OPTION");
   if (selected) triggerText = selected.label;
-  else if (current !== "") triggerText = unmatchedLabel;
+  else if (current !== "") triggerText = loaded ? unmatchedLabel : current;
 
   const changeOpen = (next: boolean) => {
     if (next && disabled) return;
@@ -147,7 +153,7 @@ export const SearchableSelectField = ({
               )}
             >
               <span className="truncate">{triggerText}</span>
-              {isLoading && <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-50" />}
+              {isLoading && <Loader2 aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin opacity-50" />}
             </span>
             <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
           </button>
@@ -162,13 +168,16 @@ export const SearchableSelectField = ({
             />
             <CommandList>
               {filtered.length === 0 && !showUnmatched && (
-                <div className="py-6 text-center text-sm" role="status">
+                <output className="block py-6 text-center text-sm">
                   {isLoading ? (
-                    <Loader2 className="mx-auto h-4 w-4 animate-spin opacity-50" />
+                    <>
+                      <Loader2 className="mx-auto h-4 w-4 animate-spin opacity-50" />
+                      <span className="sr-only">{t("common:LOADING")}</span>
+                    </>
                   ) : (
                     t("SEARCHABLE_SELECT_FIELD.NO_RESULTS")
                   )}
-                </div>
+                </output>
               )}
               <CommandGroup>
                 {showUnmatched && (

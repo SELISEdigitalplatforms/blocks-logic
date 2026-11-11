@@ -1,4 +1,5 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
@@ -174,5 +175,41 @@ describe("SearchableSelectField", () => {
     expect(screen.queryByRole("option")).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(trigger()));
     expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads async options under React StrictMode", async () => {
+    const loader = vi.fn().mockResolvedValue(OPTIONS);
+    const onChange = vi.fn();
+    // StrictMode at the root, so effects really run twice (inside a provider wrapper they don't).
+    render(
+      <StrictMode>
+        <SearchableSelectField
+          field={makeField({ options: loader, unmatchedLabel: (v) => `Missing (${v})` })}
+          value="cc-old"
+          onChange={onChange}
+          data={{}}
+          config={cfg}
+        />
+      </StrictMode>,
+    );
+    expect(loader).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByText(WARNING)).toBeTruthy());
+    expect(trigger().textContent).toContain("Missing (cc-old)");
+    expect(document.querySelector(".animate-spin")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("shows the raw saved value, not the unmatched label, while options load", async () => {
+    let resolve: (value: SelectOption[]) => void = () => {};
+    const loader = vi.fn(() => new Promise<SelectOption[]>((r) => (resolve = r)));
+    renderField({
+      field: makeField({ options: loader, unmatchedLabel: (v) => `Missing (${v})` }),
+      value: "cc-1",
+    });
+    expect(trigger().textContent).toContain("cc-1");
+    expect(trigger().textContent).not.toContain("Missing");
+    await waitFor(() => expect(loader).toHaveBeenCalled());
+    await act(async () => resolve(OPTIONS));
+    expect(trigger().textContent).toContain("Main");
   });
 });

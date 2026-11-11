@@ -5,6 +5,7 @@ import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { FormBuilder } from "./form-builder";
 import type { FieldSchema } from "./form-field.types";
 import { FIELD_COMPONENTS_REGISTRY } from "./fields";
+import type { FieldComponentProps } from "./form-field.types";
 
 // Controlled wrapper so onChange updates flow back into the form.
 const Harness = ({
@@ -340,6 +341,51 @@ describe("FormBuilder json-fields patch path", () => {
       expect(renders).toHaveBeenCalledTimes(1);
     } finally {
       FIELD_COMPONENTS_REGISTRY.text = original;
+    }
+  });
+
+  /** Swaps the json-fields component for a stub that sends `patch` on click. */
+  const withPatchStub = (patch: unknown, run: () => void) => {
+    const original = FIELD_COMPONENTS_REGISTRY["json-fields"];
+    FIELD_COMPONENTS_REGISTRY["json-fields"] = ({ onChange }: FieldComponentProps) => (
+      <button type="button" onClick={() => onChange(patch)}>
+        patch
+      </button>
+    );
+    try {
+      run();
+    } finally {
+      FIELD_COMPONENTS_REGISTRY["json-fields"] = original;
+    }
+  };
+
+  it("H10: resets the dependants of every key in a multi-key patch", () => {
+    const spy = vi.fn();
+    withPatchStub({ a: "2", b: "2" }, () => {
+      render(
+        [
+          jsonFields(),
+          { id: "x", key: "x", type: "text", label: "X", defaultValue: "", dependsOn: { key: "a", value: "2" } } as FieldSchema,
+          { id: "y", key: "y", type: "text", label: "Y", defaultValue: "", dependsOn: { key: "b", value: "2" } } as FieldSchema,
+        ],
+        { a: "1", b: "1", x: "kept?", y: "kept?" },
+        spy,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "patch" }));
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toEqual({ a: "2", b: "2", x: "", y: "" });
+  });
+
+  it("H10: an empty or non-object patch saves nothing", () => {
+    for (const patch of [{}, null, "text", ["a"]]) {
+      const spy = vi.fn();
+      withPatchStub(patch, () => {
+        const view = render([jsonFields()], { email: "a" }, spy);
+        fireEvent.click(screen.getByRole("button", { name: "patch" }));
+        view.unmount();
+      });
+      expect(spy).not.toHaveBeenCalled();
     }
   });
 });

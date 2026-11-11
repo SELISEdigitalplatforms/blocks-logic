@@ -15,7 +15,9 @@ import { cn } from "@/lib/utils";
 import { useT } from "@seliseblocks/genesis-os";
 import {
   FieldProps,
+  JsonFieldComment,
   JsonFieldGroup,
+  JsonFieldKind,
   JsonFieldRow,
   SearchOptionsPage,
   SearchOptionsRequest,
@@ -58,32 +60,40 @@ const isEmptyValue = (row: JsonFieldRow, value: unknown): boolean =>
 const isOptionValue = (row: JsonFieldRow, value: string) =>
   (row.options ?? []).some((option) => String(option.value) === value);
 
+type Resolved = { mode: Mode; value: unknown };
+
+/** Text of a stored value that is not a string, for display only. */
+const toText = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return `${value}`;
+  return value === undefined || value === null ? "" : JSON.stringify(value);
+};
+
+const asExpression = (value: unknown): Resolved | null =>
+  typeof value === "string" ? { mode: "fx", value } : null;
+
+/** Per kind: the mode and shown value of a stored (non-null) value, or null when its type doesn't fit. */
+const CLASSIFIERS: Record<JsonFieldKind, (row: JsonFieldRow, value: unknown) => Resolved | null> = {
+  text: (_row, value) => (typeof value === "string" ? { mode: "fixed", value } : null),
+  // Duplicates (e.g. from an imported workflow) are shown once; nothing is written.
+  list: (_row, value) =>
+    Array.isArray(value) ? { mode: "fixed", value: Array.from(new Set(value.map(toText))) } : asExpression(value),
+  bool: (_row, value) => (typeof value === "boolean" ? { mode: "fixed", value } : asExpression(value)),
+  int: (_row, value) =>
+    typeof value === "number" && Number.isFinite(value) ? { mode: "fixed", value } : asExpression(value),
+  enum: (row, value) => {
+    if (typeof value !== "string") return null;
+    return isOptionValue(row, value) ? { mode: "fixed", value } : { mode: "fx", value };
+  },
+};
+
 /**
  * The row's mode and the value it shows, from the stored value's JSON type (no flag is saved).
  * A missing, `null` or ill-typed value shows `defaultValue` without writing it.
  */
-const resolveRow = (row: JsonFieldRow, stored: unknown): { mode: Mode; value: unknown } => {
-  const classify = (value: unknown): { mode: Mode; value: unknown } | null => {
-    if (value === undefined || value === null) return null;
-    switch (row.kind) {
-      case "text":
-        return typeof value === "string" ? { mode: "fixed", value } : null;
-      case "list":
-        if (Array.isArray(value)) return { mode: "fixed", value: value.map(String) };
-        return typeof value === "string" ? { mode: "fx", value } : null;
-      case "bool":
-        if (typeof value === "boolean") return { mode: "fixed", value };
-        return typeof value === "string" ? { mode: "fx", value } : null;
-      case "int":
-        if (typeof value === "number" && Number.isFinite(value)) return { mode: "fixed", value };
-        return typeof value === "string" ? { mode: "fx", value } : null;
-      case "enum":
-        if (typeof value !== "string") return null;
-        return isOptionValue(row, value) ? { mode: "fixed", value } : { mode: "fx", value };
-      default:
-        return null;
-    }
-  };
+const resolveRow = (row: JsonFieldRow, stored: unknown): Resolved => {
+  const classify = (value: unknown) =>
+    value === undefined || value === null ? null : (CLASSIFIERS[row.kind]?.(row, value) ?? null);
   return classify(stored) ?? classify(row.defaultValue) ?? { mode: "fixed", value: row.defaultValue };
 };
 
@@ -167,7 +177,7 @@ const OneLineInput = ({
   disabled,
   picker,
   className,
-}: OneLineInputProps) => {
+}: Readonly<OneLineInputProps>) => {
   const longestLine = Math.max(
     placeholder.length,
     ...value.split("\n").map((line) => line.length),
@@ -301,7 +311,12 @@ const useRemoteOptions = (enabled: boolean, open: boolean, searchInput: string, 
   }, [enabled, open, key, search]);
 
   // Drop responses that arrive after unmount.
-  useEffect(() => () => void ++generationRef.current, []);
+  useEffect(
+    () => () => {
+      generationRef.current += 1;
+    },
+    [],
+  );
 
   const loading = enabled && open && settledKey !== key;
 
@@ -344,6 +359,14 @@ const useRemoteOptions = (enabled: boolean, open: boolean, searchInput: string, 
   };
 };
 
+/** A loading indicator with an accessible name. */
+const Spinner = ({ className, label }: Readonly<{ className: string; label: string }>) => (
+  <output className={cn("flex justify-center", className)}>
+    <Loader2 className="h-4 w-4 animate-spin opacity-50" />
+    <span className="sr-only">{label}</span>
+  </output>
+);
+
 // ── Value controls ───────────────────────────────────────────────────────────────────────────
 
 interface ListValueProps {
@@ -358,7 +381,7 @@ interface ListValueProps {
   t: Translate;
 }
 
-const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, onValues, t }: ListValueProps) => {
+const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, onValues, t }: Readonly<ListValueProps>) => {
   const [open, setOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const isRemote = !!row.searchOptions;
@@ -389,13 +412,14 @@ const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, on
     if (event.key !== "Enter" || !row.allowCustom || disabled) return;
     const text = searchInput.trim();
     if (!text) return;
-    const known = [...staticOptions, ...remote.options].some(
+    // Text naming an option adds that option; any other text is added as typed.
+    const match = [...staticOptions, ...remote.options].find(
       (option) => String(option.value) === text || option.label.toLowerCase() === text.toLowerCase(),
     );
-    if (known) return;
-    // Handled here: cmdk skips its own Enter (selecting the highlighted item) once this is prevented.
+    const value = match ? String(match.value) : text;
+    // Handled here: cmdk skips its own Enter (toggling the highlighted item) once this is prevented.
     event.preventDefault();
-    if (!values.includes(text)) onValues([...values, text]);
+    if (!values.includes(value)) onValues([...values, value]);
     setSearchInput("");
   };
 
@@ -442,16 +466,9 @@ const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, on
               className="h-9"
             />
             <CommandList onScroll={isRemote ? remote.onScroll : undefined}>
-              {isRemote && remote.loading ? (
-                <div className="flex justify-center py-6" role="status">
-                  <Loader2 className="h-4 w-4 animate-spin opacity-50" />
-                </div>
-              ) : (
-                options.length === 0 && (
-                  <div className="py-6 text-center text-sm" role="status">
-                    {t("JSON_FIELDS_FIELD.NO_RESULTS")}
-                  </div>
-                )
+              {isRemote && remote.loading && <Spinner className="py-6" label={t("common:LOADING")} />}
+              {!(isRemote && remote.loading) && options.length === 0 && (
+                <output className="block py-6 text-center text-sm">{t("JSON_FIELDS_FIELD.NO_RESULTS")}</output>
               )}
               <CommandGroup>
                 {options.map((option) => {
@@ -478,11 +495,7 @@ const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, on
                   );
                 })}
               </CommandGroup>
-              {isRemote && remote.loadingMore && (
-                <div className="flex justify-center py-2" role="status">
-                  <Loader2 className="h-4 w-4 animate-spin opacity-50" />
-                </div>
-              )}
+              {isRemote && remote.loadingMore && <Spinner className="py-2" label={t("common:LOADING")} />}
             </CommandList>
           </Command>
         </PopoverContent>
@@ -502,7 +515,7 @@ interface EnumValueProps {
   onSelect: (next: string) => void;
 }
 
-const EnumValue = ({ row, id, label, value, disabled, describedBy, onSelect }: EnumValueProps) => {
+const EnumValue = ({ row, id, label, value, disabled, describedBy, onSelect }: Readonly<EnumValueProps>) => {
   const [open, setOpen] = useState(false);
   const commandRef = useRef<HTMLDivElement | null>(null);
   return (
@@ -572,6 +585,7 @@ interface IntValueProps {
   disabled: boolean;
   describedBy: string;
   onNumber: (next: number) => void;
+  /** Called with the typed text once it contains `{{`; the row moves focus to its expression input. */
   onExpression: (text: string) => void;
 }
 
@@ -579,7 +593,7 @@ interface IntValueProps {
  * A whole-number input. Nothing is written while the text is empty or not a whole number; an empty
  * input writes `defaultValue` on blur. Typing `{{` switches the row to `fx` with the typed text.
  */
-const IntValue = ({ id, label, value, disabled, describedBy, onNumber, onExpression }: IntValueProps) => {
+const IntValue = ({ id, label, value, disabled, describedBy, onNumber, onExpression }: Readonly<IntValueProps>) => {
   const [draft, setDraft] = useState<string | null>(null);
   const shown = draft ?? String(value);
   return (
@@ -627,6 +641,127 @@ interface RowContext {
   pickerTarget: (row: JsonFieldRow) => string;
 }
 
+interface RowControlProps {
+  row: JsonFieldRow;
+  mode: Mode;
+  value: unknown;
+  id: string;
+  label: string;
+  describedBy: string;
+  disabled: boolean;
+  depKey: string;
+  picker: VariablePickerConfig | null;
+  load: Loader;
+  write: (next: unknown) => void;
+  onExpressionTyped: (text: string) => void;
+}
+
+/** The value control of a row: the `fx` expression input, or the literal control of its kind. */
+const RowControl = ({
+  row,
+  mode,
+  value,
+  id,
+  label,
+  describedBy,
+  disabled,
+  depKey,
+  picker,
+  load,
+  write,
+  onExpressionTyped,
+}: Readonly<RowControlProps>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
+  const textInput = (placeholder: string, placeholderClassName: string) => (
+    <OneLineInput
+      id={id}
+      value={toText(value)}
+      onChange={write}
+      placeholder={placeholder}
+      placeholderClassName={placeholderClassName}
+      ariaLabel={label}
+      describedBy={describedBy}
+      disabled={disabled}
+      picker={picker}
+    />
+  );
+
+  if (mode === "fx") {
+    return (
+      <span className="inline-flex min-w-0 max-w-full rounded bg-primary/5 px-0.5">
+        {textInput(`{{ ${t("JSON_FIELDS_FIELD.EXPRESSION")} }}`, "placeholder:text-low-emphasis")}
+      </span>
+    );
+  }
+  switch (row.kind) {
+    case "text":
+      return (
+        <span className="inline-flex min-w-0 max-w-full items-center text-green-600 dark:text-green-400 [&_[aria-hidden=true]]:text-green-600 dark:[&_[aria-hidden=true]]:text-green-400">
+          <span>&quot;</span>
+          {row.required
+            ? textInput(t("JSON_FIELDS_FIELD.REQUIRED"), "placeholder:text-red-500/70")
+            : textInput(t("JSON_FIELDS_FIELD.EMPTY"), "placeholder:text-low-emphasis")}
+          <span>&quot;</span>
+        </span>
+      );
+    case "list":
+      return (
+        <ListValue
+          row={row}
+          label={label}
+          values={value as string[]}
+          disabled={disabled}
+          depKey={depKey}
+          describedBy={describedBy}
+          load={load}
+          onValues={write}
+          t={t}
+        />
+      );
+    case "bool":
+      return (
+        <button
+          type="button"
+          id={id}
+          role="switch"
+          data-json-value="bool"
+          aria-checked={value === true}
+          aria-label={label}
+          aria-describedby={describedBy}
+          disabled={disabled}
+          onClick={() => write(value !== true)}
+          className="rounded px-0.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+        >
+          {toText(value === true)}
+        </button>
+      );
+    case "int":
+      return (
+        <IntValue
+          id={id}
+          label={label}
+          value={value as number}
+          disabled={disabled}
+          describedBy={describedBy}
+          onNumber={(next) => write(Number.isNaN(next) ? row.defaultValue : next)}
+          onExpression={onExpressionTyped}
+        />
+      );
+    default:
+      return (
+        <EnumValue
+          row={row}
+          id={id}
+          label={label}
+          value={toText(value)}
+          disabled={disabled}
+          describedBy={describedBy}
+          onSelect={write}
+        />
+      );
+  }
+};
+
 interface RowLineProps {
   row: JsonFieldRow;
   signature: string;
@@ -639,7 +774,26 @@ interface RowLineProps {
   trailing: React.ReactNode;
 }
 
-const RowLineImpl = ({ row, stored, depKey, disabled, picker, focusRequest, context, trailing }: RowLineProps) => {
+const ACTION_CLASSES =
+  "rounded px-1 text-xs text-low-emphasis opacity-0 transition-opacity hover:bg-muted hover:text-high-emphasis focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100 group-focus-within/row:opacity-100 disabled:cursor-not-allowed";
+
+/** The text a drop leaves in a row: appended to a text row's value, the whole expression otherwise. */
+const droppedValue = (row: JsonFieldRow, value: unknown, text: string) => {
+  if (row.kind !== "text") return text;
+  const current = toText(value);
+  return current ? `${current} ${text}` : text;
+};
+
+const RowLineImpl = ({
+  row,
+  stored,
+  depKey,
+  disabled,
+  picker,
+  focusRequest,
+  context,
+  trailing,
+}: Readonly<RowLineProps>) => {
   const { t } = useT("logic.workflow.nodes.inspector");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -651,28 +805,27 @@ const RowLineImpl = ({ row, stored, depKey, disabled, picker, focusRequest, cont
     if (!disabled) context.write(row.key, next);
   };
 
-  // Focus the value after `// add:` shows the row, and the expression input after a switch to `fx`
-  // while focus was in the row (typing `{{` in an int row unmounts the focused input).
-  const previousMode = useRef(mode);
-  const focusWithin = useRef(false);
+  // Focus the value after `// add:` shows the row, and the expression input after the author switched
+  // the row to `fx` (the fx toggle, or `{{` typed in an int row, which unmounts the focused input).
+  const pendingFxFocus = useRef(false);
   useEffect(() => {
     if (focusRequest > 0) focusValueControl(containerRef.current);
   }, [focusRequest]);
   useEffect(() => {
-    if (previousMode.current !== mode && mode === "fx" && focusWithin.current) {
-      focusValueControl(containerRef.current);
-    }
-    previousMode.current = mode;
+    if (mode !== "fx" || !pendingFxFocus.current) return;
+    pendingFxFocus.current = false;
+    focusValueControl(containerRef.current);
   }, [mode]);
+  const writeAndFocusFx = (next: unknown) => {
+    pendingFxFocus.current = true;
+    write(next);
+  };
 
   const loadOptions = useCallback<Loader>(
     (request) =>
       context.getRow(row.key)?.searchOptions?.(request, context.dataRef.current ?? NO_DATA, context.configRef.current),
     [context, row.key],
   );
-
-  const variablePicker = (onPick: (next: string) => void): VariablePickerConfig | null =>
-    picker ? { target: context.pickerTarget(row), onChange: onPick } : null;
 
   const onDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     if (disabled || !hasPlainText(event.dataTransfer)) return;
@@ -697,113 +850,10 @@ const RowLineImpl = ({ row, stored, depKey, disabled, picker, focusRequest, cont
     if (target instanceof HTMLTextAreaElement && target.dataset.jsonValue === "text") return;
     event.preventDefault();
     const text = event.dataTransfer.getData("text/plain");
-    if (!text) return;
-    if (row.kind === "text") {
-      const currentText = String(value ?? "");
-      write(currentText ? `${currentText} ${text}` : text);
-    } else {
-      write(text);
-    }
+    if (text) write(droppedValue(row, value, text));
   };
 
-  const textInput = (text: string, placeholder: string, placeholderClassName: string) => (
-    <OneLineInput
-      id={id}
-      value={text}
-      onChange={write}
-      placeholder={placeholder}
-      placeholderClassName={placeholderClassName}
-      ariaLabel={label}
-      describedBy={describedBy}
-      disabled={disabled}
-      picker={variablePicker(write)}
-    />
-  );
-
-  let control: React.ReactNode;
-  if (mode === "fx") {
-    control = (
-      <span className="inline-flex min-w-0 max-w-full rounded bg-primary/5 px-0.5">
-        {textInput(
-          String(value ?? ""),
-          `{{ ${t("JSON_FIELDS_FIELD.EXPRESSION")} }}`,
-          "placeholder:text-low-emphasis",
-        )}
-      </span>
-    );
-  } else if (row.kind === "text") {
-    const placeholder = row.required ? t("JSON_FIELDS_FIELD.REQUIRED") : t("JSON_FIELDS_FIELD.EMPTY");
-    control = (
-      <span className="inline-flex min-w-0 max-w-full items-center text-green-600 dark:text-green-400 [&_[aria-hidden=true]]:text-green-600 dark:[&_[aria-hidden=true]]:text-green-400">
-        <span>&quot;</span>
-        {textInput(
-          String(value ?? ""),
-          placeholder,
-          row.required ? "placeholder:text-red-500/70" : "placeholder:text-low-emphasis",
-        )}
-        <span>&quot;</span>
-      </span>
-    );
-  } else if (row.kind === "list") {
-    control = (
-      <ListValue
-        row={row}
-        label={label}
-        values={value as string[]}
-        disabled={disabled}
-        depKey={depKey}
-        describedBy={describedBy}
-        load={loadOptions}
-        onValues={write}
-        t={t}
-      />
-    );
-  } else if (row.kind === "bool") {
-    control = (
-      <button
-        type="button"
-        id={id}
-        role="switch"
-        data-json-value="bool"
-        aria-checked={value === true}
-        aria-label={label}
-        aria-describedby={describedBy}
-        disabled={disabled}
-        onClick={() => write(!(value === true))}
-        className="rounded px-0.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
-      >
-        {String(value === true)}
-      </button>
-    );
-  } else if (row.kind === "int") {
-    control = (
-      <IntValue
-        id={id}
-        label={label}
-        value={value as number}
-        disabled={disabled}
-        describedBy={describedBy}
-        onNumber={(next) => write(Number.isNaN(next) ? row.defaultValue : next)}
-        onExpression={write}
-      />
-    );
-  } else {
-    control = (
-      <EnumValue
-        row={row}
-        id={id}
-        label={label}
-        value={String(value)}
-        disabled={disabled}
-        describedBy={describedBy}
-        onSelect={write}
-      />
-    );
-  }
-
   const help = [kindDescription(row, t), row.info].filter(Boolean).join(". ");
-  const actionClasses =
-    "rounded px-1 text-xs text-low-emphasis opacity-0 transition-opacity hover:bg-muted hover:text-high-emphasis focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100 group-focus-within/row:opacity-100 disabled:cursor-not-allowed";
 
   return (
     <div
@@ -814,12 +864,6 @@ const RowLineImpl = ({ row, stored, depKey, disabled, picker, focusRequest, cont
       onDragEnter={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      onFocus={() => {
-        focusWithin.current = true;
-      }}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) focusWithin.current = false;
-      }}
     >
       <Tooltip>
         <TooltipTrigger asChild>
@@ -843,7 +887,20 @@ const RowLineImpl = ({ row, stored, depKey, disabled, picker, focusRequest, cont
         {help}
       </span>
       <span className="text-low-emphasis">:</span>
-      {control}
+      <RowControl
+        row={row}
+        mode={mode}
+        value={value}
+        id={id}
+        label={label}
+        describedBy={describedBy}
+        disabled={disabled}
+        depKey={depKey}
+        picker={picker ? { target: context.pickerTarget(row), onChange: write } : null}
+        load={loadOptions}
+        write={write}
+        onExpressionTyped={writeAndFocusFx}
+      />
       {trailing}
       {row.kind !== "text" && (
         <button
@@ -851,8 +908,8 @@ const RowLineImpl = ({ row, stored, depKey, disabled, picker, focusRequest, cont
           disabled={disabled}
           aria-pressed={mode === "fx"}
           aria-label={t("JSON_FIELDS_FIELD.USE_EXPRESSION_FOR", { label })}
-          onClick={() => write(mode === "fx" ? row.defaultValue : "")}
-          className={cn(actionClasses, mode === "fx" && "text-primary opacity-100")}
+          onClick={() => (mode === "fx" ? write(row.defaultValue) : writeAndFocusFx(""))}
+          className={cn(ACTION_CLASSES, mode === "fx" && "text-primary opacity-100")}
         >
           {EXPRESSION_TOKEN}
         </button>
@@ -863,7 +920,7 @@ const RowLineImpl = ({ row, stored, depKey, disabled, picker, focusRequest, cont
           disabled={disabled}
           aria-label={t("JSON_FIELDS_FIELD.REMOVE_ROW", { label })}
           onClick={() => context.removeRow(row)}
-          className={actionClasses}
+          className={ACTION_CLASSES}
         >
           <X className="h-3 w-3" />
         </button>
@@ -902,40 +959,141 @@ const COMMA = <span className="text-low-emphasis">,</span>;
 const INDENT_CLASSES = ["pl-0", "pl-4", "pl-8"];
 
 /**
- * `json-fields`: a node's operation parameters as one compact JSON-styled block. Each row reads and
- * writes its own parameter key (`data[row.key]`); `onChange` receives a patch of those keys, and the
- * field's own key is never written. A row's mode (literal or `fx` expression) comes from the stored
- * value's JSON type.
+ * The block's lines: braces, visible rows (groups nested, a comma after all but the last at each
+ * level), shown comments under their rows, and one `// add:` line for every hidden optional row.
  */
-export const JsonFieldsField = ({ field, readOnly, data, config, onChange, variablePicker }: FieldProps<unknown>) => {
-  const { t } = useT("logic.workflow.nodes.inspector");
-  const disabled = field.disabled === true || !!readOnly;
-  const picker = showsVariablePicker(field, readOnly, variablePicker);
-
-  // `rowsContext` runs once per mount; rows use `{}` until it resolves, and keep it on failure.
-  const [rowsContext, setRowsContext] = useState<Record<string, unknown>>(NO_DATA);
-  const loadRowsContext = useRef(field.rowsContext);
-  const mounted = useRef(false);
-  const contextRequested = useRef(false);
-  const dataRef = useRef(data);
-  const configRef = useRef(config);
-  const onChangeRef = useRef(onChange);
-  const disabledRef = useRef(disabled);
-  const rowsByKey = useRef(new Map<string, JsonFieldRow>());
-  useLayoutEffect(() => {
-    dataRef.current = data;
-    configRef.current = config;
-    onChangeRef.current = onChange;
-    disabledRef.current = disabled;
+const buildLines = (
+  items: Array<JsonFieldRow | JsonFieldGroup>,
+  isHidden: (row: JsonFieldRow) => boolean,
+  commentShown: (row: JsonFieldRow) => boolean,
+): Line[] => {
+  const lines: Line[] = [{ type: "brace", text: "{", depth: 0, key: "open" }];
+  const waiting: JsonFieldRow[] = [];
+  const keepVisible = (row: JsonFieldRow) => {
+    if (!isHidden(row)) return true;
+    waiting.push(row);
+    return false;
+  };
+  const visible = items.flatMap((item): Array<JsonFieldRow | JsonFieldGroup> => {
+    if (!isGroup(item)) return keepVisible(item) ? [item] : [];
+    const rows = item.rows.filter(keepVisible);
+    return rows.length > 0 ? [{ ...item, rows }] : [];
   });
+  const pushRows = (rows: JsonFieldRow[], depth: number, lastAtLevel: boolean) => {
+    rows.forEach((row, index) => {
+      lines.push({ type: "row", row, depth, comma: !(lastAtLevel && index === rows.length - 1) });
+      if (commentShown(row)) lines.push({ type: "comment", row, depth });
+    });
+  };
+  visible.forEach((item, index) => {
+    const last = index === visible.length - 1;
+    if (isGroup(item)) {
+      lines.push({ type: "group", group: item, depth: 1 });
+      pushRows(item.rows, 2, true);
+      lines.push({ type: "brace", text: last ? "}" : "},", depth: 1, key: `close-${item.group}` });
+    } else {
+      pushRows([item], 1, last);
+    }
+  });
+  if (waiting.length > 0) lines.push({ type: "add", rows: waiting, depth: 1 });
+  lines.push({ type: "brace", text: "}", depth: 0, key: "close" });
+  return lines;
+};
 
+const lineKey = (line: Line) => {
+  switch (line.type) {
+    case "brace":
+      return `brace-${line.key}`;
+    case "group":
+      return `group-${line.group.group}`;
+    case "row":
+      return `row-${line.row.key}`;
+    case "comment":
+      return `comment-${line.row.key}`;
+    default:
+      return "add";
+  }
+};
+
+const GroupKey = ({ group }: Readonly<{ group: JsonFieldGroup }>) => (
+  <span className="inline-flex items-center gap-1">
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={-1} className="cursor-help text-high-emphasis">
+          <span className="text-low-emphasis">&quot;</span>
+          {group.group}
+          <span className="text-low-emphasis">&quot;</span>
+        </span>
+      </TooltipTrigger>
+      {group.info && (
+        <TooltipContent side="top" className="max-w-xs text-xs">
+          {group.info}
+        </TooltipContent>
+      )}
+    </Tooltip>
+    <span className="text-low-emphasis">: {"{"}</span>
+  </span>
+);
+
+const CommentLine = ({
+  comment,
+  expanded,
+  onToggle,
+}: Readonly<{ comment: JsonFieldComment; expanded: boolean; onToggle: () => void }>) => (
+  <button
+    type="button"
+    aria-expanded={expanded}
+    onClick={onToggle}
+    className={cn(
+      "min-w-0 max-w-full text-left italic focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      expanded ? "whitespace-normal" : "truncate",
+      comment.tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+    )}
+  >
+    {"// "}
+    {comment.text}
+  </button>
+);
+
+const AddLine = ({
+  rows,
+  disabled,
+  onShow,
+  t,
+}: Readonly<{ rows: JsonFieldRow[]; disabled: boolean; onShow: (key: string) => void; t: Translate }>) => (
+  <span className="inline-flex flex-wrap items-center gap-2 italic text-muted-foreground">
+    <span>
+      {"// "}
+      {t("JSON_FIELDS_FIELD.ADD")}:
+    </span>
+    {rows.map((row) => (
+      <button
+        key={row.key}
+        type="button"
+        data-add-key={row.key}
+        disabled={disabled}
+        onClick={() => onShow(row.key)}
+        className="rounded px-0.5 not-italic hover:bg-muted hover:text-high-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+      >
+        {row.label || row.key}
+      </button>
+    ))}
+  </span>
+);
+
+/** Loads `rowsContext` once per mount: `{}` until it resolves, and kept on failure (no retry). */
+const useRowsContext = (load: FieldProps["field"]["rowsContext"], configRef: React.RefObject<FieldConfig>) => {
+  const [rowsContext, setRowsContext] = useState<Record<string, unknown>>(NO_DATA);
+  const loadRef = useRef(load);
+  const mounted = useRef(false);
+  const requested = useRef(false);
   useEffect(() => {
     mounted.current = true;
-    const load = loadRowsContext.current;
-    if (load && !contextRequested.current) {
-      contextRequested.current = true;
+    const loader = loadRef.current;
+    if (loader && !requested.current) {
+      requested.current = true;
       Promise.resolve()
-        .then(() => load(configRef.current))
+        .then(() => loader(configRef.current))
         .then((resolved) => {
           if (mounted.current && resolved && typeof resolved === "object") setRowsContext(resolved);
         })
@@ -946,8 +1104,43 @@ export const JsonFieldsField = ({ field, readOnly, data, config, onChange, varia
     return () => {
       mounted.current = false;
     };
-  }, []);
+  }, [configRef]);
+  return rowsContext;
+};
 
+/**
+ * `json-fields`: a node's operation parameters as one compact JSON-styled block. Each row reads and
+ * writes its own parameter key (`data[row.key]`); `onChange` receives a patch of those keys, and the
+ * field's own key is never written. A row's mode (literal or `fx` expression) comes from the stored
+ * value's JSON type.
+ */
+export const JsonFieldsField = ({
+  field,
+  readOnly,
+  data,
+  config,
+  onChange,
+  variablePicker,
+}: Readonly<FieldProps<unknown>>) => {
+  const { t } = useT("logic.workflow.nodes.inspector");
+  const disabled = field.disabled === true || !!readOnly;
+  const picker = showsVariablePicker(field, readOnly, variablePicker);
+
+  const dataRef = useRef(data);
+  const configRef = useRef(config);
+  const onChangeRef = useRef(onChange);
+  const disabledRef = useRef(disabled);
+  const rowsByKey = useRef(new Map<string, JsonFieldRow>());
+  const blockRef = useRef<HTMLDivElement | null>(null);
+  const pendingAddFocus = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    dataRef.current = data;
+    configRef.current = config;
+    onChangeRef.current = onChange;
+    disabledRef.current = disabled;
+  });
+
+  const rowsContext = useRowsContext(field.rowsContext, configRef);
   const buildRows = field.rows;
   const items = useMemo(() => buildRows?.(data, rowsContext) ?? [], [buildRows, data, rowsContext]);
 
@@ -963,10 +1156,21 @@ export const JsonFieldsField = ({ field, readOnly, data, config, onChange, varia
     rowsByKey.current = rowsMap;
   }, [rowsMap]);
 
-  // Optional rows the author showed through `// add:` in this session. UI state only, never saved.
+  // Optional rows shown in this session (through `// add:` or an edit). UI state only, never saved.
   const [added, setAdded] = useState<Set<string>>(() => new Set());
   const [focusRequests, setFocusRequests] = useState<Record<string, number>>({});
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
+  // After × hides a row, keyboard focus moves to its `// add:` button.
+  useEffect(() => {
+    const key = pendingAddFocus.current;
+    if (!key) return;
+    pendingAddFocus.current = null;
+    const buttons = blockRef.current?.querySelectorAll<HTMLElement>("[data-add-key]") ?? [];
+    Array.from(buttons)
+      .find((button) => button.dataset.addKey === key)
+      ?.focus();
+  });
 
   const showOptional = (key: string) => {
     if (disabled) return;
@@ -986,6 +1190,8 @@ export const JsonFieldsField = ({ field, readOnly, data, config, onChange, varia
       fieldId: field.id,
       write: (key, value) => {
         if (disabledRef.current) return;
+        // An optional row stays shown while the author edits it, even when the value becomes empty.
+        if (rowsByKey.current.get(key)?.optional) setAdded((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
         onChangeRef.current({ [key]: value });
       },
       getRow: (key) => rowsByKey.current.get(key),
@@ -998,6 +1204,12 @@ export const JsonFieldsField = ({ field, readOnly, data, config, onChange, varia
           next.delete(row.key);
           return next;
         });
+        setFocusRequests((prev) => {
+          const next = { ...prev };
+          delete next[row.key];
+          return next;
+        });
+        pendingAddFocus.current = row.key;
         onChangeRef.current({ [row.key]: row.defaultValue });
       },
       pickerTarget: (row) => [field.label || field.key, row.label || row.key].join(" "),
@@ -1005,46 +1217,11 @@ export const JsonFieldsField = ({ field, readOnly, data, config, onChange, varia
     [field.id, field.label, field.key],
   );
 
-  const isHidden = (row: JsonFieldRow) => !!row.optional && !added.has(row.key) && isEmptyValue(row, data[row.key]);
-  const commentShown = (row: JsonFieldRow) => !!row.comment && (!row.comment.when || row.comment.when(data));
-
-  // Build the visible lines: braces, rows (groups nested), comments, and the `// add:` line.
-  const lines: Line[] = [{ type: "brace", text: "{", depth: 0, key: "open" }];
-  const waiting: JsonFieldRow[] = [];
-  const pushRows = (rows: JsonFieldRow[], depth: number, lastAtLevel: boolean) => {
-    rows.forEach((row, index) => {
-      lines.push({ type: "row", row, depth, comma: !(lastAtLevel && index === rows.length - 1) });
-      if (commentShown(row)) lines.push({ type: "comment", row, depth });
-    });
-  };
-  const visible = items
-    .map((item) => {
-      if (isGroup(item)) {
-        const rows = item.rows.filter((row) => {
-          if (!isHidden(row)) return true;
-          waiting.push(row);
-          return false;
-        });
-        return rows.length > 0 ? { ...item, rows } : null;
-      }
-      if (!isHidden(item)) return item;
-      waiting.push(item);
-      return null;
-    })
-    .filter((item): item is JsonFieldRow | JsonFieldGroup => item !== null);
-
-  visible.forEach((item, index) => {
-    const last = index === visible.length - 1;
-    if (isGroup(item)) {
-      lines.push({ type: "group", group: item, depth: 1 });
-      pushRows(item.rows, 2, true);
-      lines.push({ type: "brace", text: last ? "}" : "},", depth: 1, key: `close-${item.group}` });
-    } else {
-      pushRows([item], 1, last);
-    }
-  });
-  if (waiting.length > 0) lines.push({ type: "add", rows: waiting, depth: 1 });
-  lines.push({ type: "brace", text: "}", depth: 0, key: "close" });
+  const lines = buildLines(
+    items,
+    (row) => !!row.optional && !added.has(row.key) && isEmptyValue(row, data[row.key]),
+    (row) => !!row.comment && (!row.comment.when || row.comment.when(data)),
+  );
 
   const depKeyOf = (row: JsonFieldRow) =>
     row.optionsDependencies ? JSON.stringify(row.optionsDependencies.map((key) => data[key])) : "";
@@ -1054,25 +1231,7 @@ export const JsonFieldsField = ({ field, readOnly, data, config, onChange, varia
       case "brace":
         return <span className="text-low-emphasis">{line.text}</span>;
       case "group":
-        return (
-          <span className="inline-flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={-1} className="cursor-help text-high-emphasis">
-                  <span className="text-low-emphasis">&quot;</span>
-                  {line.group.group}
-                  <span className="text-low-emphasis">&quot;</span>
-                </span>
-              </TooltipTrigger>
-              {line.group.info && (
-                <TooltipContent side="top" className="max-w-xs text-xs">
-                  {line.group.info}
-                </TooltipContent>
-              )}
-            </Tooltip>
-            <span className="text-low-emphasis">: {"{"}</span>
-          </span>
-        );
+        return <GroupKey group={line.group} />;
       case "row":
         return (
           <RowLine
@@ -1087,65 +1246,22 @@ export const JsonFieldsField = ({ field, readOnly, data, config, onChange, varia
             trailing={line.comma ? COMMA : null}
           />
         );
-      case "comment": {
-        const comment = line.row.comment!;
-        const isExpanded = expanded.has(line.row.key);
-        return (
-          <button
-            type="button"
-            aria-expanded={isExpanded}
-            onClick={() => toggleComment(line.row.key)}
-            className={cn(
-              "min-w-0 max-w-full text-left italic focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              isExpanded ? "whitespace-normal" : "truncate",
-              comment.tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
-            )}
-          >
-            {"// "}
-            {comment.text}
-          </button>
-        );
-      }
-      case "add":
-        return (
-          <span className="inline-flex flex-wrap items-center gap-2 italic text-muted-foreground">
-            <span>
-              {"// "}
-              {t("JSON_FIELDS_FIELD.ADD")}:
-            </span>
-            {line.rows.map((row) => (
-              <button
-                key={row.key}
-                type="button"
-                disabled={disabled}
-                onClick={() => showOptional(row.key)}
-                className="rounded px-0.5 not-italic hover:bg-muted hover:text-high-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
-              >
-                {row.label || row.key}
-              </button>
-            ))}
-          </span>
-        );
-    }
-  };
-
-  const lineKey = (line: Line) => {
-    switch (line.type) {
-      case "brace":
-        return `brace-${line.key}`;
-      case "group":
-        return `group-${line.group.group}`;
-      case "row":
-        return `row-${line.row.key}`;
       case "comment":
-        return `comment-${line.row.key}`;
-      case "add":
-        return "add";
+        return line.row.comment ? (
+          <CommentLine
+            comment={line.row.comment}
+            expanded={expanded.has(line.row.key)}
+            onToggle={() => toggleComment(line.row.key)}
+          />
+        ) : null;
+      default:
+        return <AddLine rows={line.rows} disabled={disabled} onShow={showOptional} t={t} />;
     }
   };
 
   return (
     <div
+      ref={blockRef}
       role="group"
       aria-label={field.label || field.key}
       className="rounded-md border border-input bg-muted/30 py-1.5 font-mono text-sm"

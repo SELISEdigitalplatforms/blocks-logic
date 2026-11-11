@@ -529,6 +529,8 @@ describe("JsonFieldsField", () => {
     await user.click(screen.getByRole("button", { name: "Remove userName" }));
     expect(spy).toHaveBeenLastCalledWith({ userName: "" });
     expect(screen.queryByTestId("json-row-userName")).toBeNull();
+    // Keyboard focus moves to the row's // add: button.
+    expect(document.activeElement?.textContent).toBe("userName");
     await user.click(screen.getByRole("button", { name: "Remove phoneNumber" }));
     expect(spy).toHaveBeenLastCalledWith({ phoneNumber: "" });
     const finalAdd = lineElements()[lineElements().length - 2];
@@ -701,5 +703,54 @@ describe("JsonFieldsField", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("option", { name: "Editor" })).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(listTrigger));
+  });
+
+  it("H8: an optional row stays shown while edited, also when it turns empty or switches to fx", async () => {
+    const user = userEvent.setup();
+    const rows = (): JsonFieldRow[] => [
+      { key: "userName", kind: "text", defaultValue: "", optional: true },
+      { key: "limit", kind: "int", defaultValue: 0, optional: true },
+    ];
+    const { spy } = setup({ field: makeField({ rows }), initial: { userName: "ana", limit: 5 } });
+    fireEvent.change(textInput("userName"), { target: { value: "" } });
+    expect(spy).toHaveBeenLastCalledWith({ userName: "" });
+    expect(rowOf("userName")).toBeTruthy();
+
+    await user.click(fxButton("limit"));
+    expect(spy).toHaveBeenLastCalledWith({ limit: "" });
+    expect(textInput("limit")).toBeTruthy();
+    expect(document.activeElement).toBe(textInput("limit"));
+    await user.click(screen.getByRole("button", { name: "Remove limit" }));
+    expect(spy).toHaveBeenLastCalledWith({ limit: 0 });
+    expect(screen.queryByTestId("json-row-limit")).toBeNull();
+  });
+
+  it("H3: Enter on text naming an option adds that option once", async () => {
+    const user = userEvent.setup();
+    const { spy } = setup({ initial: { roles: ["editor"] } });
+    await user.click(screen.getByRole("button", { name: "Add a value to roles" }));
+    const search = screen.getByPlaceholderText("Search…");
+    await user.type(search, "viewer{Enter}");
+    expect(spy).toHaveBeenLastCalledWith({ roles: ["editor", "viewer"] });
+    spy.mockClear();
+    // Already selected: Enter keeps it rather than toggling it off.
+    await user.type(search, "Editor{Enter}");
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("shows duplicate stored list values once, without writing", async () => {
+    const { spy } = setup({ initial: { roles: ["editor", "editor", "x"] } });
+    await act(async () => {});
+    expect(within(rowOf("roles")).getAllByText("Editor")).toHaveLength(1);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("H2: highlights {{$...}} expressions in a text row", () => {
+    setup({ initial: { email: "{{$json.input.email}} (work)" } });
+    const overlay = rowOf("email").querySelector('[aria-hidden="true"]');
+    const highlighted = Array.from(overlay?.querySelectorAll("span") ?? []).find(
+      (span) => span.textContent === "{{$json.input.email}}",
+    );
+    expect(highlighted?.className).toMatch(/text-(green|red)-700/);
   });
 });
