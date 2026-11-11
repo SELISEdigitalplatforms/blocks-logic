@@ -1237,7 +1237,7 @@ describe("action/iamUser v2 (logic#424)", () => {
 
   it("H1: the library card uses UserCog with the primary icon class only", () => {
     const card = NodeDefinitions.find((d) => d.type === "iamUser")!;
-    expect(card).toMatchObject({ id: "action-iamUser-v2", category: "action", version: "v2", title: "IAM User", defaultName: "IAM User" });
+    expect(card).toMatchObject({ id: "action-iamUser-v2", category: "action", version: "v2", title: "Manage Users", defaultName: "Manage Users" });
     expect(card.handle).toEqual({ sources: [{ key: "source", label: "" }], targets: [{ key: "target", label: "" }] });
     expect(isValidElement(card.icon)).toBe(true);
     expect((card.icon as { props: { className: string } }).props.className).toBe("h-5 w-5 text-primary");
@@ -1416,7 +1416,7 @@ describe("action/iamUser v2 (logic#424)", () => {
 
   it("guide: explains authentication, operations, errors and the action loop", () => {
     render(createElement(NodeGuideActionIamUserV2));
-    expect(screen.getByRole("heading", { name: "IAM User action" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Manage Users action" })).toBeTruthy();
     expect(screen.getByText(/manage your project's IAM users from a workflow/)).toBeTruthy();
     expect(screen.getByText(/can start itself in a loop/)).toBeTruthy();
     expect(screen.getByText(/A change someone else makes between the two can be lost/)).toBeTruthy();
