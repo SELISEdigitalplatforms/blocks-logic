@@ -9,6 +9,14 @@ namespace XUnitTest.TestHelpers
     {
         public static void Set(string tenantId = "tenant-123", string userId = "user-123", string orgId = "org-123")
         {
+            var context = Create(tenantId, userId, orgId);
+            if (context is null) return;
+            BlocksContext.SetContext(context, true);
+        }
+
+        /// <summary>An authenticated context without installing it, e.g. a webhook caller handed to a service.</summary>
+        public static BlocksContext? Create(string tenantId = "tenant-123", string userId = "user-123", string orgId = "org-123")
+        {
             var createMethods = typeof(BlocksContext)
                 .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
                 .Where(m => m.Name == "Create" && m.ReturnType == typeof(BlocksContext))
@@ -17,15 +25,12 @@ namespace XUnitTest.TestHelpers
             var create = createMethods.FirstOrDefault(m => m.GetParameters().Length >= 15)
                          ?? createMethods.FirstOrDefault(m => m.GetParameters().Length == 14);
 
-            if (create == null) return;
-
-            var context = create.CreateContext(new object[]
+            return create?.CreateContext(new object[]
             {
                 tenantId, Array.Empty<string>(), userId, true, string.Empty, orgId,
                 DateTime.UtcNow.AddHours(1), "test@example.com", Array.Empty<string>(),
                 "testuser", string.Empty, "Test User", string.Empty, tenantId, string.Empty
             });
-            BlocksContext.SetContext(context, true);
         }
 
         /// <summary>An impersonated context: <c>TenantId</c> is the target tenant, <c>OriginalTenantId</c> the caller's own.</summary>
