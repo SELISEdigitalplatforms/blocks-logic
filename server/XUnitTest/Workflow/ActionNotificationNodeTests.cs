@@ -148,11 +148,12 @@ namespace XUnitTest.Workflow
             var output = OutputOf(result);
             output["Queued"].AsBoolean.Should().BeTrue();
             output["NotificationId"].AsString.Should().Be(request.Id.ToString());
-            output["Recipients"].AsString.Should().Be("AffectedOnly");
+            output["Recipients"].AsString.Should().Be("Event owner only");
             output["Scope"].AsString.Should().Be("App");
             output["Channels"]["InApp"].AsBoolean.Should().BeTrue();
             output["Channels"]["Offline"].AsBoolean.Should().BeTrue();
             output["NamedUsers"].AsInt32.Should().Be(1);
+            output["NamedUsersUsed"].AsBoolean.Should().BeTrue();
             output.Contains("Skipped").Should().BeFalse();
         }
 
@@ -245,6 +246,74 @@ namespace XUnitTest.Workflow
             OutputOf(result)["Queued"].AsBoolean.Should().BeTrue();
             harness.Published.Single().NamedUserIds.Should().BeEmpty();
         }
+
+        public static TheoryData<NotificationAudienceLevel, bool, NotificationScope, bool, string> NamedUserUse() => new()
+        {
+            { NotificationAudienceLevel.AffectedOnly, false, NotificationScope.App, true, "Event owner only" },
+            { NotificationAudienceLevel.AllUsers, false, NotificationScope.App, false, "All users" },
+            { NotificationAudienceLevel.Selected, false, NotificationScope.App, false, "Targeted users" },
+            { NotificationAudienceLevel.Selected, true, NotificationScope.App, true, "Targeted users + event owner" },
+            { NotificationAudienceLevel.AllUsers, false, NotificationScope.Both, true, "All users" },
+            { NotificationAudienceLevel.Selected, false, NotificationScope.Console, true, "Targeted users" },
+        };
+
+        [Theory]
+        [MemberData(nameof(NamedUserUse))]
+        public async Task The_output_says_whether_the_configuration_used_the_named_users(
+            NotificationAudienceLevel level, bool alsoNamedUsers, NotificationScope scope, bool used, string recipients)
+        {
+            var configuration = Config(level, scope);
+            configuration.Audience!.AlsoNamedUsers = alsoNamedUsers;
+            var harness = new Harness(configuration);
+
+            var result = await harness.Node.RunAsync(Context(Parameters(), new BsonDocument { { "userId", "u-1" } }));
+
+            var output = OutputOf(result);
+            output["Recipients"].AsString.Should().Be(recipients);
+            output["NamedUsers"].AsInt32.Should().Be(1);
+            output["NamedUsersUsed"].AsBoolean.Should().Be(used);
+            harness.Published.Single().NamedUserIds.Should().Equal("u-1");
+        }
+
+        [Fact]
+        public async Task The_step_log_warns_when_the_configuration_ignores_the_named_users()
+        {
+            var harness = new Harness(Config(NotificationAudienceLevel.AllUsers));
+            var logger = new ListLogger();
+            var context = Context(Parameters(),
+                new BsonDocument { { "userId", "secret-user-1" } },
+                new BsonDocument { { "userId", "secret-user-2" } });
+            context.Log = new WorkflowExecutionLogger(logger).For(Execution()).ForNode("node-1", 1);
+
+            await harness.Node.RunAsync(context);
+
+            logger.Lines.Should().Contain(l => l.Contains("[wf:node.notification.usersIgnored]") && l.Contains("2 item(s)"));
+            logger.Lines.Should().NotContain(l => l.Contains("secret-user"));
+        }
+
+        [Fact]
+        public async Task The_step_log_does_not_warn_when_the_named_users_are_used()
+        {
+            var harness = new Harness(Config());
+            var logger = new ListLogger();
+            var context = Context(Parameters(), new BsonDocument { { "userId", "u-1" } });
+            context.Log = new WorkflowExecutionLogger(logger).For(Execution()).ForNode("node-1", 1);
+
+            await harness.Node.RunAsync(context);
+
+            logger.Lines.Should().NotContain(l => l.Contains("usersIgnored"));
+        }
+
+        private static WorkflowExecutionEntity Execution() => new()
+        {
+            Id = "exec-1",
+            TenantId = Tenant,
+            WorkflowId = "wf-1",
+            WorkflowName = "Orders",
+            WorkflowSnapshot = new WorkflowEntity { ItemId = "wf-1", Name = "Orders", TenantId = Tenant },
+            TriggerMetadata = new TriggerMetadata(),
+            TraceId = "0af7651916cd43dd8448eb211c80319c",
+        };
 
         [Fact]
         public async Task A_blank_configuration_name_is_an_error_item()

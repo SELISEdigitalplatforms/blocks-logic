@@ -72,6 +72,7 @@ namespace Workflow.DomainService.Logging
         public const string MailFinished = "node.mail.finished";
         public const string NotificationFinished = "node.notification.finished";
         public const string NotificationRateLimit = "node.notification.rateLimit";
+        public const string NotificationUsersIgnored = "node.notification.usersIgnored";
         public const string AgentCall = "node.agent.call";
         public const string AgentResponse = "node.agent.response";
         public const string AgentNotLogged = "node.agent.notLogged";

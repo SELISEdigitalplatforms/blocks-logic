@@ -100,15 +100,17 @@ namespace Workflow.DomainService.Nodes.ActionNotification
             var context = step.Context;
             var outputItems = new List<NodeOutputItem>();
             var queued = 0;
+            var usersIgnored = 0;
 
             for (int i = 0; i < context.IterationCount; i++)
             {
                 var inputItem = context.InputItems[i];
                 try
                 {
-                    var (item, wasQueued) = SendItem(step, inputItem);
+                    var (item, wasQueued, ignoredUsers) = SendItem(step, inputItem);
                     if (item is not null) outputItems.Add(item);
                     if (wasQueued) queued++;
+                    if (ignoredUsers) usersIgnored++;
                 }
                 catch (InvalidFilledJsonException ex)
                 {
@@ -127,6 +129,7 @@ namespace Workflow.DomainService.Nodes.ActionNotification
             }
 
             WarnOverRateLimit(step, queued);
+            WarnUsersIgnored(step, usersIgnored);
 
             // Counts only: never recipients, payloads or configuration names.
             context.Log.Info(ExecutionLogStages.NotificationFinished, "{Queued} of {Total} notification(s) queued.", queued, context.IterationCount);
@@ -138,11 +141,11 @@ namespace Workflow.DomainService.Nodes.ActionNotification
         /// Queues the notification for one item: its output item, or an error item saying why nothing was queued.
         /// Throws <see cref="InvalidFilledJsonException"/> when the payload is not JSON after filling.
         /// </summary>
-        private (NodeOutputItem? Item, bool Queued) SendItem(StepState step, WorkflowItemExecutionEntity inputItem)
+        private (NodeOutputItem? Item, bool Queued, bool UsersIgnored) SendItem(StepState step, WorkflowItemExecutionEntity inputItem)
         {
             var parameters = step.Parameters;
             var configuration = step.Configuration;
-            (NodeOutputItem?, bool) Error(string message) => (TryBuildErrorOutputItem(inputItem, step.ParametersDocument, message), false);
+            (NodeOutputItem?, bool, bool) Error(string message) => (TryBuildErrorOutputItem(inputItem, step.ParametersDocument, message), false, false);
 
             var payload = string.IsNullOrWhiteSpace(parameters.Payload)
                 ? "{}"
@@ -174,7 +177,7 @@ namespace Workflow.DomainService.Nodes.ActionNotification
                 Branch = "source",
                 ParentItemIds = new List<string> { inputItem.Id },
             };
-            return (item, !skipped);
+            return (item, !skipped, !skipped && userIds.Count > 0 && !UsesNamedUsers(configuration));
         }
 
         /// <summary>
@@ -203,6 +206,45 @@ namespace Workflow.DomainService.Nodes.ActionNotification
                     "{Count} notifications of one configuration in this step; its limit is {Limit} per minute, the rest are dropped.",
                     queued, limit);
             }
+        }
+
+        /// <summary>
+        /// User ids were set but the configuration does not use them (All users, or Targeted without "event owner"):
+        /// the editor hides the field for these, so this is a node saved before the configuration changed.
+        /// </summary>
+        private static void WarnUsersIgnored(StepState step, int items)
+        {
+            if (items > 0)
+            {
+                step.Context.Log.Warn(ExecutionLogStages.NotificationUsersIgnored,
+                    "{Count} item(s) named users, but the configuration picks its own recipients; the user ids were not used.",
+                    items);
+            }
+        }
+
+        /// <summary>
+        /// Whether the receivers depend on the named users, as the genesis resolver reads them: "Affected users only",
+        /// "Selected" with "also the named users", or any configuration that reaches console users.
+        /// </summary>
+        internal static bool UsesNamedUsers(NotificationConfiguration configuration)
+        {
+            if (configuration.Scope != NotificationScope.App)
+                return true;
+            var audience = configuration.EffectiveAudience();
+            return audience.Level == NotificationAudienceLevel.AffectedOnly
+                || (audience.Level == NotificationAudienceLevel.Selected && audience.AlsoNamedUsers);
+        }
+
+        /// <summary>The recipients in the words of the editor's picker.</summary>
+        internal static string RecipientsLabel(NotificationConfiguration configuration)
+        {
+            var audience = configuration.EffectiveAudience();
+            return audience.Level switch
+            {
+                NotificationAudienceLevel.AllUsers => "All users",
+                NotificationAudienceLevel.Selected => audience.AlsoNamedUsers ? "Targeted users + event owner" : "Targeted users",
+                _ => "Event owner only",
+            };
         }
 
         private static string? PayloadSizeError(string payload) =>
@@ -319,7 +361,7 @@ namespace Workflow.DomainService.Nodes.ActionNotification
                 { "Queued", !skipped },
                 { "NotificationId", request.Id.ToString() },
                 { "ConfigurationName", request.Name },
-                { "Recipients", configuration.EffectiveAudience().Level.ToString() },
+                { "Recipients", RecipientsLabel(configuration) },
                 { "Scope", configuration.Scope.ToString() },
                 { "Channels", new BsonDocument
                     {
@@ -329,6 +371,7 @@ namespace Workflow.DomainService.Nodes.ActionNotification
                     }
                 },
                 { "NamedUsers", request.NamedUserIds.Count },
+                { "NamedUsersUsed", request.NamedUserIds.Count > 0 && UsesNamedUsers(configuration) },
                 { "OrganizationId", request.OrganizationId ?? "" },
                 { "ResponseKey", request.ResponseKey ?? "" },
             };

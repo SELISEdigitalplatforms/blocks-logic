@@ -1,5 +1,6 @@
 import { NodeGuideActionNotification } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
+import type { AsyncFieldProps } from "../node-inspector/form-builder/form-field.types";
 import { getQueryClient } from "@/providers/query-provider";
 import { notificationConfigService } from "@blocks-workflow/services/notification-config.service";
 import { INotificationConfig, NotificationRecipients } from "../../models/notification-config";
@@ -50,6 +51,77 @@ export const configOptionDescription = (config: INotificationConfig) =>
     .join(" · ");
 
 const EXPRESSION_HINT = "Accepts expressions such as {{$json.userId}}.";
+const LIST_HINT = "An expression that gives a list adds every id in it.";
+const DEFAULT_ORG_HINT = "Empty means the default organization.";
+
+/** The picked configuration, from the cached list; undefined when it is not listed or the list cannot be loaded. */
+const findConfig = (tenantId: string, name: unknown): Promise<INotificationConfig | undefined> =>
+  typeof name === "string" && name
+    ? getConfigsCached(tenantId)
+        .then((configs) => configs.find((c) => c.name === name))
+        .catch(() => undefined)
+    : Promise.resolve(undefined);
+
+/**
+ * Organization ID for the picked configuration. Project users are always matched inside the send's
+ * organization; a configuration only for Console users does not use it.
+ */
+export const organizationIdProps = (config?: INotificationConfig): AsyncFieldProps => {
+  if (!config)
+    return {
+      hidden: false,
+      info: `Optional. Only users of this organization receive the notification. ${DEFAULT_ORG_HINT} ${EXPRESSION_HINT}`,
+    };
+  if (config.scope === "console") return { hidden: true };
+  const who = {
+    owner: "Only the users named below who belong to this organization receive it.",
+    all: "Every active user of this organization receives it.",
+    targeted: "The configuration's users, roles and permissions are matched inside this organization.",
+  }[config.recipients];
+  return { hidden: false, info: `Optional. ${who} ${DEFAULT_ORG_HINT} ${EXPRESSION_HINT}` };
+};
+
+/**
+ * User IDs for the picked configuration. The configuration decides who receives it; the ids are used only
+ * by "Event owner only", by "Targeted users + event owner" (added on top), and to find Console users.
+ * Anywhere else the server ignores them, so the field is hidden.
+ */
+export const userIdsProps = (config?: INotificationConfig): AsyncFieldProps => {
+  if (!config)
+    return {
+      hidden: false,
+      required: false,
+      info: `Optional. The users the event is about. Whether they receive it depends on the configuration. ${EXPRESSION_HINT} ${LIST_HINT}`,
+    };
+
+  const parts: string[] = [];
+  let required = false;
+  if (config.scope !== "console") {
+    if (config.recipients === "owner") {
+      required = true;
+      parts.push("The configuration sends only to these users.");
+    } else if (config.recipients === "targeted" && config.alsoNamedUsers) {
+      parts.push("Added to the users the configuration picks.");
+    }
+  }
+  if (config.scope === "console") {
+    required = true;
+    parts.push("The Blocks Console users to notify; only those with access to this project receive it.");
+  } else if (config.scope === "both") {
+    parts.push("Blocks Console users among them with access to this project receive it too.");
+  }
+
+  if (parts.length === 0) return { hidden: true };
+  return { hidden: false, required, info: [...parts, EXPRESSION_HINT, LIST_HINT].join(" ") };
+};
+
+/** Loads the picked configuration and lays its rules over a field. Nothing picked: the field stays hidden. */
+const fromPickedConfig =
+  (rules: (config?: INotificationConfig) => AsyncFieldProps) =>
+  (data: Record<string, unknown>, ctx: { tenantId: string }): Promise<AsyncFieldProps> =>
+    data.ConfigurationName
+      ? findConfig(ctx.tenantId, data.ConfigurationName).then(rules)
+      : Promise.resolve({ hidden: true });
 
 export const NodeSchemaActionNotification: NodeSchemaDefinition = {
   guide: NodeGuideActionNotification,
@@ -77,20 +149,24 @@ export const NodeSchemaActionNotification: NodeSchemaDefinition = {
         id: "organizationId",
         type: "text",
         label: "Organization ID",
-        info: `Optional. All users and Targeted configurations count only users of this organization. Empty means the default organization. ${EXPRESSION_HINT}`,
+        info: organizationIdProps().info,
         key: "OrganizationId",
         placeholder: "default",
         hidden: (data) => !data.ConfigurationName,
+        asyncProps: fromPickedConfig(organizationIdProps),
+        asyncPropsDependencies: ["ConfigurationName"],
       },
       {
         id: "userIds",
         type: "expression-list",
         label: "User IDs",
-        info: `Optional. The users the event is about. Needed by Event owner only and Console users configurations. ${EXPRESSION_HINT} An expression that gives a list adds every id in it.`,
+        info: userIdsProps().info,
         key: "UserIds",
         placeholder: "User ID or {{ expression }}",
         addButtonText: "Add user",
         hidden: (data) => !data.ConfigurationName,
+        asyncProps: fromPickedConfig(userIdsProps),
+        asyncPropsDependencies: ["ConfigurationName"],
       },
       {
         id: "responseKey",

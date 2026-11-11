@@ -6,7 +6,12 @@ vi.mock("@blocks-workflow/services/notification-config.service", () => ({
   notificationConfigService: { fetchConfigurations },
 }));
 
-import { NodeSchemaActionNotification, clearNotificationConfigCache } from "./node-schema-action-notification";
+import {
+  NodeSchemaActionNotification,
+  clearNotificationConfigCache,
+  organizationIdProps,
+  userIdsProps,
+} from "./node-schema-action-notification";
 import { INotificationConfig } from "../../models/notification-config";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -94,6 +99,52 @@ describe("action notification v2", () => {
       expect(field(key).hidden({ ConfigurationName: "x" })).toBe(false);
       expect(field(key).required).toBeFalsy();
     }
+  });
+
+  describe("fields follow the picked configuration", () => {
+    it.each([
+      ["owner", false, "project", { hidden: false, required: true }, /sends only to these users/],
+      ["all", false, "project", { hidden: true }, null],
+      ["targeted", false, "project", { hidden: true }, null],
+      ["targeted", true, "project", { hidden: false, required: false }, /Added to the users the configuration picks/],
+      ["all", false, "console", { hidden: false, required: true }, /Blocks Console users to notify/],
+      ["all", false, "both", { hidden: false, required: false }, /Console users among them/],
+      ["owner", false, "both", { hidden: false, required: true }, /sends only to these users.*Console users among them/],
+    ] as const)("User IDs for %s (also named: %s, scope %s)", (recipients, alsoNamedUsers, scope, expected, info) => {
+      const props = userIdsProps(config({ recipients, alsoNamedUsers, scope }));
+      expect(props).toMatchObject(expected);
+      if (info) expect(props.info).toMatch(info);
+    });
+
+    it("Organization ID is hidden only for Console-only configurations and says what it limits", () => {
+      expect(organizationIdProps(config({ scope: "console" }))).toEqual({ hidden: true });
+      expect(organizationIdProps(config({ recipients: "all" })).info).toMatch(/Every active user of this organization/);
+      expect(organizationIdProps(config({ recipients: "owner" })).info).toMatch(/users named below who belong/);
+      expect(organizationIdProps(config({ recipients: "targeted", scope: "both" })).info).toMatch(/matched inside this organization/);
+    });
+
+    it("an unknown configuration shows both fields with general help", () => {
+      expect(userIdsProps()).toMatchObject({ hidden: false, required: false });
+      expect(organizationIdProps()).toMatchObject({ hidden: false });
+    });
+
+    it("loads the picked configuration from the cached list", async () => {
+      fetchConfigurations.mockResolvedValue([config({ name: "everyone", recipients: "all" }), config()]);
+      const ctx = { tenantId: "t-1" } as never;
+
+      await expect(field("UserIds").asyncProps({ ConfigurationName: "everyone" }, ctx)).resolves.toEqual({ hidden: true });
+      await expect(field("UserIds").asyncProps({ ConfigurationName: "order-shipped" }, ctx)).resolves.toMatchObject({ required: true });
+      await expect(field("UserIds").asyncProps({ ConfigurationName: "" }, ctx)).resolves.toEqual({ hidden: true });
+      await expect(field("UserIds").asyncProps({ ConfigurationName: "gone" }, ctx)).resolves.toMatchObject({ hidden: false });
+      expect(fetchConfigurations).toHaveBeenCalledTimes(1);
+      expect(field("UserIds").asyncPropsDependencies).toEqual(["ConfigurationName"]);
+      expect(field("OrganizationId").asyncPropsDependencies).toEqual(["ConfigurationName"]);
+    });
+
+    it("shows both fields when the list cannot be loaded", async () => {
+      fetchConfigurations.mockRejectedValue(new Error("403"));
+      await expect(field("OrganizationId").asyncProps({ ConfigurationName: "x" }, cfg)).resolves.toMatchObject({ hidden: false });
+    });
   });
 
   it("saves the node as it is", () => {
