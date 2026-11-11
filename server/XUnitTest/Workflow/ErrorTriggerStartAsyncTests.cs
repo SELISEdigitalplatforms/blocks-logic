@@ -41,11 +41,13 @@ namespace XUnitTest.Workflow
             SetSnapshot(ErrorTriggerNode());
 
             _sut = new WorkflowExecutionService(
-                _workflows.Object, _executions.Object, _messages.Object,
-                NullLogger<WorkflowExecutionService>.Instance, Mock.Of<IWorkflowEngineService>(), _versions.Object,
-                Mock.Of<IWorkflowNotificationService>(), Mock.Of<IWorkflowAuthService>(), Mock.Of<IHttpContextAccessor>(),
-                Mock.Of<IDelegationGrantFactory>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>());
+                new WorkflowExecutionStores(_workflows.Object, _executions.Object, _versions.Object),
+                _messages.Object,
+                NullLogger<WorkflowExecutionService>.Instance,
+                Mock.Of<IWorkflowEngineService>(),
+                Mock.Of<IWorkflowNotificationService>(),
+                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
+                new WorkflowTriggerAccess(Mock.Of<IWorkflowAuthService>(), Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(), Mock.Of<IWebhookIntake>()));
         }
 
         private void SetSnapshot(params NodeEntity[] nodes) =>
