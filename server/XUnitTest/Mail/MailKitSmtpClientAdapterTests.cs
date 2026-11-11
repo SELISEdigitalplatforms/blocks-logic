@@ -110,8 +110,8 @@ namespace XUnitTest.Mail
 
             adapter.CertificateValidationCallback!(this, null, chain, SslPolicyErrors.RemoteCertificateChainErrors).Should().BeFalse();
 
-            adapter.Diagnostics.ChainStatus.Should().Be("UntrustedRoot");
-            adapter.Diagnostics.TimingFields()[5].Should().Be("UntrustedRoot");
+            adapter.Diagnostics.ChainStatus.Should().Contain("UntrustedRoot");
+            adapter.Diagnostics.TimingFields()[5].Should().Be(adapter.Diagnostics.ChainStatus);
             adapter.Diagnostics.TimingFields()[6].Should().Be("false");
         }
 

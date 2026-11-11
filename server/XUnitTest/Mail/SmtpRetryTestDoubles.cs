@@ -84,7 +84,7 @@ namespace XUnitTest.Mail
 
         private bool HasPendingTimer(TimeSpan remaining)
         {
-            lock (_gate) return _timers.Any(t => t.DueAt is { } due && due - _elapsed == remaining);
+            lock (_gate) return _timers.Exists(t => t.DueAt is { } due && due - _elapsed == remaining);
         }
 
         private void FireDueTimers()

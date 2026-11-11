@@ -91,29 +91,38 @@ namespace Mail.DomainService.Mails
 
         /// <summary>
         /// Resolves the host and tries each address in turn, as MailKit does, so one unreachable
-        /// address cannot fail a host that has a reachable one.
+        /// address cannot fail a host that has a reachable one. IPv6 addresses are skipped on a
+        /// host without IPv6, and the lookup itself is held to the attempt deadline.
         /// </summary>
         internal static async Task<Socket> OpenSocketAsync(string host, int port, CancellationToken cancellationToken)
         {
-            var addresses = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
+            var addresses = await Dns.GetHostAddressesAsync(host, cancellationToken)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
             SocketException? lastFailure = null;
 
             foreach (var address in addresses)
             {
-                var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                if (address.AddressFamily == AddressFamily.InterNetworkV6 && !Socket.OSSupportsIPv6)
+                {
+                    continue;
+                }
+
+                Socket? socket = null;
                 try
                 {
+                    socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
                     await socket.ConnectAsync(address, port, cancellationToken).ConfigureAwait(false);
                     return socket;
                 }
                 catch (SocketException ex)
                 {
-                    socket.Dispose();
+                    socket?.Dispose();
                     lastFailure = ex;
                 }
                 catch
                 {
-                    socket.Dispose();
+                    socket?.Dispose();
                     throw;
                 }
             }

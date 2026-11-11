@@ -166,7 +166,7 @@ namespace XUnitTest.Mail
         [Fact]
         public async Task Retry_SuccessfulAttempt_LogsItsTimings()
         {
-            // §1 / §10 step 6: every attempt logs its phase timings (D9: an Information line after login).
+            // §1 / §10 step 6: every attempt logs its phase timings; for Office 365 that is an Information line after login.
             var client = Scripted((_, _) => { });
 
             (await Run(client.SendAsync(AMail(), ABody()))).Should().BeTrue();
@@ -260,7 +260,8 @@ namespace XUnitTest.Mail
         [Fact]
         public async Task Retry_WarningCarriesNoProviderText()
         {
-            // C7: type and code only, like Office365FailureLog.
+            // C7: the rendered Warning carries type and code only. The exception is passed to the logger as
+            // an exception, as Office365FailureLog does, so the sink's sanitization applies to it.
             var client = Scripted((n, s) =>
             {
                 if (n == 1) s.FailConnect = new SmtpProtocolException("provider says: mailbox support@contoso.com is busy");
