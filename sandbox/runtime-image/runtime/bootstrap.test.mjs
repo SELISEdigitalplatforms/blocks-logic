@@ -253,6 +253,25 @@ describe('bootstrap end to end', () => {
     assert.deepEqual(r.result.value, { echoed: '123' });
   });
 
+  test('runs an envelope under the 2 MB input ceiling', async () => {
+    const blob = 'x'.repeat(1.5 * 1024 * 1024);
+    const r = await runBootstrap('export default async (input) => ({ size: input.blob.length });',
+      { ...BASE_ENVELOPE, input: { blob } });
+    assert.equal(r.code, EXIT.OK);
+    assert.equal(r.result.ok, true);
+    assert.deepEqual(r.result.value, { size: blob.length });
+  });
+
+  test('refuses an envelope over the 2 MB input ceiling before the function runs', async () => {
+    const blob = 'x'.repeat(2 * 1024 * 1024 + 64 * 1024);
+    const r = await runBootstrap('export default async () => ({ ran: true });',
+      { ...BASE_ENVELOPE, input: { blob } });
+    assert.equal(r.code, EXIT.BOOTSTRAP_ERROR);
+    assert.equal(r.result.ok, false);
+    assert.equal(r.result.code, CODE.RUNTIME_START_FAILED);
+    assert.match(r.result.message ?? r.result.error?.message ?? '', /2 MB input ceiling/);
+  });
+
   test('exposes a frozen ctx built from the envelope', async () => {
     const r = await runBootstrap(`export default async (input, ctx) => ({
       tenantId: ctx.context.tenantId,

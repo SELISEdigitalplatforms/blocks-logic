@@ -208,8 +208,8 @@ async function main() {
   let envelope;
   try {
     const raw = readFileSync(ENVELOPE_PATH, 'utf8');
-    if (Buffer.byteLength(raw, 'utf8') > 1024 * 1024) {
-      throw new EnvelopeError('envelope exceeds the 1 MB input ceiling');
+    if (Buffer.byteLength(raw, 'utf8') > 2 * 1024 * 1024) {
+      throw new EnvelopeError('envelope exceeds the 2 MB input ceiling');
     }
     envelope = parseEnvelope(raw);
   } catch (err) {
