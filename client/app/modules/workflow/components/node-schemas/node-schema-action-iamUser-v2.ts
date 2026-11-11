@@ -1,4 +1,4 @@
-import { tStatic } from "@seliseblocks/genesis-os";
+import { getRuntimeEnv, tStatic } from "@seliseblocks/genesis-os";
 import { NodeGuideActionIamUserV2 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import type {
@@ -64,12 +64,16 @@ export const iamUserOperationDefaults = (): Record<string, unknown> => ({
   roleMode: "add",
 });
 
-/** §6 defaults of the whole node. No base URL: IAM's address is a server setting. */
+/**
+ * §6 defaults of the whole node. `apiBaseUrl` is stamped by `transform` from `BLOCKS_IAM_BASE_URL`, as the
+ * Data Action node does with `BLOCKS_DATA_BASE_URL`; the server falls back to its `IamBaseUrl` setting.
+ */
 const iamUserDefaults = (): Record<string, unknown> => ({
   authenticationType: "clientCredential",
   clientId: "",
   operation: "getUsers",
   ...iamUserOperationDefaults(),
+  apiBaseUrl: "",
 });
 
 /**
@@ -330,11 +334,14 @@ export const NodeSchemaActionIamUserV2: NodeSchemaDefinition = {
     parameters: iamUserDefaults(),
     settings: {},
   },
-  // Identity apart from copying lists, so new nodes never share the defaults' arrays; nothing is stamped.
+  // Copies lists, so new nodes never share the defaults' arrays, and stamps IAM's base URL.
   transform: (node) => ({
     ...node,
-    parameters: Object.fromEntries(
-      Object.entries(node.parameters ?? {}).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]),
-    ),
+    parameters: {
+      ...Object.fromEntries(
+        Object.entries(node.parameters ?? {}).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]),
+      ),
+      apiBaseUrl: getRuntimeEnv("BLOCKS_IAM_BASE_URL") || "",
+    },
   }),
 };

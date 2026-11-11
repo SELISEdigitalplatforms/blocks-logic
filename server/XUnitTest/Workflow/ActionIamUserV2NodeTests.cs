@@ -154,7 +154,6 @@ namespace XUnitTest.Workflow
                 { "email", "{{$json.email}}" },
                 { "roles", new BsonArray { "editor" } },
                 { "organizationId", "org1" },
-                { "apiBaseUrl", "https://evil.example" }, // ignored (C15)
             });
 
             var result = await Run(parameters, new BsonDocument("email", "a@x.io"));
@@ -632,7 +631,37 @@ namespace XUnitTest.Workflow
 
             var output = SingleOutput(result);
             AssertError(output, "invalid_configuration");
-            output["message"].AsString.Should().Be("IAM base URL is not configured on the server.");
+            output["message"].AsString.Should().Be("IAM base URL is not configured (node or server).");
+            _iam.Requests.Should().BeEmpty();
+            AssertNoTokenRequested();
+        }
+
+        [Fact]
+        public async Task NodeApiBaseUrl_TakesPrecedenceOverTheServerSetting()
+        {
+            _iam.Enqueue(HttpStatusCode.OK, """{"data":[],"totalCount":0}""");
+
+            await Run(Params("getUsers", new BsonDocument { { "apiBaseUrl", "https://node-iam.test.local/" } }));
+
+            _iam.Requests.Single().Uri.Should().Be("https://node-iam.test.local/api/iam/users");
+        }
+
+        [Fact]
+        public async Task BlankNodeApiBaseUrl_FallsBackToTheServerSetting()
+        {
+            _iam.Enqueue(HttpStatusCode.OK, """{"data":[],"totalCount":0}""");
+
+            await Run(Params("getUsers", new BsonDocument { { "apiBaseUrl", "  " } }));
+
+            _iam.Requests.Single().Uri.Should().Be($"{BaseUrl}/api/iam/users");
+        }
+
+        [Fact]
+        public async Task UnusableNodeApiBaseUrl_FailsEveryItem_WithoutFallingBack()
+        {
+            var result = await Run(Params("getUsers", new BsonDocument { { "apiBaseUrl", "ftp://node-iam.test.local" } }));
+
+            AssertError(SingleOutput(result), "invalid_configuration");
             _iam.Requests.Should().BeEmpty();
             AssertNoTokenRequested();
         }

@@ -53,7 +53,7 @@ vi.mock("@/modules/proxy/services/proxy.service", () => ({
   proxyService: { getAll: getProxies, get: getProxy },
 }));
 
-import { useProjectStore } from "@seliseblocks/genesis-os";
+import { getRuntimeEnv, useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemasDefinition } from "./node-schemas";
 import { NodeSchemaTriggerWebhookV1 } from "./node-schema-trigger-webhook-v1";
 import { NodeSchemaTriggerEmailV1 } from "./node-schema-trigger-email-v1";
@@ -1219,12 +1219,11 @@ describe("action/iamUser v2 (logic#424)", () => {
     accountStates: [], filterRoles: [], page: 0, pageSize: 10, roleMode: "add",
   };
 
-  it("H1/H2: a v2-only action schema with the §6 defaults and no base URL", () => {
+  it("H1/H2: a v2-only action schema with the §6 defaults and a blank base URL", () => {
     expect(schema.schema).toMatchObject({ type: "iamUser", category: "action", version: "v2", settings: [] });
     expect(schema.defaults.parameters).toEqual({
-      authenticationType: "clientCredential", clientId: "", operation: "getUsers", ...OPERATION_DEFAULTS,
+      authenticationType: "clientCredential", clientId: "", operation: "getUsers", ...OPERATION_DEFAULTS, apiBaseUrl: "",
     });
-    expect(schema.defaults.parameters).not.toHaveProperty("apiBaseUrl");
     expect(schema.guide).toBe(NodeGuideActionIamUserV2);
     expect(schema.schema.parameters.map((f) => [f.key, f.type])).toEqual([
       ["authenticationType", "select"],
@@ -1246,14 +1245,15 @@ describe("action/iamUser v2 (logic#424)", () => {
     );
   });
 
-  it("H1/D6: transform stamps nothing and gives each new node its own lists", () => {
+  it("H1/D6: transform stamps the IAM base URL and gives each new node its own lists", () => {
     const base = { id: "n", position: { x: 0, y: 0 }, data: {}, parameters: schema.defaults.parameters } as never;
     const a = schema.transform!(base);
     const b = schema.transform!(base);
-    expect(a.parameters).toEqual(schema.defaults.parameters);
+    const iamBaseUrl = getRuntimeEnv("BLOCKS_IAM_BASE_URL") || "";
+    expect(a.parameters).toEqual({ ...schema.defaults.parameters, apiBaseUrl: iamBaseUrl });
     expect((a.parameters as AnyRec).roles).not.toBe((b.parameters as AnyRec).roles);
     expect((a.parameters as AnyRec).roles).not.toBe(schema.defaults.parameters.roles);
-    expect(schema.transform!({ id: "x" } as never)).toEqual({ id: "x", parameters: {} });
+    expect(schema.transform!({ id: "x" } as never)).toEqual({ id: "x", parameters: { apiBaseUrl: iamBaseUrl } });
   });
 
   it("C1: authentication offers Client Credential and Blocks Authentication only, no None", () => {

@@ -21,8 +21,9 @@ namespace Workflow.DomainService.Nodes.ActionIamUserV2
     /// <list type="bullet">
     /// <item>Each input item is one IAM call (two for Assign Roles › Add, plus one organization-settings read
     /// per run for a blank-organization Create), sent one at a time. Get Users emits one item per user.</item>
-    /// <item>Every call carries a bearer token (Client Credential or the run's delegated token) and goes only to
-    /// the server setting <c>IamBaseUrl</c>, through the <see cref="HttpClientName"/> client, which follows no
+    /// <item>Every call carries a bearer token (Client Credential or the run's delegated token) and goes to the
+    /// node's <c>ApiBaseUrl</c> (stamped by the editor from <c>BLOCKS_IAM_BASE_URL</c>), or the server setting
+    /// <c>IamBaseUrl</c> when that is blank, through the <see cref="HttpClientName"/> client, which follows no
     /// redirect. The token is requested lazily, at most once per run, plus one Client Credential refresh after
     /// a 401.</item>
     /// <item>A failed item becomes an error item and the remaining items still run; the node fails only when its
@@ -36,7 +37,7 @@ namespace Workflow.DomainService.Nodes.ActionIamUserV2
         /// <summary>Named HTTP client: 30 s, no redirects, no cookies, no request logging (it would log the URL).</summary>
         public const string HttpClientName = "IamUserNode";
 
-        /// <summary>Server setting holding IAM's absolute http/https base URL.</summary>
+        /// <summary>Server setting holding IAM's absolute http/https base URL; used when the node's own is blank.</summary>
         public const string BaseUrlSetting = "IamBaseUrl";
 
         /// <summary>Per IAM call, over the response headers and the capped body read.</summary>
@@ -124,7 +125,7 @@ namespace Workflow.DomainService.Nodes.ActionIamUserV2
             var outputItems = new List<NodeOutputItem>();
             if (total == 0) return NodeExecutionResult.Successful(outputItems);
 
-            var run = new IamRun(context, parameters, PerItemRequestLog.ForIamUser(context.Log, total), ReadBaseUrl());
+            var run = new IamRun(context, parameters, PerItemRequestLog.ForIamUser(context.Log, total), ReadBaseUrl(parameters));
             var failed = 0;
             for (var index = 0; index < total; index++)
             {
@@ -175,10 +176,17 @@ namespace Workflow.DomainService.Nodes.ActionIamUserV2
 
         // ---- configuration and fields -----------------------------------------------------------------
 
-        /// <summary>The trimmed base URL without a trailing '/', or null when it is not a usable absolute URL.</summary>
-        private string? ReadBaseUrl()
+        /// <summary>
+        /// The node's <c>ApiBaseUrl</c>, or the <see cref="BaseUrlSetting"/> setting when that is blank (as the
+        /// Data Action node resolves its own), trimmed without a trailing '/'; null when it is not a usable
+        /// absolute URL.
+        /// </summary>
+        private string? ReadBaseUrl(ActionIamUserV2Parameters parameters)
         {
-            var raw = (_configuration[BaseUrlSetting] ?? string.Empty).Trim().TrimEnd('/');
+            var source = string.IsNullOrWhiteSpace(parameters.ApiBaseUrl)
+                ? _configuration[BaseUrlSetting]
+                : parameters.ApiBaseUrl;
+            var raw = (source ?? string.Empty).Trim().TrimEnd('/');
             if (raw.Length == 0 || raw.Contains('?', StringComparison.Ordinal) || raw.Contains('#', StringComparison.Ordinal)) return null;
             if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri)) return null;
             var httpScheme = uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps;
@@ -195,7 +203,7 @@ namespace Workflow.DomainService.Nodes.ActionIamUserV2
             }
 
             if (run.BaseUrl is null)
-                throw new IamItemException(new IamFailure("invalid_configuration", "IAM base URL is not configured on the server."));
+                throw new IamItemException(new IamFailure("invalid_configuration", "IAM base URL is not configured (node or server)."));
         }
 
         /// <summary>Resolves only the keys the operation uses, then applies the field rules (C5, C23).</summary>

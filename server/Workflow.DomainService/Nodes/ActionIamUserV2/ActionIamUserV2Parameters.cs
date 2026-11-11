@@ -41,10 +41,16 @@ namespace Workflow.DomainService.Nodes.ActionIamUserV2
     /// Saved parameters of the IAM User node (v2). Text keys are expressions resolved per item. The list,
     /// switch and number keys are <see cref="JToken"/>: a JSON value is a literal, a JSON string is an
     /// expression resolved per item to that type; <c>null</c>, a blank string or a missing key means the
-    /// default. There is no base URL parameter: IAM's address is the server setting <c>IamBaseUrl</c>.
+    /// default. IAM's address is <see cref="ApiBaseUrl"/>, falling back to the server setting <c>IamBaseUrl</c>.
     /// </summary>
     public class ActionIamUserV2Parameters
     {
+        /// <summary>
+        /// Base URL of blocks-iam, injected by the editor's transform from <c>BLOCKS_IAM_BASE_URL</c> (as the
+        /// Data Action node does with <c>BLOCKS_DATA_BASE_URL</c>). Blank: the server setting <c>IamBaseUrl</c>.
+        /// </summary>
+        public string ApiBaseUrl { get; set; } = string.Empty;
+
         public IamUserAuthenticationType AuthenticationType { get; set; } = IamUserAuthenticationType.ClientCredential;
 
         /// <summary>Client Credential only: the credential's id. The secret is never stored on the node.</summary>
