@@ -185,7 +185,7 @@ export const NodeSchemaTriggerDataGatewayV1: NodeSchemaDefinition = {
   ...documentFields
 }
 \`\`\`
-Document fields are populated from the selected collection schema. For Update operations, an \`UpdatedFields\` array is included instead of document fields.`;
+${tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_DATA_GATEWAY_V1.DOCUMENT_FIELDS_ARE_POPULATED")}`;
         },
       },
     ],

@@ -1,5 +1,8 @@
 import type { Edge } from "@xyflow/react";
 import type { NodeHandle } from "../models/node.model";
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_WORKFLOW_MODULE = "logic.workflow";
 
 /** Stable output key prefix; the server accepts `^switch-handle-source-[a-z0-9]{6}$`. */
 export const SWITCH_KEY_PREFIX = "switch-handle-source-";
@@ -88,7 +91,7 @@ export const switchHandleLabel = (handle: NodeHandle | null | undefined, key: st
   if (index < 0) return "";
   const label = sources[index].label;
   if (label) return label;
-  return key === SWITCH_FALLBACK_KEY ? "Fallback" : String(index);
+  return key === SWITCH_FALLBACK_KEY ? tStatic(LOGIC_WORKFLOW_MODULE, "SWITCH_HANDLES.FALLBACK") : String(index);
 };
 
 export const newSwitchRule = (used: Iterable<string>): SwitchRule => ({

@@ -162,11 +162,19 @@ export const ConnectionsCard = ({
     );
     const parts = [
       result.addedPackage
-        ? `Added ${preset.packageName}@${result.version}${
-            resolved?.source === "fallback" ? " (npm was unreachable, so the tested version)" : ""
-          }.`
-        : `${preset.packageName} was already listed (${result.existingVersion}) and was left as is.`,
-      result.addedKeys.length > 0 ? `Added ${result.addedKeys.join(", ")}.` : null,
+        ? t(
+            resolved?.source === "fallback"
+              ? "CONNECTIONS_CARD.ADDED_PACKAGE_NPM_UNREACHABLE"
+              : "CONNECTIONS_CARD.ADDED_PACKAGE",
+            { packageName: preset.packageName, version: result.version },
+          )
+        : t("CONNECTIONS_CARD.WAS_ALREADY_LISTED", {
+            packageName: preset.packageName,
+            version: String(result.existingVersion),
+          }),
+      result.addedKeys.length > 0
+        ? t("CONNECTIONS_CARD.ADDED_KEYS", { value: result.addedKeys.join(", ") })
+        : null,
       result.filledKeys.length > 0
         ? t("CONNECTIONS_CARD.FILLED_IN", { value: result.filledKeys.join(", ") })
         : null,

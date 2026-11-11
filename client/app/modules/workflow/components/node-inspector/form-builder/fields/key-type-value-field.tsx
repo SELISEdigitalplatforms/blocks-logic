@@ -134,7 +134,7 @@ export const KeyTypeValueField = ({
                 variablePicker={
                   showsVariablePicker(field, readOnly, variablePicker)
                     ? {
-                        target: pickerTarget(field, `row ${index + 1} key`),
+                        target: pickerTarget(field, t("KEY_TYPE_VALUE_FIELD.ROW_KEY", { value: index + 1 })),
                         onChange: (next) => handleKeyChange(index, next),
                       }
                     : null

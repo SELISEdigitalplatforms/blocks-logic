@@ -59,7 +59,7 @@ export const ProxyResilienceCard = ({ control }: Props) => {
 
         <ProxyResilienceFields
           idPrefix="proxy-resilience"
-          subject="this proxy"
+          subject={t("PROXY_RESILIENCE_CARD.THIS_PROXY")}
           value={field.value ?? null}
           onChange={field.onChange}
           errors={flattenResilienceErrors(fieldState.error)}

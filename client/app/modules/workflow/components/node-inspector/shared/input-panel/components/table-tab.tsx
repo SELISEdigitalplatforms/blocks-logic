@@ -84,7 +84,7 @@ export function TableTab({
     return <p className="text-xs text-low-emphasis">{t("TABLE_TAB.NO_RUNTIME_INPUT_DATA")}</p>;
   }
 
-  const primitiveColumn = "(value)";
+  const primitiveColumn = t("JSON_TAB.VALUE");
   const hasPrimitiveRows = rows.some((row) => typeof row !== "object" || row === null);
   const objectColumns = Array.from(
     rows.reduce<Set<string>>((acc, row) => {

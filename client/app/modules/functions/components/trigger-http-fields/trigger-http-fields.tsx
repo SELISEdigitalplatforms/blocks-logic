@@ -34,8 +34,18 @@ const AUTH_OPTIONS: Array<{ value: AuthMode; label: string }> = [
 ];
 
 const COMBINE_OPTIONS: Array<{ value: AccessCombine; label: string }> = [
-  { value: "Or", label: "OR" },
-  { value: "And", label: "AND" },
+  {
+    value: "Or",
+    get label() {
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.OR");
+    },
+  },
+  {
+    value: "And",
+    get label() {
+      return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TRIGGER_HTTP_CARD.AND");
+    },
+  },
 ];
 
 const RESPONSE_OPTIONS: Array<{ value: TriggerResponseMode; label: string }> = [

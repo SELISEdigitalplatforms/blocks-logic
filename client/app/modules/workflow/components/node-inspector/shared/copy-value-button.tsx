@@ -3,6 +3,7 @@ import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui-kits/button/button";
 import { cn } from "@/lib/utils";
 import { copyToClipboard } from "@blocks-workflow/utils/copy-to-clipboard";
+import { useT } from "@seliseblocks/genesis-os";
 
 const COPIED_RESET_MS = 1500;
 
@@ -18,6 +19,7 @@ type CopyValueButtonProps = Readonly<{
  * icon so it can be clicked again.
  */
 export function CopyValueButton({ value, label, className, iconClassName = "h-4 w-4" }: CopyValueButtonProps) {
+  const { t } = useT("logic.workflow.nodes.inspector");
   const [copied, setCopied] = useState(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -31,7 +33,7 @@ export function CopyValueButton({ value, label, className, iconClassName = "h-4 
     resetTimer.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
   };
 
-  const title = copied ? "Copied" : label;
+  const title = copied ? t("COPY_VALUE_BUTTON.COPIED") : label;
 
   return (
     <Button

@@ -40,8 +40,9 @@ const MODES: { value: CallMode; label: string }[] = [
 const LABEL_CLASS = "text-xs font-medium uppercase tracking-wide text-medium-emphasis";
 const NOTE_CLASS = "text-xs leading-relaxed text-medium-emphasis";
 
-const SSE_RESPONSE = [
-  "200 OK · live updates",
+/** The sample replies are code; only their short prose notes go through translation. */
+const sseResponse = () => [
+  `200 OK · ${tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "INVOKE_SNIPPET_CARD.SSE_STATUS_NOTE")}`,
   "event: run",
   'data: { "runId": "run_7f21c4" }',
   "",
@@ -82,19 +83,20 @@ const CopyButton = ({ text, label }: { text: string; label?: string }) => {
 };
 
 const ASYNC_RESPONSE = '202 Accepted\n{ "runId": "run_7f21c4", "status": "QUEUED" }';
-const SYNC_RESPONSE = '200 OK\n{ "ok": true }   ← what your function returned';
+const syncResponse = () =>
+  `200 OK\n{ "ok": true }   ${tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "INVOKE_SNIPPET_CARD.SYNC_RESULT_NOTE")}`;
 
 /** What the caller gets back, and one plain line about it, for the response mode in play. */
 const callerResponse = (isSse: boolean, isSync: boolean) => {
   if (isSse) {
     return {
-      text: SSE_RESPONSE,
+      text: sseResponse(),
       help: tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "INVOKE_SNIPPET_CARD.HELP_LIVE"),
     };
   }
   if (isSync) {
     return {
-      text: SYNC_RESPONSE,
+      text: syncResponse(),
       help: tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "INVOKE_SNIPPET_CARD.HELP_RESULT"),
     };
   }

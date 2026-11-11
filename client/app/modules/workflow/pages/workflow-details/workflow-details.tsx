@@ -216,7 +216,7 @@ export const WorkflowDetailsContent = ({ workflowId }: WorkflowDetailPageProps) 
                       </span>
                     )}
                     {!isSaving && data?.data?.lastUpdatedDate && (
-                      `Last saved: ${format(new Date(data.data.lastUpdatedDate), "dd/MM/yyyy, hh:mm a")}`
+                      t("WORKFLOW_DETAILS.LAST_SAVED", { value: format(new Date(data.data.lastUpdatedDate), "dd/MM/yyyy, hh:mm a") })
                     )}
                     {!isSaving && !data?.data?.lastUpdatedDate && (
                       t("WORKFLOW_DETAILS.NOT_SAVED_YET")
