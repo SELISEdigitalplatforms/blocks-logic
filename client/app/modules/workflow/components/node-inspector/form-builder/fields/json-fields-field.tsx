@@ -185,9 +185,9 @@ const OneLineInput = ({
   return (
     <span
       className={cn("inline-block min-w-0 max-w-full align-middle", className)}
-      style={{ width: `calc(${longestLine + 1}ch + ${picker ? "2.75rem" : "0.5rem"})` }}
+      style={{ width: `calc(${longestLine + 1}ch + ${picker ? "2rem" : "0.5rem"})` }}
     >
-      <ExpressionHighlighter value={value} isMultiline variablePicker={picker}>
+      <ExpressionHighlighter value={value} isMultiline variablePicker={picker} compact>
         <textarea
           id={id}
           data-json-value="text"

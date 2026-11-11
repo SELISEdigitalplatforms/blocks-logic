@@ -168,6 +168,7 @@ export const ExpressionHighlighter = ({
   disableHighlighting = false,
   variablePicker,
   trailingAction,
+  compact = false,
 }: {
   children: React.ReactElement<ChildProps>;
   value: string;
@@ -185,6 +186,11 @@ export const ExpressionHighlighter = ({
    * so the two never stack in the same corner. It controls its own visibility.
    */
   trailingAction?: React.ReactNode;
+  /**
+   * For a one-line control shorter than the key button (e.g. a json-fields row, 24px): the key
+   * button shrinks to 20px and is centred vertically, so it stays inside the line. Off by default.
+   */
+  compact?: boolean;
 }) => {
   const { nodes } = useWorkflow();
   const backdropRef = useRef<HTMLDivElement | null>(null);
@@ -290,8 +296,9 @@ export const ExpressionHighlighter = ({
     picker || trailingAction ? (
       <div
         className={cn(
-          "absolute right-1 z-20 flex items-center gap-0.5",
-          isMultiline ? "top-1" : "top-1/2 -translate-y-1/2",
+          "absolute z-20 flex items-center gap-0.5",
+          compact ? "right-0.5" : "right-1",
+          isMultiline && !compact ? "top-1" : "top-1/2 -translate-y-1/2",
         )}
       >
         {picker && (
@@ -301,7 +308,12 @@ export const ExpressionHighlighter = ({
               pickerOpen && "opacity-100",
             )}
           >
-            <SecretPicker target={picker.target} onPick={insertToken} onOpenChange={setPickerOpen} />
+            <SecretPicker
+              target={picker.target}
+              onPick={insertToken}
+              onOpenChange={setPickerOpen}
+              className={compact ? "h-5 w-5" : undefined}
+            />
           </div>
         )}
         {picker && trailingAction && <span className="h-4 w-px bg-border" aria-hidden="true" />}
@@ -319,7 +331,7 @@ export const ExpressionHighlighter = ({
     className: cn(
       children.props.className,
       "expression-highlighter-control relative z-10 caret-black dark:caret-white",
-      picker && trailingAction ? "pr-16" : (picker || trailingAction) && "pr-9",
+      picker && trailingAction ? "pr-16" : (picker || trailingAction) && (compact ? "pr-6" : "pr-9"),
     ),
     // Inline so it beats the control's own utility classes: the text is invisible, the
     // caret is not, and the coloured backdrop shows through.
