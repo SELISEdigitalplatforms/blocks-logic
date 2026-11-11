@@ -143,7 +143,9 @@ const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
   };
 
   if (!state) return null;
-  const versionSuffix = version ? ` as v${version}` : "";
+  const liveText = version
+    ? t("FUNCTION_IMPORT_DIALOG.IMPORTED_AND_LIVE_AS_V", { value: version })
+    : t("FUNCTION_IMPORT_DIALOG.IMPORTED_AND_LIVE");
 
   return (
     <div className="flex flex-col gap-2" data-testid="import-deploy">
@@ -153,7 +155,7 @@ const DeployProgress = ({ result }: { result: IFunctionImportResult }) => {
         {state === "failed" && <XCircle className="h-4 w-4 text-error" />}
         <span>
           {state === "building" && t("FUNCTION_IMPORT_DIALOG.IMPORTED_BUILDING_AND_DEPLOYING")}
-          {state === "live" && `Imported and live${versionSuffix}.`}
+          {state === "live" && liveText}
           {state === "failed" && t("FUNCTION_IMPORT_DIALOG.IMPORTED_BUT_THE_DEPLOY")}
         </span>
       </div>
@@ -296,7 +298,7 @@ export const FunctionImportDialog = ({ open, onOpenChange }: Props) => {
       const { status, message } = importErrorOf(failure);
       if (status === 409) {
         // Someone changed it meanwhile (or it is hidden / still being deleted): show the fresh state.
-        showErrorToast({ errors: `${message} The preview was refreshed.` });
+        showErrorToast({ errors: t("FUNCTION_IMPORT_DIALOG.THE_PREVIEW_WAS_REFRESHED", { value: message }) });
         await runPreview(file);
         return;
       }

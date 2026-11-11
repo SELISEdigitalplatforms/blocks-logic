@@ -18,4 +18,6 @@ export { ConditionsField } from "./conditions-field";
 export { ArrayField } from "./array-field";
 export { ExpressionInputField } from "./expression-input-field";
 export { TabWithTextField } from "./tab-with-text-field";
+export { JsonFieldsField } from "./json-fields-field";
+export { SearchableSelectField } from "./searchable-select-field";
 export * from "./fields";

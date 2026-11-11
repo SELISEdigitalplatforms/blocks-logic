@@ -31,6 +31,7 @@ import {
   MAX_RESPONSE_BODY_BYTES,
   overriddenKeys,
   parseRouteTemplate,
+  ProxyConfigSource,
   queryStringKeys,
   resolveEffectiveRoute,
 } from "../utils";
@@ -40,6 +41,8 @@ import { ReadonlyConfigRows } from "./readonly-config-rows";
 const LOGIC_PROXY_COMPONENTS_MODULE = "logic.proxy.components";
 
 const MB = 1024 * 1024;
+
+type Translate = ReturnType<typeof useT>["t"];
 
 type Props = {
   proxy: Proxy;
@@ -51,7 +54,15 @@ const BODY_METHODS: ProxyMethod[] = ["POST", "PUT", "PATCH"];
 /** Stable Select value for a route, which has no id of its own. */
 const routeKey = (route: ProxyRoute) => `${route.method} ${route.path}`;
 
-const routeLabel = (route: ProxyRoute) => (route.path ? `/${route.path}` : "/ (base path)");
+const routeLabel = (t: Translate, route: ProxyRoute) =>
+  route.path ? `/${route.path}` : t("PROXY_TEST_TAB.BASE_PATH");
+
+/** Badge text for where an injected header comes from; the source value itself stays the enum. */
+const sourceLabel = (t: Translate, source: ProxyConfigSource) => {
+  if (source === "connection") return t("PROXY_TEST_TAB.CONNECTION");
+  if (source === "method") return t("PROXY_TEST_TAB.METHOD_2");
+  return t("PROXY_TEST_TAB.ENDPOINT");
+};
 
 /** The routes the picker offers for a method. An empty allowlist means "base path only" server-side. */
 const routesFor = (proxy: Proxy, method: ProxyMethod): ProxyRoute[] =>
@@ -148,7 +159,6 @@ const statusClass = (status: number) => {
   return "text-green-700";
 };
 
-type Translate = ReturnType<typeof useT>["t"];
 
 /** Why the request cannot be sent yet, or null when it can. */
 const whyBlocked = (
@@ -355,7 +365,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
                   <SelectContent>
                     {routes.map((candidate) => (
                       <SelectItem key={routeKey(candidate)} value={routeKey(candidate)}>
-                        {routeLabel(candidate)}
+                        {routeLabel(t, candidate)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -405,7 +415,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
             <p className="text-xs text-muted-foreground">
               {t("PROXY_TEST_TAB.SENT_ALONGSIDE_THE_QUERY")}
             </p>
-            <OverrideNote keys={overriddenQuery} what="query string" />
+            <OverrideNote keys={overriddenQuery} what={t("PROXY_TEST_TAB.QUERY_STRING_2")} />
           </div>
 
           {sendsBody ? (
@@ -433,7 +443,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
                   {t("PROXY_TEST_TAB.MERGED_INTO_THIS_BODY")}
                 </p>
               ) : null}
-              <OverrideNote keys={overriddenBody} what="body" />
+              <OverrideNote keys={overriddenBody} what={t("PROXY_TEST_TAB.BODY")} />
             </div>
           ) : null}
 
@@ -441,7 +451,7 @@ export const ProxyTestTab = ({ proxy }: Props) => {
             <p className="text-sm font-medium">{t("PROXY_TEST_TAB.HEADERS_THE_PROXY_ADDS")}</p>
             <ReadonlyConfigRows
               label={t("PROXY_TEST_TAB.HEADERS_THE_PROXY_ADDS")}
-              rows={effective.headers.map((row) => ({ ...row, tag: row.source }))}
+              rows={effective.headers.map((row) => ({ ...row, tag: sourceLabel(t, row.source) }))}
               empty={t("PROXY_TEST_TAB.NO_HEADERS_ARE_ADDED")}
             />
             <p className="text-xs text-muted-foreground">

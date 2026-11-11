@@ -32,7 +32,9 @@ export type FormFieldType =
   | "callout-accordion-display"
   | "tab-with-text"
   | "readonly-details"
-  | "link";
+  | "link"
+  | "json-fields"
+  | "searchable-select";
 
 export interface SelectOption {
   value: string | number | boolean;
@@ -52,6 +54,56 @@ export interface SearchOptionsRequest {
 export interface SearchOptionsPage {
   options: SelectOption[];
   totalCount: number;
+}
+
+/** What a `json-fields` row edits: text, a list of text, a switch, a whole number or one of `options`. */
+export type JsonFieldKind = "text" | "list" | "bool" | "int" | "enum";
+
+/** A `// comment` line under a `json-fields` row, shown while `when(data)` is true (always without `when`). */
+export interface JsonFieldComment {
+  text: string;
+  /** Default "info". */
+  tone?: "info" | "warn";
+  when?: (data: Record<string, unknown>) => boolean;
+}
+
+/**
+ * One row of a `json-fields` block. It reads and writes the parameter `data[key]`. Its mode comes from
+ * the stored value's JSON type: a string in a list, bool or int row (or a non-option string in an enum
+ * row) is an `fx` expression.
+ */
+export interface JsonFieldRow {
+  /** Parameter key the row reads and writes. */
+  key: string;
+  /** Shown key; default `key`. */
+  label?: string;
+  kind: JsonFieldKind;
+  defaultValue: string | string[] | boolean | number;
+  /** Marker only; the server validates. */
+  required?: boolean;
+  /** Waits on the `// add:` line while empty. */
+  optional?: boolean;
+  info?: string;
+  /** `list` (picker) or `enum` (required for enum). */
+  options?: SelectOption[];
+  /** `list` only: server-side search and paging for the picker. */
+  searchOptions?: (
+    request: SearchOptionsRequest,
+    data: Record<string, unknown>,
+    config: FieldProps["config"],
+  ) => Promise<SearchOptionsPage>;
+  /** `list` only: parameter keys whose change clears the picker's loaded pages. */
+  optionsDependencies?: string[];
+  /** `list` only: Enter on typed text that matches no option adds that text. */
+  allowCustom?: boolean;
+  comment?: JsonFieldComment;
+}
+
+/** Rows shown nested under `"group": { … }`. Display only: its rows are flat parameter keys. */
+export interface JsonFieldGroup {
+  group: string;
+  info?: string;
+  rows: JsonFieldRow[];
 }
 
 /** One locked field of a `readonly-details` field: an ordinary field schema and the value it shows. */
@@ -255,6 +307,18 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
    * Default true; set false to hide it. Always hidden while the field is read-only or disabled.
    */
   variablePicker?: boolean;
+  /**
+   * `json-fields` only: the block's rows for the current parameters. `context` is what `rowsContext`
+   * resolved (`{}` until then or on failure).
+   */
+  rows?: (
+    data: Record<string, unknown>,
+    context: Record<string, unknown>,
+  ) => Array<JsonFieldRow | JsonFieldGroup>;
+  /** `json-fields` only: loaded once per mount and handed to `rows`. */
+  rowsContext?: (config: FieldProps["config"]) => Promise<Record<string, unknown>>;
+  /** `searchable-select` only: the text shown for a saved value that is not among the options. Default: the value. */
+  unmatchedLabel?: (value: string) => string;
 }
 
 export interface FieldProps<T = unknown> {
