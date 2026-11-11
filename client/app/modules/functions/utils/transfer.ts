@@ -6,7 +6,7 @@ const LOGIC_FUNCTIONS_MODULE = "logic.functions";
 /** The server's ceiling for an import (FunctionTransferCodec.MaxImportBytes): checked here first. */
 // The version as the file wrote it; an object is shown as JSON instead of "[object Object]".
 const describeSchemaVersion = (version: unknown): string => {
-  if (version == null) return "(none)";
+  if (version == null) return tStatic(LOGIC_FUNCTIONS_MODULE, "TRANSFER.NONE");
   if (typeof version === "string") return version;
   return JSON.stringify(version);
 };

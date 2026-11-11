@@ -86,7 +86,7 @@ export const ExpressionListField = ({
               variablePicker={
                 picker
                   ? {
-                      target: pickerTarget(field, `item ${index + 1}`),
+                      target: pickerTarget(field, t("EXPRESSION_LIST_FIELD.ITEM", { value: index + 1 })),
                       onChange: (next) => handleChange(index, next),
                     }
                   : null

@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui-kits/badge/badge";
+import { useT } from "@seliseblocks/genesis-os";
 import { ProxyKeyValue } from "../types";
 
 type Row = ProxyKeyValue & { tag?: string };
@@ -9,7 +10,7 @@ type Row = ProxyKeyValue & { tag?: string };
  */
 export const ReadonlyConfigRows = ({
   rows,
-  empty = "None",
+  empty,
   label,
 }: {
   rows: Row[];
@@ -17,7 +18,11 @@ export const ReadonlyConfigRows = ({
   /** Accessible name for the list. */
   label: string;
 }) => {
-  if (!rows.length) return <p className="text-xs text-muted-foreground">{empty}</p>;
+  const { t } = useT("logic.proxy.components");
+  if (!rows.length)
+    return (
+      <p className="text-xs text-muted-foreground">{empty ?? t("READONLY_CONFIG_ROWS.NONE")}</p>
+    );
 
   return (
     <ul aria-label={label} className="space-y-1">

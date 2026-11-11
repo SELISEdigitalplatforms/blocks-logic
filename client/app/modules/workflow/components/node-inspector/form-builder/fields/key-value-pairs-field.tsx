@@ -180,7 +180,7 @@ export const KeyValuePairsField = ({
               variablePicker={
                 showsVariablePicker(field, readOnly, variablePicker)
                   ? {
-                      target: pickerTarget(field, `row ${index + 1} key`),
+                      target: pickerTarget(field, t("KEY_VALUE_PAIRS_FIELD.ROW_KEY", { value: index + 1 })),
                       onChange: (next) => handleKeyChange(index, next),
                     }
                   : null

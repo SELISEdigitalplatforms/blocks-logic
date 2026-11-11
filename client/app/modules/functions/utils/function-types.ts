@@ -179,7 +179,7 @@ export const buildCtxCompletions = (envKeys: string[] = []) => {
     {
       label: "log",
       detail: "FunctionLogger",
-      documentation: "info / warn / error / debug — kept on the run.",
+      documentation: tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_TYPES.INFO_WARN_ERROR_DEBUG"),
     },
     { label: "run", detail: "FunctionRun", documentation: "id, version, attempt, invokedBy." },
     {
@@ -190,7 +190,7 @@ export const buildCtxCompletions = (envKeys: string[] = []) => {
     {
       label: "blocks",
       detail: "FunctionBlocksAccess",
-      documentation: "getAccessToken() — the caller's Blocks token, fetched on demand (await it), or undefined.",
+      documentation: tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_TYPES.GETACCESSTOKEN_THE_CALLER_S"),
     },
     {
       label: "waitUntil",
