@@ -93,8 +93,48 @@ export const useFormBuilder = ({
     dataRef.current = data;
   }, [data]);
 
+  // A `json-fields` field owns several parameter keys, so its value is a patch of them: each key is
+  // set, the field's side effects run as for any field, and dependent fields reset for every patched
+  // key. The field's own key is transient and never saved.
+  const handlePatch = useCallback(
+    (field: FieldSchema, value: unknown) => {
+      const patch =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? (value as Record<string, unknown>)
+          : {};
+      const patchedKeys = Object.keys(patch);
+      let updated = patchedKeys.reduce(
+        (current, key) => setValueByPath(current, key, patch[key]),
+        dataRef.current,
+      );
+
+      let sideEffectKeys: string[] = [];
+      if (field.onChange) {
+        const result = field.onChange(value, updated, config) || {};
+        if (result) {
+          sideEffectKeys = Object.keys(result);
+          updated = { ...updated, ...result };
+        }
+      }
+
+      for (const key of patchedKeys) {
+        updated = cascadeFieldResets(fields, key, updated, sideEffectKeys);
+      }
+
+      const persisted = stripTransientKeys(updated, fields);
+      dataRef.current = persisted;
+      onChange(persisted);
+    },
+    [fields, onChange, config],
+  );
+
   const handleChange = useCallback(
     (field: FieldSchema, value: unknown) => {
+      if (field.type === "json-fields") {
+        handlePatch(field, value);
+        return;
+      }
+
       let updated = setValueByPath(dataRef.current, field.key, value);
 
       // Run field-level side-effects (e.g., recalculate cronExpression)
@@ -113,7 +153,7 @@ export const useFormBuilder = ({
       dataRef.current = persisted;
       onChange(persisted);
     },
-    [fields, onChange, config],
+    [fields, onChange, config, handlePatch],
   );
 
   const visibleFields = useMemo(
