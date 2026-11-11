@@ -77,6 +77,12 @@ export interface IGetRolesPayload extends IListPagePayload {
   search?: string;
 }
 
+/** `GET /api/iam/organizations/config/admin`: a flat settings dictionary for the caller's tenant. */
+export interface IOrganizationConfig {
+  isMultiOrgEnabled: boolean;
+  [key: string]: unknown;
+}
+
 export interface IGetPermissionsPayload extends IListPagePayload {
   search?: string;
 }

@@ -180,7 +180,9 @@ const runMeta = (
   [
     run?.durationMs == null ? null : formatDuration(run.durationMs),
     run?.peakMemoryBytes == null ? null : formatMegabytes(run.peakMemoryBytes),
-    run?.versionNumber ? `v${run.versionNumber}` : null,
+    run?.versionNumber
+      ? tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "TEST_PANEL.V", { value: run.versionNumber })
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -190,7 +192,7 @@ const testButtonLabel = (
   t: Translate,
   state: { isActive: boolean; cooldownSeconds: number; hasRun: boolean },
 ) => {
-  if (state.isActive) return "Running…";
+  if (state.isActive) return t("TEST_PANEL.RUNNING");
   if (state.cooldownSeconds > 0) return t("TEST_PANEL.NEXT_TEST_IN_S", { cooldownSeconds: state.cooldownSeconds });
   if (state.hasRun) return t("TEST_PANEL.RUN_AGAIN");
   return t("TEST_PANEL.RUN_TEST");
@@ -535,7 +537,7 @@ export const TestPanel = ({ functionId, lastRunId, onOpenRun, onBeforeRun }: Tes
               const isCurrent = index === currentStep && currentStep < 4;
               const isFailed = index === 4 && failed;
               const finished = index === 4 && currentStep === 4;
-              const finalTitle = failed ? "Failed" : "Succeeded";
+              const finalTitle = failed ? t("TEST_PANEL.FAILED") : t("TEST_PANEL.SUCCEEDED");
               const title = finished ? finalTitle : step.title;
               return (
                 <li

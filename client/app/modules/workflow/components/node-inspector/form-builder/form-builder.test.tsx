@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test-utils/test-providers/render";
 import { FormBuilder } from "./form-builder";
 import type { FieldSchema } from "./form-field.types";
+import { FIELD_COMPONENTS_REGISTRY } from "./fields";
+import type { FieldComponentProps } from "./form-field.types";
 
 // Controlled wrapper so onChange updates flow back into the form.
 const Harness = ({
@@ -248,5 +250,142 @@ describe("FormBuilder", () => {
     await waitFor(() =>
       expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ first: true, second: true })),
     );
+  });
+});
+
+describe("FormBuilder json-fields patch path", () => {
+  const jsonFields = (extra: Partial<FieldSchema> = {}): FieldSchema => ({
+    id: "ops",
+    key: "fields",
+    type: "json-fields",
+    label: "Fields",
+    transient: true,
+    rows: () => [
+      { key: "email", kind: "text", defaultValue: "" },
+      { key: "roles", kind: "list", defaultValue: [], options: [{ value: "editor", label: "Editor" }] },
+    ],
+    ...extra,
+  });
+
+  it("H10: writes only the patched keys, resets dependants of each and never saves the field's key", () => {
+    const spy = vi.fn();
+    const sideEffect = vi.fn(() => ({ audit: "changed" }));
+    render(
+      [
+        jsonFields({ onChange: sideEffect }),
+        {
+          id: "confirm",
+          key: "confirm",
+          type: "text",
+          label: "Confirm",
+          defaultValue: "",
+          dependsOn: { key: "email", value: ["a@x.io", "b@x.io"], operator: "in" },
+        } as FieldSchema,
+      ],
+      { email: "a@x.io", confirm: "yes", roles: ["editor"], other: 1 },
+      spy,
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "email" }), { target: { value: "b@x.io" } });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toEqual({
+      email: "b@x.io",
+      confirm: "",
+      roles: ["editor"],
+      other: 1,
+      audit: "changed",
+    });
+    expect("fields" in spy.mock.calls[0][0]).toBe(false);
+    expect(sideEffect).toHaveBeenCalledWith(
+      { email: "b@x.io" },
+      expect.objectContaining({ email: "b@x.io" }),
+      expect.anything(),
+    );
+  });
+
+  it("H10: does not save the field's own key even when it is in the data", () => {
+    const spy = vi.fn();
+    render([jsonFields()], { fields: "stale", email: "" }, spy);
+    fireEvent.change(screen.getByRole("textbox", { name: "email" }), { target: { value: "x" } });
+    expect(spy.mock.calls[0][0]).toEqual({ email: "x" });
+  });
+
+  it("C9: the single-key path is unchanged for other fields next to a json-fields field", () => {
+    const spy = vi.fn();
+    render(
+      [jsonFields(), { id: "name", key: "name", type: "text", label: "Name" } as FieldSchema],
+      { email: "a" },
+      spy,
+    );
+    fireEvent.change(document.getElementById("name") as HTMLInputElement, { target: { value: "Ada" } });
+    expect(spy.mock.calls[0][0]).toEqual({ email: "a", name: "Ada" });
+  });
+
+  it("§5 / D2: a keystroke in a row renders each other field once, as any keystroke does today", () => {
+    const original = FIELD_COMPONENTS_REGISTRY.text;
+    const renders = vi.fn();
+    FIELD_COMPONENTS_REGISTRY.text = (props) => {
+      renders(props.field.key);
+      return original(props);
+    };
+    try {
+      render(
+        [jsonFields(), { id: "name", key: "name", type: "text", label: "Name" } as FieldSchema],
+        {},
+      );
+      renders.mockClear();
+      fireEvent.change(screen.getByRole("textbox", { name: "email" }), { target: { value: "a" } });
+      expect(renders).toHaveBeenCalledTimes(1);
+      renders.mockClear();
+      // The same cost as a keystroke in an ordinary field.
+      fireEvent.change(document.getElementById("name") as HTMLInputElement, { target: { value: "b" } });
+      expect(renders).toHaveBeenCalledTimes(1);
+    } finally {
+      FIELD_COMPONENTS_REGISTRY.text = original;
+    }
+  });
+
+  /** Swaps the json-fields component for a stub that sends `patch` on click. */
+  const withPatchStub = (patch: unknown, run: () => void) => {
+    const original = FIELD_COMPONENTS_REGISTRY["json-fields"];
+    FIELD_COMPONENTS_REGISTRY["json-fields"] = ({ onChange }: FieldComponentProps) => (
+      <button type="button" onClick={() => onChange(patch)}>
+        patch
+      </button>
+    );
+    try {
+      run();
+    } finally {
+      FIELD_COMPONENTS_REGISTRY["json-fields"] = original;
+    }
+  };
+
+  it("H10: resets the dependants of every key in a multi-key patch", () => {
+    const spy = vi.fn();
+    withPatchStub({ a: "2", b: "2" }, () => {
+      render(
+        [
+          jsonFields(),
+          { id: "x", key: "x", type: "text", label: "X", defaultValue: "", dependsOn: { key: "a", value: "2" } } as FieldSchema,
+          { id: "y", key: "y", type: "text", label: "Y", defaultValue: "", dependsOn: { key: "b", value: "2" } } as FieldSchema,
+        ],
+        { a: "1", b: "1", x: "kept?", y: "kept?" },
+        spy,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "patch" }));
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toEqual({ a: "2", b: "2", x: "", y: "" });
+  });
+
+  it("H10: an empty or non-object patch saves nothing", () => {
+    for (const patch of [{}, null, "text", ["a"]]) {
+      const spy = vi.fn();
+      withPatchStub(patch, () => {
+        const view = render([jsonFields()], { email: "a" }, spy);
+        fireEvent.click(screen.getByRole("button", { name: "patch" }));
+        view.unmount();
+      });
+      expect(spy).not.toHaveBeenCalled();
+    }
   });
 });

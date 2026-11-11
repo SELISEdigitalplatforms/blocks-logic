@@ -27,7 +27,7 @@ export const NodeSchemaTransformMergeV2: NodeSchemaDefinition = {
         id: "numberInputs",
         type: "number",
         get label() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.NUMBER_OF_INPUTS"); },
-        info: "2 to 10. Applies when you leave the field or press Enter. Lowering it removes the connections on the removed inputs.",
+        get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRANSFORM_MERGE_V2.2_TO_10_APPLIES"); },
         key: "numberInputs",
         min: MERGE_MIN_INPUTS,
         max: MERGE_MAX_INPUTS,

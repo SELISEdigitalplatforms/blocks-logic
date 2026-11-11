@@ -99,7 +99,7 @@ export const VersionsTable = ({
                     isActive ? "text-primary" : "text-foreground",
                   )}
                 >
-                  v{version.number}
+                  {t("VERSIONS_TABLE.V", { value: version.number })}
                 </code>
 
                 <div className="flex min-w-0 flex-col gap-0.5" role="cell">

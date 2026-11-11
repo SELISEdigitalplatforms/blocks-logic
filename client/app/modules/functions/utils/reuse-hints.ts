@@ -15,13 +15,11 @@ export type ReuseHint = {
 };
 
 export const REUSE_HINT_MESSAGES = {
-  interval:
-    "setInterval keeps running after the call ends, so the sandbox is replaced after it. Clear it before returning. For repeating work, use a scheduled workflow with a Function step.",
+  get interval() { return tStatic(LOGIC_FUNCTIONS_MODULE, "REUSE_HINTS.SETINTERVAL_KEEPS_RUNNING_AFTER"); },
   get unawaitedFetch() { return tStatic(LOGIC_FUNCTIONS_MODULE, "REUSE_HINTS.THIS_FETCH_IS_NOT"); },
   get moduleVariable() { return tStatic(LOGIC_FUNCTIONS_MODULE, "REUSE_HINTS.KEEPS_THIS_CALL_S"); },
   get listenerCtx() { return tStatic(LOGIC_FUNCTIONS_MODULE, "REUSE_HINTS.THIS_LISTENER_OUTLIVES_THE"); },
-  removedAccessToken:
-    "ctx.blocks.accessToken was removed. Use `await ctx.blocks.getAccessToken()` — the caller's token is now fetched only when your code asks for it.",
+  get removedAccessToken() { return tStatic(LOGIC_FUNCTIONS_MODULE, "REUSE_HINTS.CTX_BLOCKS_ACCESSTOKEN_WAS_REMOVED"); },
 } as const;
 
 /** The code part of a line: drops a trailing `// comment` (not inside a string — good enough here). */

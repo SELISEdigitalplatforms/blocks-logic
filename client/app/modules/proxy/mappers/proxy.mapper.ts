@@ -56,18 +56,18 @@ const toMethods = (value: string[] | null | undefined): ProxyMethod[] => {
 
 const HTTP_STATUS_TEXT: Record<number, string> = {
   200: "OK",
-  201: "Created",
-  202: "Accepted",
+  get 201() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.CREATED"); },
+  get 202() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.ACCEPTED"); },
   get 204() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.NO_CONTENT"); },
   get 301() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.MOVED_PERMANENTLY"); },
-  302: "Found",
+  get 302() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.FOUND"); },
   get 304() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.NOT_MODIFIED"); },
   get 400() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.BAD_REQUEST"); },
-  401: "Unauthorized",
-  403: "Forbidden",
+  get 401() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.UNAUTHORIZED"); },
+  get 403() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.FORBIDDEN"); },
   get 404() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.NOT_FOUND"); },
   get 405() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.METHOD_NOT_ALLOWED"); },
-  409: "Conflict",
+  get 409() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.CONFLICT"); },
   get 413() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.PAYLOAD_TOO_LARGE"); },
   get 429() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.TOO_MANY_REQUESTS"); },
   get 500() { return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.INTERNAL_SERVER_ERROR"); },
@@ -632,13 +632,13 @@ export const mapProxyTestResponseDtoToResponse = (
 const responseFilterMeta = (note: string | null | undefined): string | null => {
   switch (note) {
     case "Applied":
-      return "filter: applied";
+      return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.FILTER_APPLIED");
     case "EmptyResult":
-      return "filter: empty-result";
+      return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.FILTER_EMPTY_RESULT");
     case "WholePrimitive":
-      return "filter: whole-primitive";
+      return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.FILTER_WHOLE_PRIMITIVE");
     case "Failed":
-      return "filter: FAILED";
+      return tStatic(LOGIC_PROXY_MODULE, "PROXY_MAPPER.FILTER_FAILED");
     default:
       return null;
   }

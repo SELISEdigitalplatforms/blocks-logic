@@ -523,7 +523,9 @@ export const parseRouteTemplate = (
     if (!ROUTE_PARAM.test(segment))
       return {
         ok: false,
-        reason: `'${segment}' is not a valid parameter. Use {name} as a whole segment.`,
+        reason: tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.IS_NOT_A_VALID_PARAMETER", {
+          value: segment,
+        }),
       };
     const name = segment.slice(1, -1);
     if (params.includes(name))
@@ -865,7 +867,7 @@ export const buildProxyCurl = (
 
   const lines = [
     `curl -X ${log.method} ${shellQuote(url)}`,
-    `  -H ${shellQuote("x-blocks-key: <your x-blocks-key>")}`,
+    `  -H ${shellQuote(tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.X_BLOCKS_KEY_YOUR"))}`,
     `  -H ${shellQuote(tStatic(LOGIC_PROXY_MODULE, "PROXY_UTILS.AUTHORIZATION_BEARER_TOKEN_ISSUED"))}`,
   ];
 
