@@ -61,8 +61,10 @@ namespace Mail.DomainService.Mails.Office365
             var message = MailMessageComposer.Compose(mailToBeSent, mailBody);
             var maxAttempts = SmtpConnectRetryPolicy.MaxAttemptsFor(mailToBeSent);
 
-            for (var attempt = 1; ; attempt++)
+            var attempt = 0;
+            while (true)
             {
+                attempt++;
                 TimeSpan wait;
                 using (var client = CreateSmtpClient())
                 {

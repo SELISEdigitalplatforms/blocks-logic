@@ -21,6 +21,10 @@ namespace Mail.DomainService.Mails
         /// The structured-log fields appended to every attempt line, in the order
         /// <see cref="TimingFields"/> returns their values.
         /// </summary>
+        /// <remarks>
+        /// <c>attemptMs</c> runs from the attempt's start to the moment the line is logged, so on a
+        /// failure after login it includes the send; compare connect and login through the other fields.
+        /// </remarks>
         public const string TimingTemplate =
             "tcpMs={TcpMs} tlsToCertificateMs={TlsToCertificateMs} certificateToReadyMs={CertificateToReadyMs} authMs={AuthMs} attemptMs={AttemptMs} chainStatus={ChainStatus} certificateAccepted={CertificateAccepted}";
 
@@ -59,8 +63,10 @@ namespace Mail.DomainService.Mails
         /// <summary>The connect step finished: handshake, greeting and EHLO are done.</summary>
         public void MarkConnected() => _connected = _timeProvider.GetTimestamp();
 
+        /// <summary>The login starts.</summary>
         public void MarkAuthenticationStarted() => _authenticationStarted = _timeProvider.GetTimestamp();
 
+        /// <summary>The login succeeded.</summary>
         public void MarkAuthenticated() => _authenticated = _timeProvider.GetTimestamp();
 
         /// <summary>

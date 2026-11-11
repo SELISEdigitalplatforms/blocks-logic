@@ -181,8 +181,10 @@ namespace Mail.DomainService.Mails
                 configuration.EnableSSL ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable);
             var maxAttempts = SmtpConnectRetryPolicy.MaxAttemptsFor(mailToBeSent);
 
-            for (var attempt = 1; ; attempt++)
+            var attempt = 0;
+            while (true)
             {
+                attempt++;
                 TimeSpan wait;
                 using (var client = CreateSmtpClient())
                 {
