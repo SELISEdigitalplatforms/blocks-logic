@@ -149,7 +149,12 @@ namespace Workflow.DomainService.Services
 
         public static WebhookIntakeException TooLarge(string message) => new(413, "too_large", message);
         public static WebhookIntakeException Unsupported(string message) => new(415, "unsupported_type", message);
-        public static WebhookIntakeException BadRequest(string message) => new(400, "invalid_body", message);
+        public static WebhookIntakeException BadRequest(string message) => new(400, InvalidBodyKind, message);
+
+        /// <summary>A JSON body that cannot be parsed, decoded or stored; the cause is kept as the inner exception.</summary>
+        public static WebhookIntakeException InvalidJson(Exception inner) => new(400, InvalidBodyKind, "Body is not valid JSON", inner);
+
+        private const string InvalidBodyKind = "invalid_body";
 
         /// <summary>A file part or binary body sent to a webhook without an authenticated caller (SPEC10 K1, K2).</summary>
         public static WebhookIntakeException FilesNotAllowed() =>

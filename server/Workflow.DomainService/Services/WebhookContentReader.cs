@@ -69,7 +69,6 @@ namespace Workflow.DomainService.Services
         private const string OctetStream = "application/octet-stream";
         private const string MessageNonFileTooLarge = "Request body exceeds 5 MiB";
         private const string MessageFileRequestTooLarge = "Request body exceeds 50 MiB";
-        private const string MessageInvalidJson = "Body is not valid JSON";
         private const string MessageUnsupportedCharset = "Unsupported charset";
         private const int CopyBufferSize = 81920;
 
@@ -114,7 +113,7 @@ namespace Workflow.DomainService.Services
             }
             catch (JsonException ex)
             {
-                throw new WebhookIntakeException(400, "invalid_body", MessageInvalidJson, ex);
+                throw WebhookIntakeException.InvalidJson(ex);
             }
         }
 
@@ -480,7 +479,7 @@ namespace Workflow.DomainService.Services
             }
             catch (DecoderFallbackException ex)
             {
-                throw new WebhookIntakeException(400, "invalid_body", MessageInvalidJson, ex);
+                throw WebhookIntakeException.InvalidJson(ex);
             }
         }
 
@@ -496,7 +495,7 @@ namespace Workflow.DomainService.Services
             }
             catch (JsonException ex)
             {
-                throw new WebhookIntakeException(400, "invalid_body", MessageInvalidJson, ex);
+                throw WebhookIntakeException.InvalidJson(ex);
             }
         }
 
@@ -510,7 +509,7 @@ namespace Workflow.DomainService.Services
             catch (Exception ex) when (ex is FormatException or BsonSerializationException or InvalidOperationException)
             {
                 // e.g. a "$date"/"$oid" style key that Mongo's extended JSON reader rejects.
-                throw new WebhookIntakeException(400, "invalid_body", MessageInvalidJson, ex);
+                throw WebhookIntakeException.InvalidJson(ex);
             }
         }
 
