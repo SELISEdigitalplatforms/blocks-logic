@@ -43,7 +43,8 @@ const renderField = (
   return { ...view, onChange, rerender };
 };
 
-const trigger = () => screen.getByRole("combobox");
+// The trigger is a button; Radix's popover trigger gives it aria-expanded and aria-controls.
+const trigger = () => document.getElementById("credential") as HTMLButtonElement;
 const WARNING = "This item is not in the list. It may be inactive, deleted or from another project.";
 
 describe("SearchableSelectField", () => {
@@ -162,9 +163,12 @@ describe("SearchableSelectField", () => {
   it("H13: opens with Enter or Space, moves with arrows, selects with Enter, Escape returns focus", async () => {
     const user = userEvent.setup();
     const { onChange } = renderField({ value: "cc-1" });
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
     trigger().focus();
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("option", { name: "Main" })).toBeTruthy();
+    expect(trigger().getAttribute("aria-expanded")).toBe("true");
+    expect(trigger().getAttribute("aria-controls")).toBeTruthy();
     await user.keyboard("{ArrowDown}{Enter}");
     expect(onChange).toHaveBeenLastCalledWith("cc-2");
     await waitFor(() => expect(document.activeElement).toBe(trigger()));

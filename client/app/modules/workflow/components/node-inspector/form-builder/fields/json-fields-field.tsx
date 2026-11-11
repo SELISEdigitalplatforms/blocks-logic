@@ -40,7 +40,7 @@ const EXPRESSION_TOKEN = "fx";
 const NO_DATA: Record<string, unknown> = {};
 
 const isGroup = (item: JsonFieldRow | JsonFieldGroup): item is JsonFieldGroup =>
-  "group" in item && Array.isArray((item as JsonFieldGroup).rows);
+  "group" in item && Array.isArray(item.rows);
 
 const sameValue = (a: unknown, b: unknown): boolean => {
   if (Array.isArray(a) && Array.isArray(b)) {
@@ -827,31 +827,49 @@ const RowLineImpl = ({
     [context, row.key],
   );
 
-  const onDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    if (disabled || !hasPlainText(event.dataTransfer)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-    if (!dragOver) setDragOver(true);
-  };
-
-  const onDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false);
-  };
-
-  const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    setDragOver(false);
-    if (disabled || !hasPlainText(event.dataTransfer)) {
-      // Files and HTML-only drags are ignored, and never open in the page.
+  // The whole row is a drop target. Its handlers are attached natively: the row is a layout element,
+  // and dropping is a pointer-only shortcut (every value can also be typed).
+  const dropState = useRef({ disabled, dragOver, onDropText: (_text: string) => {} });
+  useLayoutEffect(() => {
+    dropState.current = { disabled, dragOver, onDropText: (text) => write(droppedValue(row, value, text)) };
+  });
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onDragOver = (event: DragEvent) => {
+      if (dropState.current.disabled || !hasPlainText(event.dataTransfer)) return;
       event.preventDefault();
-      return;
-    }
-    const target = event.target as HTMLElement;
-    // A drop on a text input inserts at the caret natively.
-    if (target instanceof HTMLTextAreaElement && target.dataset.jsonValue === "text") return;
-    event.preventDefault();
-    const text = event.dataTransfer.getData("text/plain");
-    if (text) write(droppedValue(row, value, text));
-  };
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      if (!dropState.current.dragOver) setDragOver(true);
+    };
+    const onDragLeave = (event: DragEvent) => {
+      if (!el.contains(event.relatedTarget as Node | null)) setDragOver(false);
+    };
+    const onDrop = (event: DragEvent) => {
+      setDragOver(false);
+      if (dropState.current.disabled || !hasPlainText(event.dataTransfer)) {
+        // Files and HTML-only drags are ignored, and never open in the page.
+        event.preventDefault();
+        return;
+      }
+      const target = event.target as HTMLElement;
+      // A drop on a text input inserts at the caret natively.
+      if (target instanceof HTMLTextAreaElement && target.dataset.jsonValue === "text") return;
+      event.preventDefault();
+      const text = event.dataTransfer?.getData("text/plain");
+      if (text) dropState.current.onDropText(text);
+    };
+    el.addEventListener("dragover", onDragOver);
+    el.addEventListener("dragenter", onDragOver);
+    el.addEventListener("dragleave", onDragLeave);
+    el.addEventListener("drop", onDrop);
+    return () => {
+      el.removeEventListener("dragover", onDragOver);
+      el.removeEventListener("dragenter", onDragOver);
+      el.removeEventListener("dragleave", onDragLeave);
+      el.removeEventListener("drop", onDrop);
+    };
+  }, []);
 
   const help = [kindDescription(row, t), row.info].filter(Boolean).join(". ");
 
@@ -860,10 +878,6 @@ const RowLineImpl = ({
       ref={containerRef}
       data-testid={`json-row-${row.key}`}
       className={cn("group/row flex min-w-0 flex-1 items-center gap-1 rounded", dragOver && "bg-primary/10")}
-      onDragOver={onDragOver}
-      onDragEnter={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
     >
       <Tooltip>
         <TooltipTrigger asChild>
@@ -1131,7 +1145,7 @@ export const JsonFieldsField = ({
   const onChangeRef = useRef(onChange);
   const disabledRef = useRef(disabled);
   const rowsByKey = useRef(new Map<string, JsonFieldRow>());
-  const blockRef = useRef<HTMLDivElement | null>(null);
+  const blockRef = useRef<HTMLFieldSetElement | null>(null);
   const pendingAddFocus = useRef<string | null>(null);
   useLayoutEffect(() => {
     dataRef.current = data;
@@ -1260,11 +1274,10 @@ export const JsonFieldsField = ({
   };
 
   return (
-    <div
+    <fieldset
       ref={blockRef}
-      role="group"
       aria-label={field.label || field.key}
-      className="rounded-md border border-input bg-muted/30 py-1.5 font-mono text-sm"
+      className="m-0 min-w-0 rounded-md border border-input bg-muted/30 px-0 py-1.5 font-mono text-sm"
     >
       {lines.map((line, index) => (
         <div key={lineKey(line)} className="flex min-h-6 items-center">
@@ -1279,6 +1292,6 @@ export const JsonFieldsField = ({
           </div>
         </div>
       ))}
-    </div>
+    </fieldset>
   );
 };

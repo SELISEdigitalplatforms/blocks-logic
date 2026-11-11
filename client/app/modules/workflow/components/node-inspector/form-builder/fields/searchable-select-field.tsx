@@ -140,9 +140,6 @@ export const SearchableSelectField = ({
           <button
             type="button"
             id={field.id}
-            role="combobox"
-            aria-expanded={open}
-            aria-haspopup="listbox"
             disabled={disabled}
             className={SELECT_TRIGGER_CLASSES}
           >
