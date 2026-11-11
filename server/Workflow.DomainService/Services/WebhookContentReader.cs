@@ -70,22 +70,32 @@ namespace Workflow.DomainService.Services
         private const string MessageNonFileTooLarge = "Request body exceeds 5 MiB";
         private const string MessageFileRequestTooLarge = "Request body exceeds 50 MiB";
         private const string MessageInvalidJson = "Body is not valid JSON";
+        private const string MessageUnsupportedCharset = "Unsupported charset";
         private const int CopyBufferSize = 81920;
+
+        /// <summary>The nesting limit of the former <c>[FromBody]</c> binding (MVC's default of 32).</summary>
+        public const int JsonMaxDepth = 32;
+
+        private static readonly JsonDocumentOptions JsonParseOptions = new() { MaxDepth = JsonMaxDepth };
+        private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
+        private const int Utf16BigEndianCodePage = 1201;
 
         // ---------------------------------------------------------------- legacy
 
         /// <summary>
         /// The legacy body: JSON only, as the former <c>[FromBody] JsonElement</c> binding accepted it (415 for
-        /// another or missing Content-Type, 400 for an empty or malformed body).
+        /// another or missing Content-Type or a charset other than UTF-8/UTF-16, 400 for an empty, malformed or
+        /// too deeply nested body; a byte order mark is skipped).
         /// </summary>
         public static async Task<JsonElement> ReadLegacyJsonAsync(HttpRequest request, CancellationToken ct = default)
         {
-            var mediaType = MediaTypeOf(request, out _);
+            var mediaType = MediaTypeOf(request, out var parsed);
             if (!IsJson(mediaType))
             {
                 throw WebhookIntakeException.Unsupported("Content-Type must be application/json");
             }
 
+            var encoding = ResolveJsonEncoding(parsed);
             if (request.ContentLength > LegacyMaxBytes)
             {
                 throw WebhookIntakeException.TooLarge("Request body is too large");
@@ -99,7 +109,7 @@ namespace Workflow.DomainService.Services
 
             try
             {
-                using var document = JsonDocument.Parse(bytes);
+                using var document = JsonDocument.Parse(ToUtf8Json(bytes, encoding), JsonParseOptions);
                 return document.RootElement.Clone();
             }
             catch (JsonException ex)
@@ -183,7 +193,7 @@ namespace Workflow.DomainService.Services
             var isJson = IsJson(mediaType);
             var format = isJson ? FormatJson : FormatText;
             // Resolve the charset before reading, so an unusable one is refused without consuming the body.
-            var encoding = isJson ? Encoding.UTF8 : ResolveEncoding(parsed);
+            var encoding = isJson ? ResolveJsonEncoding(parsed) : ResolveEncoding(parsed);
             var bytes = await ReadLimitedAsync(request.Body, WebhookIntakeLimits.NonFileMaxBytes, MessageNonFileTooLarge, ct);
             if (bytes.Length == 0) return empty();
 
@@ -191,7 +201,7 @@ namespace Workflow.DomainService.Services
             {
                 BodyFormat = format,
                 ContentType = mediaType,
-                Bodies = isJson ? ParseJsonBodies(bytes) : [new BsonString(encoding.GetString(bytes))],
+                Bodies = isJson ? ParseJsonBodies(ToUtf8Json(bytes, encoding)) : [new BsonString(encoding.GetString(bytes))],
                 Headers = headers,
                 Query = query,
                 Bytes = bytes.Length,
@@ -427,15 +437,58 @@ namespace Workflow.DomainService.Services
             }
             catch (ArgumentException)
             {
-                throw WebhookIntakeException.Unsupported("Unsupported charset");
+                throw WebhookIntakeException.Unsupported(MessageUnsupportedCharset);
             }
         }
 
-        private static IReadOnlyList<BsonValue> ParseJsonBodies(byte[] bytes)
+        /// <summary>
+        /// The charset a JSON body may use, as the former <c>[FromBody]</c> binding allowed: UTF-8 (also when none
+        /// is given) or UTF-16. Anything else is 415, decided before the body is read.
+        /// </summary>
+        private static Encoding ResolveJsonEncoding(MediaTypeHeaderValue? parsed)
+        {
+            var charset = HeaderUtilities.RemoveQuotes(parsed?.Charset ?? default).ToString().Trim().ToLowerInvariant();
+            return charset switch
+            {
+                "" or "utf-8" or "utf8" => Encoding.UTF8,
+                "utf-16" or "utf-16le" or "unicode" => new UnicodeEncoding(bigEndian: false, byteOrderMark: false, throwOnInvalidBytes: true),
+                "utf-16be" => new UnicodeEncoding(bigEndian: true, byteOrderMark: false, throwOnInvalidBytes: true),
+                _ => throw WebhookIntakeException.Unsupported(MessageUnsupportedCharset),
+            };
+        }
+
+        /// <summary>
+        /// A JSON body as UTF-8 for <see cref="JsonDocument"/>: a leading byte order mark is skipped (a UTF-16 one
+        /// also decides the byte order) and UTF-16 is transcoded. Bytes that are not valid UTF-16 are a 400.
+        /// </summary>
+        private static ReadOnlyMemory<byte> ToUtf8Json(byte[] bytes, Encoding encoding)
+        {
+            if (encoding is not UnicodeEncoding)
+            {
+                return bytes.AsSpan().StartsWith(Utf8Bom) ? bytes.AsMemory(Utf8Bom.Length) : bytes;
+            }
+
+            var bigEndian = encoding.CodePage == Utf16BigEndianCodePage;
+            var start = 0;
+            if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) { bigEndian = false; start = 2; }
+            else if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) { bigEndian = true; start = 2; }
+
+            try
+            {
+                var decoder = new UnicodeEncoding(bigEndian, byteOrderMark: false, throwOnInvalidBytes: true);
+                return Encoding.UTF8.GetBytes(decoder.GetString(bytes, start, bytes.Length - start));
+            }
+            catch (DecoderFallbackException ex)
+            {
+                throw new WebhookIntakeException(400, "invalid_body", MessageInvalidJson, ex);
+            }
+        }
+
+        private static IReadOnlyList<BsonValue> ParseJsonBodies(ReadOnlyMemory<byte> bytes)
         {
             try
             {
-                using var document = JsonDocument.Parse(bytes);
+                using var document = JsonDocument.Parse(bytes, JsonParseOptions);
                 var root = document.RootElement;
                 return root.ValueKind == JsonValueKind.Array
                     ? root.EnumerateArray().Select(ToBson).ToList()

@@ -50,6 +50,114 @@ namespace XUnitTest.Workflow
             error.Message.Should().Be(message);
         }
 
+        // ------------------------------------------------------------ legacy: parity with the former [FromBody] binding
+
+        private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
+
+        private static byte[] Utf16(string text, bool bigEndian, bool bom) =>
+            [.. bom ? (bigEndian ? new byte[] { 0xFE, 0xFF } : new byte[] { 0xFF, 0xFE }) : [],
+             .. (bigEndian ? Encoding.BigEndianUnicode : Encoding.Unicode).GetBytes(text)];
+
+        /// <summary><paramref name="objects"/> objects nested inside each other, the innermost holding a number.</summary>
+        private static string Nested(int objects) => string.Concat(Enumerable.Repeat("{\"d\":", objects)) + "1" + new string('}', objects);
+
+        [Theory]
+        [InlineData("application/json")]
+        [InlineData("application/json; charset=utf-8")]
+        public async Task Legacy_skips_a_utf8_byte_order_mark(string contentType)
+        {
+            var request = WebhookRequests.Create(contentType, [.. Utf8Bom, .. Encoding.UTF8.GetBytes("[{\"a\":1},{\"a\":2}]")]);
+
+            var element = await WebhookContentReader.ReadLegacyJsonAsync(request);
+
+            element.GetArrayLength().Should().Be(2);
+        }
+
+        [Theory]
+        [InlineData("application/json; charset=utf-16", false, true)]
+        [InlineData("application/json; charset=utf-16", false, false)]
+        [InlineData("application/json; charset=UTF-16LE", false, false)]
+        [InlineData("application/json; charset=utf-16be", true, false)]
+        [InlineData("application/json; charset=utf-16", true, true)]   // a big-endian byte order mark wins
+        public async Task Legacy_reads_utf16_json(string contentType, bool bigEndian, bool bom)
+        {
+            var request = WebhookRequests.Create(contentType, Utf16("{\"name\":\"café 🏠\"}", bigEndian, bom));
+
+            var element = await WebhookContentReader.ReadLegacyJsonAsync(request);
+
+            element.GetProperty("name").GetString().Should().Be("café 🏠");
+        }
+
+        [Theory]
+        [InlineData("application/json; charset=iso-8859-1")]
+        [InlineData("application/json; charset=windows-1252")]
+        [InlineData("application/json; charset=not-a-charset")]
+        public async Task Legacy_refuses_another_charset_with_415_before_reading(string contentType)
+        {
+            var error = await Refused(() => WebhookContentReader.ReadLegacyJsonAsync(Unreadable(contentType)));
+
+            error.StatusCode.Should().Be(415);
+            error.Message.Should().Be("Unsupported charset");
+        }
+
+        [Fact]
+        public async Task Legacy_refuses_invalid_utf16_with_400()
+        {
+            // A lone high surrogate is not valid UTF-16.
+            var request = WebhookRequests.Create("application/json; charset=utf-16", [0x7B, 0x00, 0x00, 0xD8, 0x7D, 0x00]);
+
+            var error = await Refused(() => WebhookContentReader.ReadLegacyJsonAsync(request));
+
+            error.StatusCode.Should().Be(400);
+            error.Message.Should().Be("Body is not valid JSON");
+        }
+
+        [Fact]
+        public async Task Legacy_accepts_json_nested_32_levels_deep()
+        {
+            var element = await WebhookContentReader.ReadLegacyJsonAsync(WebhookRequests.Json(Nested(WebhookContentReader.JsonMaxDepth)));
+
+            element.GetProperty("d").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Object);
+        }
+
+        [Fact]
+        public async Task Legacy_refuses_json_nested_deeper_than_32_levels_with_400()
+        {
+            var error = await Refused(() => WebhookContentReader.ReadLegacyJsonAsync(WebhookRequests.Json(Nested(WebhookContentReader.JsonMaxDepth + 1))));
+
+            error.StatusCode.Should().Be(400);
+            error.Message.Should().Be("Body is not valid JSON");
+        }
+
+        [Fact]
+        public async Task Any_content_json_skips_a_utf8_byte_order_mark()
+        {
+            var request = WebhookRequests.Create("application/json", [.. Utf8Bom, .. Encoding.UTF8.GetBytes("{\"a\":1}")]);
+
+            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+
+            content.BodyFormat.Should().Be("json");
+            content.Bodies.Should().ContainSingle().Which.Should().Be(BsonDocument.Parse("{a:1}"));
+        }
+
+        [Fact]
+        public async Task Any_content_json_reads_utf16()
+        {
+            var request = WebhookRequests.Create("application/json; charset=utf-16", Utf16("[{\"a\":1},{\"a\":2}]", bigEndian: false, bom: true));
+
+            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+
+            content.Bodies.Should().HaveCount(2);
+        }
+
+        [Fact]
+        public async Task Any_content_json_refuses_another_charset_with_415()
+        {
+            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(Unreadable("application/json; charset=iso-8859-1"), AnyContent));
+
+            error.StatusCode.Should().Be(415);
+        }
+
         // ------------------------------------------------------------ any content: formats
 
         [Fact]
