@@ -959,11 +959,15 @@ namespace Workflow.DomainService.Nodes.ActionIamUserV2
 
         private sealed record IamResponse(int Status, string Body);
 
-        private sealed record IamFailure(
+        /// <summary>
+        /// Why one item failed: its error code, a message without request values, and optionally IAM's HTTP
+        /// status, IAM's (bounded) errors and whether a mutation's outcome is unknown.
+        /// </summary>
+        public sealed record IamFailure(
             string Code, string Message, int? HttpStatus = null, BsonDocument? Errors = null, bool OutcomeUnknown = false);
 
-        /// <summary>Ends one item with an error item; the run continues with the next item.</summary>
-        private sealed class IamItemException(IamFailure failure) : Exception(failure.Message)
+        /// <summary>Ends one item with an error item; the run continues with the next item. Never leaves the node.</summary>
+        public sealed class IamItemException(IamFailure failure) : Exception(failure.Message)
         {
             public IamFailure Failure { get; } = failure;
         }
