@@ -623,7 +623,7 @@ namespace XUnitTest.Workflow
         [InlineData("ftp://iam.test.local")]
         [InlineData("https://iam.test.local?x=1")]
         [InlineData("https://iam.test.local/#f")]
-        [InlineData("https://user:pw@iam.test.local")]
+        [InlineData("https://u:x@iam.test.local")]
         public async Task UnusableIamBaseUrl_FailsEveryItem_BeforeAnyTokenRequest(string? baseUrl)
         {
             _baseUrl = baseUrl;

@@ -372,7 +372,7 @@ namespace Workflow.DomainService.Nodes.ActionIamUserV2
                     return true;
                 case JTokenType.Float:
                     var number = (double)token;
-                    if (Math.Floor(number) != number || number is < int.MinValue or > int.MaxValue) return false;
+                    if (!double.IsInteger(number) || number is < int.MinValue or > int.MaxValue) return false;
                     value = (int)number;
                     return true;
                 case JTokenType.String:
@@ -410,7 +410,7 @@ namespace Workflow.DomainService.Nodes.ActionIamUserV2
             else
                 await RequestClientCredentialTokenAsync(run);
 
-            // Token calls take no cancellation token (Client Credential); a shutdown waited for them.
+            // The Client Credential token call takes no cancellation token, so re-check after it.
             run.Context.CancellationToken.ThrowIfCancellationRequested();
         }
 
