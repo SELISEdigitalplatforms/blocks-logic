@@ -41,6 +41,11 @@ const reportLoadFailure = (reason: unknown) => {
   }
 };
 
+/** A cancellation is the expected end of an unmounted load; anything else is a real failure. */
+const handleLoadRejection = (reason: unknown) => {
+  if (!isCancelation(reason)) reportLoadFailure(reason);
+};
+
 /**
  * The Monaco instance, or `null` until it has loaded. A drop-in for the hook that
  * `@monaco-editor/react` ships, which cancels its pending load on unmount but never handles the
@@ -62,9 +67,7 @@ export const useMonacoInstance = (): Monaco | null => {
       .then((instance) => {
         if (active) setMonaco(instance);
       })
-      .catch((reason: unknown) => {
-        if (!isCancelation(reason)) reportLoadFailure(reason);
-      });
+      .catch(handleLoadRejection);
     return () => {
       active = false;
       pending.cancel();
