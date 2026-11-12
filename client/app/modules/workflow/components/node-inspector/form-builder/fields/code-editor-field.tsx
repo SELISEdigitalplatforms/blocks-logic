@@ -1,8 +1,9 @@
 "use client";
 
-import Editor, { useMonaco, type Monaco, type OnMount } from "@monaco-editor/react";
+import Editor, { type Monaco, type OnMount } from "@monaco-editor/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
+import { useMonacoInstance, type MonacoPosition, type MonacoTextModel } from "@/lib/monaco-loader";
 import { FieldProps } from "../form-field.types";
 import { cn } from "@/lib/utils";
 
@@ -113,7 +114,7 @@ export const CodeEditorField = ({
   const configUpstreamKeys = (config as { upstreamKeys?: string[] } | undefined)?.upstreamKeys;
   // Stable empty fallback so the completion provider is not re-registered on every render.
   const upstreamKeys = useMemo(() => configUpstreamKeys ?? [], [configUpstreamKeys]);
-  const monaco = useMonaco();
+  const monaco = useMonacoInstance();
   const providerRef = useRef<{ dispose: () => void } | null>(null);
   const [editorHeight, setEditorHeight] = useState(MIN_EDITOR_HEIGHT);
 
@@ -122,7 +123,7 @@ export const CodeEditorField = ({
     if (!monaco) return;
     providerRef.current = monaco.languages.registerCompletionItemProvider(language, {
       triggerCharacters: ["$", "."],
-      provideCompletionItems: (model, position) => {
+      provideCompletionItems: (model: MonacoTextModel, position: MonacoPosition) => {
         const line = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
         const match = line.match(/\$[\w.]*$/);
         if (!match) return { suggestions: [] };
