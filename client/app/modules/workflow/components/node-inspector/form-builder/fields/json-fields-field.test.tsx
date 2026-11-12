@@ -207,20 +207,45 @@ describe("JsonFieldsField", () => {
     expect(textInput("email").placeholder).toBe("required");
     expect(textInput("email").className).toContain("placeholder:text-red-500/70");
 
-    // A drop elsewhere on the row appends with a space; a drop on the input is left to the browser.
+    // Before the author has been in the input, a drop on the row or on the input appends with a space.
     fireEvent.drop(rowOf("email"), { dataTransfer: transfer(["text/plain"], "{{ $json.extra }}") });
     expect(spy).toHaveBeenLastCalledWith({ email: "{{ $json.email }} (work) {{ $json.extra }}" });
-    spy.mockClear();
     fireEvent.drop(textInput("organizationId"), { dataTransfer: transfer(["text/plain"], "{{ $json.orgId }}") });
-    expect(spy).not.toHaveBeenCalled();
-    fireEvent.drop(rowOf("organizationId"), { dataTransfer: transfer(["text/plain"], "{{ $json.orgId }}") });
     expect(spy).toHaveBeenLastCalledWith({ organizationId: "{{ $json.orgId }}" });
+  });
+
+  it("H2: a drop lands at the caret the author left in the value, also after the input lost focus", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { spy } = setup({ initial: { email: "ab@x.io" } });
+      const input = textInput("email");
+      input.focus();
+      input.setSelectionRange(2, 2);
+      input.blur();
+      fireEvent.drop(input, { dataTransfer: transfer(["text/plain"], "{{ $json.tag }}") });
+      expect(spy).toHaveBeenLastCalledWith({ email: "ab{{ $json.tag }}@x.io" });
+      await act(async () => {
+        vi.runAllTimers();
+      });
+      // Focus returns with the caret after the dropped text.
+      expect(document.activeElement).toBe(textInput("email"));
+      expect(textInput("email").selectionStart).toBe(2 + "{{ $json.tag }}".length);
+
+      // A selection is replaced, and a drop elsewhere on the row uses the same caret.
+      textInput("email").setSelectionRange(0, 2);
+      fireEvent.drop(rowOf("email"), { dataTransfer: transfer(["text/plain"], "X") });
+      expect(spy).toHaveBeenLastCalledWith({ email: "X{{ $json.tag }}@x.io" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("H2: highlights a row while text is dragged over it", () => {
     setup();
     fireEvent.dragOver(rowOf("email"), { dataTransfer: transfer(["text/plain"], "x") });
     expect(rowOf("email").className).toContain("bg-primary/10");
+    // The value box shows during the drag, so the target is visible without focus.
+    expect(rowOf("email").getAttribute("data-dragover")).toBe("true");
     fireEvent.dragLeave(rowOf("email"), { relatedTarget: document.body });
     expect(rowOf("email").className).not.toContain("bg-primary/10");
   });
@@ -568,7 +593,8 @@ describe("JsonFieldsField", () => {
     expect((screen.getByRole("textbox", { name: "page" }) as HTMLInputElement).value).toBe("0");
     expect((screen.getByRole("textbox", { name: "pageSize" }) as HTMLInputElement).value).toBe("10");
     expect(screen.getByRole("button", { name: "roleMode" }).textContent).toContain('"add"');
-    expect(screen.getByRole("button", { name: "Add a value to roles" }).textContent).toBe("+ add");
+    // The add button is a bare +, also while the list is empty.
+    expect(screen.getByRole("button", { name: "Add a value to roles" }).textContent).toBe("");
     expect(spy).not.toHaveBeenCalled();
   });
 

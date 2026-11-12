@@ -9,7 +9,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui-kits/command/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/popover/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui-kits/popover/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { useT } from "@seliseblocks/genesis-os";
@@ -145,9 +145,9 @@ const focusValueControl = (container: HTMLElement | null) => {
   }
 };
 
-/** A value box: plain text at rest, an input box while focused. */
+/** A value box: plain text at rest, an input box while focused or while text is dragged over its row. */
 const VALUE_BOX_CLASSES =
-  "rounded bg-transparent focus-within:bg-background focus-within:ring-1 focus-within:ring-input";
+  "rounded bg-transparent focus-within:bg-background focus-within:ring-1 focus-within:ring-input group-data-[dragover=true]/row:bg-background group-data-[dragover=true]/row:ring-1 group-data-[dragover=true]/row:ring-primary";
 
 /** A dashed "add" button that turns primary on hover: `// add:` options and a list's add button. */
 const DASHED_BUTTON_CLASSES =
@@ -212,6 +212,10 @@ const OneLineInput = ({
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.nativeEvent.isComposing) event.preventDefault();
+          }}
+          // Marks the caret as the author's own, so a later drop on the row lands there.
+          onFocus={(event) => {
+            event.currentTarget.dataset.caret = "set";
           }}
           className={cn(
             "block h-6 w-full cursor-text resize-none overflow-hidden whitespace-pre bg-transparent px-1.5 py-0 font-mono text-sm leading-6 outline-none placeholder:italic disabled:cursor-not-allowed",
@@ -465,34 +469,37 @@ const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, on
     setSearchInput("");
   };
 
+  // The picker opens under the opening `[`, which stays put; the `+` moves right as chips are added.
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5">
-      <span className="text-low-emphasis">[</span>
-      {values.map((value) => (
-        <span
-          key={value}
-          className={cn(
-            "inline-flex max-w-[14rem] items-center rounded border border-input bg-background py-0 pl-1.5 pr-0.5 leading-[22px]",
-            STRING_CLASSES,
-          )}
-        >
-          <span aria-hidden="true">&quot;</span>
-          <span className="truncate">{labelFor(value)}</span>
-          <span aria-hidden="true" className="mr-1">
-            &quot;
-          </span>
-          <button
-            type="button"
-            disabled={disabled}
-            aria-label={t("JSON_FIELDS_FIELD.REMOVE_VALUE", { value: labelFor(value) })}
-            onClick={() => toggle(value)}
-            className="grid h-4 w-4 place-items-center rounded text-low-emphasis hover:bg-muted hover:text-high-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+    <Popover open={open} onOpenChange={(next) => setOpen(next && !disabled)}>
+      <span className="inline-flex shrink-0 items-center gap-1.5">
+        <PopoverAnchor asChild>
+          <span className="text-low-emphasis">[</span>
+        </PopoverAnchor>
+        {values.map((value) => (
+          <span
+            key={value}
+            className={cn(
+              "inline-flex max-w-[14rem] items-center rounded border border-input bg-background py-0 pl-1.5 pr-0.5 leading-[22px]",
+              STRING_CLASSES,
+            )}
           >
-            <X className="h-3 w-3" />
-          </button>
-        </span>
-      ))}
-      <Popover open={open} onOpenChange={(next) => setOpen(next && !disabled)}>
+            <span aria-hidden="true">&quot;</span>
+            <span className="truncate">{labelFor(value)}</span>
+            <span aria-hidden="true" className="mr-1">
+              &quot;
+            </span>
+            <button
+              type="button"
+              disabled={disabled}
+              aria-label={t("JSON_FIELDS_FIELD.REMOVE_VALUE", { value: labelFor(value) })}
+              onClick={() => toggle(value)}
+              className="grid h-4 w-4 place-items-center rounded text-low-emphasis hover:bg-muted hover:text-high-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -503,10 +510,9 @@ const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, on
             className={DASHED_BUTTON_CLASSES}
           >
             <Plus className="h-3 w-3" aria-hidden="true" />
-            {values.length === 0 && t("JSON_FIELDS_FIELD.ADD_EMPTY")}
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-64 p-0" align="start">
+        <PopoverContent className="w-64 p-0" align="start" collisionPadding={8}>
           <Command shouldFilter={false}>
             <CommandInput
               placeholder={t("JSON_FIELDS_FIELD.SEARCH")}
@@ -549,9 +555,9 @@ const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, on
             </CommandList>
           </Command>
         </PopoverContent>
-      </Popover>
-      <span className="text-low-emphasis">]</span>
-    </span>
+        <span className="text-low-emphasis">]</span>
+      </span>
+    </Popover>
   );
 };
 
@@ -842,13 +848,29 @@ interface RowLineProps {
 
 /** A row action (fx, ×): shown while its line is hovered or holds focus. */
 const ACTION_CLASSES =
-  "grid h-[22px] min-w-[22px] place-items-center rounded px-1 text-low-emphasis opacity-0 transition-opacity hover:bg-muted hover:text-high-emphasis focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/line:opacity-100 group-focus-within/line:opacity-100 disabled:cursor-not-allowed";
+  "grid h-[22px] min-w-[22px] place-items-center rounded bg-background px-1 text-low-emphasis opacity-0 shadow-sm transition-opacity hover:bg-muted hover:text-high-emphasis focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/line:opacity-100 group-focus-within/line:opacity-100 disabled:cursor-not-allowed";
 
-/** The text a drop leaves in a row: appended to a text row's value, the whole expression otherwise. */
-const droppedValue = (row: JsonFieldRow, value: unknown, text: string) => {
-  if (row.kind !== "text") return text;
+type Caret = { start: number; end: number };
+
+/**
+ * The text a drop leaves in a row. With a caret the author placed in the row's text input, the text
+ * goes there (replacing a selection). Otherwise it is appended to a text row's value with a space, and
+ * replaces the value of any other row.
+ */
+const droppedValue = (row: JsonFieldRow, mode: Mode, value: unknown, text: string, caret: Caret | null) => {
   const current = toText(value);
+  if (caret && (row.kind === "text" || mode === "fx")) {
+    return current.slice(0, caret.start) + text + current.slice(caret.end);
+  }
+  if (row.kind !== "text") return text;
   return current ? `${current} ${text}` : text;
+};
+
+/** The row's text input and its caret, when the author has been in it. */
+const authorCaret = (container: HTMLElement): { input: HTMLTextAreaElement; caret: Caret } | null => {
+  const input = container.querySelector<HTMLTextAreaElement>('textarea[data-json-value="text"]');
+  if (input?.dataset.caret !== "set") return null;
+  return { input, caret: { start: input.selectionStart, end: input.selectionEnd } };
 };
 
 const RowLineImpl = ({
@@ -898,7 +920,22 @@ const RowLineImpl = ({
   // and dropping is a pointer-only shortcut (every value can also be typed).
   const dropState = useRef({ disabled, dragOver, onDropText: (_text: string) => {} });
   useLayoutEffect(() => {
-    dropState.current = { disabled, dragOver, onDropText: (text) => write(droppedValue(row, value, text)) };
+    dropState.current = {
+      disabled,
+      dragOver,
+      onDropText: (text) => {
+        const container = containerRef.current;
+        const target = container ? authorCaret(container) : null;
+        write(droppedValue(row, mode, value, text, target?.caret ?? null));
+        if (!target) return;
+        // Back in the input, with the caret after the dropped text.
+        const end = target.caret.start + text.length;
+        setTimeout(() => {
+          target.input.focus();
+          target.input.setSelectionRange(end, end);
+        }, 0);
+      },
+    };
   });
   useEffect(() => {
     const el = containerRef.current;
@@ -919,9 +956,8 @@ const RowLineImpl = ({
         event.preventDefault();
         return;
       }
-      const target = event.target as HTMLElement;
-      // A drop on a text input inserts at the caret natively.
-      if (target instanceof HTMLTextAreaElement && target.dataset.jsonValue === "text") return;
+      // Every drop is handled here, also one on the text input: the browser's own insertion depends on
+      // focus and on where the pointer lands, and the input is only as wide as its text.
       event.preventDefault();
       const text = event.dataTransfer?.getData("text/plain");
       if (text) dropState.current.onDropText(text);
@@ -944,7 +980,8 @@ const RowLineImpl = ({
     <div
       ref={containerRef}
       data-testid={`json-row-${row.key}`}
-      className={cn("flex flex-1 items-center self-stretch rounded", dragOver && "bg-primary/10")}
+      data-dragover={dragOver}
+      className={cn("group/row flex flex-1 items-center self-stretch rounded", dragOver && "bg-primary/10")}
     >
       <Tooltip>
         <TooltipTrigger asChild>
@@ -991,7 +1028,7 @@ const RowLineImpl = ({
             aria-pressed={mode === "fx"}
             aria-label={t("JSON_FIELDS_FIELD.USE_EXPRESSION_FOR", { label })}
             onClick={() => (mode === "fx" ? write(row.defaultValue) : writeAndFocusFx(""))}
-            className={cn(ACTION_CLASSES, mode === "fx" && "bg-primary/10 text-primary opacity-100")}
+            className={cn(ACTION_CLASSES, mode === "fx" && "text-primary opacity-100 ring-1 ring-primary/40")}
           >
             <span className="font-serif text-[15px] font-semibold italic leading-none">{EXPRESSION_TOKEN}</span>
           </button>
