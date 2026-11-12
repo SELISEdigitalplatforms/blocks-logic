@@ -87,11 +87,11 @@ namespace Mail.DomainService.Mails
                 _logger.LogInformation("Sns configuration enabled: {IsEnableSnsConfiguration}", mailToBeSent.MailServerConfiguration.SendsSnsHeaders());
                 if (mailToBeSent.MailServerConfiguration.SendsSnsHeaders())
                 {
-
+                    // The body is deliberately not copied into a header. Exchange Online rejects a
+                    // header value over 32,768 characters (554 5.6.211), so every template above
+                    // that size bounced at Microsoft 365 after SES had already accepted it.
                     message.Headers.Add("X-SES-CONFIGURATION-SET", _configuration["SnsConfigurationName"]);
                     message.Headers.Add("X-Tenant-Id", BlocksContext.GetContext()?.TenantId);
-                    message.Headers.Add("X-Mail-Body", mailBody.Body);
-
                 }
 
                 await client.SendAsync(message);
