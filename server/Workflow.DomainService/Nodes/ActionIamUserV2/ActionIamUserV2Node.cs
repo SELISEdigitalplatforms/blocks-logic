@@ -592,10 +592,14 @@ namespace Workflow.DomainService.Nodes.ActionIamUserV2
             return new List<NodeOutputItem> { OutputItem(run, item, Success(run, fields.UserId, fields, response.Status)) };
         }
 
-        /// <summary>Only non-blank fields: blank keeps the current value (never "", null, roles, permissions or MFA).</summary>
+        /// <summary>
+        /// Only non-blank fields: blank keeps the current value (never "", null, roles, permissions or MFA).
+        /// The node's userId also goes in the body as itemId: IAM's model validation requires it there before
+        /// the controller copies the route id over it, so a body without it is a 400.
+        /// </summary>
         private static JsonObject UpdateBody(IamFields fields)
         {
-            var body = new JsonObject();
+            var body = new JsonObject { ["itemId"] = fields.UserId };
             AddIfSet(body, OrganizationIdKey, fields.OrganizationId);
             AddIfSet(body, "firstName", fields.FirstName);
             AddIfSet(body, "lastName", fields.LastName);

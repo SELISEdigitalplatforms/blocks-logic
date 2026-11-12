@@ -9,7 +9,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui-kits/command/command";
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui-kits/popover/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui-kits/popover/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui-kits/tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { useT } from "@seliseblocks/genesis-os";
@@ -469,37 +469,11 @@ const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, on
     setSearchInput("");
   };
 
-  // The picker opens under the opening `[`, which stays put; the `+` moves right as chips are added.
+  // The `+` sits right after `[`, so it and its picker stay put as values are added.
   return (
-    <Popover open={open} onOpenChange={(next) => setOpen(next && !disabled)}>
-      <span className="inline-flex shrink-0 items-center gap-1.5">
-        <PopoverAnchor asChild>
-          <span className="text-low-emphasis">[</span>
-        </PopoverAnchor>
-        {values.map((value) => (
-          <span
-            key={value}
-            className={cn(
-              "inline-flex max-w-[14rem] items-center rounded border border-input bg-background py-0 pl-1.5 pr-0.5 leading-[22px]",
-              STRING_CLASSES,
-            )}
-          >
-            <span aria-hidden="true">&quot;</span>
-            <span className="truncate">{labelFor(value)}</span>
-            <span aria-hidden="true" className="mr-1">
-              &quot;
-            </span>
-            <button
-              type="button"
-              disabled={disabled}
-              aria-label={t("JSON_FIELDS_FIELD.REMOVE_VALUE", { value: labelFor(value) })}
-              onClick={() => toggle(value)}
-              className="grid h-4 w-4 place-items-center rounded text-low-emphasis hover:bg-muted hover:text-high-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
+    <span className="inline-flex shrink-0 items-center gap-1.5">
+      <span className="text-low-emphasis">[</span>
+      <Popover open={open} onOpenChange={(next) => setOpen(next && !disabled)}>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -555,9 +529,33 @@ const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, on
             </CommandList>
           </Command>
         </PopoverContent>
-        <span className="text-low-emphasis">]</span>
-      </span>
-    </Popover>
+      </Popover>
+      {values.map((value) => (
+        <span
+          key={value}
+          className={cn(
+            "inline-flex max-w-[14rem] items-center rounded border border-input bg-background py-0 pl-1.5 pr-0.5 leading-[22px]",
+            STRING_CLASSES,
+          )}
+        >
+          <span aria-hidden="true">&quot;</span>
+          <span className="truncate">{labelFor(value)}</span>
+          <span aria-hidden="true" className="mr-1">
+            &quot;
+          </span>
+          <button
+            type="button"
+            disabled={disabled}
+            aria-label={t("JSON_FIELDS_FIELD.REMOVE_VALUE", { value: labelFor(value) })}
+            onClick={() => toggle(value)}
+            className="grid h-4 w-4 place-items-center rounded text-low-emphasis hover:bg-muted hover:text-high-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </span>
+      ))}
+      <span className="text-low-emphasis">]</span>
+    </span>
   );
 };
 

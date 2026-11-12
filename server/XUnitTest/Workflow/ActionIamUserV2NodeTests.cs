@@ -264,7 +264,7 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task UpdateUser_WithOnlyFirstName_SendsOnlyFirstName()
+        public async Task UpdateUser_WithOnlyFirstName_SendsTheItemIdAndOnlyFirstName()
         {
             _iam.Enqueue(HttpStatusCode.OK, """{"isSuccess":true}""");
 
@@ -276,7 +276,8 @@ namespace XUnitTest.Workflow
 
             var request = _iam.Requests.Single();
             request.Uri.Should().Be($"{BaseUrl}/api/iam/users/u%2F1");
-            request.Body.Should().Be("""{"firstName":"E2E"}""");
+            // The id goes in the body as itemId too: IAM validates it there before copying the route id over it.
+            request.Body.Should().Be("""{"itemId":"u/1","firstName":"E2E"}""");
             SingleOutput(result).Should().BeEquivalentTo(new BsonDocument
             {
                 { "operation", "updateUser" }, { "status", "success" }, { "userId", "u/1" },
@@ -294,7 +295,7 @@ namespace XUnitTest.Workflow
                 { "userId", "u1" }, { "organizationId", "org1" }, { "lastName", "Lee" }, { "language", "en" }, { "phoneNumber", "1" },
             }));
 
-            _iam.Requests.Single().Body.Should().Be("""{"organizationId":"org1","lastName":"Lee","phoneNumber":"1","language":"en"}""");
+            _iam.Requests.Single().Body.Should().Be("""{"itemId":"u1","organizationId":"org1","lastName":"Lee","phoneNumber":"1","language":"en"}""");
         }
 
         [Theory]
