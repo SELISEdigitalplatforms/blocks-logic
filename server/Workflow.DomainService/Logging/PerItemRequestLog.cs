@@ -1,7 +1,7 @@
 namespace Workflow.DomainService.Logging
 {
     /// <summary>
-    /// Per-item request lines for network-bound nodes (HTTP Request, Proxy): "sending", "response" and "error",
+    /// Per-item request lines for network-bound nodes (HTTP Request, Proxy, IAM User): "sending", "response" and "error",
     /// numbered 1..Total. After <see cref="ExecutionLogStages.PerItemLineCap"/> items it writes one
     /// "… N more request(s) not logged individually." line and stays silent, so a large run stays well under the
     /// read limit.
@@ -31,6 +31,10 @@ namespace Workflow.DomainService.Logging
 
         public static PerItemRequestLog ForProxy(NodeExecutionLog log, int total) => new(
             log, total, ExecutionLogStages.ProxySending, ExecutionLogStages.ProxyResponse, ExecutionLogStages.ProxyError, ExecutionLogStages.ProxyNotLogged);
+
+        /// <summary>IAM User: lines are numbered per input item, so one item can write several request pairs.</summary>
+        public static PerItemRequestLog ForIamUser(NodeExecutionLog log, int total) => new(
+            log, total, ExecutionLogStages.IamUserSending, ExecutionLogStages.IamUserResponse, ExecutionLogStages.IamUserError, ExecutionLogStages.IamUserNotLogged);
 
         /// <param name="index">Zero-based item index.</param>
         public void Sending(int index)

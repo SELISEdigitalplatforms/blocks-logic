@@ -42,24 +42,17 @@ namespace XUnitTest.Workflow
         {
             TestBlocksContext.Set("tenant-1");
             DelegatedTokenContext.Clear();
-            var accessor = new Mock<IHttpContextAccessor>();
-            accessor.Setup(a => a.HttpContext).Returns(new DefaultHttpContext());
             _executions.Setup(r => r.CreateAsync(It.IsAny<WorkflowExecutionEntity>()))
                 .ReturnsAsync((WorkflowExecutionEntity e) => { e.Id = "exec-1"; return e; });
             _executionLog.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
             _sut = new WorkflowExecutionService(
-                _workflows.Object,
-                _executions.Object,
+                new WorkflowExecutionStores(_workflows.Object, _executions.Object, _versions.Object),
                 _messages.Object,
                 _logger.Object,
                 _engine.Object,
-                _versions.Object,
                 Mock.Of<IWorkflowNotificationService>(),
-                _auth.Object,
-                accessor.Object,
-                _grants.Object,
                 new WorkflowExecutionLogger(_executionLog.Object),
-                _releaser.Object);
+                new WorkflowTriggerAccess(_auth.Object, _grants.Object, _releaser.Object, WebhookRequests.Intake()));
         }
 
         public void Dispose()
@@ -171,17 +164,11 @@ namespace XUnitTest.Workflow
             OutputCountsByBranch = new Dictionary<string, int> { ["source"] = 1 },
         };
 
-        private static JsonElement Json(string raw)
-        {
-            using var doc = JsonDocument.Parse(raw);
-            return doc.RootElement.Clone();
-        }
-
         private Task<WorkflowWebhookResponseDto?> Call(string body = "{}") =>
-            _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", Json(body));
+            _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", WebhookRequests.Json(body));
 
         private Task<WorkflowWebhookResponseDto?> CallTest(string body = "{}") =>
-            _sut.TriggerTestWebhookAsync("wf-1", "hook", "tenant-1", Json(body));
+            _sut.TriggerTestWebhookAsync("wf-1", "hook", "tenant-1", WebhookRequests.Json(body));
 
         private void VerifyQueuedOnce()
         {
@@ -430,7 +417,7 @@ namespace XUnitTest.Workflow
         {
             Published(new BsonDocument { { "authType", "none" } });
 
-            var result = await _sut.TriggerWebhookAsync("wf-1", "other", "tenant-1", Json("{}"));
+            var result = await _sut.TriggerWebhookAsync("wf-1", "other", "tenant-1", WebhookRequests.Json("{}"));
 
             result!.Status.Should().Be("Workflow not found");
             result.ExecutionId.Should().BeNull();

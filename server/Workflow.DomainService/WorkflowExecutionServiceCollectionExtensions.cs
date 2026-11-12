@@ -15,6 +15,7 @@ using Workflow.DomainService.Nodes.ActionHttpRequestV1;
 using Workflow.DomainService.Nodes.ActionDataV1;
 using Workflow.DomainService.Nodes.ActionProxy;
 using Workflow.DomainService.Nodes.ActionNotification;
+using Workflow.DomainService.Nodes.ActionIamUserV2;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -50,7 +51,14 @@ namespace Workflow.DomainService
             services.AddSingleton<IWorkflowService, WorkflowService>();
             services.TryAddSingleton<IWorkflowImportTenantSlugResolver, NullWorkflowImportTenantSlugResolver>();
             services.AddSingleton<IWorkflowImportService, WorkflowImportService>();
+            services.AddSingleton<WorkflowExecutionStores>();
+            services.AddSingleton<WorkflowTriggerAccess>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
+            // Webhook "Any content" intake: request → JSON items, files stored through the storage driver.
+            services.AddOptions<WebhookUploadOptions>().BindConfiguration(WebhookUploadOptions.SectionName);
+            services.AddSingleton<IWebhookFileStore, StorageWebhookFileStore>();
+            services.AddSingleton<IWebhookIntake, WebhookIntake>();
+            services.AddHttpClient(StorageWebhookFileStore.HttpClientName);
             services.AddSingleton<IInProcessGrantReleaser, InProcessGrantReleaser>();
             services.AddSingleton<IWorkflowEngineService, WorkflowEngineService>();
             services.AddSingleton<IWorkflowNotificationService, WorkflowNotificationService>();
@@ -99,6 +107,7 @@ namespace Workflow.DomainService
             services.AddSingleton<INodeExecutor, ActionDataV1Node>();
             services.AddSingleton<INodeExecutor, ActionProxyNode>();
             services.AddSingleton<INodeExecutor, ActionNotificationNode>();
+            services.AddSingleton<INodeExecutor, ActionIamUserV2Node>();
 
 
             // end register node executors
@@ -126,6 +135,13 @@ namespace Workflow.DomainService
                     client.MaxResponseContentBufferSize = WorkflowOutboundGuard.MaxResponseBytes)
                 .ConfigurePrimaryHttpMessageHandler(sp =>
                     WorkflowOutboundGuard.CreatePrimaryHandler(sp.GetRequiredService<IWorkflowOutboundGuard>()));
+
+            // IAM User step: only ever calls the IamBaseUrl setting with a bearer token, so it follows no redirect
+            // and keeps no cookies. The factory's request logging is removed: it would write the IAM URL (base URL
+            // and user id) to the log.
+            services.AddHttpClient(ActionIamUserV2Node.HttpClientName, client => client.Timeout = ActionIamUserV2Node.RequestTimeout)
+                .ConfigurePrimaryHttpMessageHandler(ActionIamUserV2Node.CreatePrimaryHandler)
+                .RemoveAllLoggers();
             return services;
         }
     }

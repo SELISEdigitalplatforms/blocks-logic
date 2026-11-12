@@ -21,6 +21,7 @@ import {
 	BetweenHorizontalStart,
 	Zap,
 	TriangleAlert,
+	UserCog,
 } from "lucide-react";
 import { deriveMergeHandle } from "@blocks-workflow/utils/merge-handles";
 import { deriveSwitchHandle, switchHandleLabel } from "@blocks-workflow/utils/switch-handles";
@@ -194,6 +195,21 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		type: "dataAction",
 		version: "v2",
 		get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.DATA_ACTION"); },
+		handle: {
+			sources: [{ key: "source", label: "" }],
+			targets: [{ key: "target", label: "" }],
+		},
+	},
+	{
+		id: "action-iamUser-v2",
+		icon: <UserCog className="h-5 w-5 text-primary" />,
+		get title() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.IAM_USER"); },
+		get description() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.MANAGE_YOUR_PROJECTS_IAM_USERS"); },
+		category: "action",
+		type: "iamUser",
+		version: "v2",
+		isComingSoon: true,
+		get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.IAM_USER"); },
 		handle: {
 			sources: [{ key: "source", label: "" }],
 			targets: [{ key: "target", label: "" }],

@@ -2,6 +2,7 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using Mail.DomainService.Entities;
 using Microsoft.Extensions.Logging;
+using MimeKit;
 
 namespace Mail.DomainService.Mails.Office365
 {
@@ -22,44 +23,111 @@ namespace Mail.DomainService.Mails.Office365
     /// </remarks>
     public class Office365SmtpClient : ISmtpClient
     {
+        private const string ConnectingTemplate =
+            "SMTP (Office 365): connecting to {Host}:{Port} for itemId={ItemId} with {AttachmentCount} attachment(s) attempt={Attempt}/{MaxAttempts}";
+
+        private const string AuthenticatedTemplate =
+            "SMTP (Office 365): authenticated for itemId={ItemId} attempt={Attempt}/{MaxAttempts} " + SmtpConnectionDiagnostics.TimingTemplate;
+
+        // Type and code only, like Office365FailureLog: no raw provider text.
+        private const string RetryTemplate =
+            "SMTP (Office 365) attempt {Attempt}/{MaxAttempts} failed at {Stage} for itemId={ItemId}: {ExceptionType}; failureCode={FailureCode}; retrying in {DelaySeconds}s " + SmtpConnectionDiagnostics.TimingTemplate;
+
+        private static readonly SmtpEndpoint Endpoint = new(
+            Office365ConfigurationContract.SmtpHost,
+            Office365ConfigurationContract.SmtpPort,
+            SecureSocketOptions.StartTls);
+
         private readonly ILogger<Office365SmtpClient> _logger;
+        private readonly TimeProvider _timeProvider;
 
         public Office365SmtpClient(ILogger<Office365SmtpClient> logger)
+            : this(logger, TimeProvider.System)
         {
-            _logger = logger;
         }
 
-        protected virtual IMailKitSmtpClient CreateSmtpClient() => new MailKitSmtpClientAdapter();
+        public Office365SmtpClient(ILogger<Office365SmtpClient> logger, TimeProvider timeProvider)
+        {
+            _logger = logger;
+            _timeProvider = timeProvider;
+        }
+
+        /// <summary>A new session for each attempt; a failed one is disposed before the wait.</summary>
+        protected virtual IMailKitSmtpClient CreateSmtpClient() => new MailKitSmtpClientAdapter(_timeProvider);
 
         public virtual async Task<bool> SendAsync(MailToBeSent mailToBeSent, MailBody mailBody)
         {
             var configuration = mailToBeSent.MailServerConfiguration;
             var message = MailMessageComposer.Compose(mailToBeSent, mailBody);
+            var maxAttempts = SmtpConnectRetryPolicy.MaxAttemptsFor(mailToBeSent);
 
-            using var client = CreateSmtpClient();
-            var accepted = false;
+            var attempt = 0;
+            while (true)
+            {
+                attempt++;
+                TimeSpan wait;
+                using (var client = CreateSmtpClient())
+                {
+                    _logger.LogInformation(
+                        ConnectingTemplate,
+                        Office365ConfigurationContract.SmtpHost,
+                        Office365ConfigurationContract.SmtpPort,
+                        mailToBeSent.ItemId,
+                        mailBody.Attachments.Count,
+                        attempt,
+                        maxAttempts);
+
+                    var failure = await SmtpConnectRetryPolicy
+                        .ConnectAndAuthenticateAsync(client, Endpoint, configuration, _timeProvider)
+                        .ConfigureAwait(false);
+
+                    if (failure is null)
+                    {
+                        return await SendConnectedAsync(client, message, mailToBeSent, attempt, maxAttempts).ConfigureAwait(false);
+                    }
+
+                    var code = Classify(failure.Exception);
+                    if (!failure.IsTransient || attempt >= maxAttempts)
+                    {
+                        LogFailure(code, mailToBeSent, failure.Exception);
+                        return false;
+                    }
+
+                    wait = SmtpConnectRetryPolicy.WaitAfter(attempt);
+                    _logger.LogWarning(
+                        failure.Exception,
+                        RetryTemplate,
+                        [
+                            attempt,
+                            maxAttempts,
+                            failure.Stage,
+                            mailToBeSent.ItemId,
+                            failure.Exception.GetType().Name,
+                            code,
+                            (int)wait.TotalSeconds,
+                            .. client.Diagnostics.TimingFields()
+                        ]);
+                }
+
+                await Task.Delay(wait, _timeProvider).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>Sends on a logged-in session. Never retried: the message may already be on its way.</summary>
+        private async Task<bool> SendConnectedAsync(
+            IMailKitSmtpClient client,
+            MimeMessage message,
+            MailToBeSent mailToBeSent,
+            int attempt,
+            int maxAttempts)
+        {
+            _logger.LogInformation(
+                AuthenticatedTemplate,
+                [mailToBeSent.ItemId, attempt, maxAttempts, .. client.Diagnostics.TimingFields()]);
 
             try
             {
-                _logger.LogInformation(
-                    "SMTP (Office 365): connecting to {Host}:{Port} for itemId={ItemId} with {AttachmentCount} attachment(s)",
-                    Office365ConfigurationContract.SmtpHost,
-                    Office365ConfigurationContract.SmtpPort,
-                    mailToBeSent.ItemId,
-                    mailBody.Attachments.Count);
-
-                await client.ConnectAsync(
-                    Office365ConfigurationContract.SmtpHost,
-                    Office365ConfigurationContract.SmtpPort,
-                    SecureSocketOptions.StartTls).ConfigureAwait(false);
-
-                await client.AuthenticateAsync(configuration.SenderUserName, configuration.AccountPassword).ConfigureAwait(false);
-
                 await client.SendAsync(message).ConfigureAwait(false);
-
-                // Past this point the message is Exchange's problem, not ours. Nothing below may
-                // turn the result false, and nothing anywhere may resend it.
-                accepted = true;
             }
             catch (Exception ex)
             {
@@ -67,6 +135,8 @@ namespace Mail.DomainService.Mails.Office365
                 return false;
             }
 
+            // Past this point the message is Exchange's problem, not ours. Nothing below may
+            // turn the result false, and nothing anywhere may resend it.
             try
             {
                 await client.DisconnectAsync(true).ConfigureAwait(false);
@@ -82,7 +152,7 @@ namespace Mail.DomainService.Mails.Office365
                     ex.GetType().Name);
             }
 
-            return accepted;
+            return true;
         }
 
         /// <summary>

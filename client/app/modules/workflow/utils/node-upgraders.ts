@@ -6,6 +6,7 @@ import type {
 } from "../models/node.model";
 import { getNodeDefinition } from "../components/node-library-panel/node-definitions";
 import { upgradeClientCredentialParameters } from "./client-credential-upgrade";
+import { normaliseIamUserParameters } from "./iam-user-parameters";
 
 /** Versions a stored node may carry; anything else is read as "v1". */
 const KNOWN_VERSIONS: readonly string[] = ["v1", "v2", "v3"] satisfies NodeVersion[];
@@ -79,6 +80,7 @@ const upgradeNodeShape = <T extends WorkflowNode>(node: T): T => {
  * - Afterwards a definition with `deriveHandle` always rebuilds the handle from the parameters; any
  *   other definition fills a null, missing or empty handle from its template.
  * - Client Credential parameters move to the `clientId`-only shape (see upgradeClientCredentialParameters).
+ * - An IAM User node's enum indexes are read as their names (see normaliseIamUserParameters).
  */
 export const upgradeNode = <T extends WorkflowNode>(node: T): T =>
-  upgradeClientCredentialParameters(upgradeNodeShape(node));
+  normaliseIamUserParameters(upgradeClientCredentialParameters(upgradeNodeShape(node)));

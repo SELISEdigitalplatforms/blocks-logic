@@ -12,6 +12,7 @@ namespace Workflow.DomainService.Logging
         public const string ExecutionInProcess = "execution.inProcess";
         public const string ExecutionStep = "execution.step";
         public const string ExecutionStartFailed = "execution.startFailed";
+        public const string TriggerWebhookIntake = "execution.webhookIntake";
 
         // Engine (WorkflowEngineService)
         public const string NodeSkipped = "node.skipped";
@@ -73,6 +74,13 @@ namespace Workflow.DomainService.Logging
         public const string NotificationFinished = "node.notification.finished";
         public const string NotificationRateLimit = "node.notification.rateLimit";
         public const string NotificationUsersIgnored = "node.notification.usersIgnored";
+        public const string IamUserSending = "node.iamUser.sending";
+        public const string IamUserResponse = "node.iamUser.response";
+        public const string IamUserError = "node.iamUser.error";
+        public const string IamUserNotLogged = "node.iamUser.notLogged";
+        public const string IamUserToken = "node.iamUser.token";
+        public const string IamUserTokenFailed = "node.iamUser.tokenFailed";
+        public const string IamUserFinished = "node.iamUser.finished";
         public const string AgentCall = "node.agent.call";
         public const string AgentResponse = "node.agent.response";
         public const string AgentNotLogged = "node.agent.notLogged";

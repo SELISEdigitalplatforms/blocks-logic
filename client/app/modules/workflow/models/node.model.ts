@@ -24,6 +24,7 @@ export type NodeType =
   | "function"
   | "proxy"
   | "notification"
+  | "iamUser"
   | "schedule";
 
 export type NodeCategory = "trigger" | "action" | "logic" | "transform";
