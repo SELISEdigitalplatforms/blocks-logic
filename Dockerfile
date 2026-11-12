@@ -58,6 +58,7 @@ EXPOSE 5000
 
 # tzdata backs TimeZoneInfo (IANA ids); Alpine ships without it.
 RUN apk add --no-cache icu-libs tzdata
+RUN test -f /usr/share/zoneinfo/Asia/Dhaka && test -f /usr/share/zoneinfo/Europe/Zurich
 
 COPY --from=publish /app/publish .
 RUN chown -R app:app /app
