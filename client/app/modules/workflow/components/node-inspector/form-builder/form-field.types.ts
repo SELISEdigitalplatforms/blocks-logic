@@ -59,14 +59,6 @@ export interface SearchOptionsPage {
 /** What a `json-fields` row edits: text, a list of text, a switch, a whole number or one of `options`. */
 export type JsonFieldKind = "text" | "list" | "bool" | "int" | "enum";
 
-/** A `// comment` line under a `json-fields` row, shown while `when(data)` is true (always without `when`). */
-export interface JsonFieldComment {
-  text: string;
-  /** Default "info". */
-  tone?: "info" | "warn";
-  when?: (data: Record<string, unknown>) => boolean;
-}
-
 /**
  * One row of a `json-fields` block. It reads and writes the parameter `data[key]`. Its mode comes from
  * the stored value's JSON type: a string in a list, bool or int row (or a non-option string in an enum
@@ -81,7 +73,10 @@ export interface JsonFieldRow {
   defaultValue: string | string[] | boolean | number;
   /** Marker only; the server validates. */
   required?: boolean;
-  /** Waits on the `// add:` line while empty. */
+  /**
+   * Waits on the `// add:` line while empty. Any row that is not `required` can also be removed with
+   * its × button, which resets it to `defaultValue` and moves it to the `// add:` line.
+   */
   optional?: boolean;
   info?: string;
   /** `list` (picker) or `enum` (required for enum). */
@@ -96,7 +91,6 @@ export interface JsonFieldRow {
   optionsDependencies?: string[];
   /** `list` only: Enter on typed text that matches no option adds that text. */
   allowCustom?: boolean;
-  comment?: JsonFieldComment;
 }
 
 /** Rows shown nested under `"group": { … }`. Display only: its rows are flat parameter keys. */

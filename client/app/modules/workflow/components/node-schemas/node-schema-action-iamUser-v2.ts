@@ -1,4 +1,4 @@
-import { tStatic } from "@seliseblocks/genesis-os";
+import { getRuntimeEnv, tStatic } from "@seliseblocks/genesis-os";
 import { NodeGuideActionIamUserV2 } from "../node-guides";
 import { NodeSchemaDefinition } from "./node-schema.type";
 import type {
@@ -64,12 +64,16 @@ export const iamUserOperationDefaults = (): Record<string, unknown> => ({
   roleMode: "add",
 });
 
-/** §6 defaults of the whole node. No base URL: IAM's address is a server setting. */
+/**
+ * §6 defaults of the whole node. `apiBaseUrl` is stamped by `transform` from `BLOCKS_IAM_BASE_URL`, as the
+ * Data Action node does with `BLOCKS_DATA_BASE_URL`; the server falls back to its `IamBaseUrl` setting.
+ */
 const iamUserDefaults = (): Record<string, unknown> => ({
   authenticationType: "clientCredential",
   clientId: "",
   operation: "getUsers",
   ...iamUserOperationDefaults(),
+  apiBaseUrl: "",
 });
 
 /**
@@ -148,7 +152,7 @@ export const iamUserRows = (
           required: context.isMultiOrgEnabled !== false,
           info: text("ORGANIZATION_ID_CREATE_INFO"),
         }),
-        textRow("email", { required: true, comment: { text: text("EXISTING_EMAIL_COMMENT") } }),
+        textRow("email", { required: true }),
         textRow("firstName"),
         textRow("lastName"),
         textRow("userName", { optional: true }),
@@ -186,12 +190,8 @@ export const iamUserRows = (
             { value: "add", label: text("ROLE_MODE_ADD") },
             { value: "replace", label: text("ROLE_MODE_REPLACE") },
           ],
-          comment: { text: text("REPLACE_COMMENT"), tone: "warn", when: (current) => current.roleMode === "replace" },
         },
-        {
-          ...roleRow("roles", "roles", true),
-          comment: { text: text("ADD_COMMENT"), when: (current) => current.roleMode === "add" },
-        },
+        roleRow("roles", "roles", true),
         notifyRow("NOTIFY_USER_ASSIGN_INFO"),
       ];
     case "revokeAccess":
@@ -277,21 +277,6 @@ export const NodeSchemaActionIamUserV2: NodeSchemaDefinition = {
         },
       },
       {
-        id: "blocksAuthenticationNotes",
-        type: "callout-accordion-display",
-        key: "blocksAuthenticationNotes",
-        transient: true,
-        displayValue: () => ({
-          title: text("BLOCKS_AUTHENTICATION_CALLOUT_TITLE"),
-          description: text("BLOCKS_AUTHENTICATION_CALLOUT"),
-        }),
-        dependsOn: {
-          key: "authenticationType",
-          value: "blocksAuthentication",
-          operator: "equals",
-        },
-      },
-      {
         id: "operation",
         type: "select",
         get label() {
@@ -330,11 +315,14 @@ export const NodeSchemaActionIamUserV2: NodeSchemaDefinition = {
     parameters: iamUserDefaults(),
     settings: {},
   },
-  // Identity apart from copying lists, so new nodes never share the defaults' arrays; nothing is stamped.
+  // Copies lists, so new nodes never share the defaults' arrays, and stamps IAM's base URL.
   transform: (node) => ({
     ...node,
-    parameters: Object.fromEntries(
-      Object.entries(node.parameters ?? {}).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]),
-    ),
+    parameters: {
+      ...Object.fromEntries(
+        Object.entries(node.parameters ?? {}).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]),
+      ),
+      apiBaseUrl: getRuntimeEnv("BLOCKS_IAM_BASE_URL") || "",
+    },
   }),
 };

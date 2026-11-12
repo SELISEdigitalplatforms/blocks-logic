@@ -208,7 +208,6 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		category: "action",
 		type: "iamUser",
 		version: "v2",
-		isComingSoon: true,
 		get defaultName() { return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "NODE_DEFINITIONS.IAM_USER"); },
 		handle: {
 			sources: [{ key: "source", label: "" }],

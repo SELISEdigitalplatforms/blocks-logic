@@ -154,7 +154,6 @@ namespace XUnitTest.Workflow
                 { "email", "{{$json.email}}" },
                 { "roles", new BsonArray { "editor" } },
                 { "organizationId", "org1" },
-                { "apiBaseUrl", "https://evil.example" }, // ignored (C15)
             });
 
             var result = await Run(parameters, new BsonDocument("email", "a@x.io"));
@@ -265,7 +264,7 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task UpdateUser_WithOnlyFirstName_SendsOnlyFirstName()
+        public async Task UpdateUser_WithOnlyFirstName_SendsTheItemIdAndOnlyFirstName()
         {
             _iam.Enqueue(HttpStatusCode.OK, """{"isSuccess":true}""");
 
@@ -277,7 +276,8 @@ namespace XUnitTest.Workflow
 
             var request = _iam.Requests.Single();
             request.Uri.Should().Be($"{BaseUrl}/api/iam/users/u%2F1");
-            request.Body.Should().Be("""{"firstName":"E2E"}""");
+            // The id goes in the body as itemId too: IAM validates it there before copying the route id over it.
+            request.Body.Should().Be("""{"itemId":"u/1","firstName":"E2E"}""");
             SingleOutput(result).Should().BeEquivalentTo(new BsonDocument
             {
                 { "operation", "updateUser" }, { "status", "success" }, { "userId", "u/1" },
@@ -295,7 +295,7 @@ namespace XUnitTest.Workflow
                 { "userId", "u1" }, { "organizationId", "org1" }, { "lastName", "Lee" }, { "language", "en" }, { "phoneNumber", "1" },
             }));
 
-            _iam.Requests.Single().Body.Should().Be("""{"organizationId":"org1","lastName":"Lee","phoneNumber":"1","language":"en"}""");
+            _iam.Requests.Single().Body.Should().Be("""{"itemId":"u1","organizationId":"org1","lastName":"Lee","phoneNumber":"1","language":"en"}""");
         }
 
         [Theory]
@@ -632,7 +632,37 @@ namespace XUnitTest.Workflow
 
             var output = SingleOutput(result);
             AssertError(output, "invalid_configuration");
-            output["message"].AsString.Should().Be("IAM base URL is not configured on the server.");
+            output["message"].AsString.Should().Be("IAM base URL is not configured (node or server).");
+            _iam.Requests.Should().BeEmpty();
+            AssertNoTokenRequested();
+        }
+
+        [Fact]
+        public async Task NodeApiBaseUrl_TakesPrecedenceOverTheServerSetting()
+        {
+            _iam.Enqueue(HttpStatusCode.OK, """{"data":[],"totalCount":0}""");
+
+            await Run(Params("getUsers", new BsonDocument { { "apiBaseUrl", "https://node-iam.test.local/" } }));
+
+            _iam.Requests.Single().Uri.Should().Be("https://node-iam.test.local/api/iam/users");
+        }
+
+        [Fact]
+        public async Task BlankNodeApiBaseUrl_FallsBackToTheServerSetting()
+        {
+            _iam.Enqueue(HttpStatusCode.OK, """{"data":[],"totalCount":0}""");
+
+            await Run(Params("getUsers", new BsonDocument { { "apiBaseUrl", "  " } }));
+
+            _iam.Requests.Single().Uri.Should().Be($"{BaseUrl}/api/iam/users");
+        }
+
+        [Fact]
+        public async Task UnusableNodeApiBaseUrl_FailsEveryItem_WithoutFallingBack()
+        {
+            var result = await Run(Params("getUsers", new BsonDocument { { "apiBaseUrl", "ftp://node-iam.test.local" } }));
+
+            AssertError(SingleOutput(result), "invalid_configuration");
             _iam.Requests.Should().BeEmpty();
             AssertNoTokenRequested();
         }
