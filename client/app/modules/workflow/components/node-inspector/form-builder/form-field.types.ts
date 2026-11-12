@@ -117,6 +117,15 @@ export interface ReadonlyDetails {
   link?: { label: string; path: string };
 }
 
+/** What a field's `asyncProps` loader may set. */
+export interface AsyncFieldProps {
+  hidden?: boolean;
+  required?: boolean;
+  label?: string;
+  info?: string;
+  placeholder?: string;
+}
+
 export interface FieldSchema<Whole = Record<string, unknown>> {
   id: string;
   type: FormFieldType;
@@ -225,6 +234,24 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
   ) => Promise<unknown>;
   /** Parameter keys whose change re-runs `locked`. Mirrors `optionsDependencies`. */
   lockedDependencies?: string[];
+  /**
+   * Field props that depend on data loaded from outside the node (e.g. the picked configuration's
+   * rules). What it returns replaces the field's own props of the same name. While it loads the field
+   * is hidden; if it fails the field's own props apply. Re-runs when a key in
+   * `asyncPropsDependencies` changes.
+   */
+  asyncProps?: (
+    data: Whole,
+    config: {
+      tenantId: string;
+      workflowId: string;
+      nodeId: string;
+      store: WorkflowStore;
+      executionMode?: number;
+    },
+  ) => Promise<AsyncFieldProps>;
+  /** Parameter keys whose change re-runs `asyncProps`. Mirrors `optionsDependencies`. */
+  asyncPropsDependencies?: string[];
   /**
    * Parameter keys whose value changes should re-run an async `options` function. Without this an
    * async option list is fetched once per mount, which is wrong for a dropdown that narrows itself

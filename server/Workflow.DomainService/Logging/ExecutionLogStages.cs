@@ -71,6 +71,9 @@ namespace Workflow.DomainService.Logging
         public const string DataTokenFailed = "node.data.tokenFailed";
         public const string DataFinished = "node.data.finished";
         public const string MailFinished = "node.mail.finished";
+        public const string NotificationFinished = "node.notification.finished";
+        public const string NotificationRateLimit = "node.notification.rateLimit";
+        public const string NotificationUsersIgnored = "node.notification.usersIgnored";
         public const string IamUserSending = "node.iamUser.sending";
         public const string IamUserResponse = "node.iamUser.response";
         public const string IamUserError = "node.iamUser.error";

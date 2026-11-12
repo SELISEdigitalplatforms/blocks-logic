@@ -54,6 +54,52 @@ describe("FormBuilder", () => {
     expect(screen.getByText("Name")).toBeTruthy();
   });
 
+  it("hides a field with asyncProps while they load, then applies them", async () => {
+    let resolve: (v: { label: string; required: boolean }) => void = () => {};
+    const asyncProps = vi.fn(
+      () => new Promise<{ label: string; required: boolean }>((r) => { resolve = r; }),
+    );
+    render([
+      { id: "a", key: "a", type: "text", label: "Static", asyncProps, asyncPropsDependencies: ["kind"] } as FieldSchema,
+    ]);
+
+    expect(screen.queryByText("Static")).toBeNull();
+    resolve({ label: "Loaded", required: true });
+    await waitFor(() => expect(screen.getByText("Loaded")).toBeTruthy());
+  });
+
+  it("re-runs asyncProps when a dependency changes and can hide the field", async () => {
+    const fields: FieldSchema[] = [
+      { id: "kind", key: "kind", type: "text", label: "Kind" },
+      {
+        id: "extra",
+        key: "extra",
+        type: "text",
+        label: "Extra",
+        asyncProps: async (data) => ({ hidden: data.kind === "none" }),
+        asyncPropsDependencies: ["kind"],
+      },
+    ];
+    render(fields, { kind: "some" });
+    await waitFor(() => expect(screen.getByText("Extra")).toBeTruthy());
+
+    fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: "none" } });
+    await waitFor(() => expect(screen.queryByText("Extra")).toBeNull());
+  });
+
+  it("falls back to the field's own props when asyncProps fails", async () => {
+    render([
+      {
+        id: "b",
+        key: "b",
+        type: "text",
+        label: "Own label",
+        asyncProps: () => Promise.reject(new Error("nope")),
+      } as FieldSchema,
+    ]);
+    await waitFor(() => expect(screen.getByText("Own label")).toBeTruthy());
+  });
+
   it("renders an unknown field type gracefully", () => {
     render([
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

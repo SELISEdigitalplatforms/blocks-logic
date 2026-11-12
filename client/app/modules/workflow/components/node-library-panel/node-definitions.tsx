@@ -16,6 +16,7 @@ import {
 	Split,
 	Signpost,
 	Merge,
+	Bell,
 	Filter,
 	BetweenHorizontalStart,
 	Zap,
@@ -165,6 +166,21 @@ export const NodeDefinitions: WorkflowNodeDefinition[] = [
 		category: "action",
 		version: "v2",
 		defaultName: "Proxy",
+		handle: {
+			sources: [{ key: "source", label: "" }],
+			targets: [{ key: "target", label: "" }],
+		},
+	},
+	{
+		id: "action-notification-v2",
+		icon: <Bell className="h-5 w-5 text-amber-500" />,
+		title: "Send Notification",
+		description:
+			"Sends a Blocks notification to users through one of the project's notification configurations.",
+		type: "notification",
+		category: "action",
+		version: "v2",
+		defaultName: "Send Notification",
 		handle: {
 			sources: [{ key: "source", label: "" }],
 			targets: [{ key: "target", label: "" }],

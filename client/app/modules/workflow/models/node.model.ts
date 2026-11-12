@@ -23,6 +23,7 @@ export type NodeType =
   | "dataAction"
   | "function"
   | "proxy"
+  | "notification"
   | "iamUser"
   | "schedule";
 
