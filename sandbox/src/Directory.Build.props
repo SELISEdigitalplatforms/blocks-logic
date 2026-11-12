@@ -48,4 +48,13 @@
          down, so the processing loops catch broadly and report. -->
     <NoWarn>$(NoWarn);CA1848;CA1873;CA1031</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- TEMPORARY. GHSA-wr8v-9x5q-ggcm (CVE-2026-114147, ASP.NET Core DoS) flags
+         Microsoft.AspNetCore.SignalR.StackExchangeRedis 10.0.7, which arrives transitively through
+         SeliseBlocks.Genesis.OS; the fix is 10.0.15. With warnings as errors, NU1903 fails restore.
+         Only this one advisory is suppressed, so any other vulnerability still fails the build.
+         Remove once Genesis ships with 10.0.15 or later. -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-wr8v-9x5q-ggcm" />
+  </ItemGroup>
 </Project>
