@@ -160,6 +160,67 @@ const forwardToChildRef = (childRef: React.Ref<Control> | undefined, node: Contr
     childRef.current = node;
 };
 
+/** The picker to show: none while the control is disabled or read-only. */
+const activePicker = (
+  variablePicker: VariablePickerConfig | null | undefined,
+  child: ChildProps,
+): VariablePickerConfig | null => {
+  if (!variablePicker || child.disabled || child.readOnly) return null;
+  return variablePicker;
+};
+
+/** Right padding that keeps the control's text clear of the buttons over its right end. */
+const actionPadding = (hasPicker: boolean, hasTrailingAction: boolean, compact: boolean) => {
+  if (hasPicker && hasTrailingAction) return "pr-16";
+  if (!hasPicker && !hasTrailingAction) return undefined;
+  return compact ? "pr-6" : "pr-9";
+};
+
+/** The key button and the caller's trailing action, over the control's right end. */
+const HighlighterActions = ({
+  picker,
+  trailingAction,
+  compact,
+  isMultiline,
+  onPick,
+}: {
+  picker: VariablePickerConfig | null;
+  trailingAction?: React.ReactNode;
+  compact: boolean;
+  isMultiline: boolean;
+  onPick: (token: string) => void;
+}) => {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  if (!picker && !trailingAction) return null;
+  return (
+    <div
+      className={cn(
+        "absolute z-20 flex items-center gap-0.5",
+        compact ? "right-0.5" : "right-1",
+        isMultiline && !compact ? "top-1" : "top-1/2 -translate-y-1/2",
+      )}
+    >
+      {picker && (
+        <div
+          className={cn(
+            "opacity-0 transition-opacity group-hover/var:opacity-100 group-focus-within/var:opacity-100",
+            pickerOpen && "opacity-100",
+          )}
+        >
+          <SecretPicker
+            target={picker.target}
+            onPick={onPick}
+            onOpenChange={setPickerOpen}
+            className={compact ? "h-5 w-5" : undefined}
+          />
+        </div>
+      )}
+      {picker && trailingAction && <span className="h-4 w-px bg-border" aria-hidden="true" />}
+      {trailingAction}
+    </div>
+  );
+};
+
 export const ExpressionHighlighter = ({
   children,
   value,
@@ -198,9 +259,7 @@ export const ExpressionHighlighter = ({
   const { nodes } = useWorkflow();
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const controlRef = useRef<Control | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const picker =
-    variablePicker && !children.props.disabled && !children.props.readOnly ? variablePicker : null;
+  const picker = activePicker(variablePicker, children.props);
 
   // A pick replaces the whole value, as the proxy form's picker does.
   const insertToken = (token: string) => {
@@ -295,35 +354,6 @@ export const ExpressionHighlighter = ({
     },
   };
 
-  const actions =
-    picker || trailingAction ? (
-      <div
-        className={cn(
-          "absolute z-20 flex items-center gap-0.5",
-          compact ? "right-0.5" : "right-1",
-          isMultiline && !compact ? "top-1" : "top-1/2 -translate-y-1/2",
-        )}
-      >
-        {picker && (
-          <div
-            className={cn(
-              "opacity-0 transition-opacity group-hover/var:opacity-100 group-focus-within/var:opacity-100",
-              pickerOpen && "opacity-100",
-            )}
-          >
-            <SecretPicker
-              target={picker.target}
-              onPick={insertToken}
-              onOpenChange={setPickerOpen}
-              className={compact ? "h-5 w-5" : undefined}
-            />
-          </div>
-        )}
-        {picker && trailingAction && <span className="h-4 w-px bg-border" aria-hidden="true" />}
-        {trailingAction}
-      </div>
-    ) : null;
-
   const enhancedChild = React.cloneElement(children, {
     spellCheck: false,
     ...refProps,
@@ -334,7 +364,7 @@ export const ExpressionHighlighter = ({
     className: cn(
       children.props.className,
       "expression-highlighter-control relative z-10 caret-black dark:caret-white",
-      picker && trailingAction ? "pr-16" : (picker || trailingAction) && (compact ? "pr-6" : "pr-9"),
+      actionPadding(!!picker, !!trailingAction, compact),
     ),
     // Inline so it beats the control's own utility classes: the text is invisible, the
     // caret is not, and the coloured backdrop shows through.
@@ -367,7 +397,13 @@ export const ExpressionHighlighter = ({
         )}
       </div>
       {enhancedChild}
-      {actions}
+      <HighlighterActions
+        picker={picker}
+        trailingAction={trailingAction}
+        compact={compact}
+        isMultiline={isMultiline}
+        onPick={insertToken}
+      />
     </div>
   );
 };
