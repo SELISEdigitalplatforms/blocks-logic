@@ -1,7 +1,7 @@
 "use client";
 
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Loader2, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Plus, X } from "lucide-react";
 import {
   Command,
   CommandGroup,
@@ -15,7 +15,6 @@ import { cn } from "@/lib/utils";
 import { useT } from "@seliseblocks/genesis-os";
 import {
   FieldProps,
-  JsonFieldComment,
   JsonFieldGroup,
   JsonFieldKind,
   JsonFieldRow,
@@ -29,7 +28,7 @@ import {
   REMOTE_SEARCH_PAGE_SIZE,
   REMOTE_SEARCH_SCROLL_THRESHOLD_PX,
 } from "./remote-search.constants";
-import { showsVariablePicker } from "./secret-picker";
+import { SecretPicker, showsVariablePicker } from "./secret-picker";
 
 type Translate = (key: string, values?: Readonly<Record<string, string | number>>) => string;
 type FieldConfig = FieldProps["config"];
@@ -146,6 +145,19 @@ const focusValueControl = (container: HTMLElement | null) => {
   }
 };
 
+/** A value box: plain text at rest, an input box while focused. */
+const VALUE_BOX_CLASSES =
+  "rounded bg-transparent focus-within:bg-background focus-within:ring-1 focus-within:ring-input";
+
+/** A dashed "add" button that turns primary on hover: `// add:` options and a list's add button. */
+const DASHED_BUTTON_CLASSES =
+  "inline-flex items-center gap-0.5 rounded border border-dashed border-input px-1.5 font-mono text-xs not-italic leading-[22px] text-muted-foreground transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:hover:border-input disabled:hover:text-muted-foreground";
+
+/** Token colours of the block, as in a code editor. */
+const STRING_CLASSES = "text-green-600 dark:text-green-400";
+const KEY_CLASSES = "text-violet-600 dark:text-violet-300";
+const LITERAL_CLASSES = "text-sky-600 dark:text-sky-400";
+
 // ── One-line text input ──────────────────────────────────────────────────────────────────────
 
 interface OneLineInputProps {
@@ -157,14 +169,14 @@ interface OneLineInputProps {
   ariaLabel: string;
   describedBy: string;
   disabled: boolean;
-  picker: VariablePickerConfig | null;
   className?: string;
 }
 
 /**
  * A value input that sizes to its content. It is a one-row textarea with wrapping off, so pasted
- * newlines are kept byte for byte (an `<input>` strips them) while the row stays on one line and
- * scrolls sideways. Enter is not inserted, as in a one-line input.
+ * newlines are kept byte for byte (an `<input>` strips them) while the row stays on one line; a long
+ * value widens the row and the whole block scrolls sideways. Enter is not inserted, as in a one-line
+ * input. It reads as plain text until focused, when it shows an input box.
  */
 const OneLineInput = ({
   id,
@@ -175,7 +187,6 @@ const OneLineInput = ({
   ariaLabel,
   describedBy,
   disabled,
-  picker,
   className,
 }: Readonly<OneLineInputProps>) => {
   const longestLine = Math.max(
@@ -184,10 +195,10 @@ const OneLineInput = ({
   );
   return (
     <span
-      className={cn("inline-block min-w-0 max-w-full align-middle", className)}
-      style={{ width: `calc(${longestLine + 1}ch + ${picker ? "2rem" : "0.5rem"})` }}
+      className={cn("inline-block shrink-0 align-middle", className)}
+      style={{ width: `calc(${longestLine + 1}ch + 0.75rem)` }}
     >
-      <ExpressionHighlighter value={value} isMultiline variablePicker={picker} compact>
+      <ExpressionHighlighter value={value} isMultiline compact wrapperClassName={VALUE_BOX_CLASSES}>
         <textarea
           id={id}
           data-json-value="text"
@@ -203,11 +214,42 @@ const OneLineInput = ({
             if (event.key === "Enter" && !event.nativeEvent.isComposing) event.preventDefault();
           }}
           className={cn(
-            "block h-6 w-full resize-none overflow-x-auto overflow-y-hidden whitespace-pre bg-transparent px-1 py-0 font-mono text-sm leading-6 outline-none disabled:cursor-not-allowed",
+            "block h-6 w-full cursor-text resize-none overflow-hidden whitespace-pre bg-transparent px-1.5 py-0 font-mono text-sm leading-6 outline-none placeholder:italic disabled:cursor-not-allowed",
             placeholderClassName,
           )}
         />
       </ExpressionHighlighter>
+    </span>
+  );
+};
+
+/**
+ * The `{{$VAR.name}}` key button of a text or fx row, outside the value box after its closing quote.
+ * Shown while the line is hovered or holds focus; a pick replaces the whole value, as elsewhere.
+ */
+const KeyButton = ({ picker, controlId }: Readonly<{ picker: VariablePickerConfig; controlId: string }>) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      className={cn(
+        "ml-1 inline-flex shrink-0 opacity-0 transition-opacity group-hover/line:opacity-100 group-focus-within/line:opacity-100",
+        open && "opacity-100",
+      )}
+    >
+      <SecretPicker
+        target={picker.target}
+        onOpenChange={setOpen}
+        className="h-5 w-5"
+        onPick={(token) => {
+          picker.onChange(token);
+          setTimeout(() => {
+            const control = document.getElementById(controlId);
+            if (!(control instanceof HTMLTextAreaElement)) return;
+            control.focus();
+            control.setSelectionRange(token.length, token.length);
+          }, 0);
+        }}
+      />
     </span>
   );
 };
@@ -424,20 +466,27 @@ const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, on
   };
 
   return (
-    <span className="inline-flex min-w-0 flex-wrap items-center gap-1">
+    <span className="inline-flex shrink-0 items-center gap-1.5">
       <span className="text-low-emphasis">[</span>
       {values.map((value) => (
         <span
           key={value}
-          className="inline-flex max-w-[12rem] items-center gap-0.5 rounded bg-muted px-1.5 text-xs text-green-600 dark:text-green-400"
+          className={cn(
+            "inline-flex max-w-[14rem] items-center rounded border border-input bg-background py-0 pl-1.5 pr-0.5 leading-[22px]",
+            STRING_CLASSES,
+          )}
         >
+          <span aria-hidden="true">&quot;</span>
           <span className="truncate">{labelFor(value)}</span>
+          <span aria-hidden="true" className="mr-1">
+            &quot;
+          </span>
           <button
             type="button"
             disabled={disabled}
             aria-label={t("JSON_FIELDS_FIELD.REMOVE_VALUE", { value: labelFor(value) })}
             onClick={() => toggle(value)}
-            className="rounded text-low-emphasis hover:text-high-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+            className="grid h-4 w-4 place-items-center rounded text-low-emphasis hover:bg-muted hover:text-high-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
           >
             <X className="h-3 w-3" />
           </button>
@@ -451,9 +500,10 @@ const ListValue = ({ row, label, values, disabled, depKey, describedBy, load, on
             disabled={disabled}
             aria-label={t("JSON_FIELDS_FIELD.ADD_VALUE", { label })}
             aria-describedby={describedBy}
-            className="rounded px-1 text-xs text-low-emphasis hover:bg-muted hover:text-high-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+            className={DASHED_BUTTON_CLASSES}
           >
-            {values.length === 0 ? t("JSON_FIELDS_FIELD.ADD_EMPTY") : "+"}
+            <Plus className="h-3 w-3" aria-hidden="true" />
+            {values.length === 0 && t("JSON_FIELDS_FIELD.ADD_EMPTY")}
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-64 p-0" align="start">
@@ -529,7 +579,10 @@ const EnumValue = ({ row, id, label, value, disabled, describedBy, onSelect }: R
           aria-label={label}
           aria-describedby={describedBy}
           aria-haspopup="listbox"
-          className="inline-flex items-center gap-0.5 rounded px-0.5 text-green-600 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed dark:text-green-400"
+          className={cn(
+            "inline-flex items-center gap-1 rounded border border-input bg-background px-1.5 leading-[22px] hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
+            STRING_CLASSES,
+          )}
         >
           <span>{JSON.stringify(value)}</span>
           <ChevronDown className="h-3 w-3 text-low-emphasis" />
@@ -622,7 +675,7 @@ const IntValue = ({ id, label, value, disabled, describedBy, onNumber, onExpress
         if (draft !== null && draft.trim() === "") onNumber(Number.NaN);
         setDraft(null);
       }}
-      className="w-auto min-w-[3ch] bg-transparent px-0.5 font-mono tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+      className="w-auto min-w-[3ch] rounded bg-transparent px-1.5 font-mono leading-6 tabular-nums text-orange-600 outline-none focus:bg-background focus:ring-1 focus:ring-input disabled:cursor-not-allowed dark:text-orange-400"
       size={Math.max(shown.length, 1)}
     />
   );
@@ -682,26 +735,36 @@ const RowControl = ({
       ariaLabel={label}
       describedBy={describedBy}
       disabled={disabled}
-      picker={picker}
     />
   );
+  const keyButton = picker && !disabled ? <KeyButton picker={picker} controlId={id} /> : null;
 
   if (mode === "fx") {
     return (
-      <span className="inline-flex min-w-0 max-w-full rounded bg-primary/5 px-0.5">
-        {textInput(`{{ ${t("JSON_FIELDS_FIELD.EXPRESSION")} }}`, "placeholder:text-low-emphasis")}
-      </span>
+      <>
+        <span className="inline-flex shrink-0 rounded bg-primary/10 px-0.5">
+          {textInput(`{{ ${t("JSON_FIELDS_FIELD.EXPRESSION")} }}`, "placeholder:text-low-emphasis")}
+        </span>
+        {keyButton}
+      </>
     );
   }
   switch (row.kind) {
     case "text":
       return (
-        <span className="inline-flex min-w-0 max-w-full items-center text-green-600 dark:text-green-400 [&_[aria-hidden=true]]:text-green-600 dark:[&_[aria-hidden=true]]:text-green-400">
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-0.5",
+            STRING_CLASSES,
+            "[&_[aria-hidden=true]]:text-green-600 dark:[&_[aria-hidden=true]]:text-green-400",
+          )}
+        >
           <span>&quot;</span>
           {row.required
             ? textInput(t("JSON_FIELDS_FIELD.REQUIRED"), "placeholder:text-red-500/70")
             : textInput(t("JSON_FIELDS_FIELD.EMPTY"), "placeholder:text-low-emphasis")}
           <span>&quot;</span>
+          {keyButton}
         </span>
       );
     case "list":
@@ -730,7 +793,10 @@ const RowControl = ({
           aria-describedby={describedBy}
           disabled={disabled}
           onClick={() => write(value !== true)}
-          className="rounded px-0.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+          className={cn(
+            "rounded border border-dashed border-transparent px-1.5 leading-[22px] hover:border-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:hover:border-transparent",
+            LITERAL_CLASSES,
+          )}
         >
           {toText(value === true)}
         </button>
@@ -774,8 +840,9 @@ interface RowLineProps {
   trailing: React.ReactNode;
 }
 
+/** A row action (fx, ×): shown while its line is hovered or holds focus. */
 const ACTION_CLASSES =
-  "rounded px-1 text-xs text-low-emphasis opacity-0 transition-opacity hover:bg-muted hover:text-high-emphasis focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100 group-focus-within/row:opacity-100 disabled:cursor-not-allowed";
+  "grid h-[22px] min-w-[22px] place-items-center rounded px-1 text-low-emphasis opacity-0 transition-opacity hover:bg-muted hover:text-high-emphasis focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/line:opacity-100 group-focus-within/line:opacity-100 disabled:cursor-not-allowed";
 
 /** The text a drop leaves in a row: appended to a text row's value, the whole expression otherwise. */
 const droppedValue = (row: JsonFieldRow, value: unknown, text: string) => {
@@ -877,20 +944,19 @@ const RowLineImpl = ({
     <div
       ref={containerRef}
       data-testid={`json-row-${row.key}`}
-      className={cn("group/row flex min-w-0 flex-1 items-center gap-1 rounded", dragOver && "bg-primary/10")}
+      className={cn("flex flex-1 items-center self-stretch rounded", dragOver && "bg-primary/10")}
     >
       <Tooltip>
         <TooltipTrigger asChild>
           <span
             tabIndex={-1}
             className={cn(
-              "shrink-0 cursor-help text-high-emphasis",
-              row.required && "after:text-red-500 after:content-['*']",
+              "shrink-0 cursor-help whitespace-nowrap",
+              KEY_CLASSES,
+              row.required && "after:ml-px after:align-super after:text-[11px] after:text-red-500 after:content-['*']",
             )}
           >
-            <span className="text-low-emphasis">&quot;</span>
-            {label}
-            <span className="text-low-emphasis">&quot;</span>
+            &quot;{label}&quot;
           </span>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-xs text-xs">
@@ -900,7 +966,7 @@ const RowLineImpl = ({
       <span id={describedBy} className="sr-only">
         {help}
       </span>
-      <span className="text-low-emphasis">:</span>
+      <span className="ml-px mr-2 text-low-emphasis">:</span>
       <RowControl
         row={row}
         mode={mode}
@@ -916,29 +982,32 @@ const RowLineImpl = ({
         onExpressionTyped={writeAndFocusFx}
       />
       {trailing}
-      {row.kind !== "text" && (
-        <button
-          type="button"
-          disabled={disabled}
-          aria-pressed={mode === "fx"}
-          aria-label={t("JSON_FIELDS_FIELD.USE_EXPRESSION_FOR", { label })}
-          onClick={() => (mode === "fx" ? write(row.defaultValue) : writeAndFocusFx(""))}
-          className={cn(ACTION_CLASSES, mode === "fx" && "text-primary opacity-100")}
-        >
-          {EXPRESSION_TOKEN}
-        </button>
-      )}
-      {row.optional && (
-        <button
-          type="button"
-          disabled={disabled}
-          aria-label={t("JSON_FIELDS_FIELD.REMOVE_ROW", { label })}
-          onClick={() => context.removeRow(row)}
-          className={ACTION_CLASSES}
-        >
-          <X className="h-3 w-3" />
-        </button>
-      )}
+      {/* Pinned to the line's right edge, and to the visible edge while the block scrolls sideways. */}
+      <span className="sticky right-1 ml-auto flex shrink-0 items-center gap-0.5 pl-3">
+        {row.kind !== "text" && (
+          <button
+            type="button"
+            disabled={disabled}
+            aria-pressed={mode === "fx"}
+            aria-label={t("JSON_FIELDS_FIELD.USE_EXPRESSION_FOR", { label })}
+            onClick={() => (mode === "fx" ? write(row.defaultValue) : writeAndFocusFx(""))}
+            className={cn(ACTION_CLASSES, mode === "fx" && "bg-primary/10 text-primary opacity-100")}
+          >
+            <span className="font-serif text-[15px] font-semibold italic leading-none">{EXPRESSION_TOKEN}</span>
+          </button>
+        )}
+        {!row.required && (
+          <button
+            type="button"
+            disabled={disabled}
+            aria-label={t("JSON_FIELDS_FIELD.REMOVE_ROW", { label })}
+            onClick={() => context.removeRow(row)}
+            className={ACTION_CLASSES}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </span>
     </div>
   );
 };
@@ -965,22 +1034,17 @@ const RowLine = memo(
 type Line =
   | { type: "brace"; text: string; depth: number; key: string }
   | { type: "row"; row: JsonFieldRow; depth: number; comma: boolean }
-  | { type: "comment"; row: JsonFieldRow; depth: number }
   | { type: "group"; group: JsonFieldGroup; depth: number }
   | { type: "add"; rows: JsonFieldRow[]; depth: number };
 
 const COMMA = <span className="text-low-emphasis">,</span>;
-const INDENT_CLASSES = ["pl-0", "pl-4", "pl-8"];
+const INDENT_CLASSES = ["pl-0", "pl-[18px]", "pl-9"];
 
 /**
  * The block's lines: braces, visible rows (groups nested, a comma after all but the last at each
- * level), shown comments under their rows, and one `// add:` line for every hidden optional row.
+ * level), and one `// add:` line for every hidden row.
  */
-const buildLines = (
-  items: Array<JsonFieldRow | JsonFieldGroup>,
-  isHidden: (row: JsonFieldRow) => boolean,
-  commentShown: (row: JsonFieldRow) => boolean,
-): Line[] => {
+const buildLines = (items: Array<JsonFieldRow | JsonFieldGroup>, isHidden: (row: JsonFieldRow) => boolean): Line[] => {
   const lines: Line[] = [{ type: "brace", text: "{", depth: 0, key: "open" }];
   const waiting: JsonFieldRow[] = [];
   const keepVisible = (row: JsonFieldRow) => {
@@ -996,7 +1060,6 @@ const buildLines = (
   const pushRows = (rows: JsonFieldRow[], depth: number, lastAtLevel: boolean) => {
     rows.forEach((row, index) => {
       lines.push({ type: "row", row, depth, comma: !(lastAtLevel && index === rows.length - 1) });
-      if (commentShown(row)) lines.push({ type: "comment", row, depth });
     });
   };
   visible.forEach((item, index) => {
@@ -1022,21 +1085,17 @@ const lineKey = (line: Line) => {
       return `group-${line.group.group}`;
     case "row":
       return `row-${line.row.key}`;
-    case "comment":
-      return `comment-${line.row.key}`;
     default:
       return "add";
   }
 };
 
 const GroupKey = ({ group }: Readonly<{ group: JsonFieldGroup }>) => (
-  <span className="inline-flex items-center gap-1">
+  <span className="inline-flex items-center whitespace-nowrap">
     <Tooltip>
       <TooltipTrigger asChild>
-        <span tabIndex={-1} className="cursor-help text-high-emphasis">
-          <span className="text-low-emphasis">&quot;</span>
-          {group.group}
-          <span className="text-low-emphasis">&quot;</span>
+        <span tabIndex={-1} className={cn("cursor-help", KEY_CLASSES)}>
+          &quot;{group.group}&quot;
         </span>
       </TooltipTrigger>
       {group.info && (
@@ -1045,28 +1104,9 @@ const GroupKey = ({ group }: Readonly<{ group: JsonFieldGroup }>) => (
         </TooltipContent>
       )}
     </Tooltip>
-    <span className="text-low-emphasis">: {"{"}</span>
+    <span className="ml-px mr-2 text-low-emphasis">:</span>
+    <span className="text-low-emphasis">{"{"}</span>
   </span>
-);
-
-const CommentLine = ({
-  comment,
-  expanded,
-  onToggle,
-}: Readonly<{ comment: JsonFieldComment; expanded: boolean; onToggle: () => void }>) => (
-  <button
-    type="button"
-    aria-expanded={expanded}
-    onClick={onToggle}
-    className={cn(
-      "min-w-0 max-w-full text-left italic focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-      expanded ? "whitespace-normal" : "truncate",
-      comment.tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
-    )}
-  >
-    {"// "}
-    {comment.text}
-  </button>
 );
 
 const AddLine = ({
@@ -1075,8 +1115,8 @@ const AddLine = ({
   onShow,
   t,
 }: Readonly<{ rows: JsonFieldRow[]; disabled: boolean; onShow: (key: string) => void; t: Translate }>) => (
-  <span className="inline-flex flex-wrap items-center gap-2 italic text-muted-foreground">
-    <span>
+  <span className="inline-flex items-center gap-1.5 whitespace-nowrap py-1 italic text-muted-foreground">
+    <span className="mr-0.5">
       {"// "}
       {t("JSON_FIELDS_FIELD.ADD")}:
     </span>
@@ -1087,7 +1127,7 @@ const AddLine = ({
         data-add-key={row.key}
         disabled={disabled}
         onClick={() => onShow(row.key)}
-        className="rounded px-0.5 not-italic hover:bg-muted hover:text-high-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+        className={DASHED_BUTTON_CLASSES}
       >
         {row.label || row.key}
       </button>
@@ -1121,6 +1161,15 @@ const useRowsContext = (load: FieldProps["field"]["rowsContext"], configRef: Rea
   }, [configRef]);
   return rowsContext;
 };
+
+const without = (set: Set<string>, key: string) => {
+  if (!set.has(key)) return set;
+  const next = new Set(set);
+  next.delete(key);
+  return next;
+};
+
+const including = (set: Set<string>, key: string) => (set.has(key) ? set : new Set(set).add(key));
 
 /**
  * `json-fields`: a node's operation parameters as one compact JSON-styled block. Each row reads and
@@ -1170,10 +1219,19 @@ export const JsonFieldsField = ({
     rowsByKey.current = rowsMap;
   }, [rowsMap]);
 
-  // Optional rows shown in this session (through `// add:` or an edit). UI state only, never saved.
+  // UI state only, never saved. `added`: optional rows shown in this session (through `// add:` or an
+  // edit). `removed`: other rows the author removed with ×, waiting on `// add:` until shown again.
   const [added, setAdded] = useState<Set<string>>(() => new Set());
+  const [removed, setRemoved] = useState<Set<string>>(() => new Set());
   const [focusRequests, setFocusRequests] = useState<Record<string, number>>({});
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
+  // A different set of rows (e.g. another operation) starts with every row in its default place.
+  const rowKeys = Array.from(rowsMap.keys()).join("\u0000");
+  const [shownKeys, setShownKeys] = useState(rowKeys);
+  if (shownKeys !== rowKeys) {
+    setShownKeys(rowKeys);
+    setRemoved(new Set());
+  }
 
   // After × hides a row, keyboard focus moves to its `// add:` button.
   useEffect(() => {
@@ -1186,38 +1244,30 @@ export const JsonFieldsField = ({
       ?.focus();
   });
 
-  const showOptional = (key: string) => {
+  const showRow = (key: string) => {
     if (disabled) return;
-    setAdded((prev) => new Set(prev).add(key));
+    setRemoved((prev) => without(prev, key));
+    if (rowsMap.get(key)?.optional) setAdded((prev) => including(prev, key));
     setFocusRequests((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }));
   };
-
-  const toggleComment = (key: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(key)) next.add(key);
-      return next;
-    });
 
   const rowContext = useMemo<RowContext>(
     () => ({
       fieldId: field.id,
       write: (key, value) => {
         if (disabledRef.current) return;
-        // An optional row stays shown while the author edits it, even when the value becomes empty.
-        if (rowsByKey.current.get(key)?.optional) setAdded((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+        // A row stays shown while the author edits it, even when the value becomes empty.
+        setRemoved((prev) => without(prev, key));
+        if (rowsByKey.current.get(key)?.optional) setAdded((prev) => including(prev, key));
         onChangeRef.current({ [key]: value });
       },
       getRow: (key) => rowsByKey.current.get(key),
       dataRef,
       configRef,
       removeRow: (row) => {
-        if (disabledRef.current) return;
-        setAdded((prev) => {
-          const next = new Set(prev);
-          next.delete(row.key);
-          return next;
-        });
+        if (disabledRef.current || row.required) return;
+        setAdded((prev) => without(prev, row.key));
+        if (!row.optional) setRemoved((prev) => including(prev, row.key));
         setFocusRequests((prev) => {
           const next = { ...prev };
           delete next[row.key];
@@ -1233,8 +1283,10 @@ export const JsonFieldsField = ({
 
   const lines = buildLines(
     items,
-    (row) => !!row.optional && !added.has(row.key) && isEmptyValue(row, data[row.key]),
-    (row) => !!row.comment && (!row.comment.when || row.comment.when(data)),
+    (row) =>
+      !row.required &&
+      isEmptyValue(row, data[row.key]) &&
+      (removed.has(row.key) || (!!row.optional && !added.has(row.key))),
   );
 
   const depKeyOf = (row: JsonFieldRow) =>
@@ -1260,16 +1312,8 @@ export const JsonFieldsField = ({
             trailing={line.comma ? COMMA : null}
           />
         );
-      case "comment":
-        return line.row.comment ? (
-          <CommentLine
-            comment={line.row.comment}
-            expanded={expanded.has(line.row.key)}
-            onToggle={() => toggleComment(line.row.key)}
-          />
-        ) : null;
       default:
-        return <AddLine rows={line.rows} disabled={disabled} onShow={showOptional} t={t} />;
+        return <AddLine rows={line.rows} disabled={disabled} onShow={showRow} t={t} />;
     }
   };
 
@@ -1277,21 +1321,30 @@ export const JsonFieldsField = ({
     <fieldset
       ref={blockRef}
       aria-label={field.label || field.key}
-      className="m-0 min-w-0 rounded-md border border-input bg-muted/30 px-0 py-1.5 font-mono text-sm"
+      className="m-0 min-w-0 rounded-md border border-input bg-muted/30 p-0 font-mono text-sm"
     >
-      {lines.map((line, index) => (
-        <div key={lineKey(line)} className="flex min-h-6 items-center">
-          <span
-            aria-hidden="true"
-            className="w-8 shrink-0 select-none pr-2 text-right text-xs tabular-nums text-low-emphasis"
-          >
-            {index + 1}
-          </span>
-          <div className={cn("flex min-w-0 flex-1 items-center", INDENT_CLASSES[line.depth])}>
-            {renderLine(line)}
-          </div>
+      {/* The whole block scrolls sideways; every line is as wide as the widest one. */}
+      <div className="overflow-x-auto py-1.5">
+        <div className="w-max min-w-full">
+          {lines.map((line, index) => (
+            <div
+              key={lineKey(line)}
+              data-json-line
+              className="group/line flex min-h-[30px] items-center pr-1.5 transition-colors hover:bg-muted/50"
+            >
+              <span
+                aria-hidden="true"
+                className="w-9 shrink-0 select-none pr-2.5 text-right text-xs tabular-nums text-low-emphasis"
+              >
+                {index + 1}
+              </span>
+              <div className={cn("flex flex-1 items-center self-stretch", INDENT_CLASSES[line.depth])}>
+                {renderLine(line)}
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
     </fieldset>
   );
 };

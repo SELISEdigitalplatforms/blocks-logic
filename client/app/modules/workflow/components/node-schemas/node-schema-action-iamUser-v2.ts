@@ -152,7 +152,7 @@ export const iamUserRows = (
           required: context.isMultiOrgEnabled !== false,
           info: text("ORGANIZATION_ID_CREATE_INFO"),
         }),
-        textRow("email", { required: true, comment: { text: text("EXISTING_EMAIL_COMMENT") } }),
+        textRow("email", { required: true }),
         textRow("firstName"),
         textRow("lastName"),
         textRow("userName", { optional: true }),
@@ -190,12 +190,8 @@ export const iamUserRows = (
             { value: "add", label: text("ROLE_MODE_ADD") },
             { value: "replace", label: text("ROLE_MODE_REPLACE") },
           ],
-          comment: { text: text("REPLACE_COMMENT"), tone: "warn", when: (current) => current.roleMode === "replace" },
         },
-        {
-          ...roleRow("roles", "roles", true),
-          comment: { text: text("ADD_COMMENT"), when: (current) => current.roleMode === "add" },
-        },
+        roleRow("roles", "roles", true),
         notifyRow("NOTIFY_USER_ASSIGN_INFO"),
       ];
     case "revokeAccess":
@@ -277,21 +273,6 @@ export const NodeSchemaActionIamUserV2: NodeSchemaDefinition = {
         dependsOn: {
           key: "authenticationType",
           value: "clientCredential",
-          operator: "equals",
-        },
-      },
-      {
-        id: "blocksAuthenticationNotes",
-        type: "callout-accordion-display",
-        key: "blocksAuthenticationNotes",
-        transient: true,
-        displayValue: () => ({
-          title: text("BLOCKS_AUTHENTICATION_CALLOUT_TITLE"),
-          description: text("BLOCKS_AUTHENTICATION_CALLOUT"),
-        }),
-        dependsOn: {
-          key: "authenticationType",
-          value: "blocksAuthentication",
           operator: "equals",
         },
       },

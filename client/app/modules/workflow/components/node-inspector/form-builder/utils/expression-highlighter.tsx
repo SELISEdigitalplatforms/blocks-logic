@@ -169,6 +169,7 @@ export const ExpressionHighlighter = ({
   variablePicker,
   trailingAction,
   compact = false,
+  wrapperClassName,
 }: {
   children: React.ReactElement<ChildProps>;
   value: string;
@@ -191,6 +192,8 @@ export const ExpressionHighlighter = ({
    * button shrinks to 20px and is centred vertically, so it stays inside the line. Off by default.
    */
   compact?: boolean;
+  /** Extra classes for the wrapper, e.g. to replace its default background. */
+  wrapperClassName?: string;
 }) => {
   const { nodes } = useWorkflow();
   const backdropRef = useRef<HTMLDivElement | null>(null);
@@ -344,7 +347,12 @@ export const ExpressionHighlighter = ({
 
   return (
     <div
-      className={cn("relative w-full bg-background rounded-md", picker && "group/var", fontClassName)}
+      className={cn(
+        "relative w-full bg-background rounded-md",
+        picker && "group/var",
+        fontClassName,
+        wrapperClassName,
+      )}
     >
       <div
         ref={backdropRef}
