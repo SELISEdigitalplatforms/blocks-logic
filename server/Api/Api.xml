@@ -312,32 +312,40 @@
         <member name="M:Utilities.Api.Controllers.WorkflowController.Restore(Workflow.DomainService.Dtos.WorkflowRestoreRequestDto)">
             <summary><c>POST</c> — restores a soft-deleted workflow.</summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)">
+        <member name="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String)">
             <summary>
             Data-plane entry point: runs the published workflow behind a webhook trigger.
             <c>POST /api/Workflow/Webhook/{tenantId}/{workflowId}/{webhookId}</c>. Anonymous at the framework
             level — the trigger's own <c>authType</c> decides whether a caller must be authenticated or
-            authorized, and a failure surfaces here as 401.
+            authorized, and a failure surfaces here as 401. The body is not bound by the framework: the service
+            reads it after the workflow and auth checks, as JSON or "Any content" per the trigger's
+            <c>bodyMode</c> (see <see cref="M:Utilities.Api.Controllers.WorkflowController.RunWebhookAsync(System.Func{System.Threading.Tasks.Task{Workflow.DomainService.Dtos.WorkflowWebhookResponseDto}})"/> for the error statuses).
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String,System.Text.Json.JsonElement)">
+        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String)">
             <summary>
-            The <c>webhook-test</c> twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: runs the DRAFT graph rather than the
+            The <c>webhook-test</c> twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String)"/>: runs the DRAFT graph rather than the
             published version, for the console's test panel. Same route shape, same 401 behaviour.
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)">
+        <member name="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String)">
             <summary>
-            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than the
+            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.Webhook(System.String,System.String,System.String)"/>: tenant comes from <c>x-blocks-key</c> rather than the
             path. <c>POST /api/Workflow/Webhook/{workflowId}/{webhookId}</c>. Anonymous at the framework
             level — missing or blank header is 400; trigger <c>authType</c> failures still surface as 401.
             </summary>
         </member>
-        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)">
+        <member name="M:Utilities.Api.Controllers.WorkflowController.TestWebhookByHeader(System.String,System.String)">
             <summary>
-            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String,System.Text.Json.JsonElement)"/>: tenant comes from <c>x-blocks-key</c> rather than
+            Header-based twin of <see cref="M:Utilities.Api.Controllers.WorkflowController.TestWebhook(System.String,System.String,System.String)"/>: tenant comes from <c>x-blocks-key</c> rather than
             the path. <c>POST /api/Workflow/webhook-test/{workflowId}/{webhookId}</c>. Same 400/401 behaviour
-            as <see cref="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String,System.Text.Json.JsonElement)"/>.
+            as <see cref="M:Utilities.Api.Controllers.WorkflowController.WebhookByHeader(System.String,System.String)"/>.
+            </summary>
+        </member>
+        <member name="M:Utilities.Api.Controllers.WorkflowController.RunWebhookAsync(System.Func{System.Threading.Tasks.Task{Workflow.DomainService.Dtos.WorkflowWebhookResponseDto}})">
+            <summary>
+            Shared webhook error mapping: 401 for a failed trigger auth, 400 for a legacy body that is not an object
+            or array of objects, and the intake's own status (400/403/413/415/422/503) with its message otherwise.
             </summary>
         </member>
         <member name="M:Utilities.Api.Controllers.WorkflowController.StepExecute(Workflow.DomainService.Dtos.StepExecuteRequestDto)">
@@ -1174,6 +1182,16 @@
             <c>/api</c> (JSON and user-defined function responses) or <c>/swagger</c> (its own UI).
             </para>
             </summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.WebhookBodySizeLimit">
+            <summary>
+            Webhook routes accept up to 50 MiB of files (SPEC8). Kestrel's body limit is raised for them only, and early
+            in the pipeline: the authentication middleware may read the form (Genesis resolving the tenant for a bearer
+            token) before the action's <c>[RequestSizeLimit]</c> applies. Every other route keeps the default.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.WebhookBodySizeLimit.Apply(Microsoft.AspNetCore.Http.HttpContext)">
+            <summary>Raises the request's body limit when it targets a webhook route and the limit can still change.</summary>
         </member>
         <member name="T:Api.Controllers.NotifierController">
             <summary>

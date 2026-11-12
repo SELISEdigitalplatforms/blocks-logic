@@ -67,7 +67,6 @@
   "JSON_CODE_EDITOR_FIELD.LOCKED_CAN_T_BE": "Locked, can't be changed: {{value}}",
   "JSON_CODE_EDITOR_FIELD.PROPERTY_NAMES_MUST_BE": "Property names must be wrapped in double quotes.",
   "JSON_FIELDS_FIELD.ADD": "add",
-  "JSON_FIELDS_FIELD.ADD_EMPTY": "+ add",
   "JSON_FIELDS_FIELD.ADD_VALUE": "Add a value to {{label}}",
   "JSON_FIELDS_FIELD.EMPTY": "empty",
   "JSON_FIELDS_FIELD.EXPRESSION": "expression",

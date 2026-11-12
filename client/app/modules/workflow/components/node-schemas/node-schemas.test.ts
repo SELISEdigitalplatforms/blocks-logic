@@ -53,7 +53,7 @@ vi.mock("@/modules/proxy/services/proxy.service", () => ({
   proxyService: { getAll: getProxies, get: getProxy },
 }));
 
-import { useProjectStore } from "@seliseblocks/genesis-os";
+import { getRuntimeEnv, useProjectStore } from "@seliseblocks/genesis-os";
 import { NodeSchemasDefinition } from "./node-schemas";
 import { NodeSchemaTriggerWebhookV1 } from "./node-schema-trigger-webhook-v1";
 import { NodeSchemaTriggerEmailV1 } from "./node-schema-trigger-email-v1";
@@ -1219,17 +1219,15 @@ describe("action/iamUser v2 (logic#424)", () => {
     accountStates: [], filterRoles: [], page: 0, pageSize: 10, roleMode: "add",
   };
 
-  it("H1/H2: a v2-only action schema with the §6 defaults and no base URL", () => {
+  it("H1/H2: a v2-only action schema with the §6 defaults and a blank base URL", () => {
     expect(schema.schema).toMatchObject({ type: "iamUser", category: "action", version: "v2", settings: [] });
     expect(schema.defaults.parameters).toEqual({
-      authenticationType: "clientCredential", clientId: "", operation: "getUsers", ...OPERATION_DEFAULTS,
+      authenticationType: "clientCredential", clientId: "", operation: "getUsers", ...OPERATION_DEFAULTS, apiBaseUrl: "",
     });
-    expect(schema.defaults.parameters).not.toHaveProperty("apiBaseUrl");
     expect(schema.guide).toBe(NodeGuideActionIamUserV2);
     expect(schema.schema.parameters.map((f) => [f.key, f.type])).toEqual([
       ["authenticationType", "select"],
       ["clientId", "searchable-select"],
-      ["blocksAuthenticationNotes", "callout-accordion-display"],
       ["operation", "select"],
       ["fields", "json-fields"],
     ]);
@@ -1242,18 +1240,19 @@ describe("action/iamUser v2 (logic#424)", () => {
     expect(isValidElement(card.icon)).toBe(true);
     expect((card.icon as { props: { className: string } }).props.className).toBe("h-5 w-5 text-primary");
     expect(card.description).toBe(
-      "Create, update, activate, deactivate and read your project's IAM users, and manage their roles and access.",
+      "Create, update, activate, deactivate and read your project's users, and manage their roles and access.",
     );
   });
 
-  it("H1/D6: transform stamps nothing and gives each new node its own lists", () => {
+  it("H1/D6: transform stamps the IAM base URL and gives each new node its own lists", () => {
     const base = { id: "n", position: { x: 0, y: 0 }, data: {}, parameters: schema.defaults.parameters } as never;
     const a = schema.transform!(base);
     const b = schema.transform!(base);
-    expect(a.parameters).toEqual(schema.defaults.parameters);
+    const iamBaseUrl = getRuntimeEnv("BLOCKS_IAM_BASE_URL") || "";
+    expect(a.parameters).toEqual({ ...schema.defaults.parameters, apiBaseUrl: iamBaseUrl });
     expect((a.parameters as AnyRec).roles).not.toBe((b.parameters as AnyRec).roles);
     expect((a.parameters as AnyRec).roles).not.toBe(schema.defaults.parameters.roles);
-    expect(schema.transform!({ id: "x" } as never)).toEqual({ id: "x", parameters: {} });
+    expect(schema.transform!({ id: "x" } as never)).toEqual({ id: "x", parameters: { apiBaseUrl: iamBaseUrl } });
   });
 
   it("C1: authentication offers Client Credential and Blocks Authentication only, no None", () => {
@@ -1276,16 +1275,6 @@ describe("action/iamUser v2 (logic#424)", () => {
     const options = await (field.options as (d: AnyRec, c: AnyRec) => Promise<unknown>)({}, {});
     expect(options).toEqual([{ value: "c1", label: "Active one" }]);
     expect(field.unmatchedLabel!("c9")).toBe("Not found or inactive (c9)");
-  });
-
-  it("H16: the Blocks Authentication callout is transient and shown only for Blocks Authentication", () => {
-    const field = param("blocksAuthenticationNotes");
-    expect(field).toMatchObject({ transient: true, dependsOn: { key: "authenticationType", value: "blocksAuthentication" } });
-    const value = field.displayValue!({}, {} as never) as { title: string; description: string };
-    expect(value.description).toBe(
-      "Blocks Authentication acts as the user or client whose sign-in or action started the run. Runs without one, usually schedule, email and anonymous-webhook runs, fail. Use Client Credential for those.",
-    );
-    expect(value.title).toBeTruthy();
   });
 
   it("C21: the operation select lists the 8 operations (Get Users first) and resets every operation field", () => {
@@ -1345,26 +1334,16 @@ describe("action/iamUser v2 (logic#424)", () => {
     );
   });
 
-  it("H16: the existing-email, Replace and Add comments show only in their conditions", () => {
-    const email = row("createUser", "email").comment!;
-    expect(email.when).toBeUndefined();
-    expect(email.text).toMatch(/^If the email already has an account/);
-
+  it("H16: Fields carries no comment lines; that guidance lives in the guide", () => {
+    for (const operation of ["createUser", "assignRoles"]) {
+      for (const r of flat(rowsOf(operation))) expect(r.comment).toBeUndefined();
+    }
     const roleMode = row("assignRoles", "roleMode") as Row & { options: { value: string; label: string }[] };
     expect(roleMode).toMatchObject({ kind: "enum", required: true, defaultValue: "add" });
     expect(roleMode.options).toEqual([
       { value: "add", label: "Add to existing" },
       { value: "replace", label: "Replace all" },
     ]);
-    const replace = roleMode.comment as { tone: string; when: (d: AnyRec) => boolean };
-    expect(replace.tone).toBe("warn");
-    expect(replace.when({ roleMode: "replace" })).toBe(true);
-    expect(replace.when({ roleMode: "add" })).toBe(false);
-
-    const add = row("assignRoles", "roles").comment as { text: string; when: (d: AnyRec) => boolean };
-    expect(add.text).toBe("Add first reads the user, so it also needs the `iam::users` permission.");
-    expect(add.when({ roleMode: "add" })).toBe(true);
-    expect(add.when({ roleMode: "replace" })).toBe(false);
     expect(row("assignRoles", "roles").required).toBe(true);
     expect(row("createUser", "roles").required).toBe(false);
   });
@@ -1417,7 +1396,11 @@ describe("action/iamUser v2 (logic#424)", () => {
   it("guide: explains authentication, operations, errors and the action loop", () => {
     render(createElement(NodeGuideActionIamUserV2));
     expect(screen.getByRole("heading", { name: "Manage Users action" })).toBeTruthy();
-    expect(screen.getByText(/manage your project's IAM users from a workflow/)).toBeTruthy();
+    expect(screen.getByText(/manage your project's users from a workflow/)).toBeTruthy();
+    expect(screen.getByText(/Blocks Authentication acts as the user or client/)).toBeTruthy();
+    expect(screen.getByText(/uses the organization's default member roles/)).toBeTruthy();
+    expect(screen.getByText(/Replace removes every role you did not select/)).toBeTruthy();
+    expect(screen.getByText(/also needs the `iam::users` permission/)).toBeTruthy();
     expect(screen.getByText(/can start itself in a loop/)).toBeTruthy();
     expect(screen.getByText(/A change someone else makes between the two can be lost/)).toBeTruthy();
   });

@@ -61,7 +61,6 @@ const buildRows =
       defaultValue: "",
       required: true,
       info: "The user's email",
-      comment: { text: "If the email already has an account, IAM adds it to the organization." },
     },
     {
       key: "roles",
@@ -91,11 +90,6 @@ const buildRows =
         { value: "add", label: "Add", description: "Keep the existing roles" },
         { value: "replace", label: "Replace" },
       ],
-      comment: {
-        text: "Replace removes every other role.",
-        tone: "warn",
-        when: (data) => data.roleMode === "replace",
-      },
     },
     { key: "userName", kind: "text", defaultValue: "", optional: true },
     { key: "phoneNumber", kind: "text", defaultValue: "", optional: true },
@@ -148,8 +142,8 @@ const setup = (opts: { field?: FieldSchema; initial?: Record<string, unknown>; r
 };
 
 const block = () => screen.getByRole("group", { name: "Fields" });
-const lineElements = () => Array.from(block().children) as HTMLElement[];
-const lineOf = (key: string) => screen.getByTestId(`json-row-${key}`).closest(".flex.min-h-6") as HTMLElement;
+const lineElements = () => Array.from(block().querySelectorAll("[data-json-line]")) as HTMLElement[];
+const lineOf = (key: string) => screen.getByTestId(`json-row-${key}`).closest("[data-json-line]") as HTMLElement;
 const rowOf = (key: string) => screen.getByTestId(`json-row-${key}`);
 const textInput = (label: string) => screen.getByRole("textbox", { name: label }) as HTMLTextAreaElement;
 const fxButton = (label: string) => screen.getByRole("button", { name: `Use an expression for ${label}` });
@@ -179,15 +173,15 @@ describe("JsonFieldsField", () => {
     expect(FIELD_COMPONENTS_REGISTRY["json-fields"]).toBe(JsonFieldsField);
     setup();
     const lines = lineElements();
-    expect(lines).toHaveLength(14);
+    expect(lines).toHaveLength(13);
     expect(lines.map((line) => line.firstElementChild?.textContent)).toEqual(
-      Array.from({ length: 14 }, (_, i) => String(i + 1)),
+      Array.from({ length: 13 }, (_, i) => String(i + 1)),
     );
     expect(lines[0].textContent).toBe("1{");
-    expect(lines[13].textContent).toBe("14}");
-    expect(lines[6].textContent).toContain('"paging": {');
-    expect(lines[9].textContent).toBe("10},");
-    expect(lines[12].textContent).toContain("// add:");
+    expect(lines[12].textContent).toBe("13}");
+    expect(lines[5].textContent).toContain('"paging":{');
+    expect(lines[8].textContent).toBe("9},");
+    expect(lines[11].textContent).toContain("// add:");
 
     const hasComma = (key: string) => within(lineOf(key)).queryByText(",") !== null;
     for (const key of ["organizationId", "email", "roles", "remoteRoles", "page", "notifyUser"]) {
@@ -197,10 +191,10 @@ describe("JsonFieldsField", () => {
     expect(hasComma("pageSize")).toBe(false);
     expect(hasComma("roleMode")).toBe(false);
     // Rows are indented one level, group rows two.
-    expect(lineOf("email").lastElementChild?.className).toContain("pl-4");
-    expect(lineOf("page").lastElementChild?.className).toContain("pl-8");
+    expect(lineOf("email").lastElementChild?.className).toContain("pl-[18px]");
+    expect(lineOf("page").lastElementChild?.className).toContain("pl-9");
     // The key carries the required marker; values use the JSON text colour.
-    const key = within(rowOf("email")).getByText("email").closest("span");
+    const key = within(rowOf("email")).getByText("\"email\"");
     expect(key?.className).toContain("after:content-['*']");
     expect(block().className).toContain("font-mono");
   });
@@ -213,20 +207,45 @@ describe("JsonFieldsField", () => {
     expect(textInput("email").placeholder).toBe("required");
     expect(textInput("email").className).toContain("placeholder:text-red-500/70");
 
-    // A drop elsewhere on the row appends with a space; a drop on the input is left to the browser.
+    // Before the author has been in the input, a drop on the row or on the input appends with a space.
     fireEvent.drop(rowOf("email"), { dataTransfer: transfer(["text/plain"], "{{ $json.extra }}") });
     expect(spy).toHaveBeenLastCalledWith({ email: "{{ $json.email }} (work) {{ $json.extra }}" });
-    spy.mockClear();
     fireEvent.drop(textInput("organizationId"), { dataTransfer: transfer(["text/plain"], "{{ $json.orgId }}") });
-    expect(spy).not.toHaveBeenCalled();
-    fireEvent.drop(rowOf("organizationId"), { dataTransfer: transfer(["text/plain"], "{{ $json.orgId }}") });
     expect(spy).toHaveBeenLastCalledWith({ organizationId: "{{ $json.orgId }}" });
+  });
+
+  it("H2: a drop lands at the caret the author left in the value, also after the input lost focus", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { spy } = setup({ initial: { email: "ab@x.io" } });
+      const input = textInput("email");
+      input.focus();
+      input.setSelectionRange(2, 2);
+      input.blur();
+      fireEvent.drop(input, { dataTransfer: transfer(["text/plain"], "{{ $json.tag }}") });
+      expect(spy).toHaveBeenLastCalledWith({ email: "ab{{ $json.tag }}@x.io" });
+      await act(async () => {
+        vi.runAllTimers();
+      });
+      // Focus returns with the caret after the dropped text.
+      expect(document.activeElement).toBe(textInput("email"));
+      expect(textInput("email").selectionStart).toBe(2 + "{{ $json.tag }}".length);
+
+      // A selection is replaced, and a drop elsewhere on the row uses the same caret.
+      textInput("email").setSelectionRange(0, 2);
+      fireEvent.drop(rowOf("email"), { dataTransfer: transfer(["text/plain"], "X") });
+      expect(spy).toHaveBeenLastCalledWith({ email: "X{{ $json.tag }}@x.io" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("H2: highlights a row while text is dragged over it", () => {
     setup();
     fireEvent.dragOver(rowOf("email"), { dataTransfer: transfer(["text/plain"], "x") });
     expect(rowOf("email").className).toContain("bg-primary/10");
+    // The value box shows during the drag, so the target is visible without focus.
+    expect(rowOf("email").getAttribute("data-dragover")).toBe("true");
     fireEvent.dragLeave(rowOf("email"), { relatedTarget: document.body });
     expect(rowOf("email").className).not.toContain("bg-primary/10");
   });
@@ -240,8 +259,10 @@ describe("JsonFieldsField", () => {
     expect(input.value).toBe(value);
     expect(input.getAttribute("wrap")).toBe("off");
     expect(input.rows).toBe(1);
-    expect(input.className).toContain("overflow-x-auto");
+    // The input grows with its text; the whole block scrolls sideways instead of the input.
+    expect(input.className).toContain("overflow-hidden");
     expect(input.className).toContain("whitespace-pre");
+    expect(block().firstElementChild?.className).toContain("overflow-x-auto");
   });
 
   it("H3: picks options, adds custom text and removes chips, in order and without duplicates", async () => {
@@ -436,15 +457,11 @@ describe("JsonFieldsField", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "page" }), { target: { value: "3" } });
     expect(spy).toHaveBeenLastCalledWith({ page: 3 });
 
-    expect(screen.queryByText(/Replace removes every other role/)).toBeNull();
     await user.click(screen.getByRole("button", { name: "roleMode" }));
     expect(screen.getByText("Keep the existing roles")).toBeTruthy();
     await user.click(screen.getByRole("option", { name: /Replace/ }));
     expect(spy).toHaveBeenLastCalledWith({ roleMode: "replace" });
     expect(screen.queryByRole("option", { name: /Replace/ })).toBeNull();
-    // Example 5: the warn comment appears.
-    const warn = screen.getByText(/Replace removes every other role/).closest("button");
-    expect(warn?.className).toContain("text-amber-600");
   });
 
   it("D8: an int input writes nothing while empty or partial, and the default on blur", () => {
@@ -468,7 +485,7 @@ describe("JsonFieldsField", () => {
     expect(spy).toHaveBeenLastCalledWith({ notifyUser: "" });
     expect(fxButton("notifyUser").getAttribute("aria-pressed")).toBe("true");
     expect(textInput("notifyUser").placeholder).toBe("{{ expression }}");
-    expect(textInput("notifyUser").closest(".bg-primary\\/5")).toBeTruthy();
+    expect(textInput("notifyUser").closest(".bg-primary\\/10")).toBeTruthy();
     fireEvent.change(textInput("notifyUser"), { target: { value: "{{ $json.notify }}" } });
     expect(spy).toHaveBeenLastCalledWith({ notifyUser: "{{ $json.notify }}" });
     await user.click(fxButton("notifyUser"));
@@ -537,21 +554,17 @@ describe("JsonFieldsField", () => {
     expect(within(finalAdd).getAllByRole("button").map((b) => b.textContent)).toEqual(["userName", "phoneNumber"]);
   });
 
-  it("H9: shows comments in their tone and expands them by click or Enter", async () => {
+  it("every row that is not required has ×, which moves it to // add: until added again", async () => {
     const user = userEvent.setup();
-    setup();
-    const comment = screen.getByRole("button", { name: /If the email already has an account/ });
-    expect(comment.textContent).toMatch(/^\/\/ If the email/);
-    expect(comment.className).toContain("text-muted-foreground");
-    expect(comment.className).toContain("italic");
-    expect(comment.className).toContain("truncate");
-    expect(comment.getAttribute("aria-expanded")).toBe("false");
-    await user.click(comment);
-    expect(comment.getAttribute("aria-expanded")).toBe("true");
-    expect(comment.className).not.toContain("truncate");
-    comment.focus();
-    await user.keyboard("{Enter}");
-    expect(comment.getAttribute("aria-expanded")).toBe("false");
+    const { spy } = setup({ initial: { notifyUser: false } });
+    expect(screen.queryByRole("button", { name: "Remove email" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove organizationId" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Remove notifyUser" }));
+    expect(spy).toHaveBeenLastCalledWith({ notifyUser: true });
+    expect(screen.queryByTestId("json-row-notifyUser")).toBeNull();
+    expect(document.activeElement?.textContent).toBe("notifyUser");
+    await user.click(screen.getByRole("button", { name: "notifyUser" }));
+    expect(screen.getByRole("switch", { name: "notifyUser" })).toBeTruthy();
   });
 
   it("Example 7: one edit writes exactly one patch of that key", async () => {
@@ -580,7 +593,8 @@ describe("JsonFieldsField", () => {
     expect((screen.getByRole("textbox", { name: "page" }) as HTMLInputElement).value).toBe("0");
     expect((screen.getByRole("textbox", { name: "pageSize" }) as HTMLInputElement).value).toBe("10");
     expect(screen.getByRole("button", { name: "roleMode" }).textContent).toContain('"add"');
-    expect(screen.getByRole("button", { name: "Add a value to roles" }).textContent).toBe("+ add");
+    // The add button is a bare +, also while the list is empty.
+    expect(screen.getByRole("button", { name: "Add a value to roles" }).textContent).toBe("");
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -589,8 +603,6 @@ describe("JsonFieldsField", () => {
     const { spy } = setup({ readOnly: true, initial: { roles: ["editor"] } });
     const controls = within(block()).getAllByRole("button");
     for (const control of controls) {
-      // Comment lines only expand; they write nothing.
-      if (control.hasAttribute("aria-expanded")) continue;
       expect((control as HTMLButtonElement).disabled).toBe(true);
     }
     for (const input of within(block()).getAllByRole("textbox")) {
@@ -663,7 +675,7 @@ describe("JsonFieldsField", () => {
     const { spy } = setup({ field: makeField({ variablePicker: false }) });
     textInput("organizationId").focus();
     const order: string[] = [];
-    for (let i = 0; i < 17; i++) {
+    for (let i = 0; i < 22; i++) {
       const el = document.activeElement as HTMLElement;
       order.push(el.getAttribute("aria-label") ?? el.textContent ?? "");
       await user.tab();
@@ -671,19 +683,24 @@ describe("JsonFieldsField", () => {
     expect(order).toEqual([
       "organizationId",
       "email",
-      "// If the email already has an account, IAM adds it to the organization.",
       "Add a value to roles",
       "Use an expression for roles",
+      "Remove roles",
       "Add a value to remoteRoles",
       "Use an expression for remoteRoles",
+      "Remove remoteRoles",
       "page",
       "Use an expression for page",
+      "Remove page",
       "pageSize",
       "Use an expression for pageSize",
+      "Remove pageSize",
       "notifyUser",
       "Use an expression for notifyUser",
+      "Remove notifyUser",
       "roleMode",
       "Use an expression for roleMode",
+      "Remove roleMode",
       "userName",
       "phoneNumber",
     ]);
