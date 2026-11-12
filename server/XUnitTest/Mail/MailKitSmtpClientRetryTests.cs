@@ -178,7 +178,8 @@ namespace XUnitTest.Mail
             var sent = client.Sessions.Single(s => s.Sent is not null).Sent!;
             sent.Headers.Where(h => h.Field == "X-SES-CONFIGURATION-SET").Select(h => h.Value).Should().Equal("ses-config");
             sent.Headers.Where(h => h.Field == "X-Tenant-Id").Select(h => h.Value).Should().Equal("tenant-a");
-            sent.Headers.Count(h => h.Field == "X-Mail-Body").Should().Be(1);
+            // The body is never copied into a header: Exchange Online rejects one over 32,768 characters.
+            sent.Headers.Count(h => h.Field == "X-Mail-Body").Should().Be(0);
         }
 
         [Theory]
