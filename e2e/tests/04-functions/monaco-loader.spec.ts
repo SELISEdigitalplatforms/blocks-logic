@@ -189,7 +189,7 @@ test.describe("functions — safe Monaco loader (blocks-logic#435)", () => {
         const themeOf = async () =>
           (await codePanel.locator(".monaco-editor").first().getAttribute("class"))
             ?.split(/\s+/)
-            .filter((c) => /^vs|dark|light|theme/i.test(c))
+            .filter((c) => /^(?:vs.*|.*(?:dark|light|theme).*)$/i.test(c))
             .sort()
             .join(" ") ?? "";
         const before = await themeOf();
