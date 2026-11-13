@@ -286,5 +286,21 @@
   "NODE_GUIDE_TRIGGER_WEBHOOK_V1.USE_THE_WEBHOOK_URL": "Use the Webhook URL: Test while building the workflow, or Production after the workflow is published.",
   "NODE_GUIDE_TRIGGER_WEBHOOK_V1.USE_THIS_TRIGGER_TO": "Use this trigger to start a workflow when another app sends a request to the webhook URL. The incoming body becomes the data passed to the next node.",
   "NODE_GUIDE_TRIGGER_WEBHOOK_V1.WEBHOOK_TRIGGER": "Webhook trigger",
-  "NODE_GUIDE_TRIGGER_WEBHOOK_V1.WHEN_WAITING_FOR_THE": "When waiting for the last node, Response Data controls whether the webhook returns all output items, the first output item, or no body."
+  "NODE_GUIDE_TRIGGER_WEBHOOK_V1.WHEN_WAITING_FOR_THE": "When waiting for the last node, Response Data controls whether the webhook returns all output items, the first output item, or no body.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.SEND_NOTIFICATION_ACTION": "Send Notification action",
+  "NODE_GUIDE_ACTION_NOTIFICATION.USE_THIS_NODE_TO": "Use this node to send a Blocks notification through one of the project's notification configurations. The configuration, managed in Blocks OS → Notification, decides who receives it and on which channels: in-app, mobile push and offline.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.PICK_A_CONFIGURATION": "Pick a Configuration. The line under each one shows its recipients and channels; built-in configurations are marked.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.ORGANIZATION_ID_PROJECT_USERS": "Organization ID: project users are always matched inside one organization. Leave it empty for the default organization. It is hidden for configurations that go only to Console users.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.USER_IDS_NAME_THE": "User IDs name the users the event is about. They are used only when the configuration is Event owner only (required: only these users receive it), Targeted users + event owner (added to the configuration's users), or for Console users. For All users and plain Targeted configurations they would be ignored, so the field is hidden.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.OPTIONALLY_SET_A_RESPONSE": "Optionally set a Response key and value so the receiving page can match the notification.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.WRITE_THE_PAYLOAD_AS": "Write the Payload as JSON, for example { \"title\": \"Order {{$json.id}} shipped\", \"description\": \"...\" }. Mobile push text placeholders read its fields.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.TEST_WITH_SAMPLE_DATA": "Test with sample data before enabling it in a live path.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.THE_NODE_QUEUES_ONE": "The node queues one notification for each input item; delivery happens right after, in the background.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.THE_OUTPUT_INCLUDES_QUEUED": "The output includes Queued, NotificationId, the configuration's recipients and channels, a count of named users (not the users themselves) and NamedUsersUsed, which says whether the configuration used them.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.AN_INACTIVE_CONFIGURATION_IS": "An inactive configuration is not sent: the output says Skipped: disabled.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.AN_UNKNOWN_CONFIGURATION_ONE": "An unknown configuration, one with no channel on, or a missing user id becomes an error item with the reason.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.A_CONFIGURATIONS_RATE_LIMIT": "A configuration's rate limit (120 per minute unless set) drops anything above it; the step log warns when one step goes over it. Built-in configurations share that limit with the platform's own notifications.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.A_PAYLOAD_THAT_IS": "A payload that is not valid JSON after expressions are filled fails the step.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.ROLES_AND_SUBSCRIPTION_FILTERS": "Roles and subscription filters that choose receivers are set on the configuration only; a step cannot add or change them.",
+  "NODE_GUIDE_ACTION_NOTIFICATION.IF_NO_CONFIGURATION_IS": "If no configuration is listed, the project has none yet, or you lack permission to read them."
 }
