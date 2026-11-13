@@ -62,21 +62,24 @@ export class TopbarComponent {
 
   // ---- Language selector ----
 
+  // Drift (7614686a, genesis-os 4.5.0): the switcher is a "Change language" button showing the
+  // current code, and its menu lists the languages as radio items (menuitemradio, still with `lang`).
   get languageButton(): Locator {
-    return this.page.getByRole("button", { name: /^en$/i });
+    return this.page.getByRole("button", { name: "Change language" });
   }
 
   async openLanguageMenu(): Promise<void> {
+    await expect(this.languageButton).toHaveText(/^en$/i);
     await this.languageButton.click();
   }
 
   menuItem(name: string | RegExp): Locator {
-    return this.page.getByRole("menuitem", { name });
+    return this.page.getByRole("menuitemradio", { name });
   }
 
   /** The open language menu's entries other than English; each entry carries its language code in `lang`. */
   get otherLanguageMenuItems(): Locator {
-    return this.page.getByRole("menu").locator('[role="menuitem"][lang]:not([lang^="en"])');
+    return this.page.getByRole("menu").locator('[role="menuitemradio"][lang]:not([lang^="en"])');
   }
 
   // ---- Notifications ----
