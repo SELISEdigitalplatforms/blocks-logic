@@ -5,6 +5,7 @@ using Blocks.Genesis;
 using Blocks.Genesis.Notifications;
 using Blocks.Secrets;
 using BlocksTemplate.Api;
+using BlocksTemplate.Api.Middleware;
 using BlocksTemplate.Api.Security;
 using CloudConfiguration.DomainService.Shared.Utilities;
 using Common.InternalService.Shared.Utilities;
@@ -108,17 +109,10 @@ var contentSecurityPolicy = ContentSecurityPolicy.Build(app.Configuration);
 var cspMode = SecurityHeaders.ReadMode(app.Configuration);
 Console.WriteLine($"CSP mode: {cspMode}");
 
-// OnStarting, so headers a controller already set (proxy/function sandbox CSP) are seen and kept.
-app.Use(async (context, next) =>
-{
-    context.Response.OnStarting(() =>
-    {
-        SecurityHeaders.Apply(context, contentSecurityPolicy, cspMode);
-        return Task.CompletedTask;
-    });
-
-    await next(context);
-});
+// Per response: the policy carries the browser's style nonce (StyleNonce), applied OnStarting so
+// headers a controller already set (proxy/function sandbox CSP) are seen and kept.
+var styleNonces = StyleNonce.CreateWithRandomKey();
+app.Use((context, next) => SecurityHeaders.InvokeAsync(context, next, contentSecurityPolicy, cspMode, styleNonces));
 
 // CSP violation reports. Before static files, the SPA fallback and Genesis's tenant/auth
 // middleware: browsers post them anonymously, without the x-blocks-key header.
@@ -134,53 +128,17 @@ app.Use(async (context, next) =>
     await next(context);
 });
 
+// The SPA shell carries the response's style nonce (meta[name=csp-nonce]), so it is rendered
+// rather than sent verbatim, for "/" and as the fallback of non-API routes (SpaShell). Read
+// after ApplyFrontendRuntimeSettings filled the runtime placeholders.
+var indexHtmlTemplate = await SpaShell.ReadTemplateAsync(app.Environment.WebRootPath).ConfigureAwait(false);
+if (indexHtmlTemplate is not null)
+{
+    app.Use((context, next) => SpaShell.InvokeAsync(context, next, indexHtmlTemplate));
+}
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
-
-var indexHtml = Path.Combine(app.Environment.WebRootPath ?? "", "index.html");
-
-if (File.Exists(indexHtml))
-{
-    // Deliberately middleware rather than MapFallback. A fallback endpoint matches every path on
-    // every method, which makes it a valid candidate for a request that reached a real API route
-    // with the wrong verb — and routing then prefers it over answering 405. POST to a [HttpGet]
-    // action, and PUT to /api/fn/{id}, both came back 200 with index.html, and a client parsing
-    // that as JSON failed a long way from the cause.
-    //
-    // Constraining the fallback's route to exclude /api does not fix it: excluding the prefix by
-    // route constraint turns those 405s into 404s and stops "/" matching at all. Serving the SPA
-    // from middleware instead leaves /api/** entirely to the router, so a wrong method is a 405
-    // and an unknown API route is a 404, while every non-API path behaves exactly as it did.
-    app.Use(async (context, next) =>
-    {
-        // A missing asset must stay a 404: answering a missing .js chunk with HTML turns a
-        // deploy problem into a parse error in the browser. This is what the fallback's implicit
-        // `nonfile` constraint used to do.
-        if (context.Request.Path.StartsWithSegments("/api") || LooksLikeAFile(context.Request.Path))
-        {
-            await next(context);
-            return;
-        }
-
-        await next(context);
-
-        if (context.Response.StatusCode == StatusCodes.Status404NotFound && !context.Response.HasStarted)
-        {
-            context.Response.Clear();
-            context.Response.ContentType = "text/html; charset=utf-8";
-            await context.Response.SendFileAsync(indexHtml);
-        }
-    });
-}
-
-static bool LooksLikeAFile(PathString path)
-{
-    var value = path.Value;
-    if (string.IsNullOrEmpty(value)) return false;
-
-    var lastSegment = value.AsSpan(value.LastIndexOf('/') + 1);
-    return lastSegment.Contains('.');
-}
 
 // Webhook routes accept up to 50 MiB of files; raised ahead of the authentication middleware.
 app.Use(async (context, next) =>

@@ -992,6 +992,51 @@
         <member name="M:BlocksTemplate.Api.GlobalApiRoutePrefixConvention.#ctor(System.String)">
             <summary>Prepends a segment (e.g. <c>api</c>) to every controller’s attribute route template.</summary>
         </member>
+        <member name="T:BlocksTemplate.Api.Middleware.SpaShell">
+            <summary>
+            Serves the SPA shell (index.html) with the response's CSP style nonce (meta[name=csp-nonce]).
+            The shell is rendered from a template read once at startup instead of being sent verbatim by
+            the static file middleware, so it carries the same nonce as the response's header
+            (<see cref="F:BlocksTemplate.Api.Security.StyleNonce.ItemKey"/>, set by <see cref="M:BlocksTemplate.Api.Security.SecurityHeaders.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext,Microsoft.AspNetCore.Http.RequestDelegate,System.String,BlocksTemplate.Api.Security.CspMode,BlocksTemplate.Api.Security.StyleNonce)"/>).
+            <para>
+            Middleware rather than MapFallback. A fallback endpoint matches every path on every method,
+            which makes it a valid candidate for a request that reached a real API route with the wrong
+            verb, and routing then prefers it over answering 405: POST to a [HttpGet] action, and PUT to
+            /api/fn/{id}, both came back 200 with index.html. Constraining the fallback's route to exclude
+            /api turns those 405s into 404s and stops "/" matching at all. Serving the SPA from middleware
+            leaves /api/** entirely to the router, so a wrong method is a 405 and an unknown API route is
+            a 404, while every other path that nothing else answers gets the shell.
+            </para>
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Middleware.SpaShell.ReadTemplateAsync(System.String)">
+            <summary>The template, or null when the host has no built SPA (API-only runs).</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Middleware.SpaShell.IsPageMethod(System.String)">
+            <summary>The methods the shell answers: GET and HEAD.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Middleware.SpaShell.IsRootRequest(Microsoft.AspNetCore.Http.HttpRequest)">
+            <summary>
+            A read of the shell itself ("/" or "/index.html"), which the static file middleware would
+            otherwise send verbatim, without the nonce.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Middleware.SpaShell.LooksLikeAFile(Microsoft.AspNetCore.Http.PathString)">
+            <summary>
+            True when the last path segment has a dot. A missing asset must stay a 404: answering a
+            missing .js chunk with HTML turns a deploy problem into a parse error in the browser.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Middleware.SpaShell.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext,Microsoft.AspNetCore.Http.RequestDelegate,System.String)">
+            <summary>
+            Renders the root shell; for any other GET or HEAD outside /api that is not a file and
+            that nothing downstream answered (404 before the response started), renders the shell
+            as the SPA fallback. Everything else passes through unchanged.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Middleware.SpaShell.WriteAsync(Microsoft.AspNetCore.Http.HttpContext,System.String)">
+            <summary>Writes the shell with the response's nonce as text/html.</summary>
+        </member>
         <member name="T:BlocksTemplate.Api.Security.ContentSecurityPolicy">
             <summary>
             Builds the SPA's Content-Security-Policy from configuration.
@@ -1035,6 +1080,21 @@
         </member>
         <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.FixedConnectSources">
             <summary>Fixed third parties the SPA calls: Rollbar (genesis-os error reporting).</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.ContentSecurityPolicy.StyleNoncePlaceholder">
+            <summary>
+            Stands in for the style nonce (see <see cref="T:BlocksTemplate.Api.Security.StyleNonce"/>): in the policy built at
+            startup and in the built index.html (meta[name=csp-nonce]). Replaced on every response.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.WithStyleNonce(System.String,System.String)">
+            <summary>The policy for one response, with the placeholder swapped for its nonce.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.RenderIndex(System.String,System.String)">
+            <summary>The SPA shell for one response, carrying the same nonce as its header.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.Build(Microsoft.Extensions.Configuration.IConfiguration)">
+            <summary>Builds the policy from the <c>FrontendRuntime</c> and <c>Csp</c> sections.</summary>
         </member>
         <member name="M:BlocksTemplate.Api.Security.ContentSecurityPolicy.BuildPolicy(System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
             <summary>
@@ -1182,6 +1242,63 @@
             <c>/api</c> (JSON and user-defined function responses) or <c>/swagger</c> (its own UI).
             </para>
             </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.SecurityHeaders.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext,Microsoft.AspNetCore.Http.RequestDelegate,System.String,BlocksTemplate.Api.Security.CspMode,BlocksTemplate.Api.Security.StyleNonce)">
+            <summary>
+            The header middleware: picks the response's style nonce (stable per browser, see
+            <see cref="T:BlocksTemplate.Api.Security.StyleNonce"/>), keeps it in <see cref="F:BlocksTemplate.Api.Security.StyleNonce.ItemKey"/> for the SPA shell,
+            and applies the headers with that nonce in the policy. OnStarting, so headers a controller
+            already set (proxy/function sandbox CSP) are seen and kept.
+            </summary>
+        </member>
+        <member name="T:BlocksTemplate.Api.Security.StyleNonce">
+            <summary>
+            The CSP style nonce for a browser.
+            <para>
+            A fresh nonce on every response changes the HTML body on every request, and a scanner
+            comparing two responses for the same page (ZAP rule 10104, User Agent Fuzzer) then reports
+            every page. So the nonce is derived from a random per-browser seed held in an HttpOnly
+            cookie, keyed with a secret that never leaves the process. The same browser gets the same
+            shell; another browser, or the same one after the cookie expires, gets a different nonce.
+            A page cannot read the seed, and the nonce itself is hidden from CSS and the DOM.
+            </para>
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.StyleNonce.SeedCookieName">
+            <summary>Host-only, Secure, HttpOnly cookie carrying the per-browser seed.</summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.StyleNonce.ItemKey">
+            <summary>
+            <c>HttpContext.Items</c> key holding the response's nonce, set by
+            <see cref="M:BlocksTemplate.Api.Security.SecurityHeaders.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext,Microsoft.AspNetCore.Http.RequestDelegate,System.String,BlocksTemplate.Api.Security.CspMode,BlocksTemplate.Api.Security.StyleNonce)"/> and read by the SPA shell renderer.
+            </summary>
+        </member>
+        <member name="F:BlocksTemplate.Api.Security.StyleNonce.SeedLifetime">
+            <summary>The seed is rotated by expiry, which also rotates the nonce.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.StyleNonce.#ctor(System.Byte[])">
+            <summary>Creates the nonce source with an HMAC key of at least 256 bits.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.StyleNonce.CreateWithRandomKey">
+            <summary>A process-local key: every response from this process uses it.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.StyleNonce.NewSeed">
+            <summary>A new random seed, base64url without padding (cookie-safe).</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.StyleNonce.IsValidSeed(System.String)">
+            <summary>True for a value <see cref="M:BlocksTemplate.Api.Security.StyleNonce.NewSeed"/> could have produced.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.StyleNonce.For(System.String)">
+            <summary>The nonce for a seed: 128 bits of HMAC-SHA256(key, seed), base64.</summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.StyleNonce.ForRequest(Microsoft.AspNetCore.Http.HttpContext)">
+            <summary>
+            The nonce for one response. A request without a valid seed that may render the SPA shell
+            gets a new seed cookie; API calls and static files get a throwaway nonce and no cookie.
+            </summary>
+        </member>
+        <member name="M:BlocksTemplate.Api.Security.StyleNonce.MayServeShell(System.String)">
+            <summary>True for "/index.html" and extension-less paths outside /api (SPA routes).</summary>
         </member>
         <member name="T:BlocksTemplate.Api.Security.WebhookBodySizeLimit">
             <summary>

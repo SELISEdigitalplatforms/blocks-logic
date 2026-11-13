@@ -11,6 +11,10 @@
     <DocumentationFile>Api.xml</DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
+    <!-- StyleNonce and SpaShell are internal (CA1515) and unit-tested. -->
+    <InternalsVisibleTo Include="XUnitTest" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Remove="appsettings.Development.json" />
   </ItemGroup>
   <ItemGroup>

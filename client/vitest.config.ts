@@ -101,7 +101,8 @@ export default defineConfig({
       // Write coverage even when a test fails: the SonarQube job runs on regardless, and without a
       // report one flaky test elsewhere reads as 0% coverage on every changed file.
       reportOnFailure: true,
-      include: ["app/**/*.{ts,tsx}"],
+      // The classic scripts the shell loads before the app are covered by app/lib/public-scripts.test.ts.
+      include: ["app/**/*.{ts,tsx}", "public/*.js"],
       exclude: [
         "app/**/*.test.*",
         "app/**/*.spec.*",

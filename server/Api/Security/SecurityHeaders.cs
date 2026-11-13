@@ -45,6 +45,32 @@ public static class SecurityHeaders
             : CspMode.Enforce;
     }
 
+    /// <summary>
+    /// The header middleware: picks the response's style nonce (stable per browser, see
+    /// <see cref="StyleNonce"/>), keeps it in <see cref="StyleNonce.ItemKey"/> for the SPA shell,
+    /// and applies the headers with that nonce in the policy. OnStarting, so headers a controller
+    /// already set (proxy/function sandbox CSP) are seen and kept.
+    /// </summary>
+    internal static Task InvokeAsync(
+        HttpContext context, RequestDelegate next, string policyTemplate, CspMode mode, StyleNonce styleNonces)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+        ArgumentNullException.ThrowIfNull(styleNonces);
+
+        var nonce = styleNonces.ForRequest(context);
+        context.Items[StyleNonce.ItemKey] = nonce;
+        var policy = ContentSecurityPolicy.WithStyleNonce(policyTemplate, nonce);
+
+        context.Response.OnStarting(() =>
+        {
+            Apply(context, policy, mode);
+            return Task.CompletedTask;
+        });
+
+        return next(context);
+    }
+
     public static void Apply(HttpContext context, string policy, CspMode mode)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -94,6 +120,7 @@ public static class SecurityHeaders
             SetIfAbsent(headers, "Cache-Control", "public, max-age=31536000, immutable");
         }
         else if (value.EndsWith("/runtime-config.js", StringComparison.OrdinalIgnoreCase) ||
+                 value.EndsWith("/csp-nonce.js", StringComparison.OrdinalIgnoreCase) ||
                  value.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
                  !System.IO.Path.HasExtension(value))
         {

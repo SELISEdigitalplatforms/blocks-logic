@@ -70,7 +70,7 @@ namespace Workflow.DomainService.Repositories
             var filter = Builders<WorkflowEntity>.Filter.Empty;
             if (!string.IsNullOrEmpty(search))
             {
-                filter &= Builders<WorkflowEntity>.Filter.Regex(w => w.Name, new MongoDB.Bson.BsonRegularExpression(search, "i"));
+                filter &= Builders<WorkflowEntity>.Filter.Regex(w => w.Name, WorkflowNameSearch.Pattern(search));
             }
             if (isPublished.HasValue)
             {
