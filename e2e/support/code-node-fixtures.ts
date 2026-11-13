@@ -1,11 +1,13 @@
-// Import files with Code nodes (transform / code / v1) for the time-zone spec (blocks-logic#436).
-// Same file shape as support/filter-fixtures.ts.
+// Import files with Code nodes (transform / code / v1) for the time-zone spec (blocks-logic#436) and
+// the Monaco loader spec (blocks-logic#435). Same file shape as support/filter-fixtures.ts.
 
 import type { ImportEdge, ImportNode, WorkflowImportFile } from "./filter-fixtures";
 
 export const CODE_NODE_NAMES = {
   webhook: "Webhook",
   zones: "Time Zones",
+  codeA: "Code A",
+  codeB: "Code B",
 } as const;
 
 const singleHandle = () => ({
@@ -109,5 +111,28 @@ export function timeZoneWorkflowFile(name: string): WorkflowImportFile {
       codeNode(ZONE_IDS.zones, CODE_NODE_NAMES.zones, 260, 0, TIME_ZONE_SCRIPT),
     ],
     edges: [edge(ZONE_IDS.webhook, ZONE_IDS.zones)],
+  };
+}
+
+const TWO_CODE_IDS = {
+  webhook: "e2emonacowebhook000000000000001",
+  codeA: "e2emonacocodea0000000000000001",
+  codeB: "e2emonacocodeb0000000000000001",
+};
+
+/** blocks-logic#435 §10 fixture: a workflow with two Code nodes, Webhook → Code A → Code B. */
+export function twoCodeNodesWorkflowFile(name: string): WorkflowImportFile {
+  return {
+    name,
+    settings: {},
+    nodes: [
+      webhookNode(TWO_CODE_IDS.webhook, 0, 0),
+      codeNode(TWO_CODE_IDS.codeA, CODE_NODE_NAMES.codeA, 260, 0, "return $items;\n"),
+      codeNode(TWO_CODE_IDS.codeB, CODE_NODE_NAMES.codeB, 520, 0, "return $items;\n"),
+    ],
+    edges: [
+      edge(TWO_CODE_IDS.webhook, TWO_CODE_IDS.codeA),
+      edge(TWO_CODE_IDS.codeA, TWO_CODE_IDS.codeB),
+    ],
   };
 }
