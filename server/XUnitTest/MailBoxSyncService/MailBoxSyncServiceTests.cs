@@ -375,6 +375,53 @@ namespace XUnitTest.MailBoxSyncService
             _mockRepository.Verify(r => r.InsertAsync(It.IsAny<MailBoxEntity>(), It.IsAny<string>()), Times.Never);
         }
 
+        [Fact]
+        public async Task StoreInboundAsync_AMessageOverTheStorageLimit_IsStoredWithoutItsRawMime()
+        {
+            var message = MessageWithId("big@example.com");
+            var multipart = new Multipart("mixed") { message.Body };
+            multipart.Add(new MimePart("application", "octet-stream")
+            {
+                Content = new MimeContent(new MemoryStream(new byte[12 * 1024 * 1024])),
+                ContentTransferEncoding = ContentEncoding.Base64,
+                FileName = "large.bin"
+            });
+            message.Body = multipart;
+
+            var stored = await _service.StoreInboundAsync(PasswordConfig(), "tenant-123", message);
+
+            stored.Should().BeTrue();
+            _mockRepository.Verify(r => r.InsertAsync(
+                It.Is<MailBoxEntity>(m =>
+                    m.MessageId == "big@example.com"
+                    && m.RawMime == string.Empty
+                    && m.Body == "body"
+                    && m.Error.Contains("not stored")),
+                "tenant-123"), Times.Once);
+            _mockMessageClient.Verify(c => c.SendToConsumerAsync(It.IsAny<ConsumerMessage<EmailTriggerEvent>>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task StoreInboundAsync_AMessageUnderTheStorageLimit_KeepsItsRawMime()
+        {
+            var message = MessageWithId("small@example.com");
+
+            await _service.StoreInboundAsync(PasswordConfig(), "tenant-123", message);
+
+            _mockRepository.Verify(r => r.InsertAsync(
+                It.Is<MailBoxEntity>(m => m.RawMime == message.ToString() && m.Error == null),
+                "tenant-123"), Times.Once);
+        }
+
+        [Fact]
+        public void MeasureMime_MatchesTheSerializedLength()
+        {
+            var message = MessageWithId("measure@example.com", new string('y', 5000));
+
+            global::MailBoxSyncService.Services.MailBoxSyncService.MeasureMime(message)
+                .Should().Be(System.Text.Encoding.UTF8.GetByteCount(message.ToString()));
+        }
+
         private static MimeMessage MessageWithId(string id, string body = "body")
         {
             var message = new MimeMessage();

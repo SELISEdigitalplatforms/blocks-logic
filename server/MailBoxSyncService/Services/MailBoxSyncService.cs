@@ -79,6 +79,28 @@ namespace MailBoxSyncService.Services
             if (await _repository.ExistsAsync(message.MessageId, tenantId))
                 return false;
 
+            var body = message.TextBody;
+            var mimeBytes = MeasureMime(message);
+            var fits = mimeBytes + Utf8Length(body) <= MaxStoredMailBytes;
+
+            if (!fits)
+            {
+                // Stored whole, this mail is over MongoDB's 16 MB document limit and the insert
+                // throws on every poll. On Graph that holds the delta cursor on the same page for
+                // good, and every later mail in the mailbox is never stored. The mail is stored
+                // without its source instead; the console falls back to the body.
+                _logger.LogWarning(
+                    "Mail {MessageId} for tenant '{TenantId}' using config '{ConfigId}' is {MimeBytes} bytes, over the {Limit}-byte storage limit; storing it without its raw MIME.",
+                    message.MessageId,
+                    tenantId,
+                    config.ItemId,
+                    mimeBytes,
+                    MaxStoredMailBytes);
+
+                if (body is { Length: > MaxOversizedBodyLength })
+                    body = body[..MaxOversizedBodyLength];
+            }
+
             var entity = new MailBoxEntity
             {
                 ItemId = Guid.NewGuid().ToString(),
@@ -88,10 +110,11 @@ namespace MailBoxSyncService.Services
                 From = message.From.FirstOrDefault()?.ToString() ?? "",
                 To = string.Join(",", message.To),
                 Date = message.Date.UtcDateTime,
-                RawMime = message.ToString(),
-                Body = message.TextBody,
+                RawMime = fits ? message.ToString() : string.Empty,
+                Body = body,
                 Status = MailStatus.Received,
-                IsInbound = true
+                IsInbound = true,
+                Error = fits ? null! : $"Raw MIME not stored: the message is {mimeBytes} bytes, over the {MaxStoredMailBytes}-byte storage limit."
             };
 
             await _repository.InsertAsync(entity, tenantId);
@@ -122,6 +145,29 @@ namespace MailBoxSyncService.Services
         /// the body under ~180 KB with room for the rest of the envelope.
         /// </summary>
         internal const int MaxTriggerBodyLength = 60_000;
+
+        /// <summary>
+        /// Upper bound on the raw MIME plus body of a stored mail: MongoDB's 16 MiB document limit
+        /// less 1 MiB for the other fields and BSON overhead.
+        /// </summary>
+        internal const long MaxStoredMailBytes = 15L * 1024 * 1024;
+
+        /// <summary>Body kept for a mail stored without its raw MIME.</summary>
+        internal const int MaxOversizedBodyLength = 1_000_000;
+
+        /// <summary>
+        /// The message's serialized size, counted without building it. <c>ToString()</c> on a
+        /// very large mail allocates it twice over and has run the pod out of memory.
+        /// </summary>
+        internal static long MeasureMime(MimeMessage message)
+        {
+            using var measuring = new MimeKit.IO.MeasuringStream();
+            message.WriteTo(measuring);
+            return measuring.Length;
+        }
+
+        private static long Utf8Length(string? value) =>
+            value is null ? 0 : System.Text.Encoding.UTF8.GetByteCount(value);
 
         /// <summary>
         /// The mail as a trigger event carries it: everything except the raw MIME, and the body
