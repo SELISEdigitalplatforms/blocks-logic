@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import Editor, { useMonaco, type Monaco, type OnMount } from "@monaco-editor/react";
+import Editor, { type Monaco, type OnMount } from "@monaco-editor/react";
 import { useTheme } from "@seliseblocks/genesis-os/hooks";
+import { useMonacoInstance, type MonacoPosition, type MonacoTextModel } from "@/lib/monaco-loader";
 import {
   FUNCTION_TYPES_PATH,
   buildCtxCompletions,
@@ -175,7 +176,7 @@ export const CodeEditor = ({
   envKeys,
 }: CodeEditorProps) => {
   const { resolvedTheme } = useTheme();
-  const monaco = useMonaco();
+  const monaco = useMonacoInstance();
   const monacoTheme = resolvedTheme === "dark" ? THEMES.dark.name : THEMES.light.name;
   const isJavaScript = language === "javascript";
 
@@ -217,7 +218,7 @@ export const CodeEditor = ({
     completionRef.current?.dispose();
     completionRef.current = monaco.languages.registerCompletionItemProvider("javascript", {
       triggerCharacters: ["."],
-      provideCompletionItems: (model, position) => {
+      provideCompletionItems: (model: MonacoTextModel, position: MonacoPosition) => {
         const line = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
         const match = /\bctx\.((?:env\.)?[\w$]*)$/.exec(line);
         if (!match) return { suggestions: [] };

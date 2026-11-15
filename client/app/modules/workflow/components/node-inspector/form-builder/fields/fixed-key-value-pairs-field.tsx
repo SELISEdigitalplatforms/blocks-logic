@@ -200,7 +200,7 @@ export const FixedKeyValuePairsField = ({
               variablePicker={
                 picker
                   ? {
-                      target: pickerTarget(field, `${key} value`),
+                      target: pickerTarget(field, t("FIXED_KEY_VALUE_PAIRS_FIELD.KEY_VALUE", { value: key })),
                       onChange: (next) => handleValueChange(key, next),
                     }
                   : null

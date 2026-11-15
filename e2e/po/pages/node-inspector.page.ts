@@ -156,8 +156,9 @@ export class NodeInspectorPage {
 
   /**
    * The rows the node output on the shown run (each item's `Output`), read from the Output panel's
-   * JSON tab. The Input panel (layout-with-io.tsx) is collapsed first so only the output's JSON is
-   * on screen; the Output panel's JSON tab is the last "JSON" tab in the sheet.
+   * JSON tab. The Input panel is collapsed first so only the output's JSON is on screen: it is
+   * InputPanel in the workflow editor and ReadonlyInputPanel in the execution and version views,
+   * both rendered by layout-with-io.tsx. The Output panel's JSON tab is the last "JSON" tab in the sheet.
    */
   async readOutputRows(): Promise<unknown[]> {
     const collapseInput = this.dialog.getByRole("button", { name: "Collapse input" });

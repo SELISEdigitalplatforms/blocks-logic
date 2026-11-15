@@ -466,7 +466,7 @@ function RuntimeTable({ rows }: Readonly<{ rows: unknown[] }>) {
     return <p className="text-xs text-low-emphasis">{t("OUTPUT_PANEL.NO_RUNTIME_OUTPUT_DATA")}</p>;
   }
 
-  const primitiveColumn = "(value)";
+  const primitiveColumn = t("JSON_TAB.VALUE");
   const hasPrimitiveRows = rows.some((row) => !isRecord(row));
   const objectColumns = Array.from(
     rows.reduce<Set<string>>((acc, row) => {
@@ -542,7 +542,7 @@ function RuntimeJson({ rows }: Readonly<{ rows: unknown[] }>) {
  * stored a user-facing message hold ex.ToString(): cut it before the stack trace and drop the
  * "System.Exception: " prefix.
  */
-const countItems = (count: number) => `${count} ${count === 1 ? "item" : "items"}`;
+const countItems = (count: number) => tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "OUTPUT_PANEL.ITEM_COUNT", { count });
 
 function latestRun(executedNodes: ExecutedNode[] | null | undefined, nodeId: string): ExecutedNode | null {
   return (executedNodes ?? [])
@@ -566,7 +566,7 @@ function formatCellValue(value: unknown): string {
   try {
     return JSON.stringify(value);
   } catch {
-    return "[unserializable]";
+    return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "OUTPUT_PANEL.UNSERIALIZABLE");
   }
 }
 

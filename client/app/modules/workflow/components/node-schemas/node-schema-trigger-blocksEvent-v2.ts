@@ -118,7 +118,7 @@ export const NodeSchemaTriggerBlocksEventV2: NodeSchemaDefinition = {
   "data": { ...the action's own fields }
 }
 \`\`\`
-In the next node read a field with \`{{$json.data.userId}}\` or \`{{$json.organizationId}}\`.`,
+${t("IN_THE_NEXT_NODE")}`,
       },
     ],
     settings: [],

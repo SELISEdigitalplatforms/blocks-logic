@@ -2,6 +2,9 @@ import type { WorkflowNode } from "../models/node.model";
 import { handleDisplayLabel } from "./handle-labels";
 import { findNodeDefinition } from "./node-upgraders";
 import { SWITCH_FALLBACK_KEY } from "./switch-handles";
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
 
 export type OutputBranchGroup = {
   /** The branch key the items carry (the handle key); shown only for debugging. */
@@ -16,8 +19,8 @@ type BranchNode = Pick<WorkflowNode, "category" | "type" | "version" | "handle">
 /** The output's name; an unnamed output of a numbered list (Switch) is "Output <i>". */
 const numberedTitle = (node: BranchNode, key: string, index: number) => {
   const label = node.handle?.sources?.[index]?.label;
-  if (key === SWITCH_FALLBACK_KEY) return label || "Fallback";
-  return label || `Output ${index}`;
+  if (key === SWITCH_FALLBACK_KEY) return label || tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "OUTPUT_BRANCHES.FALLBACK");
+  return label || tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "OUTPUT_BRANCHES.OUTPUT", { value: index });
 };
 
 /**
@@ -47,4 +50,8 @@ export const outputBranchGroups = (node: BranchNode, rowsByBranch: Map<string, u
 /** Branch headers are shown only when there is more than one group: single-output nodes look as before. */
 export const showsBranchHeaders = (groups: OutputBranchGroup[]) => groups.length > 1;
 
-export const itemCountLabel = (count: number) => (count === 0 ? "no items" : count === 1 ? "1 item" : `${count} items`);
+/** A zero count has its own text ("no items"): the plural key alone would read "0 items". */
+export const itemCountLabel = (count: number) =>
+  count === 0
+    ? tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "OUTPUT_BRANCHES.NO_ITEMS")
+    : tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "OUTPUT_BRANCHES.ITEM_COUNT", { count });

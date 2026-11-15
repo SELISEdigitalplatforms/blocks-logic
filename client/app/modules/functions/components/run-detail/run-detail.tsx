@@ -39,6 +39,14 @@ const LOGIC_FUNCTIONS_COMPONENTS_MODULE = "logic.functions.components";
 
 const LOG_LEVEL_FILTERS = ["All", "Info", "Warn", "Error"] as const;
 
+/** The rendered name of a level filter; the filter values themselves stay literal for matching. */
+const logLevelLabel = (level: (typeof LOG_LEVEL_FILTERS)[number]) => {
+  if (level === "All") return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.ALL");
+  if (level === "Info") return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.INFO");
+  if (level === "Warn") return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.WARN");
+  return tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.ERROR");
+};
+
 /** Log lines loaded for the viewer and the download; a run may store more. */
 const LOG_PAGE_SIZE = 500;
 
@@ -88,7 +96,7 @@ const TRIGGER_LABELS: Record<string, string> = {
  */
 const buildStages = (run: IRunDetail) => {
   const stages: { label: string; at?: string | null; isTerminal?: boolean }[] = [
-    { label: "QUEUED", at: run.createdDate },
+    { label: tStatic(LOGIC_FUNCTIONS_COMPONENTS_MODULE, "RUN_DETAIL.QUEUED"), at: run.createdDate },
   ];
   if (run.startedAt)
     stages.push({
@@ -245,7 +253,7 @@ export const RunDetail = ({
   const span = runnerSpanMs(run.startedAt, run.completedAt);
   const durationHint =
     span != null && run.durationMs != null && span - run.durationMs >= 250
-      ? `${formatDuration(span)} incl. startup`
+      ? t("RUN_DETAIL.INCL_STARTUP", { value: formatDuration(span) })
       : undefined;
 
   // The runner reports `cancelled` with no handover when a run was cancelled before any sandbox
@@ -276,7 +284,7 @@ export const RunDetail = ({
       value: String(run.attempt),
       isWarning: run.attempt > 1,
     },
-    { label: t("RUN_DETAIL.VERSION"), value: `v${run.versionNumber}`, isPrimary: true },
+    { label: t("RUN_DETAIL.VERSION"), value: t("RUN_DETAIL.V", { value: run.versionNumber }), isPrimary: true },
     // Only a function with "Reuse sandbox" on reports these; an older run has neither. A run
     // cancelled before it got a sandbox reports one too, but there was no sandbox to describe.
     ...(run.reused != null && !neverGotSandbox
@@ -535,7 +543,7 @@ export const RunDetail = ({
                   )}
                   onClick={() => setLogLevel(level)}
                 >
-                  {level}
+                  {logLevelLabel(level)}
                 </button>
               ))}
             </div>
@@ -615,7 +623,7 @@ export const RunDetail = ({
           emptyText={
             run.status === "Succeeded"
               ? t("RUN_DETAIL.THE_HANDLER_RETURNED_NOTHING")
-              : "— no value returned; the run did not finish successfully"
+              : t("RUN_DETAIL.NO_VALUE_RETURNED_THE")
           }
         />
       </div>

@@ -3,3 +3,4 @@ export { ListenEventPanel } from "./listen-event-panel";
 export { NodeGuidePanel } from "./node-guide-panel";
 export * from "./input-panel/input-panel";
 export * from "./output-panel/output-panel";
+export * from "./readonly-input-panel/readonly-input-panel";

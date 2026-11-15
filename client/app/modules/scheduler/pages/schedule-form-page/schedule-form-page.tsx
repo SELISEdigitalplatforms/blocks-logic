@@ -40,7 +40,7 @@ export const ScheduleFormPage = ({ mode }: ScheduleFormPageProps) => {
 
   // Edit: the id crumb shows the schedule name and the last crumb reads "Edit".
   const breadcrumbTitles = isEdit
-    ? { [pathname.replace(/\/edit$/, "")]: schedule?.name || null, [pathname]: "Edit" }
+    ? { [pathname.replace(/\/edit$/, "")]: schedule?.name || null, [pathname]: t("SCHEDULE_FORM_PAGE.EDIT") }
     : { [pathname]: t("SCHEDULE_FORM_PAGE.NEW_SCHEDULE") };
 
   const handleSuccess = (savedScheduleId?: string) => {

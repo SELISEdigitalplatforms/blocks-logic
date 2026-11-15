@@ -119,11 +119,14 @@ export const toPayloadDate = (value: string | undefined, timeZone: string): stri
   return value ? zonedDateToUtcIso(value, timeZone) : null;
 };
 
+/** The server's exact `validation_failed` text for an unknown zone (wire value, compared only). */
 export const TIME_ZONE_NOT_RECOGNISED = "Time zone is not recognised";
 
 /** The server's time zone refusal, to show under the Timezone field; null for any other error. */
 export const timeZoneErrorFrom = (errors?: Record<string, string> | null): string | null =>
-  errors?.validation_failed === TIME_ZONE_NOT_RECOGNISED ? TIME_ZONE_NOT_RECOGNISED : null;
+  errors?.validation_failed === TIME_ZONE_NOT_RECOGNISED
+    ? tStatic(LOGIC_SCHEDULER_MODULE, "UTILS.TIME_ZONE_IS_NOT")
+    : null;
 
 /** A stored instant as the form's `yyyy-MM-dd`, read in the schedule's zone (UTC unchanged). */
 export const toFormDate = (iso: string | null | undefined, timeZone: string): string => {

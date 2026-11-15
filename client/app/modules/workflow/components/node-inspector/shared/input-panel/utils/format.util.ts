@@ -1,3 +1,5 @@
+import { tStatic } from "@seliseblocks/genesis-os";
+
 export function formatCellValue(value: unknown): string {
   if (value === null || value === undefined) return String(value);
   if (typeof value === "string") return `"${value}"`;
@@ -6,6 +8,6 @@ export function formatCellValue(value: unknown): string {
   try {
     return JSON.stringify(value);
   } catch {
-    return "[unserializable]";
+    return tStatic("logic.workflow.nodes.inspector", "FORMAT_UTIL.UNSERIALIZABLE");
   }
 }

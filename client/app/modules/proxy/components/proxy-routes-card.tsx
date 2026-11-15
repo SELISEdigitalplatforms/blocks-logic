@@ -50,6 +50,7 @@ import { renderRichText } from "@/lib/rich-text";
 import { useT, tStatic } from "@seliseblocks/genesis-os";
 
 const LOGIC_PROXY_COMPONENTS_MODULE = "logic.proxy.components";
+const LOGIC_PROXY_MODULE = "logic.proxy";
 
 type VariablePickerProps = {
   variables?: SecretListItem[];
@@ -178,7 +179,10 @@ const describeRoute = (
     resilienceNote = t("PROXY_ROUTES_CARD.USES_THE_CONNECTION_S", {
       value: describeResilience(connectionResilience).toLowerCase(),
     });
-  } else if (describeResilience(route.resilience) === "Not configured") {
+  } else if (
+    describeResilience(route.resilience) ===
+    tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.NOT_CONFIGURED")
+  ) {
     resilienceNote = t("PROXY_ROUTES_CARD.NOTHING_SET_YET_SO");
   }
   return { sendsSummary, returnsSummary, resilienceNote };
@@ -692,7 +696,7 @@ export const ProxyRoutesCard = ({
                   {route.resilience ? (
                     <ProxyResilienceFields
                       idPrefix={`route-${index}-resilience`}
-                      subject={`endpoint ${index + 1}`}
+                      subject={t("PROXY_ROUTES_CARD.ENDPOINT", { value: index + 1 })}
                       value={route.resilience}
                       onChange={(next) =>
                         // Switching every section off leaves nothing to override with, and the

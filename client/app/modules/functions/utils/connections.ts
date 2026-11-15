@@ -5,6 +5,9 @@ import {
   IConnectionVariable,
 } from "../constants/connections.constant";
 import { IVariableBinding } from "../types/function.types";
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
 
 /** Node's built-in modules — importable without an entry in package.json, `node:` prefix or not. */
 const NODE_BUILTINS = new Set([
@@ -264,14 +267,14 @@ export const pinVersion = (
   version: string,
 ): { ok: true; packageJson: string } | { ok: false; reason: string } => {
   if (!EXACT_VERSION.test(version))
-    return { ok: false, reason: `${version} is not an exact version.` };
+    return { ok: false, reason: tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS.IS_NOT_AN_EXACT", { value: version }) };
   const manifest = parseManifest(packageJson);
   if (!manifest) {
-    return { ok: false, reason: "package.json is not valid JSON — fix it first, then update." };
+    return { ok: false, reason: tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS.PACKAGE_JSON_IS_NOT") };
   }
   const dependencies = manifest.dependencies;
   if (!isPlainObject(dependencies) || typeof dependencies[packageName] !== "string") {
-    return { ok: false, reason: `${packageName} is no longer in package.json.` };
+    return { ok: false, reason: tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS.IS_NO_LONGER_IN", { value: packageName }) };
   }
   return {
     ok: true,
@@ -333,11 +336,11 @@ export const applyPreset = (
   if (!manifest) {
     return {
       ok: false,
-      reason: "package.json is not valid JSON — fix it first, then add the connection.",
+      reason: tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS.PACKAGE_JSON_IS_NOT_2"),
     };
   }
   if (manifest.dependencies !== undefined && !isPlainObject(manifest.dependencies)) {
-    return { ok: false, reason: `"dependencies" in package.json must be an object.` };
+    return { ok: false, reason: tStatic(LOGIC_FUNCTIONS_MODULE, "CONNECTIONS.DEPENDENCIES_IN_PACKAGE_JSON") };
   }
 
   const dependencies = (manifest.dependencies ?? {}) as Record<string, unknown>;

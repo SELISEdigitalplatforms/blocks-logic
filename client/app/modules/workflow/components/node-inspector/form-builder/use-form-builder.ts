@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useCallback, useLayoutEffect, useRef } from "react";
-import { FieldSchema } from "./form-field.types";
+import { useQueries } from "@tanstack/react-query";
+import { getQueryClient } from "@/providers/query-provider";
+import { AsyncFieldProps, FieldSchema } from "./form-field.types";
 import { useWorkflow } from "@blocks-workflow/hooks";
 import {
   getValueByPath,
@@ -53,6 +55,12 @@ const resolveFieldProp = (
   return value ?? fallback;
 };
 
+/** Module-level so `useQueries` keeps the combined array stable between renders. */
+const combineAsyncProps = (
+  results: { isPending: boolean; data?: AsyncFieldProps }[],
+): (AsyncFieldProps | "pending" | undefined)[] =>
+  results.map((result) => (result.isPending ? "pending" : result.data));
+
 export const useFormBuilder = ({
   fields,
   data,
@@ -93,8 +101,45 @@ export const useFormBuilder = ({
     dataRef.current = data;
   }, [data]);
 
+  // A `json-fields` field owns several parameter keys, so its value is a patch of them: each key is
+  // set, the field's side effects run as for any field, and dependent fields reset for every patched
+  // key. The field's own key is transient and never saved.
+  const handlePatch = useCallback(
+    (field: FieldSchema, value: unknown) => {
+      const patch =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? (value as Record<string, unknown>)
+          : {};
+      const patchedKeys = Object.keys(patch);
+      // Nothing to write: don't mark the node unsaved.
+      if (patchedKeys.length === 0) return;
+      let updated = patchedKeys.reduce(
+        (current, key) => setValueByPath(current, key, patch[key]),
+        dataRef.current,
+      );
+
+      const sideEffects = field.onChange?.(value, updated, config) || {};
+      const sideEffectKeys = Object.keys(sideEffects);
+      updated = { ...updated, ...sideEffects };
+
+      for (const key of patchedKeys) {
+        updated = cascadeFieldResets(fields, key, updated, sideEffectKeys);
+      }
+
+      const persisted = stripTransientKeys(updated, fields);
+      dataRef.current = persisted;
+      onChange(persisted);
+    },
+    [fields, onChange, config],
+  );
+
   const handleChange = useCallback(
     (field: FieldSchema, value: unknown) => {
+      if (field.type === "json-fields") {
+        handlePatch(field, value);
+        return;
+      }
+
       let updated = setValueByPath(dataRef.current, field.key, value);
 
       // Run field-level side-effects (e.g., recalculate cronExpression)
@@ -113,17 +158,49 @@ export const useFormBuilder = ({
       dataRef.current = persisted;
       onChange(persisted);
     },
-    [fields, onChange, config],
+    [fields, onChange, config, handlePatch],
   );
+
+  // Fields with `asyncProps`: load them, then lay them over the field's own props. The app's shared
+  // client is passed so a form rendered without a provider (some tests) still works.
+  const asyncFields = useMemo(() => fields.filter((field) => field.asyncProps), [fields]);
+  const asyncResults = useQueries(
+    {
+      queries: asyncFields.map((field) => ({
+        queryKey: [
+          "form-builder",
+          "async-props",
+          config.nodeId,
+          field.id,
+          (field.asyncPropsDependencies ?? []).map((key) => getValueByPath(data, key)),
+        ],
+        queryFn: () => field.asyncProps!(data, config),
+        retry: false,
+      })),
+      combine: combineAsyncProps,
+    },
+    getQueryClient(),
+  );
+
+  const resolvedFields = useMemo(() => {
+    if (asyncFields.length === 0) return fields;
+    const byId = new Map(asyncFields.map((field, i) => [field.id, asyncResults[i]]));
+    return fields.map((field) => {
+      if (!byId.has(field.id)) return field;
+      const loaded = byId.get(field.id);
+      if (loaded === "pending") return { ...field, hidden: true };
+      return loaded ? { ...field, ...loaded } : field;
+    });
+  }, [fields, asyncFields, asyncResults]);
 
   const visibleFields = useMemo(
     () =>
-      fields.filter((field) => {
+      resolvedFields.filter((field) => {
         if (!isDependencySatisfied(field, data)) return false;
         if (resolveFieldProp(field.hidden, data, false)) return false;
         return true;
       }),
-    [fields, data],
+    [resolvedFields, data],
   );
 
   const getFieldProps = useCallback(

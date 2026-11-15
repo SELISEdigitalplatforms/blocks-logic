@@ -129,9 +129,10 @@ namespace XUnitTest.Mail
 
             private sealed class Session(RecordingMailKitClient owner) : IMailKitSmtpClient
             {
-                public Task ConnectAsync(string host, int port, bool useSsl) => Task.CompletedTask;
-                public Task ConnectAsync(string host, int port, SecureSocketOptions socketOptions) => Task.CompletedTask;
-                public Task AuthenticateAsync(string userName, string password) => Task.CompletedTask;
+                public SmtpConnectionDiagnostics Diagnostics { get; } = new(TimeProvider.System);
+
+                public Task ConnectAsync(string host, int port, SecureSocketOptions socketOptions, CancellationToken cancellationToken) => Task.CompletedTask;
+                public Task AuthenticateAsync(string userName, string password, CancellationToken cancellationToken) => Task.CompletedTask;
                 public Task AuthenticateAsync(SaslMechanism mechanism) => Task.CompletedTask;
                 public Task DisconnectAsync(bool quit) => Task.CompletedTask;
                 public void Dispose() { }

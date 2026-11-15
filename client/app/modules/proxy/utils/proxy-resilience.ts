@@ -137,34 +137,52 @@ export const resilienceIssues = (value: ProxyResilience | null | undefined): Res
 // The same phrasing the change history uses (ProxyChangeSet), so a setting reads the same way in the
 // form that edits it and in the row recording that it changed.
 
-export const describeTimeout = (seconds: number | null) => (seconds === null ? "not set" : `${seconds}s`);
+export const describeTimeout = (seconds: number | null) =>
+  seconds === null
+    ? tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.NOT_SET")
+    : tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.SECONDS", { value: seconds });
 
 export const describeRetry = (retry: ProxyRetry | null) => {
-  if (!retry) return "off";
+  if (!retry) return tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.OFF");
 
-  const shape =
-    retry.backoff === "fixed"
-      ? `, every ${retry.initialDelaySeconds}s`
-      : retry.backoff === "exponential"
-        ? `, backing off from ${retry.initialDelaySeconds}s`
-        : ", immediately";
-
-  return `${retry.attempts} attempts${shape}`;
+  const { attempts, initialDelaySeconds } = retry;
+  if (retry.backoff === "fixed")
+    return tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.ATTEMPTS_EVERY", {
+      attempts,
+      initialDelaySeconds,
+    });
+  if (retry.backoff === "exponential")
+    return tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.ATTEMPTS_BACKING_OFF_FROM", {
+      attempts,
+      initialDelaySeconds,
+    });
+  return tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.ATTEMPTS_IMMEDIATELY", { value: attempts });
 };
 
 export const describeBreaker = (breaker: ProxyBreaker | null) =>
   breaker
-    ? `opens after ${breaker.failureThreshold} failures, stays open ${breaker.openSeconds}s`
-    : "off";
+    ? tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.OPENS_AFTER_FAILURES_STAYS", {
+        failureThreshold: breaker.failureThreshold,
+        openSeconds: breaker.openSeconds,
+      })
+    : tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.OFF");
 
 /** One line for a summary row: what this policy does, or that there isn't one. */
 export const describeResilience = (value: ProxyResilience | null | undefined): string => {
   if (!value) return tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.NOT_CONFIGURED");
 
   const parts = [
-    value.timeoutSeconds === null ? null : `${value.timeoutSeconds}s timeout`,
-    value.retry ? `retries ${describeRetry(value.retry)}` : null,
-    value.breaker ? `breaker ${describeBreaker(value.breaker)}` : null,
+    value.timeoutSeconds === null
+      ? null
+      : tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.TIMEOUT", { value: value.timeoutSeconds }),
+    value.retry
+      ? tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.RETRIES", { value: describeRetry(value.retry) })
+      : null,
+    value.breaker
+      ? tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.BREAKER", {
+          value: describeBreaker(value.breaker),
+        })
+      : null,
   ].filter((part): part is string => part !== null);
 
   return parts.length ? parts.join(" · ") : tStatic(LOGIC_PROXY_MODULE, "PROXY_RESILIENCE.NOT_CONFIGURED");

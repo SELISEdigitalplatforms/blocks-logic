@@ -1,6 +1,6 @@
 "use client";
 import { Skeleton } from "@/components/ui-kits/skeleton/skeleton";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Table,
   TableBody,
@@ -128,6 +128,28 @@ type WorkflowListProps = {
   isFiltered?: boolean;
 };
 
+/** Workflow name cell; shows the full name in a tooltip only when it is truncated. */
+const TruncatedName = ({ name }: { name: string }) => {
+  const [open, setOpen] = useState(false);
+  const textRef = useRef<HTMLDivElement>(null);
+
+  const handleOpenChange = (next: boolean) => {
+    const el = textRef.current;
+    setOpen(next && !!el && el.scrollWidth > el.clientWidth);
+  };
+
+  return (
+    <Tooltip open={open} onOpenChange={handleOpenChange}>
+      <TooltipTrigger asChild>
+        <div ref={textRef} className="w-fit max-w-[180px] truncate font-semibold md:max-w-[240px]">
+          {name}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-sm break-words">{name}</TooltipContent>
+    </Tooltip>
+  );
+};
+
 /** A column title in the list's header style. */
 const columnHeader = (label: string) =>
   function ColumnHeader() {
@@ -188,9 +210,7 @@ export const WorkflowList = ({ workflow, isLoading, isFiltered }: WorkflowListPr
         id: "name",
         header: columnHeader(t("common:NAME")),
         cell: (info) => (
-          <div className="w-[180px] truncate font-semibold md:w-[240px]">
-            {`${info.row.original.name || ""}`.trim() || "-"}
-          </div>
+          <TruncatedName name={`${info.row.original.name || ""}`.trim() || "-"} />
         ),
       },
       {

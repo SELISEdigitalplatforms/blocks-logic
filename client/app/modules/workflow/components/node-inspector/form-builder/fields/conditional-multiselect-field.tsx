@@ -22,12 +22,13 @@ import { cn } from "@/lib/utils";
 
 import { ConditionalMultiselectValue, FieldProps, SelectOption } from "../form-field.types";
 import { useT } from "@seliseblocks/genesis-os";
+import {
+  REMOTE_SEARCH_DEBOUNCE_MS,
+  REMOTE_SEARCH_PAGE_SIZE,
+  REMOTE_SEARCH_SCROLL_THRESHOLD_PX,
+} from "./remote-search.constants";
 
 const DEFAULT_VALUE: ConditionalMultiselectValue = { mode: "and", values: [] };
-
-const PAGE_SIZE = 20;
-const SEARCH_DEBOUNCE_MS = 500;
-const SCROLL_THRESHOLD_PX = 32;
 
 /** One option per value; the first occurrence wins. */
 const dedupe = (opts: SelectOption[]): SelectOption[] => {
@@ -117,7 +118,7 @@ export const ConditionalMultiselectField = ({
 
   useEffect(() => {
     if (!isRemoteSearch) return;
-    const handle = setTimeout(() => setSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    const handle = setTimeout(() => setSearch(searchInput.trim()), REMOTE_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [searchInput, isRemoteSearch]);
 
@@ -136,7 +137,7 @@ export const ConditionalMultiselectField = ({
     rawCountRef.current = (append ? rawCountRef.current : 0) + opts.length;
     totalRef.current = Number.isFinite(totalCount) && totalCount > 0 ? totalCount : 0;
     // A short page ends paging even if the total says otherwise.
-    hasMoreRef.current = opts.length >= PAGE_SIZE && rawCountRef.current < totalRef.current;
+    hasMoreRef.current = opts.length >= REMOTE_SEARCH_PAGE_SIZE && rawCountRef.current < totalRef.current;
     setRemoteOptions((prev) => {
       if (!append) return dedupe(opts);
       return dedupe([...prev, ...opts]);
@@ -148,7 +149,7 @@ export const ConditionalMultiselectField = ({
     if (!searchOptions) return;
     const generation = ++generationRef.current;
     loadingMoreRef.current = false;
-    searchOptions({ search, page: 0, pageSize: PAGE_SIZE }, dataRef.current, configRef.current)
+    searchOptions({ search, page: 0, pageSize: REMOTE_SEARCH_PAGE_SIZE }, dataRef.current, configRef.current)
       .then((res) => {
         if (generation !== generationRef.current) return;
         applyPage(res.options ?? [], res.totalCount, 0, false);
@@ -176,7 +177,7 @@ export const ConditionalMultiselectField = ({
     loadingMoreRef.current = true;
     setLoadingMore(true);
     searchOptions(
-      { search, page: nextPage, pageSize: PAGE_SIZE },
+      { search, page: nextPage, pageSize: REMOTE_SEARCH_PAGE_SIZE },
       dataRef.current,
       configRef.current,
     )
@@ -197,7 +198,7 @@ export const ConditionalMultiselectField = ({
 
   const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_THRESHOLD_PX) loadNextPage();
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - REMOTE_SEARCH_SCROLL_THRESHOLD_PX) loadNextPage();
   };
 
   const options = isRemoteSearch ? remoteOptions : isStaticOptions ? staticOptions : asyncOptions;
@@ -227,7 +228,7 @@ export const ConditionalMultiselectField = ({
   };
 
   const MatchIcon = currentValue.mode === "and" ? Sigma : CircleSlash;
-  const matchLabel = currentValue.mode === "and" ? "All" : "Any";
+  const matchLabel = currentValue.mode === "and" ? t("CONDITIONAL_MULTISELECT_FIELD.ALL") : t("CONDITIONAL_MULTISELECT_FIELD.ANY");
 
   const labelFor = (optionValue: string): string =>
     options.find((o) => String(o.value) === optionValue)?.label ??

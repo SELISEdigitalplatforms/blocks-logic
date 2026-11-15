@@ -19,14 +19,15 @@ export const LimitsForm = () => {
   const profile = options ?? DEFAULT_LIMITS_OPTIONS;
 
   const rows = [
-    { label: t("LIMITS_FORM.MEMORY"), value: `${profile.memoryMb} MB per run` },
-    { label: t("LIMITS_FORM.TIMEOUT"), value: `${profile.timeoutSeconds} s per run` },
-    { label: "CPU", value: `${profile.cpuMillicores}m per run` },
+    { label: t("LIMITS_FORM.MEMORY"), value: t("LIMITS_FORM.MB_PER_RUN", { value: profile.memoryMb }) },
+    { label: t("LIMITS_FORM.TIMEOUT"), value: t("LIMITS_FORM.S_PER_RUN", { value: profile.timeoutSeconds }) },
+    { label: "CPU", value: t("LIMITS_FORM.M_PER_RUN", { value: profile.cpuMillicores }) },
     {
       label: t("LIMITS_FORM.CONCURRENCY"),
-      value: `${profile.concurrency} runs at a time per function`,
+      value: t("LIMITS_FORM.RUNS_AT_A_TIME", { value: profile.concurrency }),
       note: t("LIMITS_FORM.RUNS_BEYOND_THE_LIMIT"),
     },
+    // "CPU" is the literal label HARD_CAPS gives its CPU row (an identifier here, never rendered).
     ...HARD_CAPS.filter((cap) => cap.label !== "CPU"),
   ];
 

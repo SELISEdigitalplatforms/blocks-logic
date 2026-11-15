@@ -2,6 +2,9 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { isValid as isValidDate, isBefore } from "date-fns";
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_SHARED_MODULE = "logic.shared";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -16,15 +19,17 @@ export const formatDate = (date: Date, withoutTime?: boolean): string => {
   return `${dateStr}, ${timeStr}`;
 };
 
+const MONTH_KEYS = [
+  "UTILS.JAN", "UTILS.FEB", "UTILS.MAR", "UTILS.APR", "UTILS.MAY", "UTILS.JUN",
+  "UTILS.JUL", "UTILS.AUG", "UTILS.SEP", "UTILS.OCT", "UTILS.NOV", "UTILS.DEC",
+] as const;
+
 export const formatFullDate = (date: Date, withoutTime?: boolean): string => {
-  const monthNames = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-  const dateStr = `${monthNames[date.getMonth()]} ${pad(date.getDate())}, ${date.getFullYear()}`;
+  const monthName = tStatic(LOGIC_SHARED_MODULE, MONTH_KEYS[date.getMonth()]);
+  const dateStr = `${monthName} ${pad(date.getDate())}, ${date.getFullYear()}`;
   const timeStr = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
   if (withoutTime) return dateStr;
-  return `${dateStr} at ${timeStr}`;
+  return tStatic(LOGIC_SHARED_MODULE, "UTILS.AT", { date: dateStr, time: timeStr });
 };
 
 export function parseDateString(dateString: string): Date {
