@@ -1,5 +1,9 @@
 import { test, expect } from "../../support/test-base";
-import { IAM_NODE_NAMES, iamUserWorkflowFile } from "../../support/iam-user-fixtures";
+import {
+  IAM_NODE_NAMES,
+  iamUserWorkflowFile,
+  readIamBaseUrl,
+} from "../../support/iam-user-fixtures";
 import {
   deleteWorkflowAt,
   deleteWorkflowNamed,
@@ -17,8 +21,9 @@ import { NodeInspectorPage, WorkflowEditorPage } from "../../po";
  * - W10 / H13: Blocks Authentication + Get Users (page size 1) succeeds and returns users;
  * - W11: page size 101 fails the item with `validation_failed`;
  * - §6 clientId rule: Client Credential with no credential fails the item with `invalid_configuration`.
- * Only reads are sent to IAM. The node's base URL is left blank, so the run uses the server's `IamBaseUrl`
- * setting, the ticket's operations prerequisite.
+ * Only reads are sent to IAM. An imported node skips the editor's transform, so the fixture stamps each
+ * node's base URL with the app's own BLOCKS_IAM_BASE_URL (read from its runtime config), as the editor
+ * does; the server's `IamBaseUrl` fallback isn't needed.
  *
  * The live steps that need dedicated IAM fixtures (client credentials with chosen permissions, the e2e
  * organization and roles, user creation, role changes, sessions, logs) are not automated here.
@@ -80,7 +85,8 @@ test.describe("workflow — IAM User node (blocks-logic#424)", () => {
 
     try {
       imported = await test.step("[Setup] Import three standalone IAM User nodes", async () => {
-        const workflow = await importWorkflowFile(page, iamUserWorkflowFile(name));
+        const iamBaseUrl = await readIamBaseUrl(page);
+        const workflow = await importWorkflowFile(page, iamUserWorkflowFile(name, iamBaseUrl));
         for (const node of Object.values(IAM_NODE_NAMES))
           await expect(editor.canvasNode(node)).toBeVisible();
         return workflow;
