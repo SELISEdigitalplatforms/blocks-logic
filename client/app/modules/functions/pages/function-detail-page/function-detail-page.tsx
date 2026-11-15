@@ -171,12 +171,12 @@ const TAB_ORDER = [
   "versions",
 ] as const;
 const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
-  code: "Code",
-  trigger: "Trigger",
-  output: "Output",
-  configuration: "Configuration",
-  runs: "Runs",
-  versions: "Versions",
+  get code() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.CODE"); },
+  get trigger() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.TRIGGER"); },
+  get output() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.OUTPUT"); },
+  get configuration() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.CONFIGURATION"); },
+  get runs() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.RUNS"); },
+  get versions() { return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.VERSIONS"); },
 };
 
 /** The server's field errors when it sent them, else the fallback message. */
@@ -185,7 +185,9 @@ const showRequestError = (error: unknown, fallback: string) =>
 
 /** The deployed version's badge (the same test as `isDeployed`); nothing before the first deploy. */
 const versionBadge = (activeVersionNumber: number | null | undefined) =>
-  activeVersionNumber == null ? "" : `v${activeVersionNumber}`;
+  activeVersionNumber == null
+    ? ""
+    : tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.V", { value: activeVersionNumber });
 
 /** A tab's count badge; nothing for zero. */
 const countBadge = (count: number | undefined) => (count ? String(count) : "");
@@ -195,9 +197,11 @@ const deployButtonLabel = (
   upToDate: string,
   state: { isBuilding: boolean; isDeployed: boolean; hasUndeployedChanges: boolean; nextVersion: number },
 ) => {
-  if (state.isBuilding) return "Building…";
-  if (!state.isDeployed) return "Deploy";
-  if (state.hasUndeployedChanges) return `Deploy v${state.nextVersion}`;
+  if (state.isBuilding) return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.BUILDING");
+  if (!state.isDeployed) return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.DEPLOY");
+  if (state.hasUndeployedChanges) {
+    return tStatic(LOGIC_FUNCTIONS_MODULE, "FUNCTION_DETAIL_PAGE.DEPLOY_V", { value: state.nextVersion });
+  }
   return upToDate;
 };
 

@@ -129,6 +129,8 @@ export const WorkflowExecutionEditor = ({
             };
             edge.className = styles.edgeClass;
             edge.style = { stroke: styles.edgeColor };
+            // Lets the edge show its "n items" count, as the editor does after a step run.
+            edge.data = { ...edge.data, isExecutionTraversed: true };
           }
         }
       }

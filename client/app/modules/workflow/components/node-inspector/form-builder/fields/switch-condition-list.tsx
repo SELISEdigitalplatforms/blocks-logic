@@ -38,21 +38,22 @@ export const operatorLabel = (condition: Condition): string =>
   TYPE_OPERATORS[typeOf(condition)]?.find((o) => o.value === condition.operator)?.label ?? condition.operator ?? "";
 
 export const typeLabel = (condition: Condition): string =>
-  SWITCH_CONDITION_TYPES.find((t) => t.value === typeOf(condition))?.label ?? "String";
+  SWITCH_CONDITION_TYPES.find((t) => t.value === typeOf(condition))?.label ??
+  tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.STRING");
 
 export const newSwitchCondition = (): Condition => ({ left: "", operator: "equals", right: "", type: "string" });
 
 export const comparePlaceholder = (condition: Condition): string => {
-  if (LIST_OPERATORS.has(condition.operator)) return 'a, b, c  or  ["a","b"]';
+  if (LIST_OPERATORS.has(condition.operator)) return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.LIST_PLACEHOLDER");
   switch (typeOf(condition)) {
     case "number":
-      return "e.g. 100";
+      return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.NUMBER_PLACEHOLDER");
     case "date_time":
-      return "e.g. 2026-01-31";
+      return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.DATE_TIME_PLACEHOLDER");
     case "boolean":
-      return "true or false";
+      return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.BOOLEAN_PLACEHOLDER");
     case "array":
-      return "a, b, c";
+      return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.ARRAY_PLACEHOLDER");
     default:
       return tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.TEXT_TO_COMPARE");
   }
@@ -75,7 +76,10 @@ export const literalProblem = (condition: Condition, side: "left" | "right"): st
       // The server parses numbers and dates leniently (thousands separators, many date formats); only text
       // without a single digit is certainly unreadable.
       if (/\d/.test(text)) return "";
-      return `Not a ${typeOf(condition) === "number" ? "number" : "date"}, so this condition never matches.`;
+      return tStatic(
+        LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE,
+        typeOf(condition) === "number" ? "SWITCH_CONDITION_LIST.NOT_A_NUMBER" : "SWITCH_CONDITION_LIST.NOT_A_DATE",
+      );
     case "boolean":
       return /^(true|false)$/i.test(text) ? "" : tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "SWITCH_CONDITION_LIST.NOT_TRUE_OR_FALSE");
     default:
@@ -127,7 +131,15 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
 
   const operandPicker = (index: number, side: "left" | "right") =>
     picker
-      ? { target: pickerTarget(field, `condition ${index + 1} ${side} operand`), onChange: (next: string) => update(index, { [side]: next }) }
+      ? {
+          target: pickerTarget(
+            field,
+            tr(side === "left" ? "SWITCH_CONDITION_LIST.CONDITION_LEFT_OPERAND" : "SWITCH_CONDITION_LIST.CONDITION_RIGHT_OPERAND", {
+              value: index + 1,
+            }),
+          ),
+          onChange: (next: string) => update(index, { [side]: next }),
+        }
       : null;
 
   const segmentInput = "h-9 rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0";
@@ -151,7 +163,7 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
                   active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {value === "or" ? "OR" : "AND"}
+                {value === "or" ? tr("SWITCH_CONDITION_LIST.OR") : tr("SWITCH_CONDITION_LIST.AND")}
               </button>
             );
           })}
@@ -166,7 +178,7 @@ export const SwitchConditionList = ({ field, idPrefix, conditions, conditionType
             {index > 0 && (
               <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-muted-foreground" aria-hidden="true">
                 <span className="h-px flex-1 bg-border" />
-                {useOr ? "OR" : "AND"}
+                {useOr ? tr("SWITCH_CONDITION_LIST.OR") : tr("SWITCH_CONDITION_LIST.AND")}
                 <span className="h-px flex-1 bg-border" />
               </div>
             )}

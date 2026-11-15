@@ -26,17 +26,14 @@ export const IMPORT_ERROR_MESSAGES: Record<ImportErrorCode, string> = {
   get UPLOAD_FAILED() { return tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.COULD_NOT_UPLOAD_THE"); },
 };
 
-export const IMPORT_SUCCESS_MESSAGE = "Workflow imported.";
+export const importStartedMessage = (): string => tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.IMPORT_STARTED_YOU_LL");
 
-export const IMPORT_STARTED_MESSAGE = "Import started. You'll be notified when it's ready.";
-
-export const IMPORT_SLOW_MESSAGE =
-  "The import is taking longer than expected. Check the workflow list again in a moment.";
+export const importSlowMessage = (): string => tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.THE_IMPORT_IS_TAKING");
 
 export const importSuccessMessage = (issues: number): string =>
   issues > 0
     ? tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.WORKFLOW_IMPORTED_ITEM_S", { issues })
-    : IMPORT_SUCCESS_MESSAGE;
+    : tStatic(LOGIC_WORKFLOW_MODULE, "WORKFLOW_IMPORT.WORKFLOW_IMPORTED");
 
 export interface WorkflowImportRoot {
   name: string;

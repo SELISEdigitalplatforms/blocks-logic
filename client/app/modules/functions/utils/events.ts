@@ -1,3 +1,7 @@
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_FUNCTIONS_MODULE = "logic.functions";
+
 /** A function starts from one action at most. */
 export const MAX_TRIGGER_EVENTS = 1;
 
@@ -50,6 +54,8 @@ export const triggeredByLabel = (
   invokedById: string | null | undefined,
   labels: Record<string, string>,
 ): string => {
-  if (invokedBy === "Event" && invokedById) return `event ${invokedById}`;
+  if (invokedBy === "Event" && invokedById) {
+    return tStatic(LOGIC_FUNCTIONS_MODULE, "EVENTS.EVENT", { value: invokedById });
+  }
   return labels[invokedBy] ?? invokedBy;
 };

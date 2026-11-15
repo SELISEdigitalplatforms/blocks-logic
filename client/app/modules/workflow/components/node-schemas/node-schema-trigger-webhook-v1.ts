@@ -14,6 +14,25 @@ const AUTHORIZATION_DEPENDENCY = {
   value: "blocksAuthorization",
 } as const;
 
+// Values of the server's WebhookBodyModes.
+export const BODY_MODE_JSON = "json";
+export const BODY_MODE_ANY_CONTENT = "anyContent";
+
+const ANY_CONTENT_DEPENDENCY = {
+  key: "bodyMode",
+  value: BODY_MODE_ANY_CONTENT,
+} as const;
+
+// Values of the server's WebhookIntakeSettings.BodyTypes (SPEC10 D6). An empty selection accepts every type.
+export const BODY_TYPES = ["json", "form", "multipart", "text", "binary"] as const;
+const BODY_TYPE_LABEL_KEYS: Record<(typeof BODY_TYPES)[number], string> = {
+  json: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_JSON",
+  form: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_FORM",
+  multipart: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_MULTIPART",
+  text: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_TEXT",
+  binary: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_BINARY",
+};
+
 type AuthBlock = {
   organizationId?: string;
   roles?: { operator?: "all" | "any"; items?: string[] };
@@ -162,6 +181,80 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         key: "httpMethodInfo",
         transient: true,
         displayValue: () => "POST",
+      },
+      {
+        // Every webhook shows Body Mode and can switch either way (SPEC10 D7, N8 as amended). New nodes start on
+        // Any content; a node saved before this setting existed has no `bodyMode` and runs (and shows) as
+        // JSON (legacy).
+        id: "body-mode",
+        type: "select-with-description",
+        get label() {
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.BODY_MODE");
+        },
+        get info() {
+          return tStatic(
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ANY_CONTENT_LIMITS_5",
+          );
+        },
+        key: "bodyMode",
+        defaultValue: BODY_MODE_JSON,
+        options: [
+          {
+            value: BODY_MODE_JSON,
+            get label() {
+              return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.JSON_LEGACY");
+            },
+            get description() {
+              return tStatic(
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ACCEPTS_ONLY_A_JSON",
+              );
+            },
+          },
+          {
+            value: BODY_MODE_ANY_CONTENT,
+            get label() {
+              return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ANY_CONTENT");
+            },
+            get description() {
+              return tStatic(
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ACCEPTS_JSON_FORMS_MULTIPART",
+              );
+            },
+          },
+        ],
+      },
+      {
+        // Files always go to Storage's default folder and configuration, and every non-sensitive header is
+        // copied, so neither is a setting (SPEC10 D2, D3). Leaving this empty accepts every body type.
+        id: "accepted-body-types",
+        type: "multiselect",
+        get label() {
+          return tStatic(
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ACCEPTED_BODY_TYPES",
+          );
+        },
+        get info() {
+          return tStatic(
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ACCEPTED_BODY_TYPES_DESCRIPTION",
+          );
+        },
+        get placeholder() {
+          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ALL_TYPES");
+        },
+        key: "acceptedBodyTypes",
+        options: BODY_TYPES.map((value) => ({
+          value,
+          get label() {
+            return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, BODY_TYPE_LABEL_KEYS[value]);
+          },
+        })),
+        defaultValue: [],
+        dependsOn: ANY_CONTENT_DEPENDENCY,
       },
       {
         id: "auth-type",
@@ -500,6 +593,8 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       roles: { operator: "all", values: [] },
       permissions: { operator: "any", values: [] },
       authorizationMode: "",
+      bodyMode: BODY_MODE_ANY_CONTENT,
+      acceptedBodyTypes: [],
     },
     settings: {},
   },

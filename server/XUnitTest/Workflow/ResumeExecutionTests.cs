@@ -68,11 +68,13 @@ namespace XUnitTest.Workflow
             repo.Setup(r => r.TryReopenFailedExecutionAsync("exec-1", "t1")).ReturnsAsync(reopens);
             var messages = new Mock<IMessageClient>();
             var service = new WorkflowExecutionService(
-                Mock.Of<IWorkflowRepository>(), repo.Object, messages.Object, Mock.Of<ILogger<WorkflowExecutionService>>(),
-                Mock.Of<IWorkflowEngineService>(), Mock.Of<IWorkflowVersionRepository>(), Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IWorkflowAuthService>(), Mock.Of<IHttpContextAccessor>(), Mock.Of<IDelegationGrantFactory>(),
+                new WorkflowExecutionStores(Mock.Of<IWorkflowRepository>(), repo.Object, Mock.Of<IWorkflowVersionRepository>()),
+                messages.Object,
+                Mock.Of<ILogger<WorkflowExecutionService>>(),
+                Mock.Of<IWorkflowEngineService>(),
+                Mock.Of<IWorkflowNotificationService>(),
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>());
+                new WorkflowTriggerAccess(Mock.Of<IWorkflowAuthService>(), Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(), Mock.Of<IWebhookIntake>()));
             return (service, repo, messages);
         }
 

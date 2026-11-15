@@ -85,14 +85,14 @@ describe("input panel components", () => {
     expect(screen.getByText("No runtime input data available.")).toBeTruthy();
   });
 
-  it("renders the selected node input panel from execution data", () => {
+  it("renders the selected node input panel from step-execution data", () => {
     const parent = node("trigger", "Webhook");
     const selected = node("action", "Action");
 
     renderWithProviders(<InputPanel />, {
       seedWorkflow: (store) => {
         store.setState({
-          editorMode: "execution",
+          editorMode: "editor",
           nodesMap: { [parent.id]: parent, [selected.id]: selected },
           edgesMap: {
             edge1: {
@@ -130,5 +130,6 @@ describe("input panel components", () => {
     expect(screen.getByText("Input")).toBeTruthy();
     expect(screen.getByText("id")).toBeTruthy();
     expect(screen.getByText('"Ada"')).toBeTruthy();
+    expect(screen.getByTitle("Drag to use: {{$json.output.id}}")).toBeTruthy();
   });
 });

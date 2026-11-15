@@ -7,8 +7,9 @@ namespace XUnitTest.Api
 {
     /// <summary>
     /// The SPA's CSP and security headers. Pinned: hosts follow configuration (one image runs on
-    /// dev, stg and prod), no inline script is allowed, styles keep 'unsafe-inline' (genesis-os
-    /// login injects &lt;style&gt;), and headers a controller already set are never replaced.
+    /// dev, stg and prod), no inline script is allowed, style elements need the style nonce
+    /// (genesis-os login injects &lt;style&gt;, stamped by csp-nonce.js), and headers a
+    /// controller already set are never replaced.
     /// </summary>
     public class SecurityHeadersTests
     {
@@ -93,8 +94,8 @@ namespace XUnitTest.Api
             Directive(policy, "script-src").Should().Be("script-src 'self'");
             policy.Should().NotContain("jsdelivr").And.NotContain("recaptcha").And.NotContain("frame-src");
 
-            Directive(policy, "style-src").Should().Contain("'unsafe-inline'").And.Contain("https://fonts.googleapis.com");
-            Directive(policy, "font-src").Should().Contain("https://fonts.gstatic.com");
+            Directive(policy, "style-src").Should().Be($"style-src 'self' 'nonce-{ContentSecurityPolicy.StyleNoncePlaceholder}'");
+            Directive(policy, "font-src").Should().Be("font-src 'self' data:");
             Directive(policy, "worker-src").Should().Contain("blob:");
             Directive(policy, "connect-src").Should().Contain("https://api.rollbar.com");
             policy.Should().Contain("frame-ancestors 'none'").And.Contain("object-src 'none'").And.Contain("base-uri 'self'");
@@ -139,6 +140,46 @@ namespace XUnitTest.Api
 
             Directive(policy, "report-to").Should().Be("report-to " + ContentSecurityPolicy.ReportGroup);
             Directive(policy, "report-uri").Should().Be("report-uri " + ContentSecurityPolicy.ReportPath);
+        }
+
+        [Fact]
+        public void PolicyAllowsStyleElementsOnlyWithTheNonceAndKeepsStyleAttributes()
+        {
+            var policy = ContentSecurityPolicy.Build(Config(new()));
+
+            // ZAP 10055: no 'unsafe-inline' for style elements; attributes cannot carry a nonce.
+            Directive(policy, "style-src-attr").Should().Be("style-src-attr 'unsafe-inline'");
+            Directive(policy, "style-src").Should().NotContain("'unsafe-inline'");
+            // ZAP 90003: no third-party stylesheet or font host left to load without SRI.
+            policy.Should().NotContain("fonts.googleapis.com").And.NotContain("fonts.gstatic.com");
+            Directive(policy, "worker-src").Should().Be("worker-src 'self' blob:");
+        }
+
+        [Fact]
+        public void WithStyleNonceReplacesThePlaceholder()
+        {
+            var policy = ContentSecurityPolicy.WithStyleNonce(ContentSecurityPolicy.Build(Config(new())), "abc123==");
+
+            Directive(policy, "style-src").Should().Be("style-src 'self' 'nonce-abc123=='");
+            policy.Should().NotContain(ContentSecurityPolicy.StyleNoncePlaceholder);
+        }
+
+        [Fact]
+        public void RenderIndexWritesTheNonceIntoTheShell()
+        {
+            var template = $"<meta name=\"csp-nonce\" nonce=\"{ContentSecurityPolicy.StyleNoncePlaceholder}\" />";
+
+            ContentSecurityPolicy.RenderIndex(template, "abc123==").Should()
+                .Be("<meta name=\"csp-nonce\" nonce=\"abc123==\" />");
+        }
+
+        [Fact]
+        public void WithStyleNonceAndRenderIndexRefuseMissingValues()
+        {
+            FluentActions.Invoking(() => ContentSecurityPolicy.WithStyleNonce(null!, "n")).Should().Throw<ArgumentNullException>();
+            FluentActions.Invoking(() => ContentSecurityPolicy.WithStyleNonce("p", "")).Should().Throw<ArgumentException>();
+            FluentActions.Invoking(() => ContentSecurityPolicy.RenderIndex(null!, "n")).Should().Throw<ArgumentNullException>();
+            FluentActions.Invoking(() => ContentSecurityPolicy.RenderIndex("t", null!)).Should().Throw<ArgumentException>();
         }
 
         // ---------- Mode ----------
@@ -252,6 +293,7 @@ namespace XUnitTest.Api
         [Theory]
         [InlineData("/assets/index-Dl5BJBN8.js", "public, max-age=31536000, immutable")]
         [InlineData("/runtime-config.js", "no-cache")]
+        [InlineData("/csp-nonce.js", "no-cache")]
         public void Apply_CachesHashedAssetsButNotRuntimeConfig(string path, string expected)
         {
             var context = Request(path);
@@ -259,6 +301,99 @@ namespace XUnitTest.Api
             SecurityHeaders.Apply(context, Policy, CspMode.Enforce);
 
             context.Response.Headers["Cache-Control"].ToString().Should().Be(expected);
+        }
+
+        // ---------- Middleware ----------
+
+        private static readonly byte[] NonceKey = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+
+        private const string NoncePolicy = "style-src 'self' 'nonce-" + ContentSecurityPolicy.StyleNoncePlaceholder + "'";
+
+        /// <summary>DefaultHttpContext ignores OnStarting; this feature records and runs the callbacks.</summary>
+        private sealed class StartingResponseFeature : Microsoft.AspNetCore.Http.Features.HttpResponseFeature
+        {
+            private readonly List<(Func<object, Task> Callback, object State)> _starting = [];
+
+            public override void OnStarting(Func<object, Task> callback, object state) => _starting.Add((callback, state));
+
+            public async Task StartAsync()
+            {
+                foreach (var (callback, state) in _starting) await callback(state).ConfigureAwait(false);
+            }
+        }
+
+        private static (DefaultHttpContext Context, StartingResponseFeature Feature) SeededRequest(string path, string seed)
+        {
+            var context = Request(path);
+            var feature = new StartingResponseFeature();
+            context.Features.Set<Microsoft.AspNetCore.Http.Features.IHttpResponseFeature>(feature);
+            context.Request.Headers.Cookie = $"{StyleNonce.SeedCookieName}={seed}";
+            return (context, feature);
+        }
+
+        [Fact]
+        public async Task InvokeAsyncSendsThePolicyWithTheBrowsersNonceAndKeepsItForTheShell()
+        {
+            var nonces = new StyleNonce(NonceKey);
+            var seed = StyleNonce.NewSeed();
+            var (context, feature) = SeededRequest("/app/console", seed);
+            var nextCalled = false;
+
+            await SecurityHeaders.InvokeAsync(context, _ => { nextCalled = true; return Task.CompletedTask; },
+                NoncePolicy, CspMode.Enforce, nonces);
+            await feature.StartAsync();
+
+            var nonce = nonces.For(seed);
+            nextCalled.Should().BeTrue();
+            context.Items[StyleNonce.ItemKey].Should().Be(nonce);
+            context.Response.Headers["Content-Security-Policy"].ToString().Should().Be($"style-src 'self' 'nonce-{nonce}'");
+        }
+
+        [Fact]
+        public async Task InvokeAsyncGivesTheSameBrowserTheSamePolicy()
+        {
+            // ZAP 10104 compares two responses for one page: one browser must get one shell.
+            var nonces = new StyleNonce(NonceKey);
+            var seed = StyleNonce.NewSeed();
+            var policies = new List<string>();
+            for (var i = 0; i < 2; i++)
+            {
+                var (context, feature) = SeededRequest("/", seed);
+                await SecurityHeaders.InvokeAsync(context, _ => Task.CompletedTask, NoncePolicy, CspMode.Enforce, nonces);
+                await feature.StartAsync();
+                policies.Add(context.Response.Headers["Content-Security-Policy"].ToString());
+            }
+
+            policies[0].Should().Be(policies[1]);
+        }
+
+        [Fact]
+        public async Task InvokeAsyncKeepsAPolicyAControllerSet()
+        {
+            var (context, feature) = SeededRequest("/api/proxy/x", StyleNonce.NewSeed());
+
+            await SecurityHeaders.InvokeAsync(context, ctx =>
+            {
+                ctx.Response.Headers["Content-Security-Policy"] = "sandbox";
+                return Task.CompletedTask;
+            }, NoncePolicy, CspMode.Enforce, new StyleNonce(NonceKey));
+            await feature.StartAsync();
+
+            context.Response.Headers["Content-Security-Policy"].ToString().Should().Be("sandbox");
+        }
+
+        [Fact]
+        public async Task InvokeAsyncRefusesMissingArguments()
+        {
+            var nonces = new StyleNonce(NonceKey);
+            RequestDelegate next = _ => Task.CompletedTask;
+
+            await FluentActions.Awaiting(() => SecurityHeaders.InvokeAsync(null!, next, NoncePolicy, CspMode.Enforce, nonces))
+                .Should().ThrowAsync<ArgumentNullException>();
+            await FluentActions.Awaiting(() => SecurityHeaders.InvokeAsync(Request("/"), null!, NoncePolicy, CspMode.Enforce, nonces))
+                .Should().ThrowAsync<ArgumentNullException>();
+            await FluentActions.Awaiting(() => SecurityHeaders.InvokeAsync(Request("/"), next, NoncePolicy, CspMode.Enforce, null!))
+                .Should().ThrowAsync<ArgumentNullException>();
         }
     }
 }

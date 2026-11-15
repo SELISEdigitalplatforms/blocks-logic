@@ -54,7 +54,11 @@ const DIGITS = /^\d+$/;
 const describeAllowed = (spec: CronFieldSpec): string => {
   const numbers = `${spec.min}-${spec.max}`;
   if (!spec.names) return numbers;
-  return `${numbers} or ${spec.names[0]}-${spec.names.at(-1)}`;
+  return tStatic(LOGIC_SCHEDULER_MODULE, "CRON_VALIDATION.OR", {
+    numbers,
+    first: spec.names[0],
+    last: spec.names.at(-1) ?? "",
+  });
 };
 
 const parseValue = (token: string, spec: CronFieldSpec): number | null => {
@@ -91,10 +95,14 @@ const isValidItem = (item: string, spec: CronFieldSpec): boolean => {
 
 const validateField = (field: string, spec: CronFieldSpec): string | null => {
   if (field === "?") {
-    return spec.allowsQuestionMark ? null : `${spec.label} does not allow "?"`;
+    return spec.allowsQuestionMark
+      ? null
+      : tStatic(LOGIC_SCHEDULER_MODULE, "CRON_VALIDATION.DOES_NOT_ALLOW", { value: spec.label });
   }
   const isValid = field.split(",").every((item) => isValidItem(item, spec));
-  return isValid ? null : `${spec.label} must be ${describeAllowed(spec)}`;
+  return isValid
+    ? null
+    : tStatic(LOGIC_SCHEDULER_MODULE, "CRON_VALIDATION.MUST_BE", { label: spec.label, allowed: describeAllowed(spec) });
 };
 
 /** Returns an error message for an invalid expression, or null when it is valid. */

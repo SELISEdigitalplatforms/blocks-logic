@@ -120,13 +120,10 @@ namespace Mail.DomainService.Mails
 
                         if (mailToBeSent.MailServerConfiguration.SendsSnsHeaders())
                         {
+                            // No copy of the body in a header: Exchange Online rejects a header
+                            // value over 32,768 characters, so large templates bounced.
                             mail.Headers.Add("X-SES-CONFIGURATION-SET", _configuration["SnsConfigurationName"]);
                             mail.Headers.Add("X-Tenant-Id", BlocksContext.GetContext()?.TenantId);
-
-                            // System.Net.Mail rejects CR/LF inside a header value, and every HTML
-                            // template has newlines - so unfolded this threw for the whole message,
-                            // was swallowed below, and surfaced only as a bare FAILED log.
-                            mail.Headers.Add("X-Mail-Body", SingleLine(mailBody.Body));
                         }
 
                         await client.SendMailAsync(mail);
@@ -146,13 +143,6 @@ namespace Mail.DomainService.Mails
                 }
                 return false;
             }
-        }
-
-        private static string SingleLine(string? value)
-        {
-            return string.IsNullOrEmpty(value)
-                ? string.Empty
-                : value.Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
         }
 
         private bool AddMessageFrom(MailToBeSent mailToBeSent, MailMessage message)

@@ -6,9 +6,10 @@ import { ExecutionSection, SectionNote } from "./execution-section";
 import { ReadOnlyCodeViewer } from "./read-only-code-viewer";
 import { useT } from "@seliseblocks/genesis-os";
 
-const TRIGGER_LABELS: Record<number, string> = {
-  [ScheduleTriggerType.Webhook]: "Webhook",
-  [ScheduleTriggerType.Queue]: "Queue",
+/** Translation keys of the trigger type labels; looked up at render time. */
+const TRIGGER_LABEL_KEYS: Record<number, string> = {
+  [ScheduleTriggerType.Webhook]: "EXECUTION_REQUEST_SECTION.WEBHOOK",
+  [ScheduleTriggerType.Queue]: "EXECUTION_REQUEST_SECTION.QUEUE_2",
 };
 
 const Label = ({ children }: Readonly<{ children: string }>) => (
@@ -54,7 +55,8 @@ const WebhookDetails = ({ webhook }: Readonly<{ webhook: NonNullable<ScheduleSna
 
 export const ExecutionRequestSection = ({ snapshot }: Readonly<{ snapshot: ScheduleSnapshot }>) => {
   const { t } = useT("logic.scheduler");
-  const triggerLabel = TRIGGER_LABELS[snapshot.triggerType ?? -1] ?? "—";
+  const triggerLabelKey = TRIGGER_LABEL_KEYS[snapshot.triggerType ?? -1];
+  const triggerLabel = triggerLabelKey ? t(triggerLabelKey) : "—";
   const isQueue = snapshot.triggerType === ScheduleTriggerType.Queue;
 
   return (

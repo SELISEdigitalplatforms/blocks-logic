@@ -10,10 +10,9 @@ import { useEnqueueWorkflowImport } from "./use-workflow-api";
 import { workflowService } from "../services/workflow.service";
 import {
   IMPORT_ERROR_MESSAGES,
-  IMPORT_SLOW_MESSAGE,
-  IMPORT_STARTED_MESSAGE,
-  IMPORT_SUCCESS_MESSAGE,
   extractImportNotification,
+  importSlowMessage,
+  importStartedMessage,
   importSuccessMessage,
   preflightWorkflowFile,
 } from "../utils/workflow-import";
@@ -112,7 +111,7 @@ export const useImportWorkflow = () => {
             pendingRef.current.delete(correlationId);
             pollTimersRef.current.delete(correlationId);
             queryClient.invalidateQueries({ queryKey: ["workflows"] });
-            showSuccessToast({ description: IMPORT_SUCCESS_MESSAGE });
+            showSuccessToast({ description: importSuccessMessage(0) });
             navigate(scoped(`workflow/${found}`));
             return;
           }
@@ -120,7 +119,7 @@ export const useImportWorkflow = () => {
             // Still pending: a late notification can still finish it.
             pollTimersRef.current.delete(correlationId);
             queryClient.invalidateQueries({ queryKey: ["workflows"] });
-            showInfoToast({ description: IMPORT_SLOW_MESSAGE });
+            showInfoToast({ description: importSlowMessage() });
             return;
           }
           schedule(tries + 1);
@@ -195,7 +194,7 @@ export const useImportWorkflow = () => {
           return;
         }
 
-        showSuccessToast({ description: IMPORT_STARTED_MESSAGE });
+        showSuccessToast({ description: importStartedMessage() });
         if (before && pendingRef.current.has(correlationId))
           pollForImported(correlationId, name, before);
       } finally {

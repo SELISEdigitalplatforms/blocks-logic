@@ -32,6 +32,11 @@ export const serviceInstances = {
     blocksKey: getRuntimeEnv("BLOCKS_X_BLOCKS_KEY") || "",
     onError: reportHttpFailure,
   }),
+  osService: new HttpClient({
+    baseURL: getRuntimeEnv("BLOCKS_OS_BASE_URL") || "",
+    blocksKey: getRuntimeEnv("BLOCKS_X_BLOCKS_KEY") || "",
+    onError: reportHttpFailure,
+  }),
 };
 
 export { HttpClient };

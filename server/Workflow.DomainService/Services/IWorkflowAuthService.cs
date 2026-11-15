@@ -23,5 +23,12 @@ namespace Workflow.DomainService.Services
         /// they never send unauthenticated and never fall back to the caller's raw token.
         /// </summary>
         public Task<string?> CreateBlocksAuthorizationTokenAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// The <see cref="BlocksContext"/> of the caller that <see cref="IsAuthenticated"/> just validated (it puts
+        /// the principal on <c>request.HttpContext.User</c>), or <c>null</c> when there is none. Used to store a
+        /// webhook's files as that caller.
+        /// </summary>
+        public BlocksContext? BuildCallerContext(HttpRequest request, string tenantId);
     }
 }

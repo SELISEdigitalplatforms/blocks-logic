@@ -112,7 +112,14 @@ export const FunctionGuide = () => {
               <P>
                 {t("FUNCTION_GUIDE.THE_NEXT_CALL_IN")}
               </P>
-              <Items items={SANDBOX_CODE_RULES.map((rule) => `Don't ${rule.dont.charAt(0).toLowerCase()}${rule.dont.slice(1)} ${rule.fix}`)} />
+              <Items
+                items={SANDBOX_CODE_RULES.map((rule) =>
+                  t("FUNCTION_GUIDE.DON_T_RULE", {
+                    dont: `${rule.dont.charAt(0).toLowerCase()}${rule.dont.slice(1)}`,
+                    fix: rule.fix,
+                  }),
+                )}
+              />
             </AccordionContent>
           </AccordionItem>
 
@@ -158,7 +165,7 @@ export const FunctionGuide = () => {
               <Items
                 items={[
                   t("FUNCTION_GUIDE.SIGNATURE_HEADERS_THAT_REACH"),
-                  "rawBody is null when there is no body, or when the body is too large to carry twice.",
+                  t("FUNCTION_GUIDE.RAWBODY_IS_NULL_WHEN"),
                   t("FUNCTION_GUIDE.SET_THE_TRIGGER_TO"),
                 ]}
               />
@@ -241,7 +248,7 @@ export const FunctionGuide = () => {
             <AccordionContent className="px-2">
               <Items
                 items={[
-                  "ctx.log.info(message, data) and console.log both land on the run's log.",
+                  t("FUNCTION_GUIDE.CTX_LOG_INFO_MESSAGE"),
                   t("FUNCTION_GUIDE.RUN_DETAILS_SHOW_WARM"),
                   t("FUNCTION_GUIDE.USE_REPLAY_ON_A"),
                 ]}

@@ -88,7 +88,6 @@ export const TYPE_OPERATORS: Record<string, { value: string; label: string }[]> 
 
 /** Operators whose right side is a list. */
 export const LIST_OPERATORS = new Set(["in", "not_in"]);
-const LIST_HINT = "List: JSON array or comma-separated values";
 
 type DroppableConditionInputProps = Readonly<{
   id: string;
@@ -153,7 +152,12 @@ export const ConditionsField = ({
   const operandPicker = (idx: number, side: "left" | "right") =>
     picker
       ? {
-          target: pickerTarget(field, `condition ${idx + 1} ${side} operand`),
+          target: pickerTarget(
+            field,
+            t(side === "left" ? "CONDITIONS_FIELD.CONDITION_LEFT_OPERAND" : "CONDITIONS_FIELD.CONDITION_RIGHT_OPERAND", {
+              value: idx + 1,
+            }),
+          ),
           onChange: (next: string) =>
             side === "left" ? handleLeftChange(idx, next) : handleRightChange(idx, next),
         }
@@ -252,7 +256,7 @@ export const ConditionsField = ({
                   <Label className="text-[12px] text-muted-foreground">{t("CONDITIONS_FIELD.RIGHT_OPERAND")}</Label>
                   <DroppableConditionInput
                     id={`${field.id}-right-${idx}`}
-                    placeholder={LIST_OPERATORS.has(cond.operator) ? LIST_HINT : undefined}
+                    placeholder={LIST_OPERATORS.has(cond.operator) ? t("CONDITIONS_FIELD.LIST_JSON_ARRAY_OR") : undefined}
                     value={cond.right || ""}
                     onChange={(v) => handleRightChange(idx, v)}
                     readOnly={readOnly}

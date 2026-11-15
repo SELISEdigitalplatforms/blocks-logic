@@ -90,7 +90,7 @@ export const explainDiscardReason = (reason?: string | null): string | null => {
     );
     // `late`: code that an EARLIER call left behind ran during this one — a different message.
     const late = leftovers.some((item) => /^late$/i.test(item));
-    let what: string | null = "some work";
+    let what: string | null = tStatic(LOGIC_FUNCTIONS_MODULE, "TRIGGER.SOME_WORK");
     if (labels.length > 0) what = labels.join(", ");
     else if (late) what = null;
     const parts: string[] = [];

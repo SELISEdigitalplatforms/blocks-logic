@@ -17,15 +17,19 @@ export const formatRelativeTime = (value?: string | null, now: number = Date.now
   if (Number.isNaN(timestamp)) return value;
 
   const elapsed = now - timestamp;
-  if (elapsed < 0) return "just now";
-  if (elapsed < MINUTE) return "just now";
-  if (elapsed < HOUR) return `${Math.floor(elapsed / MINUTE)} min ago`;
+  if (elapsed < 0) return tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.JUST_NOW");
+  if (elapsed < MINUTE) return tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.JUST_NOW");
+  if (elapsed < HOUR) {
+    return tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.MIN_AGO", { value: Math.floor(elapsed / MINUTE) });
+  }
   if (elapsed < DAY) {
-    const hours = Math.floor(elapsed / HOUR);
-    return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+    // At least one hour here, so the plural forms give "1 hour ago" / "N hours ago" exactly.
+    return tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.HOURS_AGO", { count: Math.floor(elapsed / HOUR) });
   }
   const days = Math.floor(elapsed / DAY);
-  return days === 1 ? "yesterday" : `${days} days ago`;
+  return days === 1
+    ? tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.YESTERDAY")
+    : tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.DAYS_AGO", { value: days });
 };
 
 /** Absolute timestamp for a tooltip next to a relative one. */
@@ -59,13 +63,16 @@ export const formatTimeOfDay = (value?: string | null): string => {
  */
 export const formatDuration = (durationMs?: number | null): string => {
   if (durationMs == null) return "—";
-  if (durationMs < 1000) return `${durationMs} ms`;
+  if (durationMs < 1000) return tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.DURATION_MS", { value: durationMs });
 
   const seconds = (durationMs / 1000).toFixed(2);
-  if (Number(seconds) < 60) return `${seconds} s`;
+  if (Number(seconds) < 60) return tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.DURATION_S", { value: seconds });
 
   const totalSeconds = Math.round(durationMs / 1000);
-  return `${Math.floor(totalSeconds / 60)} min ${totalSeconds % 60} s`;
+  return tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.DURATION_MIN_S", {
+    value: Math.floor(totalSeconds / 60),
+    value2: totalSeconds % 60,
+  });
 };
 
 /**
@@ -150,11 +157,11 @@ export const describeRunCpu = (
   }
   if (cpuWindowMs != null) {
     return {
-      value: `${formatDuration(cpuUsageMs)} CPU time`,
+      value: tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.CPU_TIME", { value: formatDuration(cpuUsageMs) }),
       hint: tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.HANDLER_RAN_TOO_SHORT", { value: formatDuration(cpuWindowMs) }),
     };
   }
-  return { value: `${formatDuration(cpuUsageMs)} CPU time`, hint: tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.INCLUDES_SANDBOX_START_UP") };
+  return { value: tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.CPU_TIME", { value: formatDuration(cpuUsageMs) }), hint: tStatic(LOGIC_FUNCTIONS_MODULE, "FORMAT.INCLUDES_SANDBOX_START_UP") };
 };
 
 export const formatRunCount = (count?: number | null): string =>

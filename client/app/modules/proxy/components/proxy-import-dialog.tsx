@@ -76,7 +76,7 @@ const confirmLabel = (status: Done["status"] | undefined, takeCount: number) => 
   const module = LOGIC_PROXY_COMPONENTS_MODULE;
   if (status !== "changed") return tStatic(module, "PROXY_IMPORT_DIALOG.IMPORT");
   if (!takeCount) return tStatic(module, "PROXY_IMPORT_DIALOG.NOTHING_TO_APPLY");
-  return `Apply ${takeCount} ${takeCount === 1 ? "change" : "changes"}`;
+  return tStatic(module, "PROXY_IMPORT_DIALOG.APPLY_CHANGES", { count: takeCount });
 };
 
 /**

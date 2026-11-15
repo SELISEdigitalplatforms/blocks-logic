@@ -55,7 +55,7 @@ export const DeleteProxyDialog = ({
               )}
             </>
           ),
-          confirmButton: "Delete",
+          confirmButton: t("DELETE_PROXY_DIALOG.DELETE"),
         }}
         onConfirm={confirmHandler}
         onCancel={() => onOpenChange(false)}

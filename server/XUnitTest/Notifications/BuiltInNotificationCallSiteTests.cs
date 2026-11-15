@@ -153,11 +153,13 @@ namespace XUnitTest.Notifications
             var notifier = new Mock<IWorkflowNotificationService>();
             var versions = new Mock<IWorkflowVersionRepository>();
             var sut = new WorkflowExecutionService(
-                workflows.Object, Mock.Of<IWorkflowExecutionRepository>(), Mock.Of<IMessageClient>(),
-                Mock.Of<ILogger<WorkflowExecutionService>>(), Mock.Of<IWorkflowEngineService>(), versions.Object,
-                notifier.Object, Mock.Of<IWorkflowAuthService>(), Mock.Of<IHttpContextAccessor>(),
-                Mock.Of<IDelegationGrantFactory>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>());
+                new WorkflowExecutionStores(workflows.Object, Mock.Of<IWorkflowExecutionRepository>(), versions.Object),
+                Mock.Of<IMessageClient>(),
+                Mock.Of<ILogger<WorkflowExecutionService>>(),
+                Mock.Of<IWorkflowEngineService>(),
+                notifier.Object,
+                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
+                new WorkflowTriggerAccess(Mock.Of<IWorkflowAuthService>(), Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(), Mock.Of<IWebhookIntake>()));
             return (sut, workflows, notifier, versions);
         }
 

@@ -752,6 +752,76 @@ namespace XUnitTest.Mail
             }
         }
 
+        // ======================= #332: the connect retry inside the sender =======================
+
+        private int PublishedEvents => _messageClient.Invocations
+            .Count(i => i.Arguments.FirstOrDefault() is ConsumerMessage<MailSentEvent>);
+
+        private static async Task<bool> RunWithWaits(ManualTimeProvider time, Task<bool> send, params int[] waitSeconds)
+        {
+            foreach (var seconds in waitSeconds)
+            {
+                await time.WaitForTimerAsync(TimeSpan.FromSeconds(seconds));
+                time.Advance(TimeSpan.FromSeconds(seconds));
+            }
+
+            return await send.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        [Fact]
+        public async Task TransientConnectFailure_IsRetriedInsideTheSender_AndReportedOnceAsASuccess()
+        {
+            // H9, C13 (#332): one attachment resolution, one secret read and one composition per
+            // mail; one MailSentEvent with IsSuccess=true; no admin notice.
+            using var _ = InTenant();
+            GivenSecret();
+            GivenAttachments();
+            var time = new ManualTimeProvider();
+            var mailKit = new ScriptedMailKitSmtpClient(
+                NullLogger<MailKitSmtpClient>.Instance, new ConfigurationBuilder().Build(), time,
+                (n, s) => { if (n == 1) s.FailConnect = new IOException("The decryption operation failed"); });
+            var mail = ReferencedMail(MailServiceProvider.Zoho);
+
+            var result = await RunWithWaits(time, CreateSecretAwareService(mailKit).ProcessSendMailAsync(mail), 10);
+
+            result.Should().BeTrue();
+            mailKit.Sessions.Should().HaveCount(2);
+            mailKit.Sessions[1].Credentials.Should().Be(("user", SecretPassword));
+            mailKit.Sessions.Sum(s => s.SendCount).Should().Be(1);
+            _resolver.Verify(r => r.ResolveAsync(It.IsAny<IEnumerable<string>?>(), It.IsAny<CancellationToken>()), Times.Once);
+            _secrets!.Reads().Should().Be(1);
+            PublishedEvents.Should().Be(1);
+            PublishedEvent()!.IsSuccess.Should().BeTrue();
+            PublishedEvent()!.Error.Should().BeNull();
+            _builtIn.Invocations.Should().BeEmpty();
+            mail.MailServerConfiguration.AccountPassword.Should().BeEmpty("the secret value is put back after the send");
+        }
+
+        [Fact]
+        public async Task EveryAttemptFails_OneFailureEvent_AndOneAdminNotice()
+        {
+            // C4, C13 and the drift note: the admins hear once per mail, never once per attempt.
+            using var _ = InTenant();
+            GivenSecret();
+            GivenAttachments();
+            var time = new ManualTimeProvider();
+            var mailKit = new ScriptedMailKitSmtpClient(
+                NullLogger<MailKitSmtpClient>.Instance, new ConfigurationBuilder().Build(), time,
+                (_, s) => s.FailConnect = new IOException("reset"));
+
+            var result = await RunWithWaits(time, CreateSecretAwareService(mailKit).ProcessSendMailAsync(ReferencedMail(MailServiceProvider.AmazonSes)), 10, 60);
+
+            result.Should().BeFalse();
+            mailKit.Sessions.Should().HaveCount(3);
+            _resolver.Verify(r => r.ResolveAsync(It.IsAny<IEnumerable<string>?>(), It.IsAny<CancellationToken>()), Times.Once);
+            _secrets!.Reads().Should().Be(1);
+            PublishedEvents.Should().Be(1);
+            PublishedEvent()!.IsSuccess.Should().BeFalse();
+            PublishedEvent()!.Error.Should().Be("The SMTP server did not accept the message.");
+            _builtIn.Verify(b => b.SendToTenantAdminsAsync(TenantId, It.IsAny<string>(), It.IsAny<BuiltInNotificationPayload>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
         /// <summary>A real <see cref="Office365SmtpClient"/> with only the socket swapped out.</summary>
         private sealed class RecordingOffice365SmtpClient : Office365SmtpClient
         {
@@ -766,9 +836,9 @@ namespace XUnitTest.Mail
 
             private sealed class Session(RecordingOffice365SmtpClient owner) : IMailKitSmtpClient
             {
-                public Task ConnectAsync(string host, int port, bool useSsl) { owner.Connects++; return Task.CompletedTask; }
-                public Task ConnectAsync(string host, int port, SecureSocketOptions socketOptions) { owner.Connects++; return Task.CompletedTask; }
-                public Task AuthenticateAsync(string userName, string password) { owner.Credentials.Add((userName, password)); return Task.CompletedTask; }
+                public SmtpConnectionDiagnostics Diagnostics { get; } = new(TimeProvider.System);
+                public Task ConnectAsync(string host, int port, SecureSocketOptions socketOptions, CancellationToken cancellationToken) { owner.Connects++; return Task.CompletedTask; }
+                public Task AuthenticateAsync(string userName, string password, CancellationToken cancellationToken) { owner.Credentials.Add((userName, password)); return Task.CompletedTask; }
                 public Task AuthenticateAsync(SaslMechanism mechanism) => Task.CompletedTask;
                 public Task SendAsync(MimeMessage message) => Task.CompletedTask;
                 public Task DisconnectAsync(bool quit) => Task.CompletedTask;
@@ -800,19 +870,20 @@ namespace XUnitTest.Mail
 
                 public Recorder(RecordingSmtpClient owner) => _owner = owner;
 
-                public Task ConnectAsync(string host, int port, bool useSsl)
+                public SmtpConnectionDiagnostics Diagnostics { get; } = new(TimeProvider.System);
+
+                public Task ConnectAsync(string host, int port, SecureSocketOptions socketOptions, CancellationToken cancellationToken)
                 {
                     _owner.Connects++;
                     return Task.CompletedTask;
                 }
 
-                public Task AuthenticateAsync(string userName, string password)
+                public Task AuthenticateAsync(string userName, string password, CancellationToken cancellationToken)
                 {
                     _owner.Credentials.Add((userName, password));
                     return Task.CompletedTask;
                 }
 
-                public Task ConnectAsync(string host, int port, SecureSocketOptions socketOptions) => Task.CompletedTask;
                 public Task AuthenticateAsync(SaslMechanism mechanism) => Task.CompletedTask;
                 public Task DisconnectAsync(bool quit) => Task.CompletedTask;
                 public void Dispose() { }

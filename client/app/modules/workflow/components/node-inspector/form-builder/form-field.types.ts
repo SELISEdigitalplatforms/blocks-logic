@@ -32,7 +32,9 @@ export type FormFieldType =
   | "callout-accordion-display"
   | "tab-with-text"
   | "readonly-details"
-  | "link";
+  | "link"
+  | "json-fields"
+  | "searchable-select";
 
 export interface SelectOption {
   value: string | number | boolean;
@@ -54,6 +56,50 @@ export interface SearchOptionsPage {
   totalCount: number;
 }
 
+/** What a `json-fields` row edits: text, a list of text, a switch, a whole number or one of `options`. */
+export type JsonFieldKind = "text" | "list" | "bool" | "int" | "enum";
+
+/**
+ * One row of a `json-fields` block. It reads and writes the parameter `data[key]`. Its mode comes from
+ * the stored value's JSON type: a string in a list, bool or int row (or a non-option string in an enum
+ * row) is an `fx` expression.
+ */
+export interface JsonFieldRow {
+  /** Parameter key the row reads and writes. */
+  key: string;
+  /** Shown key; default `key`. */
+  label?: string;
+  kind: JsonFieldKind;
+  defaultValue: string | string[] | boolean | number;
+  /** Marker only; the server validates. */
+  required?: boolean;
+  /**
+   * Waits on the `// add:` line while empty. Any row that is not `required` can also be removed with
+   * its × button, which resets it to `defaultValue` and moves it to the `// add:` line.
+   */
+  optional?: boolean;
+  info?: string;
+  /** `list` (picker) or `enum` (required for enum). */
+  options?: SelectOption[];
+  /** `list` only: server-side search and paging for the picker. */
+  searchOptions?: (
+    request: SearchOptionsRequest,
+    data: Record<string, unknown>,
+    config: FieldProps["config"],
+  ) => Promise<SearchOptionsPage>;
+  /** `list` only: parameter keys whose change clears the picker's loaded pages. */
+  optionsDependencies?: string[];
+  /** `list` only: Enter on typed text that matches no option adds that text. */
+  allowCustom?: boolean;
+}
+
+/** Rows shown nested under `"group": { … }`. Display only: its rows are flat parameter keys. */
+export interface JsonFieldGroup {
+  group: string;
+  info?: string;
+  rows: JsonFieldRow[];
+}
+
 /** One locked field of a `readonly-details` field: an ordinary field schema and the value it shows. */
 export interface ReadonlyDetailField {
   field: FieldSchema;
@@ -69,6 +115,15 @@ export interface ReadonlyDetails {
   fields: ReadonlyDetailField[];
   message?: string;
   link?: { label: string; path: string };
+}
+
+/** What a field's `asyncProps` loader may set. */
+export interface AsyncFieldProps {
+  hidden?: boolean;
+  required?: boolean;
+  label?: string;
+  info?: string;
+  placeholder?: string;
 }
 
 export interface FieldSchema<Whole = Record<string, unknown>> {
@@ -180,6 +235,24 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
   /** Parameter keys whose change re-runs `locked`. Mirrors `optionsDependencies`. */
   lockedDependencies?: string[];
   /**
+   * Field props that depend on data loaded from outside the node (e.g. the picked configuration's
+   * rules). What it returns replaces the field's own props of the same name. While it loads the field
+   * is hidden; if it fails the field's own props apply. Re-runs when a key in
+   * `asyncPropsDependencies` changes.
+   */
+  asyncProps?: (
+    data: Whole,
+    config: {
+      tenantId: string;
+      workflowId: string;
+      nodeId: string;
+      store: WorkflowStore;
+      executionMode?: number;
+    },
+  ) => Promise<AsyncFieldProps>;
+  /** Parameter keys whose change re-runs `asyncProps`. Mirrors `optionsDependencies`. */
+  asyncPropsDependencies?: string[];
+  /**
    * Parameter keys whose value changes should re-run an async `options` function. Without this an
    * async option list is fetched once per mount, which is wrong for a dropdown that narrows itself
    * from another field. Mirrors `fixedKeysDependencies`.
@@ -228,6 +301,18 @@ export interface FieldSchema<Whole = Record<string, unknown>> {
    * Default true; set false to hide it. Always hidden while the field is read-only or disabled.
    */
   variablePicker?: boolean;
+  /**
+   * `json-fields` only: the block's rows for the current parameters. `context` is what `rowsContext`
+   * resolved (`{}` until then or on failure).
+   */
+  rows?: (
+    data: Record<string, unknown>,
+    context: Record<string, unknown>,
+  ) => Array<JsonFieldRow | JsonFieldGroup>;
+  /** `json-fields` only: loaded once per mount and handed to `rows`. */
+  rowsContext?: (config: FieldProps["config"]) => Promise<Record<string, unknown>>;
+  /** `searchable-select` only: the text shown for a saved value that is not among the options. Default: the value. */
+  unmatchedLabel?: (value: string) => string;
 }
 
 export interface FieldProps<T = unknown> {

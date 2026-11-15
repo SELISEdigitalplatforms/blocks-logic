@@ -1,3 +1,7 @@
+import { tStatic } from "@seliseblocks/genesis-os";
+
+const LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE = "logic.workflow.nodes.inspector";
+
 /** Top-level JSON keys the user cannot change, with their string values. */
 export type LockedKeys = Record<string, string>;
 
@@ -99,7 +103,10 @@ export const withoutLockedKeys = (
   return {
     value: pretty(rest, parsed.tokens),
     error: changed.length
-      ? `${changed.map((key) => `"${key}"`).join(", ")} ${changed.length === 1 ? "is" : "are"} locked and can't be changed or removed.`
+      ? tStatic(LOGIC_WORKFLOW_NODES_INSPECTOR_MODULE, "JSON_LOCKED_KEYS.IS_LOCKED_AND_CAN", {
+          value: changed.map((key) => `"${key}"`).join(", "),
+          count: changed.length,
+        })
       : undefined,
   };
 };

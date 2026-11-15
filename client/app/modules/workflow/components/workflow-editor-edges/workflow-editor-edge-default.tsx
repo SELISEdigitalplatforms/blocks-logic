@@ -3,6 +3,7 @@ import { useWorkflow } from "../../hooks";
 import { useWorkflowStore } from "../../store";
 import { handleDisplayLabel } from "../../utils/handle-labels";
 import { getStatusStyles } from "../../utils/workflow-execution-editor.util";
+import { useT } from "@seliseblocks/genesis-os";
 
 /** Space between a source handle and its output's name on the edge, matching the input side's `mr-1.5`. */
 const SOURCE_LABEL_GAP = 6;
@@ -20,7 +21,9 @@ export const WorkflowEditorEdgeDefault = ({
   style,
   sourceHandleId,
   selected,
+  data,
 }: EdgeProps) => {
+  const { t } = useT("logic.workflow");
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -31,7 +34,8 @@ export const WorkflowEditorEdgeDefault = ({
   });
 
   const { stepExecutionTraversedEdgeIds, executedNodes } = useWorkflow();
-  const isTraversed = stepExecutionTraversedEdgeIds?.has(id);
+  // Editor: traversed by the last step run. Execution editor: traversed in the viewed execution.
+  const isTraversed = stepExecutionTraversedEdgeIds?.has(id) || data?.isExecutionTraversed === true;
   const executedNode = isTraversed ? executedNodes.find(n => n.nodeId === source) : undefined;
   const sourceNodeStatus = executedNode?.status;
   const executionStyles = sourceNodeStatus ? getStatusStyles(sourceNodeStatus) : undefined;
@@ -63,7 +67,7 @@ export const WorkflowEditorEdgeDefault = ({
     }
 
     if (count > 0) {
-      itemCountLabel = `${count} item${count > 1 ? "s" : ""}`;
+      itemCountLabel = t("WORKFLOW_EDITOR_EDGE_DEFAULT.ITEM_COUNT", { count });
     }
   }
 

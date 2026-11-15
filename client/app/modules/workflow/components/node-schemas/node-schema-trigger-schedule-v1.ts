@@ -39,32 +39,20 @@ const TRIGGER_INTERVAL_OPTIONS = [
   },
 ];
 
-const HOUR_OPTIONS = [
-  { label: "12am", value: "0" },
-  { label: "1am", value: "1" },
-  { label: "2am", value: "2" },
-  { label: "3am", value: "3" },
-  { label: "4am", value: "4" },
-  { label: "5am", value: "5" },
-  { label: "6am", value: "6" },
-  { label: "7am", value: "7" },
-  { label: "8am", value: "8" },
-  { label: "9am", value: "9" },
-  { label: "10am", value: "10" },
-  { label: "11am", value: "11" },
-  { label: "12pm", value: "12" },
-  { label: "1pm", value: "13" },
-  { label: "2pm", value: "14" },
-  { label: "3pm", value: "15" },
-  { label: "4pm", value: "16" },
-  { label: "5pm", value: "17" },
-  { label: "6pm", value: "18" },
-  { label: "7pm", value: "19" },
-  { label: "8pm", value: "20" },
-  { label: "9pm", value: "21" },
-  { label: "10pm", value: "22" },
-  { label: "11pm", value: "23" },
-];
+/** "12am" … "11pm": the hour's 12-hour label, read at use time so it follows the current language. */
+const hourLabel = (hour: number) =>
+  tStatic(
+    LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+    hour < 12 ? "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.AM" : "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.PM",
+    { value: hour % 12 === 0 ? 12 : hour % 12 },
+  );
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
+  get label() {
+    return hourLabel(hour);
+  },
+  value: String(hour),
+}));
 
 const WEEKDAY_OPTIONS = [
   {
@@ -410,7 +398,12 @@ export const NodeSchemaTriggerScheduleV1: NodeSchemaDefinition = {
             "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.CRON_EXPRESSION",
           );
         },
-        info: "5-field cron expression (minute-based), e.g. */10 * * * *",
+        get info() {
+          return tStatic(
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+            "NODE_SCHEMA_TRIGGER_SCHEDULE_V1.5_FIELD_CRON_EXPRESSION",
+          );
+        },
         key: "cronExpression",
         required: true,
         dependsOn: {

@@ -248,4 +248,45 @@ describe("LayoutWithIO", () => {
     await user.click(screen.getByRole("tab", { name: "Settings" }));
     await waitFor(() => expect(screen.getByText("Setting S")).toBeTruthy());
   });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ioSchema = { type: "action", category: "action", version: "v1", parameters: [], settings: [] } as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seedIO = (editorMode: "editor" | "execution" | "version") => (store: any) => {
+    const parent = node("p");
+    const sel = node("n1");
+    store.getState().addNode(parent);
+    store.getState().addNode(sel);
+    store.getState().createEdge({ source: "p", sourceHandle: "s" }, { target: "n1", targetHandle: "t" });
+    store.setState({
+      selectedNode: sel,
+      editorMode,
+      executedNodes: [
+        { nodeId: "p", runIndex: 0, input: [], output: [{ name: "Ada" }] },
+        { nodeId: "n1", runIndex: 0, input: [{ own: "recorded" }], output: [] },
+      ],
+    });
+  };
+
+  it("renders the draggable InputPanel in the workflow editor", () => {
+    const { container } = renderWithProviders(inSheet(<LayoutWithIO schema={ioSchema} />), {
+      seedWorkflow: seedIO("editor"),
+    });
+    const field = screen.getByTitle("Drag to use: {{$json.output.name}}");
+    expect(field.getAttribute("draggable")).toBe("true");
+    expect(screen.queryByRole("button", { name: "Copy value of own" })).toBeNull();
+    expect(container.ownerDocument.querySelector('[draggable="true"]')).toBeTruthy();
+  });
+
+  it.each(["execution", "version"] as const)(
+    "renders the read-only input panel with the node's own input in %s mode",
+    (mode) => {
+      renderWithProviders(inSheet(<LayoutWithIO schema={ioSchema} />), { seedWorkflow: seedIO(mode) });
+      expect(screen.getByText("own:")).toBeTruthy();
+      expect(screen.getByText("recorded")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Copy value of own" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Collapse input" })).toBeTruthy();
+      expect(document.querySelector('[draggable="true"]')).toBeNull();
+    },
+  );
 });

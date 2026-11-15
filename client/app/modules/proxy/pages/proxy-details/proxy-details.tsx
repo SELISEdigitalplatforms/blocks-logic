@@ -665,8 +665,8 @@ export const ProxyDetails = () => {
               <>
                 <div className="grid gap-4 md:grid-cols-3">
                   <MetricCard label={t("PROXY_DETAILS.RECENT_CALLS")} value={calls24h.toLocaleString()} />
-                  <MetricCard label={t("PROXY_DETAILS.AVG_LATENCY")} value={`${averageLatency} ms`} />
-                  <MetricCard label={t("PROXY_DETAILS.ERROR_RATE")} value={`${errorRate}%`} danger={errorRateIsHigh} />
+                  <MetricCard label={t("PROXY_DETAILS.AVG_LATENCY")} value={t("PROXY_DETAILS.MS", { value: averageLatency })} />
+                  <MetricCard label={t("PROXY_DETAILS.ERROR_RATE")} value={t("PROXY_DETAILS.PERCENT", { value: errorRate })} danger={errorRateIsHigh} />
                 </div>
 
                 <Card className="rounded-xl">

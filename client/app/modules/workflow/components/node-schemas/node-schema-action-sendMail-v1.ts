@@ -126,7 +126,7 @@ export const NodeSchemaActionSendMailV1: NodeSchemaDefinition = {
         get info() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_SEND_MAIL_V1.STORAGE_FILE_IDS_TO"); },
         key: "Attachments",
         required: false,
-        placeholder: "File ID or {{ expression }}",
+        get placeholder() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_SEND_MAIL_V1.FILE_ID_OR_EXPRESSION"); },
         get addButtonText() { return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_ACTION_SEND_MAIL_V1.ADD_ATTACHMENT"); },
       },
     ],

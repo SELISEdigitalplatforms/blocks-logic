@@ -21,11 +21,11 @@ export const HARD_CAPS = [
   // module import are paid every time and are pure CPU, and a smaller share would only slow that
   // down — admission counts memory and slots, never CPU, so a lower value frees nothing.
   { label: "CPU", value: "100m per run" },
-  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.INPUT"); }, value: "Size-limited; a larger request is refused" },
-  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.RESULT"); }, value: "Size-limited; return a reference for large data" },
-  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.LOGS"); }, value: "Capped per run; lines past the cap are dropped" },
-  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.TEMP_DISK"); }, value: "Small /tmp only; files can't be executed" },
-  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.PROCESSES"); }, value: "Capped per sandbox" },
+  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.INPUT"); }, get value() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.SIZE_LIMITED_A_LARGER"); } },
+  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.RESULT"); }, get value() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.SIZE_LIMITED_RETURN_A"); } },
+  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.LOGS"); }, get value() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.CAPPED_PER_RUN_LINES"); } },
+  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.TEMP_DISK"); }, get value() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.SMALL_TMP_ONLY_FILES"); } },
+  { get label() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.PROCESSES"); }, get value() { return tStatic(LOGIC_FUNCTIONS_MODULE, "LIMITS_CONSTANT.CAPPED_PER_SANDBOX"); } },
 ] as const;
 
 /** The "What the sandbox gives you" reference in the Code tab's right rail. */

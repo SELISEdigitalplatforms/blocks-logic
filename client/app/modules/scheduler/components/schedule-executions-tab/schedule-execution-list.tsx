@@ -41,7 +41,11 @@ const ColumnHeader = ({ label }: Readonly<{ label: string }>) => (
 );
 
 const rowLabel = (row: IScheduleExecutionListItem, tz: string) =>
-  `Open execution fired at ${row.firedUtc ? formatInZone(row.firedUtc, tz, "datetime") : "unknown time"}`;
+  tStatic(LOGIC_SCHEDULER_MODULE, "SCHEDULE_EXECUTION_LIST.OPEN_EXECUTION_FIRED_AT", {
+    value: row.firedUtc
+      ? formatInZone(row.firedUtc, tz, "datetime")
+      : tStatic(LOGIC_SCHEDULER_MODULE, "SCHEDULE_EXECUTION_LIST.UNKNOWN_TIME"),
+  });
 
 /** The list's columns, built outside the component so no render function is redefined per render. */
 export const executionColumns = (tz: string): ColumnDef<IScheduleExecutionListItem>[] => [

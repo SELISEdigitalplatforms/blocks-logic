@@ -42,6 +42,6 @@ export function isTruncated(body: string | null | undefined): boolean {
 /** "{n} ms" below a second, "{x.x} s" from 1,000 ms, "—" when unknown. */
 export function formatDuration(ms: number | null | undefined): string {
   if (typeof ms !== "number" || Number.isNaN(ms)) return EMPTY;
-  if (ms < 1000) return `${Math.round(ms)} ms`;
-  return `${(ms / 1000).toFixed(1)} s`;
+  if (ms < 1000) return tStatic("logic.scheduler", "STATUS_LABEL.MS", { value: Math.round(ms) });
+  return tStatic("logic.scheduler", "STATUS_LABEL.S", { value: (ms / 1000).toFixed(1) });
 }

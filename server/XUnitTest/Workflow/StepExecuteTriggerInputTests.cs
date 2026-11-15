@@ -43,11 +43,13 @@ namespace XUnitTest.Workflow
                 .ReturnsAsync((string _, string id, string _, string _, string? _) => saved);
 
             _sut = new WorkflowExecutionService(
-                _workflows.Object, _executions.Object, Mock.Of<IMessageClient>(),
-                NullLogger<WorkflowExecutionService>.Instance, _engine.Object, Mock.Of<IWorkflowVersionRepository>(),
-                Mock.Of<IWorkflowNotificationService>(), Mock.Of<IWorkflowAuthService>(), Mock.Of<IHttpContextAccessor>(),
-                Mock.Of<IDelegationGrantFactory>(), new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                Mock.Of<IInProcessGrantReleaser>());
+                new WorkflowExecutionStores(_workflows.Object, _executions.Object, Mock.Of<IWorkflowVersionRepository>()),
+                Mock.Of<IMessageClient>(),
+                NullLogger<WorkflowExecutionService>.Instance,
+                _engine.Object,
+                Mock.Of<IWorkflowNotificationService>(),
+                new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
+                new WorkflowTriggerAccess(Mock.Of<IWorkflowAuthService>(), Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(), Mock.Of<IWebhookIntake>()));
         }
 
         private void SetWorkflow(BsonArray? pinData) =>

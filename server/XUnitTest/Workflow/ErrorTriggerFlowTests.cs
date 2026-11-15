@@ -87,10 +87,14 @@ namespace XUnitTest.Workflow
                 [new TriggerWebhookV1Node(), new TriggerErrorTriggerV2Node(), new FailingExecutor()],
                 messages.Object, NullLogger<WorkflowEngineService>.Instance, Mock.Of<IWorkflowNotificationService>(),
                 Mock.Of<IServiceProvider>(), logger);
-            _executionService = new WorkflowExecutionService(_workflows, _executions, messages.Object,
-                NullLogger<WorkflowExecutionService>.Instance, _engine, _versions, Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IWorkflowAuthService>(), Mock.Of<IHttpContextAccessor>(), Mock.Of<IDelegationGrantFactory>(),
-                logger, Mock.Of<IInProcessGrantReleaser>());
+            _executionService = new WorkflowExecutionService(
+                new WorkflowExecutionStores(_workflows, _executions, _versions),
+                messages.Object,
+                NullLogger<WorkflowExecutionService>.Instance,
+                _engine,
+                Mock.Of<IWorkflowNotificationService>(),
+                logger,
+                new WorkflowTriggerAccess(Mock.Of<IWorkflowAuthService>(), Mock.Of<IDelegationGrantFactory>(), Mock.Of<IInProcessGrantReleaser>(), Mock.Of<IWebhookIntake>()));
         }
 
         public void Dispose()

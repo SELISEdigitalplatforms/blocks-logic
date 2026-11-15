@@ -57,6 +57,16 @@ namespace Workflow.DomainService.Services
             return true;
         }
 
+        public BlocksContext? BuildCallerContext(HttpRequest request, string tenantId)
+        {
+            var principal = request.HttpContext?.User;
+            if (principal?.Identity?.IsAuthenticated != true)
+            {
+                return null;
+            }
+            return _accessAuthorizer.BuildContext(request, tenantId, principal, rawToken: null);
+        }
+
         public async Task<(bool isAuthorized, BlocksContext? context)> IsAuthorized(HttpRequest request, string tenantId, AuthorizationConfig config)
         {
             ArgumentNullException.ThrowIfNull(config);

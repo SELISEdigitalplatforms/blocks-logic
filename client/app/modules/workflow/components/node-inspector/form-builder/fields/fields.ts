@@ -31,6 +31,8 @@ import { ReadonlyDetailsField } from "./readonly-details-field";
 import { LinkField } from "./link-field";
 import { SwitchRulesField } from "./switch-rules-field";
 import { FilterConditionsField } from "./filter-conditions-field";
+import { JsonFieldsField } from "./json-fields-field";
+import { SearchableSelectField } from "./searchable-select-field";
 
 /**
  * Registry of all field components mapped by their field type.
@@ -73,6 +75,8 @@ export const FIELD_COMPONENTS_REGISTRY: Record<
   "comma-list": CommaListField,
   "readonly-details": ReadonlyDetailsField,
   link: LinkField,
+  "json-fields": JsonFieldsField,
+  "searchable-select": SearchableSelectField,
 };
 
 // DEADCODE 2026-07-29: extension hook with no callers in client, e2e or tests; commented pending review

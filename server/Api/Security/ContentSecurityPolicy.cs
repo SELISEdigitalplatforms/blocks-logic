@@ -73,6 +73,29 @@ public static class ContentSecurityPolicy
         "https://api.rollbar.com",
     ];
 
+    /// <summary>
+    /// Stands in for the style nonce (see <see cref="StyleNonce"/>): in the policy built at
+    /// startup and in the built index.html (meta[name=csp-nonce]). Replaced on every response.
+    /// </summary>
+    public const string StyleNoncePlaceholder = "__CSP_STYLE_NONCE__";
+
+    /// <summary>The policy for one response, with the placeholder swapped for its nonce.</summary>
+    public static string WithStyleNonce(string policy, string nonce)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentException.ThrowIfNullOrEmpty(nonce);
+        return policy.Replace(StyleNoncePlaceholder, nonce, StringComparison.Ordinal);
+    }
+
+    /// <summary>The SPA shell for one response, carrying the same nonce as its header.</summary>
+    public static string RenderIndex(string indexHtmlTemplate, string nonce)
+    {
+        ArgumentNullException.ThrowIfNull(indexHtmlTemplate);
+        ArgumentException.ThrowIfNullOrEmpty(nonce);
+        return indexHtmlTemplate.Replace(StyleNoncePlaceholder, nonce, StringComparison.Ordinal);
+    }
+
+    /// <summary>Builds the policy from the <c>FrontendRuntime</c> and <c>Csp</c> sections.</summary>
     public static string Build(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -111,13 +134,22 @@ public static class ContentSecurityPolicy
             // Runtime config is the external /runtime-config.js, so no inline script is needed.
             // Monaco is served from this origin (/monaco/vs, client/app/lib/monaco-loader.ts).
             "script-src 'self';",
-            // genesis-os pages, Radix, xyflow and Monaco inject <style> elements and style
-            // attributes at runtime (see blocks-brain lessons 2026-10-06, monitor login blank).
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
+            // Styles. Style elements need the style nonce, see StyleNonce. The genesis-os pages,
+            // Radix, xyflow and the Monaco editor create them at runtime. The csp-nonce.js shim
+            // stamps the nonce on every style element the page creates, and the server writes the
+            // same nonce into the SPA shell, see WithStyleNonce and RenderIndex. This is the same
+            // approach as blocks-monitor b4f78c8 and blocks-data 1a133860.
+            //
+            // Style attributes stay allowed through style-src-attr only: components set them,
+            // an attribute cannot carry a nonce, and an attribute cannot load a script.
+            // script-src stays strict, which is the directive that matters for injection.
+            $"style-src 'self' 'nonce-{StyleNoncePlaceholder}';",
+            "style-src-attr 'unsafe-inline';",
             // Same shape as os/iam/data/monitor: avatars and logos come from storage hosts
             // (Csp:BlobStorageSrc) and anything else from Csp:ExtraImgSrc.
             $"img-src 'self' data: blob:{Suffix(img)};",
-            "font-src 'self' data: https://fonts.gstatic.com;",
+            // No third-party font host: the SPA uses its own font stack (globals.css).
+            "font-src 'self' data:;",
             $"connect-src 'self' {string.Join(" ", FixedConnectSources)}{Suffix(connect)};",
             // Monaco runs its language workers from blob: bootstraps.
             "worker-src 'self' blob:;",

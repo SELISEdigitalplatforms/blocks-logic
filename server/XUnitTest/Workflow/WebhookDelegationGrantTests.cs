@@ -38,23 +38,16 @@ namespace XUnitTest.Workflow
         {
             TestBlocksContext.Set("tenant-1");
             DelegatedTokenContext.Clear();
-            var accessor = new Mock<IHttpContextAccessor>();
-            accessor.Setup(a => a.HttpContext).Returns(new DefaultHttpContext());
             _executions.Setup(r => r.CreateAsync(It.IsAny<WorkflowExecutionEntity>()))
                 .ReturnsAsync((WorkflowExecutionEntity e) => e);
             _sut = new WorkflowExecutionService(
-                _workflows.Object,
-                _executions.Object,
+                new WorkflowExecutionStores(_workflows.Object, _executions.Object, _versions.Object),
                 Mock.Of<IMessageClient>(),
                 Mock.Of<ILogger<WorkflowExecutionService>>(),
                 _engine.Object,
-                _versions.Object,
                 Mock.Of<IWorkflowNotificationService>(),
-                Mock.Of<IWorkflowAuthService>(),
-                accessor.Object,
-                _grants.Object,
                 new WorkflowExecutionLogger(NullLogger<WorkflowExecutionLogger>.Instance),
-                _releaser.Object);
+                new WorkflowTriggerAccess(Mock.Of<IWorkflowAuthService>(), _grants.Object, _releaser.Object, WebhookRequests.Intake()));
         }
 
         public void Dispose()
@@ -107,8 +100,7 @@ namespace XUnitTest.Workflow
                 .Callback(() => grantSeenByEngine = DelegatedTokenContext.Current)
                 .ReturnsAsync((WorkflowExecutionEntity?)null);
 
-            using var body = JsonDocument.Parse("{}");
-            await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", body.RootElement.Clone());
+            await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", WebhookRequests.Json("{}"));
 
             grantSeenByEngine.Should().Be(GrantId);
         }
@@ -123,8 +115,7 @@ namespace XUnitTest.Workflow
                 .Callback(() => releasedBeforeRunEnded = _releaser.Invocations.Count > 0)
                 .ReturnsAsync((WorkflowExecutionEntity?)null);
 
-            using var body = JsonDocument.Parse("{}");
-            await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", body.RootElement.Clone());
+            await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", WebhookRequests.Json("{}"));
 
             releasedBeforeRunEnded.Should().BeFalse();
             _releaser.Verify(r => r.ReleaseAsync(GrantId), Times.Once);
@@ -139,8 +130,7 @@ namespace XUnitTest.Workflow
             _engine.Setup(e => e.RunNodeInProcessAsync(It.IsAny<AddExcuationNodeEvent>()))
                 .ThrowsAsync(new InvalidOperationException("engine failed"));
 
-            using var body = JsonDocument.Parse("{}");
-            try { await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", body.RootElement.Clone()); }
+            try { await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", WebhookRequests.Json("{}")); }
             catch (InvalidOperationException) { /* whether the service rethrows is not what this test is about */ }
 
             _releaser.Verify(r => r.ReleaseAsync(GrantId), Times.Once);

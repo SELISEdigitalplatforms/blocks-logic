@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { tStatic } from "@seliseblocks/genesis-os";
 import { useDeployFunction } from "./use-functions";
 import { useGetBuild, useGetPendingDeploy } from "./use-versions";
 import { IFunctionVersionSummary, isDeployPending } from "../types/version.types";
@@ -94,7 +95,9 @@ export const useDeploy = (functionId: string, { onDeployed, onFailed }: UseDeplo
     if (build.status === "Failed") {
       handled.current = buildId;
       callbacks.current.onFailed({
-        errors: `The build failed: ${build.errorMessage ?? "unknown error"}`,
+        errors: tStatic("logic.functions", "USE_DEPLOY.THE_BUILD_FAILED", {
+          value: build.errorMessage ?? tStatic("logic.functions", "USE_DEPLOY.UNKNOWN_ERROR"),
+        }),
       });
       return;
     }
