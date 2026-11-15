@@ -23,7 +23,8 @@ import { NodeInspectorPage, TopbarComponent, WorkflowEditorPage } from "../../po
  * - "before the editors appear" is made certain by holding every `/monaco/vs/*` response for a few seconds
  *   (the loader's own requests) with the browser cache disabled, instead of throttling the whole app;
  * - unhandled rejections are recorded in the page (`unhandledrejection`) and through `pageerror`;
- * - step 4 counts `/monaco/vs` requests; step 5 aborts `loader.js`.
+ * - step 4 counts loader/editor-bundle requests under `/monaco/vs` (C7 per the #435 answer to Q1: per-mount worker
+ *   scripts are expected); step 5 aborts `loader.js` and checks the hook's own promise chain (answer to Q2).
  * Fixtures: one function created for the test through "New function" (never run or deployed) and a workflow with
  * two Code nodes; both are deleted at the end.
  */
@@ -43,10 +44,15 @@ async function watchPage(page: Page): Promise<Watch> {
     window.addEventListener("unhandledrejection", (event) => {
       const reason = event.reason as
         { type?: unknown; msg?: unknown; message?: unknown } | undefined;
+      const raw: unknown = event.reason;
+      const target = raw instanceof Event ? raw.target : null;
       const text = JSON.stringify({
         type: reason?.type,
         msg: reason?.msg,
         message: reason?.message ?? String(reason),
+        // A bare DOM Event (not an Error), and the tag of the element it was fired on.
+        event: raw instanceof Event && !(raw instanceof ErrorEvent),
+        target: target instanceof Element ? target.tagName : undefined,
       });
       (window as unknown as { __e2eRejection?: (t: string) => void }).__e2eRejection?.(text);
     });
@@ -80,6 +86,20 @@ async function holdMonaco(page: Page): Promise<() => Promise<void>> {
     await cdp.detach();
   };
 }
+
+/**
+ * A bare script-error `Event` as the rejection reason: what `@monaco-editor/loader`'s `makeCancelable` leaves
+ * unhandled when the loader script fails (one per `loader.init()` call). The #435 answer to Q2 scopes §10 step 5
+ * to the hook's own promise chain, so only these are excluded; any other rejection still fails the step.
+ */
+const isScriptErrorEvent = (text: string) => {
+  try {
+    const r = JSON.parse(text) as { type?: unknown; event?: unknown; target?: unknown };
+    return r.event === true && r.type === "error" && r.target === "SCRIPT";
+  } catch {
+    return false;
+  }
+};
 
 const cancelations = (watch: Watch) =>
   [...watch.rejections, ...watch.pageErrors].filter((text) => /cancel/i.test(text));
@@ -151,10 +171,11 @@ test.describe("functions — safe Monaco loader (blocks-logic#435)", () => {
         expect(cancelations(watch)).toEqual([]);
       });
 
-      await test.step("Step 4 (C7, H6): Code → Runs → Code three times loads nothing from /monaco/vs", async () => {
+      await test.step("Step 4 (C7, H6): Code → Runs → Code three times loads no Monaco loader file", async () => {
         // Every /monaco/vs request the page makes (Playwright sees the editors' worker scripts too, as the
         // DevTools Network panel lists them). Loader files (loader.js, editor.main.*) would mean Monaco is
-        // loaded again (loader.init); worker scripts are started by each editor Monaco creates.
+        // loaded again (loader.init); worker scripts are started by each editor Monaco creates. Per the #435
+        // answer to Q1, C7 covers loader/editor-bundle files only, so worker scripts are recorded, not asserted.
         const requests: string[] = [];
         const count = (request: { url(): string }) => {
           if (MONACO_VS.test(request.url()))
@@ -179,10 +200,6 @@ test.describe("functions — safe Monaco loader (blocks-logic#435)", () => {
           loaderFiles,
           "Monaco is not loaded again (no loader.js / editor.main request)",
         ).toEqual([]);
-        // §10 step 4 counts every /monaco/vs request. Soft, so steps 6, 3 and 5 still run and report.
-        expect
-          .soft(workers, "no /monaco/vs request at all after the first load (§10 step 4)")
-          .toEqual([]);
       });
 
       await test.step("Step 6 (H11): dark and back gives the same editor themes", async () => {
@@ -259,8 +276,21 @@ test.describe("functions — safe Monaco loader (blocks-logic#435)", () => {
           )
           .toBe(true);
         await page.waitForTimeout(2_000);
-        expect(watch.rejections, "no unhandled rejection").toEqual([]);
-        expect(watch.pageErrors, "no uncaught page error").toEqual([]);
+        await testInfo.attach("step5-rejections.json", {
+          body: JSON.stringify({ rejections: watch.rejections, pageErrors: watch.pageErrors }, null, 2),
+          contentType: "application/json",
+        });
+        expect(
+          watch.rejections.filter((text) => !isScriptErrorEvent(text)),
+          "no unhandled rejection from the hook's promise chain (bare script-error Events from @monaco-editor/loader excluded)",
+        ).toEqual([]);
+        // Chromium reports each unhandled rejection through `pageerror` too; a bare Event reason shows as the
+        // message "Event". Drop only as many of those as script-error rejections were excluded above.
+        let libraryRejections = watch.rejections.filter(isScriptErrorEvent).length;
+        expect(
+          watch.pageErrors.filter((message) => !(message === "Event" && libraryRejections-- > 0)),
+          "no uncaught page error (the same library rejections excluded)",
+        ).toEqual([]);
         await page.unroute(/\/monaco\/vs\/loader\.js/, block);
       });
     } catch (error) {
