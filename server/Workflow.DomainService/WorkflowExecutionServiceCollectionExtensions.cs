@@ -54,7 +54,7 @@ namespace Workflow.DomainService
             services.AddSingleton<WorkflowExecutionStores>();
             services.AddSingleton<WorkflowTriggerAccess>();
             services.AddSingleton<IWorkflowExecutionService, WorkflowExecutionService>();
-            // Webhook "Any content" intake: request → JSON items, files stored through the storage driver.
+            // Webhook Standard-format intake: request → JSON items, files stored through the storage driver.
             services.AddOptions<WebhookUploadOptions>().BindConfiguration(WebhookUploadOptions.SectionName);
             services.AddSingleton<IWebhookFileStore, StorageWebhookFileStore>();
             services.AddSingleton<IWebhookIntake, WebhookIntake>();

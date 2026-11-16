@@ -21,7 +21,7 @@ namespace XUnitTest.Workflow
     // These classes create blocks-webhook-* temp files, and some assert the temp folder is left clean, so they
     // must not run in parallel with each other.
     [Collection(WebhookTempFileCollection.Name)]
-    public class WebhookAnyContentServiceTests : IDisposable
+    public class WebhookStandardServiceTests : IDisposable
     {
         private readonly Mock<IWorkflowRepository> _workflows = new();
         private readonly Mock<IWorkflowExecutionRepository> _executions = new();
@@ -30,7 +30,7 @@ namespace XUnitTest.Workflow
         private readonly Mock<IWebhookIntake> _intake = new();
         private readonly WorkflowExecutionService _sut;
 
-        public WebhookAnyContentServiceTests()
+        public WebhookStandardServiceTests()
         {
             TestBlocksContext.Set("tenant-1");
             _executions.Setup(r => r.CreateAsync(It.IsAny<WorkflowExecutionEntity>()))
@@ -47,10 +47,10 @@ namespace XUnitTest.Workflow
 
         public void Dispose() => TestBlocksContext.Clear();
 
-        private void Published(string authType, string? bodyMode, bool isPublished = true)
+        private void Published(string authType, string? requestFormat, bool isPublished = true)
         {
             var parameters = new BsonDocument { { "authType", authType }, { "httpResponseMode", "immediate" } };
-            if (bodyMode is not null) parameters["bodyMode"] = bodyMode;
+            if (requestFormat is not null) parameters["requestFormat"] = requestFormat;
             var snapshot = new WorkflowEntity
             {
                 TenantId = "tenant-1",
@@ -82,10 +82,10 @@ namespace XUnitTest.Workflow
         };
 
         [Fact]
-        public async Task Any_content_mode_uses_the_intake_and_stores_its_items_as_the_trigger_data()
+        public async Task Standard_format_uses_the_intake_and_stores_its_items_as_the_trigger_data()
         {
-            Published("none", "anyContent");
-            _intake.Setup(i => i.ReadAnyContentAsync(It.IsAny<HttpRequest>(), It.Is<WebhookIntakeSettings>(s => s.IsAnyContent),
+            Published("none", "standard");
+            _intake.Setup(i => i.ReadStandardAsync(It.IsAny<HttpRequest>(), It.Is<WebhookIntakeSettings>(s => s.IsStandard),
                     "tenant-1", null, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result());
             WorkflowExecutionEntity? created = null;
@@ -102,26 +102,26 @@ namespace XUnitTest.Workflow
 
         [Theory]
         [InlineData(null)]
-        [InlineData("json")]
+        [InlineData("jsonLegacy")]
         [InlineData("unknown")]
-        public async Task Absent_or_unknown_body_mode_uses_the_legacy_reader(string? bodyMode)   // H1, C18
+        public async Task Absent_or_unknown_request_format_uses_the_legacy_reader(string? requestFormat)   // H1, C18
         {
-            Published("none", bodyMode);
+            Published("none", requestFormat);
             _intake.Setup(i => i.ReadLegacyAsync(It.IsAny<HttpRequest>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new BsonArray { new BsonDocument("a", 1) });
 
             await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", WebhookRequests.Json("{\"a\":1}"));
 
-            _intake.Verify(i => i.ReadAnyContentAsync(It.IsAny<HttpRequest>(), It.IsAny<WebhookIntakeSettings>(),
+            _intake.Verify(i => i.ReadStandardAsync(It.IsAny<HttpRequest>(), It.IsAny<WebhookIntakeSettings>(),
                 It.IsAny<string>(), It.IsAny<BlocksContext?>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Theory]
-        [InlineData("anyContent")]
+        [InlineData("standard")]
         [InlineData(null)]
-        public async Task Failed_auth_answers_401_before_the_body_is_read(string? bodyMode)   // C1, A1
+        public async Task Failed_auth_answers_401_before_the_body_is_read(string? requestFormat)   // C1, A1
         {
-            Published("blocksAuthentication", bodyMode);
+            Published("blocksAuthentication", requestFormat);
             _auth.Setup(a => a.IsAuthenticated(It.IsAny<HttpRequest>(), "tenant-1")).ReturnsAsync(false);
 
             var act = () => _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", WebhookRequests.Create("text/plain", "{oops"));
@@ -144,11 +144,11 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Authenticated_caller_is_handed_to_the_intake()   // H9
         {
-            Published("blocksAuthentication", "anyContent");
+            Published("blocksAuthentication", "standard");
             var caller = TestBlocksContext.Create("tenant-1", "user-7");
             _auth.Setup(a => a.IsAuthenticated(It.IsAny<HttpRequest>(), "tenant-1")).ReturnsAsync(true);
             _auth.Setup(a => a.BuildCallerContext(It.IsAny<HttpRequest>(), "tenant-1")).Returns(caller);
-            _intake.Setup(i => i.ReadAnyContentAsync(It.IsAny<HttpRequest>(), It.IsAny<WebhookIntakeSettings>(),
+            _intake.Setup(i => i.ReadStandardAsync(It.IsAny<HttpRequest>(), It.IsAny<WebhookIntakeSettings>(),
                     "tenant-1", caller, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result());
 
@@ -171,7 +171,7 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Open_webhook_refuses_a_raw_file_with_403_and_creates_nothing()   // SPEC10 K1, Example 1
         {
-            Published("none", "anyContent");
+            Published("none", "standard");
             var store = new Mock<IWebhookFileStore>(MockBehavior.Strict);
 
             var act = () => WithRealIntake(store).TriggerWebhookAsync(
@@ -185,7 +185,7 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Authenticated_webhook_stores_a_raw_file_as_the_caller()   // SPEC10 N2, Example 3
         {
-            Published("blocksAuthentication", "anyContent");
+            Published("blocksAuthentication", "standard");
             var caller = TestBlocksContext.Create("tenant-1", "user-7");
             _auth.Setup(a => a.IsAuthenticated(It.IsAny<HttpRequest>(), "tenant-1")).ReturnsAsync(true);
             _auth.Setup(a => a.BuildCallerContext(It.IsAny<HttpRequest>(), "tenant-1")).Returns(caller);
@@ -202,24 +202,44 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task Saved_accepted_body_types_reach_the_reader()   // SPEC10 K9
+        public async Task A_webhook_saved_with_the_retired_bodyMode_anyContent_uses_the_legacy_reader()
         {
-            Published("none", "anyContent");
+            Published("none", null);
             var snapshot = (await _versions.Object.GetWorkflowVersionAsync("tenant-1", "ver-1"))!.Snapshot;
-            snapshot.Nodes[0].Parameters["acceptedBodyTypes"] = new BsonArray { "json" };
+            snapshot.Nodes[0].Parameters["bodyMode"] = "anyContent";
+            _intake.Setup(i => i.ReadLegacyAsync(It.IsAny<HttpRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new BsonArray { new BsonDocument("a", 1) });
 
-            var act = () => WithRealIntake(new Mock<IWebhookFileStore>(MockBehavior.Strict)).TriggerWebhookAsync(
-                "wf-1", "hook", "tenant-1", WebhookRequests.Create("application/x-www-form-urlencoded", "a=1"));
+            await _sut.TriggerWebhookAsync("wf-1", "hook", "tenant-1", WebhookRequests.Json("{\"a\":1}"));
 
-            (await act.Should().ThrowAsync<WebhookIntakeException>()).Which.Message
-                .Should().Be("This webhook does not accept form bodies");
+            _intake.Verify(i => i.ReadLegacyAsync(It.IsAny<HttpRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+            _intake.Verify(i => i.ReadStandardAsync(It.IsAny<HttpRequest>(), It.IsAny<WebhookIntakeSettings>(),
+                It.IsAny<string>(), It.IsAny<BlocksContext?>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task A_standard_webhook_puts_a_json_array_in_one_item()
+        {
+            Published("none", "standard");
+            WorkflowExecutionEntity? created = null;
+            _executions.Setup(r => r.CreateAsync(It.IsAny<WorkflowExecutionEntity>()))
+                .Callback<WorkflowExecutionEntity>(e => created = e)
+                .ReturnsAsync((WorkflowExecutionEntity e) => e);
+
+            var response = await WithRealIntake(new Mock<IWebhookFileStore>(MockBehavior.Strict)).TriggerWebhookAsync(
+                "wf-1", "hook", "tenant-1", WebhookRequests.Json("[10,20,30]"));
+
+            response.Status.Should().Be("Queued");
+            var item = created!.TriggerMetadata!.TriggerData.Should().ContainSingle().Subject.AsBsonDocument;
+            item["body"].Should().Be(new BsonArray { 10, 20, 30 });
+            item.Contains("bodyFormat").Should().BeFalse();
         }
 
         [Fact]
         public async Task Intake_refusal_propagates_with_its_status()
         {
-            Published("none", "anyContent");
-            _intake.Setup(i => i.ReadAnyContentAsync(It.IsAny<HttpRequest>(), It.IsAny<WebhookIntakeSettings>(),
+            Published("none", "standard");
+            _intake.Setup(i => i.ReadStandardAsync(It.IsAny<HttpRequest>(), It.IsAny<WebhookIntakeSettings>(),
                     It.IsAny<string>(), It.IsAny<BlocksContext?>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(WebhookIntakeException.TooLarge("Request body exceeds 50 MiB"));
 
@@ -232,9 +252,9 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Files_are_discarded_when_the_execution_cannot_be_created()
         {
-            Published("none", "anyContent");
+            Published("none", "standard");
             var result = Result("file-1");
-            _intake.Setup(i => i.ReadAnyContentAsync(It.IsAny<HttpRequest>(), It.IsAny<WebhookIntakeSettings>(),
+            _intake.Setup(i => i.ReadStandardAsync(It.IsAny<HttpRequest>(), It.IsAny<WebhookIntakeSettings>(),
                     It.IsAny<string>(), It.IsAny<BlocksContext?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(result);
             _executions.Setup(r => r.CreateAsync(It.IsAny<WorkflowExecutionEntity>())).ThrowsAsync(new TimeoutException("mongo"));
