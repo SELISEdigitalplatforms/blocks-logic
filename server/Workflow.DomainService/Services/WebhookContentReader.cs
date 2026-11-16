@@ -30,14 +30,14 @@ namespace Workflow.DomainService.Services
         }
     }
 
-    /// <summary>What an Any content request carried, before any file is stored.</summary>
+    /// <summary>What a Standard request carried, before any file is stored.</summary>
     public sealed class WebhookContent : IDisposable
     {
         public required string BodyFormat { get; init; }
         public required string ContentType { get; init; }
 
-        /// <summary>One body per item: one for every format except a JSON array (one per element, none for []).</summary>
-        public required IReadOnlyList<BsonValue> Bodies { get; init; }
+        /// <summary>The item's body: the whole request body as JSON (a JSON array included), null when it is a file or empty.</summary>
+        public required BsonValue Body { get; init; }
         public IReadOnlyList<WebhookPendingFile> Files { get; init; } = [];
         public required BsonDocument Headers { get; init; }
         public required BsonDocument Query { get; init; }
@@ -51,8 +51,8 @@ namespace Workflow.DomainService.Services
 
     /// <summary>
     /// Reads a webhook request body. Only ever called after the trigger's auth has passed. Legacy mode keeps the
-    /// JSON-only contract; Any content mode maps every supported content type to JSON bodies plus pending files
-    /// (SPEC8 § Any-content mode). Messages never echo body content.
+    /// JSON-only contract; the Standard format maps every supported content type to one JSON body plus pending
+    /// files. Messages never echo body content.
     /// </summary>
     public static class WebhookContentReader
     {
@@ -117,9 +117,9 @@ namespace Workflow.DomainService.Services
             }
         }
 
-        // ---------------------------------------------------------------- any content
+        // ---------------------------------------------------------------- standard
 
-        public static async Task<WebhookContent> ReadAnyContentAsync(
+        public static async Task<WebhookContent> ReadStandardAsync(
             HttpRequest request, WebhookIntakeSettings settings, CancellationToken ct = default)
         {
             var mediaType = MediaTypeOf(request, out var parsed);
@@ -130,7 +130,7 @@ namespace Workflow.DomainService.Services
             {
                 BodyFormat = FormatEmpty,
                 ContentType = mediaType,
-                Bodies = [BsonNull.Value],
+                Body = BsonNull.Value,
                 Headers = headers,
                 Query = query,
             };
@@ -151,8 +151,8 @@ namespace Workflow.DomainService.Services
         }
 
         /// <summary>
-        /// The refusals decided by the declared type alone, before a byte of the body is read: XML, a type outside
-        /// the webhook's Accepted Body Types (SPEC10 K9), and a binary body without an authenticated caller (K1).
+        /// The refusals decided by the declared type alone, before a byte of the body is read: XML, and a binary
+        /// body without an authenticated caller (K1).
         /// Returns the body format. A non-multipart body sent as an attachment is a file, so its format is binary
         /// whatever its Content-Type (SPEC10 D9).
         /// </summary>
@@ -168,10 +168,6 @@ namespace Workflow.DomainService.Services
                 throw WebhookIntakeException.Unsupported("XML bodies are not supported yet");
             }
 
-            if (!settings.Accepts(format))
-            {
-                throw WebhookIntakeException.TypeNotAccepted(format);
-            }
             if (format == FormatBinary && !settings.FilesAllowed)
             {
                 throw WebhookIntakeException.FilesNotAllowed();
@@ -200,7 +196,7 @@ namespace Workflow.DomainService.Services
             {
                 BodyFormat = format,
                 ContentType = mediaType,
-                Bodies = isJson ? ParseJsonBodies(ToUtf8Json(bytes, encoding)) : [new BsonString(encoding.GetString(bytes))],
+                Body = isJson ? ParseJsonBody(ToUtf8Json(bytes, encoding)) : new BsonString(encoding.GetString(bytes)),
                 Headers = headers,
                 Query = query,
                 Bytes = bytes.Length,
@@ -226,7 +222,7 @@ namespace Workflow.DomainService.Services
             {
                 BodyFormat = FormatForm,
                 ContentType = mediaType,
-                Bodies = [fields],
+                Body = fields,
                 Headers = headers,
                 Query = query,
                 Bytes = request.ContentLength ?? fieldBytes,
@@ -299,7 +295,7 @@ namespace Workflow.DomainService.Services
             {
                 BodyFormat = FormatMultipart,
                 ContentType = mediaType,
-                Bodies = [fields],
+                Body = fields,
                 Files = files,
                 Headers = headers,
                 Query = query,
@@ -363,7 +359,7 @@ namespace Workflow.DomainService.Services
             {
                 BodyFormat = FormatBinary,
                 ContentType = mediaType,
-                Bodies = [BsonNull.Value],
+                Body = BsonNull.Value,
                 Files =
                 [
                     new WebhookPendingFile
@@ -483,15 +479,13 @@ namespace Workflow.DomainService.Services
             }
         }
 
-        private static IReadOnlyList<BsonValue> ParseJsonBodies(ReadOnlyMemory<byte> bytes)
+        /// <summary>The whole JSON body as one value: an array stays one array, never one item per element.</summary>
+        private static BsonValue ParseJsonBody(ReadOnlyMemory<byte> bytes)
         {
             try
             {
                 using var document = JsonDocument.Parse(bytes, JsonParseOptions);
-                var root = document.RootElement;
-                return root.ValueKind == JsonValueKind.Array
-                    ? root.EnumerateArray().Select(ToBson).ToList()
-                    : [ToBson(root)];
+                return ToBson(document.RootElement);
             }
             catch (JsonException ex)
             {

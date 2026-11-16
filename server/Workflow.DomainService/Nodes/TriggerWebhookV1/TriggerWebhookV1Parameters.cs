@@ -16,17 +16,11 @@ namespace Workflow.DomainService.Nodes.TriggerWebhookV1
         public string HttpResponseData { get; set; } = "all";
 
         /// <summary>
-        /// <c>json</c> (legacy: a JSON object or array of objects only) or <c>anyContent</c>. Absent on every
-        /// webhook saved before this setting existed, which keeps them on the legacy behaviour.
+        /// <c>standard</c> (any body type, one item per request) or <c>jsonLegacy</c> (a JSON object or array of
+        /// objects only). Absent on every webhook saved before this setting existed, which keeps them on legacy
+        /// JSON. The retired <c>bodyMode</c> and <c>acceptedBodyTypes</c> are ignored if still saved.
         /// See <see cref="WebhookIntakeSettings"/>.
         /// </summary>
-        public string? BodyMode { get; set; }
-
-        /// <summary>
-        /// Any content: the body types this webhook accepts (<c>json</c>, <c>form</c>, <c>multipart</c>,
-        /// <c>text</c>, <c>binary</c>); empty accepts every type (SPEC10 D6). Files always go to Storage's default
-        /// folder and configuration, and every non-sensitive header is copied, so neither is configurable here.
-        /// </summary>
-        public List<string> AcceptedBodyTypes { get; set; } = new();
+        public string? RequestFormat { get; set; }
     }
 }

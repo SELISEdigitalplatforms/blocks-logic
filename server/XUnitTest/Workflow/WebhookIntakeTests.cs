@@ -14,7 +14,7 @@ namespace XUnitTest.Workflow
     {
         private readonly Mock<IWebhookFileStore> _store = new();
 
-        private static WebhookIntakeSettings Settings() => new() { BodyMode = WebhookBodyModes.AnyContent };
+        private static WebhookIntakeSettings Settings() => new() { RequestFormat = WebhookRequestFormats.Standard };
 
         private static readonly Blocks.Genesis.BlocksContext Caller = TestBlocksContext.Create("tenant-1", "user-7");
 
@@ -22,65 +22,57 @@ namespace XUnitTest.Workflow
             [("invoiceNo", "42")],
             [("doc", "inv.pdf", "application/pdf", new byte[] { 1, 2, 3 }), ("img", "a.png", "image/png", new byte[] { 4 })]);
 
-        // ------------------------------------------------------------ settings (C18)
+        // ------------------------------------------------------------ settings
 
         [Theory]
-        [InlineData(null, "json")]
-        [InlineData("", "json")]
-        [InlineData("JSON", "json")]
-        [InlineData("anything", "json")]
-        [InlineData("anyContent", "anyContent")]
-        public void Absent_blank_or_unknown_body_mode_is_legacy_json(string? saved, string expected)
+        [InlineData(null, "jsonLegacy")]
+        [InlineData("", "jsonLegacy")]
+        [InlineData("jsonLegacy", "jsonLegacy")]
+        [InlineData("STANDARD", "jsonLegacy")]
+        [InlineData("anyContent", "jsonLegacy")]
+        [InlineData("anything", "jsonLegacy")]
+        [InlineData("standard", "standard")]
+        public void Only_standard_selects_the_standard_format_and_everything_else_is_legacy(string? saved, string expected)
         {
             var parameters = new BsonDocument();
-            if (saved is not null) parameters["bodyMode"] = saved;
+            if (saved is not null) parameters["requestFormat"] = saved;
 
-            WebhookIntakeSettings.From(parameters).BodyMode.Should().Be(expected);
+            WebhookIntakeSettings.From(parameters).RequestFormat.Should().Be(expected);
         }
 
         [Fact]
-        public void Accepted_body_types_accept_a_list_or_a_comma_string_and_drop_unknown_values()   // SPEC10 K10
+        public void A_requestFormat_that_is_not_a_string_is_legacy()
         {
-            WebhookIntakeSettings.From(new BsonDocument { { "acceptedBodyTypes", " JSON , json,xml, ,binary" } })
-                .AcceptedBodyTypes.Should().BeEquivalentTo("json", "binary");
-            WebhookIntakeSettings.From(new BsonDocument { { "acceptedBodyTypes", new BsonArray { "Form", "text", 5 } } })
-                .AcceptedBodyTypes.Should().BeEquivalentTo("form", "text");
-        }
-
-        [Theory]
-        [InlineData("xml, anything")]
-        [InlineData("")]
-        public void Only_unknown_or_no_body_types_accept_every_type(string saved)   // SPEC10 N6, K10
-        {
-            var settings = WebhookIntakeSettings.From(new BsonDocument { { "acceptedBodyTypes", saved } });
-
-            settings.AcceptedBodyTypes.Should().BeEmpty();
-            new[] { "json", "form", "multipart", "text", "binary", "empty" }.Should().OnlyContain(f => settings.Accepts(f));
+            WebhookIntakeSettings.From(new BsonDocument { { "requestFormat", 1 } }).IsStandard.Should().BeFalse();
+            WebhookIntakeSettings.From(null).IsStandard.Should().BeFalse();
         }
 
         [Fact]
-        public void A_restriction_still_accepts_an_empty_body()   // SPEC10 N7
-        {
-            var settings = WebhookIntakeSettings.From(new BsonDocument { { "acceptedBodyTypes", new BsonArray { "json" } } });
-
-            settings.Accepts("json").Should().BeTrue();
-            settings.Accepts("empty").Should().BeTrue();
-            settings.Accepts("form").Should().BeFalse();
-        }
-
-        [Fact]
-        public void Retired_folder_configuration_and_header_parameters_are_ignored()   // SPEC10 N3
+        public void The_retired_bodyMode_is_ignored_so_a_saved_anyContent_webhook_is_legacy()
         {
             var settings = WebhookIntakeSettings.From(new BsonDocument
             {
                 { "bodyMode", "anyContent" },
+                { "acceptedBodyTypes", new BsonArray { "json" } },
+            });
+
+            settings.RequestFormat.Should().Be(WebhookRequestFormats.JsonLegacy);
+        }
+
+        [Fact]
+        public void Retired_parameters_do_not_change_a_standard_webhook()   // SPEC10 N3
+        {
+            var settings = WebhookIntakeSettings.From(new BsonDocument
+            {
+                { "requestFormat", "standard" },
+                { "bodyMode", "json" },
+                { "acceptedBodyTypes", new BsonArray { "json" } },
                 { "filesFolderId", "dir-1" },
                 { "storageConfigurationName", "wf-50" },
                 { "allowedHeaders", new BsonArray { "x-a" } },
             });
 
-            settings.IsAnyContent.Should().BeTrue();
-            settings.AcceptedBodyTypes.Should().BeEmpty();
+            settings.IsStandard.Should().BeTrue();
         }
 
         // ------------------------------------------------------------ intake
@@ -95,17 +87,16 @@ namespace XUnitTest.Workflow
                 .ReturnsAsync(() => $"file-{++next}");
             var intake = WebhookRequests.Intake(_store.Object);
 
-            var result = await intake.ReadAnyContentAsync(TwoFiles(), Settings(), "tenant-1", Caller);
+            var result = await intake.ReadStandardAsync(TwoFiles(), Settings(), "tenant-1", Caller);
 
             var item = result.Items.Should().ContainSingle().Subject.AsBsonDocument;
             item["body"].Should().Be(BsonDocument.Parse("{invoiceNo:'42'}"));
-            item["bodyFormat"].AsString.Should().Be("multipart");
             item["files"].Should().Be(BsonArray.Create(new[]
             {
                 BsonDocument.Parse("{field:'doc', fileId:'file-1', name:'inv.pdf', contentType:'application/pdf', size:NumberLong(3)}"),
                 BsonDocument.Parse("{field:'img', fileId:'file-2', name:'a.png', contentType:'image/png', size:NumberLong(1)}"),
             }));
-            item.Names.Should().Equal("body", "files", "contentType", "bodyFormat", "headers", "query");
+            item.Names.Should().Equal("body", "files", "contentType", "headers", "query");
             result.StoredFileIds.Should().Equal("file-1", "file-2");
             target!.TenantId.Should().Be("tenant-1");
             target.Caller.Should().BeSameAs(Caller);
@@ -114,7 +105,7 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Without_a_caller_a_file_part_is_refused_and_nothing_is_stored()   // SPEC10 K2
         {
-            var act = () => WebhookRequests.Intake(_store.Object).ReadAnyContentAsync(TwoFiles(), Settings(), "tenant-1", caller: null);
+            var act = () => WebhookRequests.Intake(_store.Object).ReadStandardAsync(TwoFiles(), Settings(), "tenant-1", caller: null);
 
             var error = (await act.Should().ThrowAsync<WebhookIntakeException>()).Which;
             (error.StatusCode, error.ErrorKind, error.Message).Should().Be((403, "files_not_allowed", "File uploads require an authenticated webhook"));
@@ -124,7 +115,7 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task A_caller_without_a_user_id_counts_as_anonymous()   // SPEC10 D1
         {
-            var act = () => WebhookRequests.Intake(_store.Object).ReadAnyContentAsync(
+            var act = () => WebhookRequests.Intake(_store.Object).ReadStandardAsync(
                 TwoFiles(), Settings(), "tenant-1", TestBlocksContext.Create("tenant-1", ""));
 
             (await act.Should().ThrowAsync<WebhookIntakeException>()).Which.StatusCode.Should().Be(403);
@@ -136,7 +127,7 @@ namespace XUnitTest.Workflow
         {
             var request = WebhookRequests.Multipart([("name", "Ada")], []);
 
-            var result = await WebhookRequests.Intake(_store.Object).ReadAnyContentAsync(request, Settings(), "tenant-1", null);
+            var result = await WebhookRequests.Intake(_store.Object).ReadStandardAsync(request, Settings(), "tenant-1", null);
 
             result.Items.Single()["body"].Should().Be(BsonDocument.Parse("{name:'Ada'}"));
             result.StoredFileIds.Should().BeEmpty();
@@ -151,7 +142,7 @@ namespace XUnitTest.Workflow
                 .ThrowsAsync(new WebhookIntakeException(413, "storage_too_large", "File 'a.png' exceeds the storage limit"));
             _store.Setup(s => s.DeleteAsync("file-1", It.IsAny<WebhookFileTarget>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
-            var act = () => WebhookRequests.Intake(_store.Object).ReadAnyContentAsync(TwoFiles(), Settings(), "tenant-1", Caller);
+            var act = () => WebhookRequests.Intake(_store.Object).ReadStandardAsync(TwoFiles(), Settings(), "tenant-1", Caller);
 
             (await act.Should().ThrowAsync<WebhookIntakeException>()).Which.StatusCode.Should().Be(413);
             _store.Verify(s => s.DeleteAsync("file-1", It.IsAny<WebhookFileTarget>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -163,7 +154,7 @@ namespace XUnitTest.Workflow
             _store.Setup(s => s.StoreAsync(It.IsAny<WebhookPendingFile>(), It.IsAny<WebhookFileTarget>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((WebhookPendingFile f, WebhookFileTarget _, CancellationToken _) => f.Field);
             var intake = WebhookRequests.Intake(_store.Object);
-            var result = await intake.ReadAnyContentAsync(TwoFiles(), Settings(), "tenant-1", Caller);
+            var result = await intake.ReadStandardAsync(TwoFiles(), Settings(), "tenant-1", Caller);
 
             await intake.DiscardAsync(result);
 
@@ -172,14 +163,17 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task Json_array_items_share_headers_and_query_and_carry_no_files()   // H8
+        public async Task A_json_array_is_one_item_with_the_whole_array_as_body()
         {
             var request = WebhookRequests.Create("application/json", "[{\"a\":1},2]", "?q=1");
 
-            var result = await WebhookRequests.Intake(_store.Object).ReadAnyContentAsync(request, Settings(), "tenant-1", null);
+            var result = await WebhookRequests.Intake(_store.Object).ReadStandardAsync(request, Settings(), "tenant-1", null);
 
-            result.Items.Select(i => i["body"]).Should().Equal(BsonDocument.Parse("{a:1}"), new BsonInt32(2));
-            result.Items.Should().OnlyContain(i => i["query"] == BsonDocument.Parse("{q:'1'}") && i["files"].AsBsonArray.Count == 0);
+            var item = result.Items.Should().ContainSingle().Subject.AsBsonDocument;
+            item["body"].Should().Be(new BsonArray { BsonDocument.Parse("{a:1}"), 2 });
+            item["query"].Should().Be(BsonDocument.Parse("{q:'1'}"));
+            item["files"].AsBsonArray.Should().BeEmpty();
+            item.Contains("bodyFormat").Should().BeFalse();
             _store.VerifyNoOtherCalls();
         }
 

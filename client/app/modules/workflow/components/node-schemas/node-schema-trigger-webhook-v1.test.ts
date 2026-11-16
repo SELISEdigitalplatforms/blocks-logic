@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { isDependencySatisfied } from "../node-inspector/form-builder/utils/dependency-resolver";
 import {
-  BODY_MODE_ANY_CONTENT,
-  BODY_MODE_JSON,
-  BODY_TYPES,
   NodeSchemaTriggerWebhookV1,
+  REQUEST_FORMAT_JSON_LEGACY,
+  REQUEST_FORMAT_STANDARD,
 } from "./node-schema-trigger-webhook-v1";
 
 vi.mock("../../services/iam.service", () => ({ iamService: {} }));
@@ -15,71 +13,66 @@ const byKey = (key: string) => {
   if (!found) throw new Error(`no field ${key}`);
   return found;
 };
+const RETIRED_KEYS = [
+  "bodyMode",
+  "acceptedBodyTypes",
+  "filesFolderId",
+  "storageConfigurationName",
+  "allowedHeaders",
+];
 const isHidden = (key: string, data: Record<string, unknown>) => {
   const hidden = byKey(key).hidden;
   return typeof hidden === "function" ? hidden(data) : Boolean(hidden);
 };
 
-// SPEC8 H2/H3 as changed by SPEC10 N1/N8: Body Mode and Accepted Body Types of the webhook trigger.
-describe("webhook trigger v1 body settings", () => {
-  it("starts new webhook nodes on Any content accepting every body type", () => {
+describe("webhook trigger v1 request format", () => {
+  it("starts new webhook nodes on Standard", () => {
     const defaults = NodeSchemaTriggerWebhookV1.defaults.parameters;
-    expect(defaults).toMatchObject({ bodyMode: BODY_MODE_ANY_CONTENT, acceptedBodyTypes: [] });
-    for (const retired of ["filesFolderId", "storageConfigurationName", "allowedHeaders"]) {
+    expect(defaults).toMatchObject({ requestFormat: REQUEST_FORMAT_STANDARD });
+    for (const retired of RETIRED_KEYS) {
       expect(defaults).not.toHaveProperty(retired);
     }
   });
 
-  it("has no storage or header fields", () => {
+  it("has no body mode, accepted types, storage or header fields", () => {
     const keys = fields.map((f) => f.key);
-    expect(keys).not.toContain("filesFolderId");
-    expect(keys).not.toContain("storageConfigurationName");
-    expect(keys).not.toContain("allowedHeaders");
+    for (const retired of RETIRED_KEYS) {
+      expect(keys).not.toContain(retired);
+    }
   });
 
-  it("shows a saved node without bodyMode as JSON (legacy)", () => {
-    const bodyMode = byKey("bodyMode");
-    expect(bodyMode.type).toBe("select-with-description");
-    expect(bodyMode.defaultValue).toBe(BODY_MODE_JSON);
-    expect((bodyMode.options as { value: string; label: string }[]).map((o) => [o.value, o.label])).toEqual([
-      ["json", "JSON (legacy)"],
-      ["anyContent", "Any content"],
+  it("offers Standard and JSON only (legacy), and shows a node without requestFormat as legacy", () => {
+    const format = byKey("requestFormat");
+    expect(format.type).toBe("select-with-description");
+    expect(format.label).toBe("Request Format");
+    expect(format.defaultValue).toBe(REQUEST_FORMAT_JSON_LEGACY);
+    expect(
+      (format.options as { value: string; label: string; description: string }[]).map((o) => [
+        o.value,
+        o.label,
+        o.description,
+      ]),
+    ).toEqual([
+      ["standard", "Standard", "Any body type."],
+      ["jsonLegacy", "JSON only (legacy)", "JSON object or array of objects."],
     ]);
   });
 
-  it("shows Body Mode on every node, so new and legacy webhooks can switch either way", () => {
-    expect(isHidden("bodyMode", {})).toBe(false);
-    expect(isHidden("bodyMode", { bodyMode: BODY_MODE_JSON })).toBe(false);
-    expect(isHidden("bodyMode", { bodyMode: BODY_MODE_ANY_CONTENT })).toBe(false);
+  it("shows Request Format on every node, so new and legacy webhooks can switch either way", () => {
+    expect(isHidden("requestFormat", {})).toBe(false);
+    expect(isHidden("requestFormat", { requestFormat: REQUEST_FORMAT_JSON_LEGACY })).toBe(false);
+    expect(isHidden("requestFormat", { requestFormat: REQUEST_FORMAT_STANDARD })).toBe(false);
     // A dependency on its own key would be reset by the form builder on every change.
-    expect(byKey("bodyMode").dependsOn).toBeUndefined();
+    expect(byKey("requestFormat").dependsOn).toBeUndefined();
   });
 
-  it("offers Accepted Body Types as a multiselect, only in Any content mode", () => {
-    const accepted = byKey("acceptedBodyTypes");
-    expect(accepted.type).toBe("multiselect");
-    expect(accepted.defaultValue).toEqual([]);
-    expect(accepted.placeholder).toBe("All types");
-    expect((accepted.options as { value: string; label: string }[]).map((o) => [o.value, o.label])).toEqual([
-      ["json", "JSON"],
-      ["form", "Form"],
-      ["multipart", "Multipart"],
-      ["text", "Text"],
-      ["binary", "Binary"],
-    ]);
-    expect(BODY_TYPES).toEqual(["json", "form", "multipart", "text", "binary"]);
-    expect(isDependencySatisfied(accepted, {})).toBe(false);
-    expect(isDependencySatisfied(accepted, { bodyMode: BODY_MODE_JSON })).toBe(false);
-    expect(isDependencySatisfied(accepted, { bodyMode: BODY_MODE_ANY_CONTENT })).toBe(true);
-  });
-
-  it("places Body Mode and Accepted Body Types between HTTP Method and Authentication Type", () => {
+  it("places Request Format between HTTP Method and Authentication Type", () => {
     const ids = fields.map((f) => f.id);
     const from = ids.indexOf("http-method");
-    expect(ids.slice(from, from + 4)).toEqual(["http-method", "body-mode", "accepted-body-types", "auth-type"]);
+    expect(ids.slice(from, from + 3)).toEqual(["http-method", "request-format", "auth-type"]);
   });
 
-  it("does not add bodyMode to an existing node when it is saved", () => {
+  it("does not add requestFormat to an existing node when it is saved", () => {
     const legacy = {
       id: "hook",
       type: "webhook",
@@ -88,6 +81,6 @@ describe("webhook trigger v1 body settings", () => {
 
     const out = NodeSchemaTriggerWebhookV1.transform?.(legacy) as { parameters: Record<string, unknown> };
 
-    expect(out.parameters).not.toHaveProperty("bodyMode");
+    expect(out.parameters).not.toHaveProperty("requestFormat");
   });
 });
