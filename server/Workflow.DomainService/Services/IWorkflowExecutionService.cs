@@ -18,7 +18,7 @@ namespace Workflow.DomainService.Services
     {
         /// <summary>
         /// Runs the published workflow behind a webhook. The body is read from <paramref name="request"/> only after
-        /// the workflow, trigger and the trigger's auth checks pass, according to the trigger's <c>bodyMode</c>.
+        /// the workflow, trigger and the trigger's auth checks pass, according to the trigger's <c>requestFormat</c>.
         /// </summary>
         Task<WorkflowWebhookResponseDto> TriggerWebhookAsync(string workflowId, string triggerId, string tenantId, HttpRequest request);
 

@@ -6,7 +6,7 @@ using MongoDB.Bson;
 
 namespace Workflow.DomainService.Services
 {
-    /// <summary>The trigger items an Any content request produced, and what to undo if the run cannot start.</summary>
+    /// <summary>The trigger item a Standard request produced, and what to undo if the run cannot start.</summary>
     public sealed class WebhookIntakeResult
     {
         public required BsonArray Items { get; init; }
@@ -18,11 +18,11 @@ namespace Workflow.DomainService.Services
 
     public interface IWebhookIntake
     {
-        /// <summary>Legacy mode: a JSON object or array of objects, exactly as before.</summary>
+        /// <summary>Legacy JSON format: a JSON object or array of objects, exactly as before.</summary>
         Task<BsonArray> ReadLegacyAsync(HttpRequest request, CancellationToken ct = default);
 
-        /// <summary>Any content mode: the item wrapper, with every file part or binary body stored first.</summary>
-        Task<WebhookIntakeResult> ReadAnyContentAsync(
+        /// <summary>Standard format: one item per request, with every file part or binary body stored first.</summary>
+        Task<WebhookIntakeResult> ReadStandardAsync(
             HttpRequest request, WebhookIntakeSettings settings, string tenantId, BlocksContext? caller, CancellationToken ct = default);
 
         /// <summary>Deletes the files of a result whose execution could not be created.</summary>
@@ -51,12 +51,12 @@ namespace Workflow.DomainService.Services
             return WebhookBodyNormalizer.Normalize(input);
         }
 
-        public async Task<WebhookIntakeResult> ReadAnyContentAsync(
+        public async Task<WebhookIntakeResult> ReadStandardAsync(
             HttpRequest request, WebhookIntakeSettings settings, string tenantId, BlocksContext? caller, CancellationToken ct = default)
         {
             // Files only for an authenticated caller (SPEC10 D1); the reader refuses them before anything is stored.
             var filesAllowed = !string.IsNullOrWhiteSpace(caller?.UserId);
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, settings.WithFilesAllowed(filesAllowed), ct);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, settings.WithFilesAllowed(filesAllowed), ct);
 
             var target = new WebhookFileTarget { TenantId = tenantId, Caller = caller };
 
@@ -84,15 +84,17 @@ namespace Workflow.DomainService.Services
                 throw;
             }
 
-            var items = new BsonArray(content.Bodies.Select(body => new BsonDocument
+            var items = new BsonArray
             {
-                { "body", body },
-                { "files", references.DeepClone() },
-                { "contentType", content.ContentType },
-                { "bodyFormat", content.BodyFormat },
-                { "headers", content.Headers.DeepClone() },
-                { "query", content.Query.DeepClone() },
-            }));
+                new BsonDocument
+                {
+                    { "body", content.Body },
+                    { "files", references },
+                    { "contentType", content.ContentType },
+                    { "headers", content.Headers },
+                    { "query", content.Query },
+                },
+            };
 
             return new WebhookIntakeResult
             {

@@ -38,9 +38,9 @@ namespace XUnitTest.Workflow
 
         private static async Task<WebhookPendingFile> PdfAsync()
         {
-            var content = await WebhookContentReader.ReadAnyContentAsync(
+            var content = await WebhookContentReader.ReadStandardAsync(
                 WebhookRequests.Create("application/pdf", new byte[] { 1, 2, 3 }),
-                new WebhookIntakeSettings { BodyMode = WebhookBodyModes.AnyContent });
+                new WebhookIntakeSettings { RequestFormat = WebhookRequestFormats.Standard });
             return content.Files.Single();
         }
 

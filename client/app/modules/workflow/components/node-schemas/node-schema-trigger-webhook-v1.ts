@@ -14,24 +14,9 @@ const AUTHORIZATION_DEPENDENCY = {
   value: "blocksAuthorization",
 } as const;
 
-// Values of the server's WebhookBodyModes.
-export const BODY_MODE_JSON = "json";
-export const BODY_MODE_ANY_CONTENT = "anyContent";
-
-const ANY_CONTENT_DEPENDENCY = {
-  key: "bodyMode",
-  value: BODY_MODE_ANY_CONTENT,
-} as const;
-
-// Values of the server's WebhookIntakeSettings.BodyTypes (SPEC10 D6). An empty selection accepts every type.
-export const BODY_TYPES = ["json", "form", "multipart", "text", "binary"] as const;
-const BODY_TYPE_LABEL_KEYS: Record<(typeof BODY_TYPES)[number], string> = {
-  json: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_JSON",
-  form: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_FORM",
-  multipart: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_MULTIPART",
-  text: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_TEXT",
-  binary: "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.TYPE_BINARY",
-};
+// Values of the server's WebhookRequestFormats. A missing or unknown value is legacy JSON on the server.
+export const REQUEST_FORMAT_STANDARD = "standard";
+export const REQUEST_FORMAT_JSON_LEGACY = "jsonLegacy";
 
 type AuthBlock = {
   organizationId?: string;
@@ -183,78 +168,56 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
         displayValue: () => "POST",
       },
       {
-        // Every webhook shows Body Mode and can switch either way (SPEC10 D7, N8 as amended). New nodes start on
-        // Any content; a node saved before this setting existed has no `bodyMode` and runs (and shows) as
-        // JSON (legacy).
-        id: "body-mode",
+        // New nodes start on Standard (see defaults). A node saved before this setting existed has no
+        // `requestFormat`: it shows, and runs, as JSON only (legacy). The display default is never written.
+        id: "request-format",
         type: "select-with-description",
         get label() {
-          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.BODY_MODE");
+          return tStatic(
+            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.REQUEST_FORMAT",
+          );
         },
         get info() {
           return tStatic(
             LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ANY_CONTENT_LIMITS_5",
+            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.REQUEST_FORMAT_INFO",
           );
         },
-        key: "bodyMode",
-        defaultValue: BODY_MODE_JSON,
+        key: "requestFormat",
+        defaultValue: REQUEST_FORMAT_JSON_LEGACY,
         options: [
           {
-            value: BODY_MODE_JSON,
+            value: REQUEST_FORMAT_STANDARD,
             get label() {
-              return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.JSON_LEGACY");
+              return tStatic(
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.STANDARD",
+              );
             },
             get description() {
               return tStatic(
                 LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ACCEPTS_ONLY_A_JSON",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.STANDARD_DESCRIPTION",
               );
             },
           },
           {
-            value: BODY_MODE_ANY_CONTENT,
+            value: REQUEST_FORMAT_JSON_LEGACY,
             get label() {
-              return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ANY_CONTENT");
+              return tStatic(
+                LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.JSON_ONLY_LEGACY",
+              );
             },
             get description() {
               return tStatic(
                 LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ACCEPTS_JSON_FORMS_MULTIPART",
+                "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.JSON_ONLY_LEGACY_DESCRIPTION",
               );
             },
           },
         ],
-      },
-      {
-        // Files always go to Storage's default folder and configuration, and every non-sensitive header is
-        // copied, so neither is a setting (SPEC10 D2, D3). Leaving this empty accepts every body type.
-        id: "accepted-body-types",
-        type: "multiselect",
-        get label() {
-          return tStatic(
-            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ACCEPTED_BODY_TYPES",
-          );
-        },
-        get info() {
-          return tStatic(
-            LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE,
-            "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ACCEPTED_BODY_TYPES_DESCRIPTION",
-          );
-        },
-        get placeholder() {
-          return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, "NODE_SCHEMA_TRIGGER_WEBHOOK_V1.ALL_TYPES");
-        },
-        key: "acceptedBodyTypes",
-        options: BODY_TYPES.map((value) => ({
-          value,
-          get label() {
-            return tStatic(LOGIC_WORKFLOW_NODES_SCHEMAS_MODULE, BODY_TYPE_LABEL_KEYS[value]);
-          },
-        })),
-        defaultValue: [],
-        dependsOn: ANY_CONTENT_DEPENDENCY,
       },
       {
         id: "auth-type",
@@ -593,8 +556,7 @@ export const NodeSchemaTriggerWebhookV1: NodeSchemaDefinition = {
       roles: { operator: "all", values: [] },
       permissions: { operator: "any", values: [] },
       authorizationMode: "",
-      bodyMode: BODY_MODE_ANY_CONTENT,
-      acceptedBodyTypes: [],
+      requestFormat: REQUEST_FORMAT_STANDARD,
     },
     settings: {},
   },
