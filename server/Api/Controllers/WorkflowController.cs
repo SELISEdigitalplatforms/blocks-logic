@@ -221,8 +221,8 @@ namespace Utilities.Api.Controllers
         /// <c>POST /api/Workflow/Webhook/{tenantId}/{workflowId}/{webhookId}</c>. Anonymous at the framework
         /// level — the trigger's own <c>authType</c> decides whether a caller must be authenticated or
         /// authorized, and a failure surfaces here as 401. The body is not bound by the framework: the service
-        /// reads it after the workflow and auth checks, as JSON or "Any content" per the trigger's
-        /// <c>bodyMode</c> (see <see cref="RunWebhookAsync"/> for the error statuses).
+        /// reads it after the workflow and auth checks, as legacy JSON or the Standard format per the
+        /// trigger's <c>requestFormat</c> (see <see cref="RunWebhookAsync"/> for the error statuses).
         /// </summary>
         [HttpPost("{tenantId}/{workflowId}/{webhookId}")]
         [RequestSizeLimit(WebhookIntakeLimits.RequestSizeLimitBytes)]

@@ -299,18 +299,18 @@ namespace Workflow.DomainService.Services
             return (null, false);
         }
 
-        /// <summary>The trigger items, per the trigger's <c>bodyMode</c>; the intake result only in Any content mode.</summary>
+        /// <summary>The trigger items, per the trigger's <c>requestFormat</c>; the intake result only for the Standard format.</summary>
         private async Task<(BsonArray Input, WebhookIntakeResult? Intake)> ReadWebhookInputAsync(
             NodeEntity triggerNode, string tenantId, BlocksContext? caller, HttpRequest request)
         {
             var ct = request.HttpContext?.RequestAborted ?? default;
             var settings = WebhookIntakeSettings.From(triggerNode.Parameters);
-            if (!settings.IsAnyContent)
+            if (!settings.IsStandard)
             {
                 return (await _webhookIntake.ReadLegacyAsync(request, ct), null);
             }
 
-            var intake = await _webhookIntake.ReadAnyContentAsync(request, settings, tenantId, caller, ct);
+            var intake = await _webhookIntake.ReadStandardAsync(request, settings, tenantId, caller, ct);
             return (intake.Items, intake);
         }
 

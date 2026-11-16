@@ -13,7 +13,7 @@ namespace XUnitTest.Workflow
     [Collection(WebhookTempFileCollection.Name)]
     public class WebhookContentReaderTests
     {
-        private static readonly WebhookIntakeSettings AnyContent = new() { BodyMode = WebhookBodyModes.AnyContent };
+        private static readonly WebhookIntakeSettings Standard = new() { RequestFormat = WebhookRequestFormats.Standard };
 
         private static async Task<WebhookIntakeException> Refused(Func<Task> act) =>
             (await act.Should().ThrowAsync<WebhookIntakeException>()).Which;
@@ -130,30 +130,30 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task Any_content_json_skips_a_utf8_byte_order_mark()
+        public async Task Standard_json_skips_a_utf8_byte_order_mark()
         {
             var request = WebhookRequests.Create("application/json", [.. Utf8Bom, .. Encoding.UTF8.GetBytes("{\"a\":1}")]);
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.BodyFormat.Should().Be("json");
-            content.Bodies.Should().ContainSingle().Which.Should().Be(BsonDocument.Parse("{a:1}"));
+            content.Body.Should().Be(BsonDocument.Parse("{a:1}"));
         }
 
         [Fact]
-        public async Task Any_content_json_reads_utf16()
+        public async Task Standard_json_reads_utf16()
         {
             var request = WebhookRequests.Create("application/json; charset=utf-16", Utf16("[{\"a\":1},{\"a\":2}]", bigEndian: false, bom: true));
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
-            content.Bodies.Should().HaveCount(2);
+            content.Body.AsBsonArray.Should().HaveCount(2);
         }
 
         [Fact]
-        public async Task Any_content_json_refuses_another_charset_with_415()
+        public async Task Standard_json_refuses_another_charset_with_415()
         {
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(Unreadable("application/json; charset=iso-8859-1"), AnyContent));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(Unreadable("application/json; charset=iso-8859-1"), Standard));
 
             error.StatusCode.Should().Be(415);
         }
@@ -165,11 +165,11 @@ namespace XUnitTest.Workflow
         {
             var request = WebhookRequests.Create("application/x-www-form-urlencoded", "name=Ana&tag=a&tag=b", "?src=web");
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.BodyFormat.Should().Be("form");
             content.ContentType.Should().Be("application/x-www-form-urlencoded");
-            content.Bodies.Should().ContainSingle().Which.Should().Be(BsonDocument.Parse("{name:'Ana', tag:['a','b']}"));
+            content.Body.Should().Be(BsonDocument.Parse("{name:'Ana', tag:['a','b']}"));
             content.Query.ToJson().Should().Be(BsonDocument.Parse("{src:'web'}").ToJson());
             content.Headers.Names.Should().BeEquivalentTo("content-type", "content-length");
             content.Files.Should().BeEmpty();
@@ -182,10 +182,10 @@ namespace XUnitTest.Workflow
                 [("invoiceNo", "42")],
                 [("doc", "inv.pdf", "application/pdf", new byte[] { 1, 2, 3 }), ("img", "a.png", "image/png", new byte[] { 4 })]);
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.BodyFormat.Should().Be("multipart");
-            content.Bodies.Should().ContainSingle().Which.Should().Be(BsonDocument.Parse("{invoiceNo:'42'}"));
+            content.Body.Should().Be(BsonDocument.Parse("{invoiceNo:'42'}"));
             content.Files.Select(f => (f.Field, f.Name, f.ContentType, f.Length))
                 .Should().Equal(("doc", "inv.pdf", "application/pdf", 3L), ("img", "a.png", "image/png", 1L));
         }
@@ -196,10 +196,10 @@ namespace XUnitTest.Workflow
             var bytes = Encoding.Latin1.GetBytes("caf\u00e9");
             var request = WebhookRequests.Create("text/plain; charset=iso-8859-1", bytes);
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.BodyFormat.Should().Be("text");
-            content.Bodies.Should().ContainSingle().Which.AsString.Should().Be("caf\u00e9");
+            content.Body.AsString.Should().Be("caf\u00e9");
         }
 
         [Fact]
@@ -207,9 +207,9 @@ namespace XUnitTest.Workflow
         {
             var request = WebhookRequests.Create("text/csv", "a,b\n1,\u00e9");
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
-            content.Bodies.Single().AsString.Should().Be("a,b\n1,\u00e9");
+            content.Body.AsString.Should().Be("a,b\n1,\u00e9");
         }
 
         [Fact]
@@ -218,10 +218,10 @@ namespace XUnitTest.Workflow
             var request = WebhookRequests.Create("application/pdf", new byte[] { 9, 9, 9 });
             request.Headers.ContentDisposition = "attachment; filename=\"../../report.pdf\"";
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.BodyFormat.Should().Be("binary");
-            content.Bodies.Should().ContainSingle().Which.Should().Be(BsonNull.Value);
+            content.Body.Should().Be(BsonNull.Value);
             var file = content.Files.Should().ContainSingle().Subject;
             (file.Field, file.Name, file.ContentType, file.Length).Should().Be(("body", "report.pdf", "application/pdf", 3L));
             using var stream = file.File.OpenReadStream();
@@ -240,10 +240,10 @@ namespace XUnitTest.Workflow
             var request = WebhookRequests.Create(contentType, "a=1");
             request.Headers.ContentDisposition = $"attachment; filename=\"{fileName}\"";
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.BodyFormat.Should().Be("binary");
-            content.Bodies.Should().ContainSingle().Which.Should().Be(BsonNull.Value);
+            content.Body.Should().Be(BsonNull.Value);
             var file = content.Files.Should().ContainSingle().Subject;
             (file.Name, file.ContentType, file.Length).Should().Be((fileName, contentType, 3L));
         }
@@ -254,7 +254,7 @@ namespace XUnitTest.Workflow
             var request = WebhookRequests.Create("text/plain", new byte[WebhookIntakeLimits.NonFileMaxBytes + 1]);
             request.Headers.ContentDisposition = "attachment; filename=\"big.log\"";
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.Files.Single().Length.Should().Be(WebhookIntakeLimits.NonFileMaxBytes + 1);
         }
@@ -268,14 +268,14 @@ namespace XUnitTest.Workflow
             var request = WebhookRequests.Create("text/plain", "hello");
             request.Headers.ContentDisposition = disposition;
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.BodyFormat.Should().Be("text");
             content.Files.Should().BeEmpty();
         }
 
         [Fact]
-        public async Task A_text_attachment_needs_files_allowed_and_binary_accepted()   // D9, K1, K9
+        public async Task A_text_attachment_needs_files_allowed()   // D9, K1
         {
             HttpRequest Attachment()
             {
@@ -284,11 +284,9 @@ namespace XUnitTest.Workflow
                 return request;
             }
 
-            var forbidden = await Refused(() => WebhookContentReader.ReadAnyContentAsync(Attachment(), AnyContent.WithFilesAllowed(false)));
-            var notAccepted = await Refused(() => WebhookContentReader.ReadAnyContentAsync(Attachment(), Restricted("text")));
+            var forbidden = await Refused(() => WebhookContentReader.ReadStandardAsync(Attachment(), Standard.WithFilesAllowed(false)));
 
             forbidden.StatusCode.Should().Be(403);
-            (notAccepted.StatusCode, notAccepted.Message).Should().Be((415, "This webhook does not accept binary bodies"));
         }
 
         [Fact]
@@ -296,7 +294,7 @@ namespace XUnitTest.Workflow
         {
             var request = WebhookRequests.Create(null, new byte[] { 1 });
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.BodyFormat.Should().Be("binary");
             content.Files.Single().Name.Should().Be("upload.bin");
@@ -306,8 +304,8 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Binary_temp_file_is_deleted_on_dispose()   // C14
         {
-            var content = await WebhookContentReader.ReadAnyContentAsync(
-                WebhookRequests.Create("application/octet-stream", new byte[] { 1, 2 }), AnyContent);
+            var content = await WebhookContentReader.ReadStandardAsync(
+                WebhookRequests.Create("application/octet-stream", new byte[] { 1, 2 }), Standard);
             var path = content.Files.Single().TempPath!;
             File.Exists(path).Should().BeTrue();
 
@@ -317,28 +315,28 @@ namespace XUnitTest.Workflow
         }
 
         [Fact]
-        public async Task Json_array_becomes_one_body_per_element_of_any_type()   // H8, Example 4
+        public async Task Json_array_stays_one_body_holding_the_whole_array()
         {
-            using var content = await WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Json("[{\"a\":1}, 5, \"x\"]"), AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(WebhookRequests.Json("[{\"a\":1}, 5, \"x\"]"), Standard);
 
             content.BodyFormat.Should().Be("json");
-            content.Bodies.Should().Equal(BsonDocument.Parse("{a:1}"), new BsonInt32(5), new BsonString("x"));
+            content.Body.Should().Be(new BsonArray { BsonDocument.Parse("{a:1}"), 5, "x" });
         }
 
         [Fact]
-        public async Task Empty_json_array_gives_no_bodies()   // A2
+        public async Task Empty_json_array_is_one_empty_array_body()
         {
-            using var content = await WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Json("[]"), AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(WebhookRequests.Json("[]"), Standard);
 
-            content.Bodies.Should().BeEmpty();
+            content.Body.Should().Be(new BsonArray());
         }
 
         [Fact]
         public async Task Json_primitive_is_accepted()
         {
-            using var content = await WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Json("5"), AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(WebhookRequests.Json("5"), Standard);
 
-            content.Bodies.Should().ContainSingle().Which.Should().Be(new BsonInt32(5));
+            content.Body.Should().Be(new BsonInt32(5));
         }
 
         [Theory]
@@ -347,10 +345,10 @@ namespace XUnitTest.Workflow
         [InlineData("application/xml")]
         public async Task Empty_body_is_format_empty_for_any_type(string contentType)   // Example 8
         {
-            using var content = await WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Create(contentType, ""), AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(WebhookRequests.Create(contentType, ""), Standard);
 
             content.BodyFormat.Should().Be("empty");
-            content.Bodies.Should().ContainSingle().Which.Should().Be(BsonNull.Value);
+            content.Body.Should().Be(BsonNull.Value);
             content.Files.Should().BeEmpty();
         }
 
@@ -362,7 +360,7 @@ namespace XUnitTest.Workflow
         [InlineData("application/atom+xml")]
         public async Task Xml_is_refused_with_415(string contentType)   // C9
         {
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Create(contentType, "<a/>"), AnyContent));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(WebhookRequests.Create(contentType, "<a/>"), Standard));
 
             (error.StatusCode, error.Message).Should().Be((415, "XML bodies are not supported yet"));
         }
@@ -370,8 +368,8 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Unknown_charset_is_refused_with_415()   // C10
         {
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(
-                WebhookRequests.Create("text/plain; charset=x-unknown", "hi"), AnyContent));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(
+                WebhookRequests.Create("text/plain; charset=x-unknown", "hi"), Standard));
 
             (error.StatusCode, error.Message).Should().Be((415, "Unsupported charset"));
         }
@@ -379,7 +377,7 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Invalid_json_is_refused_with_400()   // C11
         {
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Json("{oops"), AnyContent));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(WebhookRequests.Json("{oops"), Standard));
 
             (error.StatusCode, error.Message).Should().Be((400, "Body is not valid JSON"));
         }
@@ -391,8 +389,8 @@ namespace XUnitTest.Workflow
         {
             var body = Encoding.UTF8.GetBytes(new string('a', (int)WebhookIntakeLimits.NonFileMaxBytes + 1));
 
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(
-                WebhookRequests.Create("text/plain", body, sendLength: sendLength), AnyContent));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(
+                WebhookRequests.Create("text/plain", body, sendLength: sendLength), Standard));
 
             (error.StatusCode, error.Message).Should().Be((413, "Request body exceeds 5 MiB"));
         }
@@ -402,9 +400,9 @@ namespace XUnitTest.Workflow
         {
             var body = Encoding.UTF8.GetBytes(new string('a', (int)WebhookIntakeLimits.NonFileMaxBytes));
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Create("text/plain", body), AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(WebhookRequests.Create("text/plain", body), Standard);
 
-            content.Bodies.Single().AsString.Length.Should().Be((int)WebhookIntakeLimits.NonFileMaxBytes);
+            content.Body.AsString.Length.Should().Be((int)WebhookIntakeLimits.NonFileMaxBytes);
         }
 
         [Theory]
@@ -415,8 +413,8 @@ namespace XUnitTest.Workflow
             var body = new byte[WebhookIntakeLimits.FileRequestMaxBytes + 1];
             var before = Directory.GetFiles(Path.GetTempPath(), "blocks-webhook-*").Length;
 
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(
-                WebhookRequests.Create("application/octet-stream", body, sendLength: sendLength), AnyContent));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(
+                WebhookRequests.Create("application/octet-stream", body, sendLength: sendLength), Standard));
 
             (error.StatusCode, error.Message).Should().Be((413, "Request body exceeds 50 MiB"));
             Directory.GetFiles(Path.GetTempPath(), "blocks-webhook-*").Length.Should().Be(before);
@@ -427,7 +425,7 @@ namespace XUnitTest.Workflow
         {
             var files = Enumerable.Range(0, 11).Select(i => ($"f{i}", $"f{i}.txt", "text/plain", new byte[] { 1 }));
 
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Multipart([], files), AnyContent));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(WebhookRequests.Multipart([], files), Standard));
 
             (error.StatusCode, error.Message).Should().Be((413, "Too many files (max 10)"));
         }
@@ -435,8 +433,8 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Multipart_without_a_boundary_is_refused_with_400()
         {
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(
-                WebhookRequests.Create("multipart/form-data", "x"), AnyContent));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(
+                WebhookRequests.Create("multipart/form-data", "x"), Standard));
 
             error.StatusCode.Should().Be(400);
         }
@@ -464,7 +462,7 @@ namespace XUnitTest.Workflow
                 request.Headers[excluded] = "secret";
             }
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.Headers.ToJson().Should().Be(BsonDocument.Parse(
                 "{'content-length':'2', 'content-type':'text/plain', 'stripe-signature':'t=1,v1=abc', 'x-github-event':'push', 'x-multi':'one, two'}").ToJson());
@@ -475,23 +473,20 @@ namespace XUnitTest.Workflow
         {
             var settings = WebhookIntakeSettings.From(new BsonDocument
             {
-                { "bodyMode", "anyContent" },
+                { "requestFormat", "standard" },
                 { "allowedHeaders", new BsonArray { "authorization", "x-event" } },
             });
             var request = WebhookRequests.Create("text/plain", "hi");
             request.Headers["Authorization"] = "Bearer secret";
             request.Headers["X-Other"] = "kept";
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, settings);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, settings);
 
             content.Headers.Contains("authorization").Should().BeFalse();
             content.Headers["x-other"].AsString.Should().Be("kept");
         }
 
-        // ------------------------------------------------------------ accepted types and the file gate (SPEC10)
-
-        private static WebhookIntakeSettings Restricted(params string[] types) => WebhookIntakeSettings.From(
-            new BsonDocument { { "bodyMode", "anyContent" }, { "acceptedBodyTypes", new BsonArray(types) } });
+        // ------------------------------------------------------------ the file gate (SPEC10)
 
         private static HttpRequest Unreadable(string? contentType, long? length = 10)
         {
@@ -501,34 +496,26 @@ namespace XUnitTest.Workflow
             return request;
         }
 
-        [Theory]
-        [InlineData("application/x-www-form-urlencoded", "form")]
-        [InlineData("text/plain", "text")]
-        [InlineData("image/png", "binary")]
-        [InlineData("multipart/form-data; boundary=x", "multipart")]
-        [InlineData(null, "binary")]
-        public async Task A_type_outside_the_accepted_ones_is_415_before_the_body_is_read(string? contentType, string format)   // K9
+        [Fact]
+        public async Task A_retired_accepted_body_types_restriction_is_ignored()
         {
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(Unreadable(contentType), Restricted("json")));
+            var settings = WebhookIntakeSettings.From(new BsonDocument
+            {
+                { "requestFormat", "standard" },
+                { "acceptedBodyTypes", new BsonArray { "json" } },
+            });
 
-            (error.StatusCode, error.ErrorKind, error.Message)
-                .Should().Be((415, "unsupported_type", $"This webhook does not accept {format} bodies"));
+            using var content = await WebhookContentReader.ReadStandardAsync(
+                WebhookRequests.Create("application/x-www-form-urlencoded", "a=1"), settings);
+
+            content.BodyFormat.Should().Be("form");
+            content.Body.Should().Be(BsonDocument.Parse("{a:'1'}"));
         }
 
         [Fact]
-        public async Task An_accepted_type_and_an_empty_body_pass_the_restriction()   // N7
+        public async Task Xml_is_refused_with_its_own_message()
         {
-            using var json = await WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Json("{\"a\":1}"), Restricted("json", "text"));
-            using var empty = await WebhookContentReader.ReadAnyContentAsync(WebhookRequests.Create("image/png", []), Restricted("json"));
-
-            json.BodyFormat.Should().Be("json");
-            empty.BodyFormat.Should().Be("empty");
-        }
-
-        [Fact]
-        public async Task Xml_is_refused_with_its_own_message_whatever_is_accepted()
-        {
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(Unreadable("application/xml"), Restricted("binary")));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(Unreadable("application/xml"), Standard));
 
             error.Message.Should().Be("XML bodies are not supported yet");
         }
@@ -538,19 +525,10 @@ namespace XUnitTest.Workflow
         [InlineData(null)]
         public async Task Without_files_allowed_a_binary_body_is_403_before_it_is_read(string? contentType)   // K1
         {
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(
-                Unreadable(contentType), AnyContent.WithFilesAllowed(false)));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(
+                Unreadable(contentType), Standard.WithFilesAllowed(false)));
 
             (error.StatusCode, error.Message).Should().Be((403, "File uploads require an authenticated webhook"));
-        }
-
-        [Fact]
-        public async Task The_type_gate_runs_before_the_file_gate()   // K9
-        {
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(
-                Unreadable("image/png"), Restricted("json").WithFilesAllowed(false)));
-
-            error.StatusCode.Should().Be(415);
         }
 
         [Fact]
@@ -558,11 +536,11 @@ namespace XUnitTest.Workflow
         {
             var withFile = WebhookRequests.Multipart([("a", "1")], [("doc", "a.pdf", "application/pdf", new byte[] { 1 })]);
             var textOnly = WebhookRequests.Multipart([("a", "1")], []);
-            var settings = AnyContent.WithFilesAllowed(false);
+            var settings = Standard.WithFilesAllowed(false);
 
-            (await Refused(() => WebhookContentReader.ReadAnyContentAsync(withFile, settings))).StatusCode.Should().Be(403);
-            using var content = await WebhookContentReader.ReadAnyContentAsync(textOnly, settings);
-            content.Bodies.Single().Should().Be(BsonDocument.Parse("{a:'1'}"));
+            (await Refused(() => WebhookContentReader.ReadStandardAsync(withFile, settings))).StatusCode.Should().Be(403);
+            using var content = await WebhookContentReader.ReadStandardAsync(textOnly, settings);
+            content.Body.Should().Be(BsonDocument.Parse("{a:'1'}"));
         }
 
         [Fact]
@@ -571,7 +549,7 @@ namespace XUnitTest.Workflow
             var files = Enumerable.Range(0, 11).Select(n => ($"f{n}", $"f{n}.txt", "text/plain", new byte[] { 1 }));
             var request = WebhookRequests.Multipart([], files);
 
-            var error = await Refused(() => WebhookContentReader.ReadAnyContentAsync(request, AnyContent.WithFilesAllowed(false)));
+            var error = await Refused(() => WebhookContentReader.ReadStandardAsync(request, Standard.WithFilesAllowed(false)));
 
             error.StatusCode.Should().Be(413);
         }
@@ -582,7 +560,7 @@ namespace XUnitTest.Workflow
             var request = Unreadable("image/png", length: null);
             request.HttpContext.Features.Set<Microsoft.AspNetCore.Http.Features.IHttpRequestBodyDetectionFeature>(new NoBody());
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent.WithFilesAllowed(false));
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard.WithFilesAllowed(false));
 
             content.BodyFormat.Should().Be("empty");
         }
@@ -604,8 +582,8 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Repeated_query_parameters_become_arrays()
         {
-            using var content = await WebhookContentReader.ReadAnyContentAsync(
-                WebhookRequests.Create("text/plain", "hi", "?a=1&a=2&b=3"), AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(
+                WebhookRequests.Create("text/plain", "hi", "?a=1&a=2&b=3"), Standard);
 
             content.Query.ToJson().Should().Be(BsonDocument.Parse("{a:['1','2'], b:'3'}").ToJson());
         }
@@ -656,8 +634,8 @@ namespace XUnitTest.Workflow
         [Fact]
         public async Task Binary_body_without_a_file_name_is_named_from_its_content_type()
         {
-            using var content = await WebhookContentReader.ReadAnyContentAsync(
-                WebhookRequests.Create("image/png", new byte[] { 1, 2 }), AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(
+                WebhookRequests.Create("image/png", new byte[] { 1, 2 }), Standard);
 
             var file = content.Files.Single();
             file.Name.Should().Be("upload.png");
@@ -669,7 +647,7 @@ namespace XUnitTest.Workflow
         {
             var request = WebhookRequests.Multipart([], [("doc", "report", "application/pdf", new byte[] { 1 })]);
 
-            using var content = await WebhookContentReader.ReadAnyContentAsync(request, AnyContent);
+            using var content = await WebhookContentReader.ReadStandardAsync(request, Standard);
 
             content.Files.Single().Name.Should().Be("report.pdf");
         }
