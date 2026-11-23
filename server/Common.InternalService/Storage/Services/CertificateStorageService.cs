@@ -1,6 +1,5 @@
+using Amazon.S3;
 using Azure;
-using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
 using Blocks.Genesis;
 using DomainService.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -18,10 +17,16 @@ namespace Common.InternalService.Storage
     /// readable without credentials, because Genesis re-fetches it with a bare
     /// <see cref="System.Net.Http.HttpClient"/> every time it validates an external token. A DMS URL
     /// is a SAS that would expire underneath it.
+    /// <para>
+    /// The write goes through <see cref="IStorageService.UploadPublicObjectAsync"/> of the tenant's Default storage
+    /// configuration, so it works on every provider that has public read (Azure, AWS, S3-compatible); an SFTP
+    /// configuration is answered with a clear error. The shared <c>certificates</c> container is kept.
+    /// </para>
     /// </remarks>
     public class CertificateStorageService : ICertificateStorageService
     {
         private readonly IStorageConfigurationProvider _storageConfigurations;
+        private readonly IStorageServiceFactory _storageServiceFactory;
 
         private const string DefaultConfigurationName = "Default";
         private const string CertificateContainerName = "certificates";
@@ -34,9 +39,10 @@ namespace Common.InternalService.Storage
         // sends that to UpdateTokenValidationParameters rather than to this endpoint.
         private static readonly string[] AllowedExtensions = [".crt", ".der", ".pfx", ".p12"];
 
-        public CertificateStorageService(IStorageConfigurationProvider storageConfigurations)
+        public CertificateStorageService(IStorageConfigurationProvider storageConfigurations, IStorageServiceFactory storageServiceFactory)
         {
             _storageConfigurations = storageConfigurations;
+            _storageServiceFactory = storageServiceFactory;
         }
 
         public async Task<UploadCertificateResponse> UploadPublicCertificateAsync(UploadCertificateRequest request)
@@ -60,7 +66,7 @@ namespace Common.InternalService.Storage
 
             var configuration = await _storageConfigurations.GetByNameAsync(DefaultConfigurationName);
 
-            if (string.IsNullOrWhiteSpace(configuration?.ConnectionString))
+            if (configuration is null)
             {
                 return Error("configuration", "storage_configuration_not_found");
             }
@@ -69,36 +75,57 @@ namespace Common.InternalService.Storage
 
             try
             {
-                var containerClient = new BlobContainerClient(configuration.ConnectionString, CertificateContainerName);
+                IStorageService storage;
+
+                try
+                {
+                    storage = _storageServiceFactory.GetStorageService(configuration);
+                }
+                catch (ArgumentException)
+                {
+                    // The factory does not know the configuration's storage strategy.
+                    return Error("configuration", "storage_configuration_not_found");
+                }
 
                 // Genesis reads the certificate back anonymously, so the container has to serve
-                // blobs without credentials. An account with public blob access disabled fails
-                // here, which is far easier to diagnose than tokens quietly 401ing days later.
-                await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
+                // objects without credentials. The provider sets that up (container access level,
+                // or a bucket policy on the one bucket); a store that refuses fails here, which is
+                // far easier to diagnose than tokens quietly 401ing days later.
+                var blobName = BuildBlobName(tenantId, request.IsThirdParty);
 
-                var blobClient = containerClient.GetBlobClient(BuildBlobName(tenantId, request.IsThirdParty));
+                PublicObjectRules.Validate(CertificateContainerName, blobName);
 
                 await using var stream = certificate.OpenReadStream();
 
-                await blobClient.UploadAsync(stream, new BlobUploadOptions
-                {
-                    HttpHeaders = new BlobHttpHeaders
-                    {
-                        ContentType = string.IsNullOrWhiteSpace(certificate.ContentType)
-                            ? FallbackContentType
-                            : certificate.ContentType
-                    }
-                });
+                var url = await storage.UploadPublicObjectAsync(
+                    CertificateContainerName,
+                    blobName,
+                    stream,
+                    string.IsNullOrWhiteSpace(certificate.ContentType)
+                        ? FallbackContentType
+                        : certificate.ContentType);
 
                 return new UploadCertificateResponse
                 {
                     IsSuccess = true,
-                    DownloadUrl = blobClient.Uri.ToString()
+                    DownloadUrl = url
                 };
+            }
+            catch (PublicObjectStorageException ex)
+            {
+                return Error("storage", ex.ErrorCode);
+            }
+            catch (NotSupportedException)
+            {
+                return Error("storage", PublicObjectStorageException.NotSupportedCode);
             }
             catch (RequestFailedException ex)
             {
                 return Error("storage", ex.ErrorCode ?? "certificate_upload_failed");
+            }
+            catch (AmazonS3Exception ex)
+            {
+                return Error("storage", string.IsNullOrEmpty(ex.ErrorCode) ? "certificate_upload_failed" : ex.ErrorCode);
             }
         }
 
