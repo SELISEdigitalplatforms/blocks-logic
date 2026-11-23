@@ -90,22 +90,83 @@ namespace Common.InternalService.Storage
         }
 
         /// <summary>
-        /// Ensures the bucket exists, creating it if necessary.
+        /// Public read on S3 is a bucket policy on the named bucket: anyone may read an object whose exact key they know
+        /// (<c>s3:GetObject</c>), and nothing else (no listing, write or delete). The bucket is created if missing and the
+        /// policy is merged into any it has. The URL is the object's own address, with no signature, so it never expires.
         /// </summary>
-        protected virtual async Task EnsureBucketExistsAsync()
+        public async Task<string> UploadPublicObjectAsync(string container, string key, Stream content, string contentType)
         {
-            if (string.IsNullOrWhiteSpace(_bucketName))
+            await EnsureBucketExistsAsync(container);
+            await EnsurePublicReadPolicyAsync(container);
+
+            await _s3Client.PutObjectAsync(new PutObjectRequest
+            {
+                BucketName = container,
+                Key = key,
+                InputStream = content,
+                ContentType = contentType,
+                AutoCloseStream = false
+            });
+
+            return PublicObjectRules.BuildS3ObjectUrl(
+                _s3Client.Config.ServiceURL,
+                _s3Client.Config.RegionEndpoint?.GetEndpointForService("s3")?.Hostname,
+                container,
+                key);
+        }
+
+        public async Task<Stream?> OpenReadAsync(string container, string key)
+        {
+            try
+            {
+                var response = await _s3Client.GetObjectAsync(new GetObjectRequest { BucketName = container, Key = key });
+                return response.ResponseStream;
+            }
+            catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+        }
+
+        private async Task EnsurePublicReadPolicyAsync(string bucket)
+        {
+            string? existing = null;
+            try
+            {
+                existing = (await _s3Client.GetBucketPolicyAsync(new GetBucketPolicyRequest { BucketName = bucket })).Policy;
+            }
+            catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // No policy yet.
+            }
+
+            var updated = PublicObjectRules.AddPublicReadStatement(existing, bucket);
+            if (updated is not null)
+            {
+                await _s3Client.PutBucketPolicyAsync(new PutBucketPolicyRequest { BucketName = bucket, Policy = updated });
+            }
+        }
+
+        /// <summary>
+        /// Ensures the tenant's bucket exists, creating it if necessary.
+        /// </summary>
+        protected virtual Task EnsureBucketExistsAsync() => EnsureBucketExistsAsync(_bucketName);
+
+        /// <summary>Ensures the named bucket exists, creating it if necessary.</summary>
+        protected async Task EnsureBucketExistsAsync(string bucketName)
+        {
+            if (string.IsNullOrWhiteSpace(bucketName))
                 return;
 
             try
             {
-                await _s3Client.GetBucketLocationAsync(_bucketName);
+                await _s3Client.GetBucketLocationAsync(bucketName);
             }
             catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 var putBucketRequest = new PutBucketRequest
                 {
-                    BucketName = _bucketName,
+                    BucketName = bucketName,
                     UseClientRegion = true
                 };
                 await _s3Client.PutBucketAsync(putBucketRequest);
