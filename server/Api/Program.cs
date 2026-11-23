@@ -199,6 +199,7 @@ static void ApplyFrontendRuntimeSettings(IConfiguration configuration, string we
         ["__BLOCKS_RELEASE_CLIENT_ID__"] = section["BLOCKS_RELEASE_CLIENT_ID"],
         ["__BLOCKS_MONITOR_CLIENT_ID__"] = section["BLOCKS_MONITOR_CLIENT_ID"],
         ["__BLOCKS_STUDIO_CLIENT_ID__"] = section["BLOCKS_STUDIO_CLIENT_ID"],
+        ["__BLOCKS_ALLOWED_SERVICES__"] = section["BLOCKS_ALLOWED_SERVICES"],
     };
 
     // The self-hosted Monaco build (client/vite.config.ts) is third-party code with no tokens;
