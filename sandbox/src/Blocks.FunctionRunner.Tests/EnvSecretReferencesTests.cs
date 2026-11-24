@@ -33,7 +33,7 @@ namespace Blocks.FunctionRunner.Tests
         private static readonly string[] AuthOnly = ["AUTH"];
         private static readonly string[] Planted = ["planted"];
 
-        private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement.Clone();
+        private static JsonElement Parse(string json) => JsonElement.Parse(json);
 
         private static string[] Strings(JsonElement array) => [.. array.EnumerateArray().Select(e => e.GetString()!)];
 

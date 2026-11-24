@@ -92,7 +92,7 @@ namespace Blocks.FunctionRunner.Tests
 
         private static readonly string[] ClientKeys = ["CLIENT_ID", "CLIENT_SECRET"];
 
-        private static JsonElement EnvOf(string envelope) => JsonDocument.Parse(envelope).RootElement.GetProperty("env");
+        private static JsonElement EnvOf(string envelope) => JsonElement.Parse(envelope).GetProperty("env");
 
         [Fact]
         public void Collect_reads_the_optional_keys()
