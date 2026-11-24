@@ -334,8 +334,8 @@ namespace Functions.DomainService.Dtos.Responses
     {
         public int CpuMillicores { get; set; } = FunctionLimits.Ceiling.CpuMillicores;
         public int MemoryMb { get; set; } = FunctionLimits.Ceiling.MemoryMb;
-        // TEMPORARY FIX: 45 s time limit instead of Genesis' 30 s (see FunctionTimeout); later back to FunctionLimits.Ceiling.TimeoutSeconds.
-        public int TimeoutSeconds { get; set; } = FunctionTimeout.Seconds;
+        // TEMPORARY FIX: 45 s function time limit instead of Genesis' 30 s; will be changed later.
+        public int TimeoutSeconds { get; set; } = 45;
         public int Concurrency { get; set; } = FunctionLimits.Ceiling.Concurrency;
         public int Attempts { get; set; } = FunctionLimits.Ceiling.Attempts;
         public int RetryDelaySeconds { get; set; } = RetryPolicy.Fixed.InitialDelaySeconds;

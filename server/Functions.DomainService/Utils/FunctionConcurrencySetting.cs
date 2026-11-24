@@ -18,9 +18,10 @@ namespace Functions.DomainService.Utils
         /// <summary>The platform profile, keeping the function's concurrency (1–10; 3 when there are no limits at all).</summary>
         public static FunctionLimits ClampKeepingConcurrency(this FunctionLimits? limits)
         {
-            // TEMPORARY FIX: ClampWithTimeout instead of Genesis Clamp, for the 45 s time limit (see FunctionTimeout).
-            var clamped = (limits ?? new FunctionLimits()).ClampWithTimeout();
+            var clamped = (limits ?? new FunctionLimits()).Clamp();
             clamped.Concurrency = Of(limits);
+            // TEMPORARY FIX: 45 s function time limit instead of Genesis' 30 s; will be changed later.
+            clamped.TimeoutSeconds = 45;
             return clamped;
         }
 

@@ -95,8 +95,8 @@ namespace Functions.DomainService.Services
             ArgumentNullException.ThrowIfNull(run);
             ArgumentNullException.ThrowIfNull(function);
 
-            // TEMPORARY FIX: 45 s time limit instead of Genesis' 30 s (see FunctionTimeout); later this goes back to .Clamp().
-            var limits = (version?.Limits ?? function.Limits).ClampWithTimeout();
+            // TEMPORARY FIX: 45 s function time limit instead of Genesis' 30 s; will be changed later.
+            var limits = (version?.Limits ?? function.Limits).ClampKeepingConcurrency();
             var variables = version?.Variables ?? function.Variables;
             var authMode = (version?.Trigger ?? function.Trigger).AuthMode;
 

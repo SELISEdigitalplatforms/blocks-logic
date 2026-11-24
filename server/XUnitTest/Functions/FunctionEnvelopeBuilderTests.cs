@@ -2,7 +2,6 @@ using System.Text.Json;
 using Blocks.Genesis;
 using FluentAssertions;
 using Functions.DomainService.Services;
-using Functions.DomainService.Utils;
 using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
@@ -179,7 +178,7 @@ namespace XUnitTest.Functions
 
             using var doc = Parse(json);
             doc.RootElement.GetProperty("limits").GetProperty("timeoutMs").GetInt32()
-                .Should().Be(FunctionTimeout.Seconds * 1000);
+                .Should().Be(45_000);
         }
 
         [Theory]

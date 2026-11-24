@@ -1,7 +1,6 @@
 using FluentAssertions;
 using RunnerCeilings = Blocks.FunctionRunner.Contracts.Ceilings;
 using Functions.DomainService.Queue;
-using Functions.DomainService.Utils;
 using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
@@ -111,11 +110,8 @@ namespace XUnitTest.Functions
         public void The_profile_matches_the_runners_own_constants()
         {
             FunctionLimits.Ceiling.CpuMillicores.Should().Be(RunnerCeilings.CpuMillicores);
-            // TEMPORARY FIX: the time limit is hardcoded in FunctionTimeout (45 s) while Genesis still
-            // says 30 s, so the runner is compared with the hardcoded value. Later this goes back to
-            // FunctionLimits.Ceiling.TimeoutSeconds.
-            FunctionTimeout.Seconds.Should().Be(RunnerCeilings.TimeoutSeconds);
-            FunctionTimeout.Seconds.Should().Be(45);
+            // TEMPORARY FIX: 45 s function time limit instead of Genesis' 30 s; will be changed later.
+            RunnerCeilings.TimeoutSeconds.Should().Be(45);
             FunctionLimits.Ceiling.PidLimit.Should().Be(RunnerCeilings.PidLimit);
             FunctionLimits.Ceiling.InputBytes.Should().Be(RunnerCeilings.InputBytes);
             FunctionLimits.Ceiling.ResultBytes.Should().Be(RunnerCeilings.ResultBytes);

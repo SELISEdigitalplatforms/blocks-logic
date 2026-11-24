@@ -8,8 +8,7 @@ const LOGIC_FUNCTIONS_MODULE = "logic.functions";
 export const DEFAULT_LIMITS_OPTIONS = {
   cpuMillicores: 100,
   memoryMb: 128,
-  // TEMPORARY FIX: 45 s to match the server's hardcoded FunctionTimeout.Seconds; will be changed later.
-  timeoutSeconds: 45,
+  timeoutSeconds: 30,
   concurrency: 10,
   attempts: 2,
   retryDelaySeconds: 5,
