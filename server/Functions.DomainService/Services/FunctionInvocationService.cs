@@ -156,7 +156,8 @@ namespace Functions.DomainService.Services
         /// timeout typical of ingress controllers and load balancers, so the caller gets a clean
         /// 202 with a run id instead of a gateway 504 that hides whether the run was accepted.
         /// </summary>
-        internal const int DefaultHttpSyncWaitMaxSeconds = 30;
+        // TEMPORARY FIX: 45 s (was 30 s) with the 45 s function time limit; will be changed later.
+        internal const int DefaultHttpSyncWaitMaxSeconds = 45;
 
         /// <summary>
         /// Ceiling on a synchronous wait when <c>Functions:SyncWaitMaxSeconds</c> is not configured.
@@ -335,7 +336,8 @@ namespace Functions.DomainService.Services
                     InvokedByType.Http, invokedById: null, inputJson, wait: false,
                     waitTimeoutSeconds: null, cancellationToken);
                 timedRunId = queued.RunId;
-                queued.SseWaitSeconds = SseWaitSeconds((version.Limits ?? function.Limits).Clamp());
+                // TEMPORARY FIX: 45 s function time limit instead of Genesis' 30 s; will be changed later.
+                queued.SseWaitSeconds = SseWaitSeconds((version.Limits ?? function.Limits).ClampKeepingConcurrency());
                 return queued;
             }
 

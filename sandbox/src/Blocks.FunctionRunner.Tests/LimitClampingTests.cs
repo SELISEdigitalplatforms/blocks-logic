@@ -105,7 +105,7 @@ namespace Blocks.FunctionRunner.Tests
         {
             Ceilings.CpuMillicores.Should().Be(100);
             Ceilings.MemoryBytes.Should().Be(128L * 1024 * 1024);
-            Ceilings.TimeoutSeconds.Should().Be(30);
+            Ceilings.TimeoutSeconds.Should().Be(45);
             Ceilings.MaxFunctionConcurrency.Should().Be(10);
             Ceilings.PidLimit.Should().Be(64);
             Ceilings.TmpfsBytes.Should().Be(64L * 1024 * 1024);

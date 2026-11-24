@@ -20,6 +20,8 @@ namespace Functions.DomainService.Utils
         {
             var clamped = (limits ?? new FunctionLimits()).Clamp();
             clamped.Concurrency = Of(limits);
+            // TEMPORARY FIX: 45 s function time limit instead of Genesis' 30 s; will be changed later.
+            clamped.TimeoutSeconds = 45;
             return clamped;
         }
 

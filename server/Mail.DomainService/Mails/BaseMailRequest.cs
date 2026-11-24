@@ -21,5 +21,13 @@
         /// its own work. Optional; existing payloads are unaffected.
         /// </summary>
         public string? CorrelationId { get; set; }
+
+        /// <summary>
+        /// The organization whose template and configuration the mail uses. Optional; without it nothing changes:
+        /// an HTTP send uses the token's organization and a queued mail the Default organization. A token of the
+        /// Default organization (or none) may name any organization; any other token only its own, and another
+        /// organization is ignored. A test mail by <c>TemplateId</c> ignores it and uses the template's own organization.
+        /// </summary>
+        public string? OrganizationId { get; set; }
     }
 }

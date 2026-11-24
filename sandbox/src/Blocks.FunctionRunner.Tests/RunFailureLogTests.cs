@@ -39,7 +39,7 @@ namespace Blocks.FunctionRunner.Tests
         {
             var logs = RunProcessor.WithFailureLine(Failed(null), "USER_RUNTIME_ERROR", "just a string", []);
 
-            JsonDocument.Parse(logs.Single()).RootElement.GetProperty("msg").GetString().Should().Be("just a string");
+            JsonElement.Parse(logs.Single()).GetProperty("msg").GetString().Should().Be("just a string");
         }
 
         [Fact]

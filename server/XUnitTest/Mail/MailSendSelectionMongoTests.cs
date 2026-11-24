@@ -353,6 +353,48 @@ namespace XUnitTest.Mail
             ExpectSent("T1", "C-def");
         }
 
+        [Theory]
+        [InlineData("default")]
+        [InlineData(null)]
+        public async Task RequestedOrganization_FromADefaultToken_UsesThatOrganizationsTemplateAndDefaultConfiguration(string? tokenOrganization)
+        {
+            SignIn(tokenOrganization);
+            _selectionReads = 0;
+            var mail = Send();
+            mail.OrganizationId = "acme";
+
+            (await _service.ProcessMailAsync(mail)).IsSuccess.Should().BeTrue();
+
+            ExpectSent("T2", "C-acme");
+        }
+
+        [Fact]
+        public async Task RequestedOrganization_WithoutItsOwnTemplate_FallsBackToTheDefaultTemplate()
+        {
+            SignIn("default");
+            _selectionReads = 0;
+            var mail = Send();
+            mail.OrganizationId = "globex";
+
+            (await _service.ProcessMailAsync(mail)).IsSuccess.Should().BeTrue();
+
+            ExpectSent("T1", "C-def");
+        }
+
+        [Fact]
+        public async Task RequestedOrganization_OnAQueuedServiceSend_UsesThatOrganizationsTemplateAndDefaultConfiguration()
+        {
+            // No delegation grant: a Blocks service published it (IAM forgot password, a background job).
+            SignIn("globex");
+            _selectionReads = 0;
+            var mail = Send();
+            mail.OrganizationId = "acme";
+
+            (await _service.ProcessQueuedMailAsync(mail)).IsSuccess.Should().BeTrue();
+
+            ExpectSent("T2", "C-acme");
+        }
+
         [Fact]
         public async Task C8_TemplateIdWithoutTestMail_IsIgnored()
         {

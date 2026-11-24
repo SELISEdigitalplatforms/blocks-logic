@@ -45,7 +45,8 @@ namespace Blocks.FunctionRunner.Contracts
         /// same number, and this one clamps again, so the two must move together — a control plane
         /// allowing more than the runner does silently loses the difference to a killed sandbox.
         /// </summary>
-        public const int TimeoutSeconds = 30;
+        // TEMPORARY FIX: 45 s function time limit instead of Genesis' 30 s; will be changed later.
+        public const int TimeoutSeconds = 45;
 
         /// <summary>Kept equal to <see cref="TimeoutSeconds"/>: there is one value, not a range.</summary>
         public const int DefaultTimeoutSeconds = TimeoutSeconds;
