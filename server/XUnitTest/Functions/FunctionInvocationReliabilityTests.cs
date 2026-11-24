@@ -712,7 +712,10 @@ namespace XUnitTest.Functions
         [Fact]
         public void The_default_http_cap_sits_under_a_60_second_ingress_timeout()
         {
-            FunctionInvocationService.DefaultHttpSyncWaitMaxSeconds.Should().BeLessThanOrEqualTo(30);
+            // TEMPORARY FIX: raised from 30 s to 45 s with the 45 s function time limit (FunctionTimeout);
+            // it will be changed later. Still under the 60 s ingress idle timeout.
+            FunctionInvocationService.DefaultHttpSyncWaitMaxSeconds.Should().Be(45);
+            FunctionInvocationService.DefaultHttpSyncWaitMaxSeconds.Should().BeLessThan(60);
         }
 
         [Fact]

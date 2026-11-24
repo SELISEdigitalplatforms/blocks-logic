@@ -2,6 +2,7 @@ using Blocks.Genesis;
 using Functions.DomainService.Queue;
 using Functions.DomainService.Repositories;
 using Functions.DomainService.Services;
+using Functions.DomainService.Utils;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -103,7 +104,8 @@ namespace Functions.DomainService.Consumers
                 _configuration.GetValue("Functions:StaleRunSweepIntervalSeconds", DefaultIntervalSeconds)));
             var margin = TimeSpan.FromSeconds(Math.Max(60,
                 _configuration.GetValue("Functions:StaleRunMarginSeconds", DefaultMarginSeconds)));
-            var longestExecution = TimeSpan.FromSeconds(FunctionLimits.Ceiling.TimeoutSeconds + RunningGraceSeconds);
+            // TEMPORARY FIX: 45 s time limit instead of Genesis' 30 s (see FunctionTimeout); later back to FunctionLimits.Ceiling.TimeoutSeconds.
+            var longestExecution = TimeSpan.FromSeconds(FunctionTimeout.Seconds + RunningGraceSeconds);
 
             // Floored, not merely defaulted: below these, a configuration value would close runs
             // that are still legitimately waiting — the one thing this sweep must never do.

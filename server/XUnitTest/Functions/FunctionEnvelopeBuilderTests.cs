@@ -2,6 +2,7 @@ using System.Text.Json;
 using Blocks.Genesis;
 using FluentAssertions;
 using Functions.DomainService.Services;
+using Functions.DomainService.Utils;
 using Blocks.Genesis.Entities.Logic;
 
 namespace XUnitTest.Functions
@@ -69,7 +70,7 @@ namespace XUnitTest.Functions
             root.GetProperty("env").GetProperty("REGION").GetString().Should().Be("ch");
             root.GetProperty("input").GetProperty("orderId").GetString().Should().Be("123");
             // The platform profile, not whatever the function document holds.
-            root.GetProperty("limits").GetProperty("timeoutMs").GetInt32().Should().Be(30_000);
+            root.GetProperty("limits").GetProperty("timeoutMs").GetInt32().Should().Be(45_000);
         }
 
         [Fact]
@@ -165,7 +166,7 @@ namespace XUnitTest.Functions
 
             // The version asked for 5 s and gets the platform's 30 s, exactly as the editable copy
             // would have. A stored limit is inert on both sides.
-            doc.RootElement.GetProperty("limits").GetProperty("timeoutMs").GetInt32().Should().Be(30_000);
+            doc.RootElement.GetProperty("limits").GetProperty("timeoutMs").GetInt32().Should().Be(45_000);
         }
 
         [Fact]
@@ -178,7 +179,7 @@ namespace XUnitTest.Functions
 
             using var doc = Parse(json);
             doc.RootElement.GetProperty("limits").GetProperty("timeoutMs").GetInt32()
-                .Should().Be(FunctionLimits.Ceiling.TimeoutSeconds * 1000);
+                .Should().Be(FunctionTimeout.Seconds * 1000);
         }
 
         [Theory]

@@ -267,7 +267,7 @@ namespace Blocks.FunctionRunner.Tests
             var (sandbox, _) = await ReadyAsync(c => c.OnCall = id =>
             [
                 Lines.Started(id),
-                Lines.Failure(id, ErrorCodes.TimedOut, "the function exceeded its 30000 ms time limit"),
+                Lines.Failure(id, ErrorCodes.TimedOut, "the function exceeded its 45000 ms time limit"),
                 Lines.Idle(id, clean: false, ["timeout"]),
                 Lines.Fatal(ErrorCodes.TimedOut, "call exceeded its time limit"),
             ]);
@@ -294,7 +294,7 @@ namespace Blocks.FunctionRunner.Tests
                 call.Result.OomKilled, call.Result.ExitCode, call.Result.TimedOut, false, call.Result.Output);
             status.Should().Be(RunStatuses.TimedOut, "a kill after the grace is the timeout's consequence, not a crash");
             code.Should().Be(ErrorCodes.TimedOut);
-            message.Should().Be("the function exceeded its 30000 ms time limit");
+            message.Should().Be("the function exceeded its 45000 ms time limit");
         }
 
         [Fact]

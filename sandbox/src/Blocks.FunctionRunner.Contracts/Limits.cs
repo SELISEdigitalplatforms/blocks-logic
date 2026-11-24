@@ -38,14 +38,17 @@ namespace Blocks.FunctionRunner.Contracts
         public const int MinPidLimit = 32;
         public const long TmpfsBytes = 64L * 1024 * 1024;
         /// <summary>
-        /// The hard ceiling on one run's wall clock. Raised from 60s to 90s for orchestration
-        /// functions that fan out to several third-party APIs, where 60s was not a safety limit
-        /// but an arbitrary one; 90s keeps a wedged run from holding a sandbox slot for minutes.
+        /// The hard ceiling on one run's wall clock.
         /// This is the value that actually holds: the control plane clamps to its own copy of the
         /// same number, and this one clamps again, so the two must move together — a control plane
         /// allowing more than the runner does silently loses the difference to a killed sandbox.
+        /// <para>
+        /// TEMPORARY FIX: raised from 30 s to 45 s. The control plane's copy is hardcoded to match in
+        /// blocks-logic's <c>FunctionTimeout.Seconds</c> (Genesis <c>FunctionLimits.Ceiling</c> still
+        /// says 30). This will be changed later, once Genesis carries the value itself.
+        /// </para>
         /// </summary>
-        public const int TimeoutSeconds = 30;
+        public const int TimeoutSeconds = 45;
 
         /// <summary>Kept equal to <see cref="TimeoutSeconds"/>: there is one value, not a range.</summary>
         public const int DefaultTimeoutSeconds = TimeoutSeconds;

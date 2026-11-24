@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Blocks.Genesis;
 using Blocks.Genesis.Entities.Logic;
+using Functions.DomainService.Utils;
 
 namespace Functions.DomainService.Services
 {
@@ -94,7 +95,8 @@ namespace Functions.DomainService.Services
             ArgumentNullException.ThrowIfNull(run);
             ArgumentNullException.ThrowIfNull(function);
 
-            var limits = (version?.Limits ?? function.Limits).Clamp();
+            // TEMPORARY FIX: 45 s time limit instead of Genesis' 30 s (see FunctionTimeout); later this goes back to .Clamp().
+            var limits = (version?.Limits ?? function.Limits).ClampWithTimeout();
             var variables = version?.Variables ?? function.Variables;
             var authMode = (version?.Trigger ?? function.Trigger).AuthMode;
 

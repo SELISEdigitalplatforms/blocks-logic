@@ -50,7 +50,7 @@ namespace Blocks.FunctionRunner.Tests
             var (status, code, message) = RunOutcome.Map(false, 137, timedOut: true, cancelled: false, Empty());
             status.Should().Be(RunStatuses.TimedOut);
             code.Should().Be(ErrorCodes.TimedOut);
-            message.Should().Be("the function exceeded its 30000 ms time limit");
+            message.Should().Be("the function exceeded its 45000 ms time limit");
         }
 
         [Fact]

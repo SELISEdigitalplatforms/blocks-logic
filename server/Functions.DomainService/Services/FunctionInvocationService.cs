@@ -155,12 +155,16 @@ namespace Functions.DomainService.Services
         /// <c>Functions:HttpSyncWaitMaxSeconds</c> is not configured. Well under the 60 s idle
         /// timeout typical of ingress controllers and load balancers, so the caller gets a clean
         /// 202 with a run id instead of a gateway 504 that hides whether the run was accepted.
+        /// <para>
+        /// TEMPORARY FIX: raised from 30 s to 45 s together with the 45 s function time limit
+        /// (<see cref="FunctionTimeout"/>). This will be changed later, with that limit.
+        /// </para>
         /// </summary>
-        internal const int DefaultHttpSyncWaitMaxSeconds = 30;
+        internal const int DefaultHttpSyncWaitMaxSeconds = 45;
 
         /// <summary>
         /// Ceiling on a synchronous wait when <c>Functions:SyncWaitMaxSeconds</c> is not configured.
-        /// Sized above the largest function timeout (<see cref="FunctionLimits.Ceiling.TimeoutSeconds"/>
+        /// Sized above the largest function timeout (<see cref="FunctionTimeout.Seconds"/>
         /// + <see cref="SyncGraceSeconds"/>) so a function allowed to run for its full limit can still
         /// be awaited to completion rather than reported as "still running". Mirrored by the workflow
         /// Function step's editor maximum (client: FUNCTION_STEP_MAX_WAIT_SECONDS).
@@ -335,7 +339,8 @@ namespace Functions.DomainService.Services
                     InvokedByType.Http, invokedById: null, inputJson, wait: false,
                     waitTimeoutSeconds: null, cancellationToken);
                 timedRunId = queued.RunId;
-                queued.SseWaitSeconds = SseWaitSeconds((version.Limits ?? function.Limits).Clamp());
+                // TEMPORARY FIX: 45 s time limit instead of Genesis' 30 s (see FunctionTimeout); later this goes back to .Clamp().
+                queued.SseWaitSeconds = SseWaitSeconds((version.Limits ?? function.Limits).ClampWithTimeout());
                 return queued;
             }
 
