@@ -18,13 +18,19 @@ namespace Mail.DomainService.Mails
         private readonly IMailRepository _mailRepository;
         private readonly ISendMailService _sendMailService;
         private readonly ILogger<MailService> _logger;
+        private readonly IDelegationGrantStore? _grantStore;
 
+        /// <param name="grantStore">
+        /// Reads the delegation grant of a queued mail that names an organization. Optional: Genesis registers it in
+        /// every host; without it such a mail cannot be verified and uses the Default organization.
+        /// </param>
         public MailService(
             IValidator<MailToBeSent> validator,
             IMessageClient messageClient,
             IMailRepository mailRepository,
             ISendMailService sendMailService,
-            ILogger<MailService> logger
+            ILogger<MailService> logger,
+            IDelegationGrantStore? grantStore = null
         )
         {
             _validator = validator;
@@ -32,6 +38,7 @@ namespace Mail.DomainService.Mails
             _mailRepository = mailRepository;
             _sendMailService = sendMailService;
             _logger = logger;
+            _grantStore = grantStore;
         }
 
         public async Task<BaseMutationResponse> ProcessMailToAnyAsync(SendMailToAny request)
@@ -49,22 +56,29 @@ namespace Mail.DomainService.Mails
             }
 
             var isTestMail = request?.IsTestMail ?? false;
-            var mailToBeSent = isTestMail && !string.IsNullOrWhiteSpace(request!.TemplateId)
-                ? await MapTestTemplateAsync(request)
-                : await MapAsync(request!, CallerOrganization(), false, isTestMail);
-            return await ProcessMailSent(mailToBeSent);
+            if (isTestMail && !string.IsNullOrWhiteSpace(request!.TemplateId))
+            {
+                // The template's own organization decides; the request's OrganizationId is not used.
+                return await ProcessMailSent(await MapTestTemplateAsync(request));
+            }
+
+            return await ProcessMailSent(await MapAsync(request!, CallerSendOrganization(request), false, isTestMail));
         }
 
-        public Task<BaseMutationResponse> ProcessMailAsync(SendMail request) => ProcessSendMailAsync(request, CallerOrganization());
+        public async Task<BaseMutationResponse> ProcessMailAsync(SendMail request)
+        {
+            LogRequested("Send", request);
+            return await ProcessSendMailAsync(request, CallerSendOrganization(request));
+        }
 
-        // Queue producers (IAM invites, password resets, workflows, functions, ...) can set any context, so a queued
-        // mail never picks an organization's template: it always uses the Default organization's.
-        public Task<BaseMutationResponse> ProcessQueuedMailAsync(SendMail request) => ProcessSendMailAsync(request, MailOrganization.Default);
+        public async Task<BaseMutationResponse> ProcessQueuedMailAsync(SendMail request)
+        {
+            LogRequested("Send", request);
+            return await ProcessSendMailAsync(request, await QueuedOrganizationAsync(request));
+        }
 
         private async Task<BaseMutationResponse> ProcessSendMailAsync(SendMail request, string organizationId)
         {
-            LogRequested("Send", request);
-
             if (!request.SendPhoneNumberAsEmail)
             {
                 return await ProcessMailSent(await MapAsync(request, organizationId, onlyUser: true));
@@ -85,11 +99,108 @@ namespace Mail.DomainService.Mails
             return await ProcessMailSent(await MapAsync(request, organizationId, onlyUser: false));
         }
 
-        /// <summary>
-        /// The organization in the caller's token, or the Default organization when it has none. No request field
-        /// sets the organization.
-        /// </summary>
+        /// <summary>The organization in the caller's token, or the Default organization when it has none.</summary>
         private static string CallerOrganization() => MailOrganization.Normalize(BlocksContext.GetContext()?.OrganizationId);
+
+        /// <summary>
+        /// The organization of an HTTP (or in-process workflow) send. Without a requested organization it is the
+        /// token's, as before. A token of the Default organization (or none) may name any organization. Any other
+        /// token may name only its own: another organization is ignored and the token's is used, exactly as before
+        /// the field existed, so a caller that already sent such a field is not broken.
+        /// </summary>
+        private string CallerSendOrganization(BaseMailRequest? request)
+        {
+            var caller = CallerOrganization();
+            var requested = MailOrganization.Requested(request?.OrganizationId);
+
+            if (requested is null)
+            {
+                return caller;
+            }
+
+            if (MailOrganization.MayActFor(caller, requested))
+            {
+                return requested;
+            }
+
+            _logger.LogWarning(
+                "MAIL MAPPING: a token of organization {CallerOrganizationId} may not send for organization {RequestedOrganizationId}; using the token's organization. correlationId={CorrelationId}",
+                MailLog.SingleLine(caller),
+                MailLog.SingleLine(requested),
+                MailLog.SingleLine(request?.CorrelationId));
+            return caller;
+        }
+
+        /// <summary>
+        /// The organization of a mail consumed from the queue.
+        /// <list type="bullet">
+        /// <item>No requested organization: the Default organization, as before.</item>
+        /// <item>No delegation grant: no person or client was behind the send, so a Blocks service published it, and
+        /// the service is trusted to name the organization.</item>
+        /// <item>A grant: the organization recorded in it (taken from the validated token when the message was sent)
+        /// decides, as on HTTP. One the sender may not name, or a grant that cannot be read, falls back to the Default
+        /// organization; the mail is still sent.</item>
+        /// </list>
+        /// Every fallback is what the mail got before the field existed. The message's SecurityContext is never used
+        /// for this: any producer can write it.
+        /// </summary>
+        private async Task<string> QueuedOrganizationAsync(SendMail request)
+        {
+            var requested = MailOrganization.Requested(request.OrganizationId);
+            if (requested is null)
+            {
+                return MailOrganization.Default;
+            }
+
+            var grantId = DelegatedTokenContext.Current;
+            if (string.IsNullOrWhiteSpace(grantId))
+            {
+                return requested;
+            }
+
+            var grant = await ReadGrantAsync(grantId);
+            var tenantId = BlocksContext.GetContext()?.TenantId;
+            if (grant is null || !string.Equals(grant.TenantId, tenantId, StringComparison.Ordinal))
+            {
+                _logger.LogWarning(
+                    "MAIL MAPPING: the delegation grant of a queued mail could not be read or is for another tenant, so organization {RequestedOrganizationId} is not verified; using the Default organization. correlationId={CorrelationId}",
+                    MailLog.SingleLine(requested),
+                    MailLog.SingleLine(request.CorrelationId));
+                return MailOrganization.Default;
+            }
+
+            if (MailOrganization.MayActFor(grant.OrganizationId, requested))
+            {
+                return requested;
+            }
+
+            _logger.LogWarning(
+                "MAIL MAPPING: the sender of a queued mail is in organization {SenderOrganizationId} and may not send for organization {RequestedOrganizationId}; using the Default organization. correlationId={CorrelationId}",
+                MailLog.SingleLine(MailOrganization.Normalize(grant.OrganizationId)),
+                MailLog.SingleLine(requested),
+                MailLog.SingleLine(request.CorrelationId));
+            return MailOrganization.Default;
+        }
+
+        private async Task<DelegationGrantRecord?> ReadGrantAsync(string grantId)
+        {
+            if (_grantStore is null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return await _grantStore.GetAsync(grantId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning( // NOSONAR S6667 — type only: a cache error can quote the key, which holds the grant id (a credential)
+                    "MAIL MAPPING: reading the delegation grant failed: {ExceptionType}",
+                    ex.GetType().Name);
+                return null;
+            }
+        }
 
         private async Task<bool> IsOnlyTheCallerAsync(BaseMailRequest request)
         {

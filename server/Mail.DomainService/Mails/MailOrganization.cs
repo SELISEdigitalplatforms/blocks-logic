@@ -19,5 +19,19 @@ namespace Mail.DomainService.Mails
         /// </summary>
         public static bool Owns(string organizationId, string? storedOrganizationId) =>
             (string.IsNullOrEmpty(storedOrganizationId) ? Default : storedOrganizationId) == Normalize(organizationId);
+
+        /// <summary>The organization a request names, trimmed, or null when it names none.</summary>
+        public static string? Requested(string? requestOrganizationId) =>
+            string.IsNullOrWhiteSpace(requestOrganizationId) ? null : requestOrganizationId.Trim();
+
+        /// <summary>
+        /// Whether a sender of <paramref name="senderOrganizationId"/> may send for <paramref name="requestedOrganizationId"/>:
+        /// a sender of the Default organization (or of none) may name any organization, any other sender only its own.
+        /// </summary>
+        public static bool MayActFor(string? senderOrganizationId, string requestedOrganizationId)
+        {
+            var sender = Normalize(senderOrganizationId);
+            return sender == Default || sender == Normalize(requestedOrganizationId);
+        }
     }
 }
