@@ -116,7 +116,8 @@ export default defineConfig(({ mode }) => {
       ],
       proxy: {
           "/dev-idp-proxy": {
-            target: "https://dev-idp.blocksdevelopers.com",
+            // BLOCKS_DEV_IDP_PROXY_TARGET (I00-WP10). Unset, the target is today's dev IdP.
+            target: env.BLOCKS_DEV_IDP_PROXY_TARGET || "https://dev-idp.blocksdevelopers.com",
             changeOrigin: true,
             secure: true,
             rewrite: (path) => path.replace(/^\/dev-idp-proxy/, ""),
