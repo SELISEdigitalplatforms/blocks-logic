@@ -241,5 +241,12 @@ namespace Common.InternalService.Storage
         {
             throw new NotImplementedException();
         }
+
+        /// <summary>An SFTP server has no anonymous read that this service can switch on, so a public object cannot be made.</summary>
+        public Task<string> UploadPublicObjectAsync(string container, string key, Stream content, string contentType) =>
+            throw new NotSupportedException("Public objects are not supported on an SFTP storage configuration: it has no public read. Use an Azure, AWS or S3-compatible configuration.");
+
+        public Task<Stream?> OpenReadAsync(string container, string key) =>
+            throw new NotSupportedException("Reading a named container is not supported on an SFTP storage configuration.");
     }
 }

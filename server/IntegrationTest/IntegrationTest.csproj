@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- I02-WP9: the public-object methods of blocks-logic's storage services against real stores (Azurite or an Azure
+       account, and an S3-compatible store such as SeaweedFS). A separate project, so the unit run (XUnitTest) stays fast
+       and needs no store. The endpoints come from environment variables (see PublicObjectLiveTests); a test without
+       them fails and names the missing one. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Common.InternalService\Common.InternalService.csproj" />
+  </ItemGroup>
+</Project>

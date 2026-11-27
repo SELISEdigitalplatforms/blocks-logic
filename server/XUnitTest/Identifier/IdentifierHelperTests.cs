@@ -19,5 +19,17 @@ namespace XUnitTest.Identifier
         {
             IdentifierHelper.EnvironmentMapper(env).Should().Be(expected);
         }
+
+        [Theory]
+        [InlineData("amqp://user:pass@localhost:5672", true)]
+        [InlineData("amqps://user:pass@localhost:5671", true)]
+        [InlineData("AMQP://user:pass@localhost:5672", true)]
+        [InlineData("Endpoint=sb://ns.servicebus.windows.net/;SharedAccessKeyName=x", false)]
+        [InlineData("not-a-uri", false)]
+        [InlineData("https://example.com", false)]
+        public void IsRabbitMq_DetectsAmqpSchemes(string connectionString, bool expected)
+        {
+            IdentifierHelper.IsRabbitMq(connectionString).Should().Be(expected);
+        }
     }
 }

@@ -10,14 +10,23 @@ namespace Common.InternalService.Storage
     [ExcludeFromCodeCoverage]
     public class AzureBlobStorageService : IStorageService
     {
+        private readonly BlobServiceClient _blobServiceClient;
         private readonly BlobContainerClient _containerClient;
 
         public AzureBlobStorageService(StorageConfiguration storageConfiguration)
         {
             var blobServiceClient = new BlobServiceClient(storageConfiguration.ConnectionString);
+            _blobServiceClient = blobServiceClient;
             _containerClient = blobServiceClient.GetBlobContainerClient(BlocksContext.GetContext()?.TenantId.ToLower());
 
             _containerClient.CreateIfNotExists(PublicAccessType.Blob);
+        }
+
+        /// <summary>For tests: the clients are given, so no account is contacted at construction.</summary>
+        protected internal AzureBlobStorageService(BlobServiceClient blobServiceClient, BlobContainerClient containerClient)
+        {
+            _blobServiceClient = blobServiceClient;
+            _containerClient = containerClient;
         }
 
         public async Task<Stream?> DownloadFileAsync(string fileName, string? tenantId = null, string? itemId = null, string? versionId = null)
@@ -99,6 +108,53 @@ namespace Common.InternalService.Storage
         public Task<bool> UploadFileToSftpAsync(string fileName, string tenantId, string itemId, string versionId, Microsoft.AspNetCore.Http.IFormFile file)
         {
             throw new NotImplementedException();
+        }
+
+        /// <summary>
+        /// Public read on Azure is the container's access level: <c>Blob</c> lets anyone read a blob whose URL they know,
+        /// and does not let them list the container. The container is created with that level, and an existing one is
+        /// raised to it. The URL is the blob's own address, with no SAS, so it never expires.
+        /// </summary>
+        public async Task<string> UploadPublicObjectAsync(string container, string key, Stream content, string contentType)
+        {
+            var containerClient = _blobServiceClient.GetBlobContainerClient(container);
+            await EnsurePublicBlobAccessAsync(containerClient);
+
+            var blobClient = containerClient.GetBlobClient(key);
+            await blobClient.UploadAsync(content, new BlobUploadOptions
+            {
+                HttpHeaders = new BlobHttpHeaders { ContentType = contentType }
+            });
+
+            return blobClient.Uri.ToString();
+        }
+
+        public async Task<Stream?> OpenReadAsync(string container, string key)
+        {
+            var blobClient = _blobServiceClient.GetBlobContainerClient(container).GetBlobClient(key);
+
+            try
+            {
+                var response = await blobClient.DownloadStreamingAsync();
+                return response.Value.Content;
+            }
+            catch (Azure.RequestFailedException ex) when (ex.Status == 404)
+            {
+                return null;
+            }
+        }
+
+        private static async Task EnsurePublicBlobAccessAsync(BlobContainerClient containerClient)
+        {
+            if (await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob) is not null)
+                return;
+
+            var policy = (await containerClient.GetAccessPolicyAsync()).Value;
+            if (policy.BlobPublicAccess == PublicAccessType.Blob)
+                return;
+
+            // Setting the level replaces the stored access policies unless they are passed back.
+            await containerClient.SetAccessPolicyAsync(PublicAccessType.Blob, policy.SignedIdentifiers);
         }
     }
 }
